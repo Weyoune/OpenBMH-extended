@@ -16,8 +16,20 @@
 #include <cstdint>
 
 #include "game/state.hpp"
+#include "game/table.hpp"
 
 namespace bmh {
+
+struct TablePredictionResult {
+    std::array<uint8_t,24> ranks{};
+    int best_rank=0;
+    uint8_t lost_goals=0,secured_goals=0;
+};
+// Numeric Void5 kernel, independent of physical league/club IDs. The full
+// table includes deductions; recent/own-rate tables retain Source's two-point
+// calculation. Notification formatting and once-only flags stay with the owner.
+TablePredictionResult calculate_table_prediction(const LeagueTable& full,const LeagueTable& recent,
+    int position,int mode,int matchdays,int europe_places,int relegation_places);
 
 // Void5(team, mode, buf). Fills buf[0..23], one entry per final rank:
 //   0     the rank can no longer be reached (at least that many clubs stay ahead)

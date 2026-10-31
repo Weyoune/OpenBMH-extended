@@ -26,6 +26,32 @@ const int& kLeagueTeams = runtime_dimensions.league_teams;  // CareerSession_Dis
 // Text of a pointer variable of the text table TextPointerTable.
 }  // namespace
 
+TablePredictionResult calculate_table_prediction(const LeagueTable& full,const LeagueTable& recent,
+    int pos,int mode,int matchdays,int europe,int relegation) {
+    const int size=full.size;
+    if(size<2||size>20||recent.size!=size||pos<0||pos>=size||mode<0||mode>255||matchdays<1||matchdays>62||europe<0||europe>size||relegation<0||relegation>=size)
+        throw std::invalid_argument("prediction: invalid bounded table context");
+    TablePredictionResult result;auto& buf=result.ranks;buf.fill(1);
+    const int target[3]={0,europe,size-relegation};
+    const auto per_game=[](const LeagueTable& table,int club){const int games=table.games(club);return games?table.points[club]*500/games:0;};
+    const int own_rate=mode==1?1500:per_game(recent,pos);
+    int points[20]{},remaining[20]{};
+    for(int c=0;c<size;++c){points[c]=full.points[c];remaining[c]=int8_t(matchdays-full.games(c));}
+    const auto& rates=mode>3?recent:full;
+    uint16_t own=uint16_t(points[pos]*500+remaining[pos]*own_rate);
+    int ahead=size;if(mode==1){ahead=0;for(int c=0;c<size;++c)ahead+=int(own)<points[c]*500;}
+    for(int r=0;r<ahead;++r)buf[size_t(r)]=0;
+    if(mode==1){for(int k=0;k<3;++k)if(buf[size_t(target[k])]==0)result.lost_goals|=uint8_t(1u<<k);own=uint16_t(points[pos]*500);}
+    int behind=0;
+    for(int c=0;c<size;++c){if(c==pos)continue;const int rate=mode==1?1500:mode==2?0:int16_t(per_game(rates,c));
+        if(uint16_t(points[c]*500+remaining[c]*rate)<own)++behind;}
+    int r=0;for(;r<behind;++r)buf[size_t(size-r-1)]=255;
+    if(mode!=1){if(r==size)++r;buf[size_t(size-r-1)]=1;}
+    if(mode==1)for(int k=0;k<3;++k)if(buf[size_t(target[k])]==255)result.secured_goals|=uint8_t(1u<<k);
+    int first=0;while(first<24&&buf[size_t(first)]==0)++first;result.best_rank=(first+1)&255;
+    return result;
+}
+
 int table_prediction(GameState& g, int team, int mode, std::array<uint8_t, 24>& buf, int* size_word) {
     buf.fill(1);
     int league = team_league(team);  // local_30
@@ -48,34 +74,15 @@ int table_prediction(GameState& g, int team, int mode, std::array<uint8_t, 24>& 
         from = rounds - 5 * (mode >> 2);
         if (from < 0) from = 0;
     }
-    auto per_game = [&](const LeagueTable& t, int club) {
-        const int games = t.games(club);
-        return games ? t.points[club] * 500 / games : 0;  // the original divides by zero here
-    };
-    int own_rate = 1500;  // local_34: three points per remaining game
-    if (mode != 1) own_rate = per_game(compute_league_table(g, league, from, rounds, 3, 0), pos);
-    const LeagueTable full = compute_league_table(g, league, 0, rounds, 7, 0);
-    int points[20] = {}, remaining[20] = {};  // acStack_60, acStack_4c
-    for (int c = 0; c < size; c++) {
-        points[c] = full.points[c];
-        remaining[c] = int8_t(matchdays - full.games(c));
-    }
-    // The scratch table the rates of the other clubs are read from: the recent form table
-    // for mode >= 4, otherwise still the full table.
-    const LeagueTable rates = mode > 3 ? compute_league_table(g, league, from, rounds, 3, 0) : full;
-    uint16_t own = uint16_t(points[pos] * 500 + remaining[pos] * own_rate);  // local_28 (low word)
-
-    int ahead = size;  // local_20: ranks that are out of reach
-    if (mode == 1) {
-        ahead = 0;
-        for (int c = 0; c < size; c++) ahead += int(own) < points[c] * 500;
-    }
-    for (int r = 0; r < ahead; r++) buf.at(size_t(r)) = 0;
+    const auto full=compute_league_table(g,league,0,rounds,7,0);
+    const auto recent=mode==1?full:compute_league_table(g,league,from,rounds,3,0);
+    const auto prediction=calculate_table_prediction(full,recent,pos,mode,matchdays,target[1],kLeagueRelegation[league]);
+    buf=prediction.ranks;
 
     int league_index = league;  // local_30 is changed by the league name of message 1
     if (mode == 1) {
         for (int k = 0; k < 3; k++) {
-            if (buf.at(size_t(target[k])) != 0) continue;
+            if (!(prediction.lost_goals & (1u<<k))) continue;
             if (manager >= 0 && (g.manager_records.at(rec + 0x28b) >> k & 1)) continue;
             // the goal can no longer be reached
             if (manager >= 0) g.manager_records.at(rec + 0x28b) |= uint8_t(1 << k);
@@ -98,27 +105,11 @@ int table_prediction(GameState& g, int team, int mode, std::array<uint8_t, 24>& 
             if (k == 2) msg += message_text(g, ::bmh::layout::Prediction_TablePrediction_TextPointer8);
             if (manager >= 0) post_composed(g, manager, msg);
         }
-        own = uint16_t(points[pos] * 500);
     }
 
-    int behind = 0;  // local_14: clubs that can no longer catch up
-    for (int c = 0; c < size; c++) {
-        if (c == pos) continue;
-        int rate;
-        if (mode == 1) rate = 1500;
-        else if (mode == 2) rate = 0;
-        else rate = int16_t(per_game(rates, c));
-        if (uint16_t(points[c] * 500 + remaining[c] * rate) < own) behind++;
-    }
-    int r = 0;
-    for (; r < behind; r++) buf.at(size_t(size - r - 1)) = 0xFF;
-    if (mode != 1) {
-        if (r == size) r++;  // cannot happen: the club itself is never counted
-        buf.at(size_t(size - r - 1)) = 1;
-    }
     if (mode == 1) {
         for (int k = 0; k < 3; k++) {
-            if (buf.at(size_t(target[k])) != 0xFF) continue;
+            if (!(prediction.secured_goals & (1u<<k))) continue;
             if (manager >= 0 && (g.manager_records.at(rec + 0x28b) >> (k + 3) & 1)) continue;
             // the goal is secured (or relegation avoided / certain)
             if (manager >= 0) g.manager_records.at(rec + 0x28b) |= uint8_t(1 << (k + 3));
@@ -132,9 +123,7 @@ int table_prediction(GameState& g, int team, int mode, std::array<uint8_t, 24>& 
             if (manager >= 0) post_composed(g, manager, msg);
         }
     }
-    int first = 0;
-    while (first < 24 && buf[size_t(first)] == 0) first++;
-    return (first + 1) & 0xFF;
+    return prediction.best_rank;
 }
 
 static uint32_t season_bonus_impl(GameState& g, int manager, int team, int board_slot, int rank, bool pay) {
