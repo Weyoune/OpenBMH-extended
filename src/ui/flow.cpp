@@ -905,8 +905,16 @@ void StartupFlow::attach_loaded_game(DeskState desk, PreparationState preparatio
     engine_attached_ = true;
 }
 
+void StartupFlow::begin_world_manager_selection(SelectionContext context) {
+    if(!pending_ || !pending_->options.country_selection || !pending_->managers.empty() || manager_ || !confirmed_.empty() ||
+        !context.world || context.world->scope!=setup_game_scope(pending_->options))
+        throw FormatError("manager: typed selection does not match pending country setup");
+    auto next=std::make_unique<ManagerScreen>(data_,0,confirmed_,context);
+    roster_revision_=context.revision;roster_source_=context.source;manager_=std::move(next);pending_.reset();
+}
 bool StartupFlow::resume_manager_selection(SelectionContext context) {
-    if (!awaiting_context_ || context.revision <= roster_revision_ || context.club_order.empty())
+    if (!awaiting_context_ || context.revision <= roster_revision_ || (context.club_order.empty()&&!context.world) ||
+        (setup_.options().country_selection && (!context.world || context.world->scope!=setup_game_scope(setup_.options()))))
         throw FormatError("manager selection: expected a newer engine/reference club-order context");
     // Construct before mutation so a bad context leaves the pending request intact.
     auto next = std::make_unique<ManagerScreen>(data_, int(confirmed_.size()), confirmed_, context);

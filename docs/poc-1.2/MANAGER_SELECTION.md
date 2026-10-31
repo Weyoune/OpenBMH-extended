@@ -1,0 +1,13 @@
+# Country switch in the Classic manager selection
+
+The typed 1.2 selection reuses `ManagerScreen` and its Original fonts, background, portraits, confirmation and five-by-four club-picker grid. The requested country control sits at native (186,77); the club crest moves to (235,77). Original KB/24 flag texels are drawn at integer scale in the existing frame style: Germany and England's St George cross.
+
+A left click on the country flag switches Germany/England, selects the first available club in that country's first league, resets the start-league selector to that league and closes any old picker state. Name, portrait and strength remain unchanged. Clicking the crest or existing club field opens the Original picker; right click closes it. England exposes twenty first-division cells and its 20/20/20/20/10 ladder. Current membership order and actual crest paths/cells come from the typed world, without the legacy 9-bit crest truncation or signed master-ID assumption.
+
+Only enabled domestic countries can be chosen. An AI-only Premier League in Germany-only play is not a selectable England manager country. Already assigned clubs and portraits remain locked across country switches. Additional country clubs occupy the existing extra-team pages; empty pages are not interactive. National-only manager selection remains a separate pending owner.
+
+`world12_manager_selection_context` creates immutable UI data from the validated world and a revision. `ManagerChoice` carries the stable `world_club` and country, with `master_club=-1`; legacy master-ID access explicitly rejects typed contexts. Confirmation retains the country and global identity. The flow owner can call `begin_world_manager_selection` for a pending typed setup, and supply newer typed contexts between manager confirmations. Its scope must match the accepted setup.
+
+Typed selection/option rendering reads the explicit reference layout without loading the legacy master database. `load_reference_le` does not change package metadata or admit the dual-world profile as a legacy playable installation; normal `load_le` still validates its declared profile. Full typed career initialization/GUI binding remains part of the ongoing completion work. These UI components and flow hooks are not a claim of a playable 1.2 release.
+
+Tests cover immutable scopes, club IDs above signed 32-bit range, exact league capacities, country roundtrips, first-club resets, locked clubs/portraits, twenty selectable English first-division cells, England-only/Germany-only restrictions, malformed asset rollback and the one/two-manager setup-to-confirmation flow. Real private data and Original assets are used for the comparison images; public fixtures remain synthetic.

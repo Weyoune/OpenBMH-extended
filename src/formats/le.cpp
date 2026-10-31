@@ -61,7 +61,10 @@ void save_runtime_image(const LeImage& image, const RuntimePolicy& policy, const
 }
 
 LeImage load_le(const std::filesystem::path& path) {
-    const auto profile = load_data_profile(path.parent_path());
+    return load_reference_le(path,load_data_profile(path.parent_path()));
+}
+LeImage load_reference_le(const std::filesystem::path& path,const DataProfile& profile) {
+    profile.validate();
     const auto apply_profile = [&](LeImage img) {
         if (!profile.extended()) return img;
         const auto put = [&](uint32_t address, uint32_t value, int width) {

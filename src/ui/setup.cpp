@@ -2,6 +2,7 @@
 #include "formats/executable_layout.hpp"
 #include "formats/resource_bundle.hpp"
 #include "ui/setup.hpp"
+#include "formats/data_profile.hpp"
 #include "ui/setup_country_symbol.hpp"
 
 #include <algorithm>
@@ -50,7 +51,7 @@ SetupScreen::SetupScreen(const std::filesystem::path& data,SetupLeagueSymbol sym
       atlas_(load_vga(asset_path(data / "KB", "20.VGA"))) {
     if (background_.width != 320 || background_.height != 240)
         throw FormatError("setup: expected original 320x240 background");
-    const auto exe = load_le(asset_path(data, "BMH.exe"));
+    const auto exe = symbol==SetupLeagueSymbol::country_selection?load_reference_le(asset_path(data,"BMH.exe"),DataProfile{}):load_le(asset_path(data, "BMH.exe"));
     for (int i = 0; i < 8; ++i) {
         button_x_[i] = exe.u16(::bmh::layout::Setup_FormatError_RuntimeField3 + i * 2);
         button_y_[i] = exe.u8(::bmh::layout::Setup_FormatError_RuntimeField4 + i);

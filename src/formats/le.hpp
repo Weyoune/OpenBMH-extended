@@ -17,6 +17,7 @@
 #include "formats/binary.hpp"
 
 namespace bmh {
+struct DataProfile;
 
 // Resolved edition policies, not copied machine instructions.
 struct RuntimePolicy {
@@ -54,6 +55,7 @@ public:
     const RuntimePolicy* runtime_policy() const { return runtime_policy_ ? &*runtime_policy_ : nullptr; }
 
     friend LeImage load_le(const std::filesystem::path& path);
+    friend LeImage load_reference_le(const std::filesystem::path&,const DataProfile&);
 
 private:
     std::optional<RuntimePolicy> runtime_policy_;
@@ -65,6 +67,9 @@ private:
 // Loads the original executable image without changing edition-specific rule tables.
 // Throws FormatError for files that are not LE executables or use external fixups.
 LeImage load_le(const std::filesystem::path& path);
+// Explicit reference-layout reader for typed adapters. It does not admit a
+// package as a playable legacy installation or change its declared profile.
+LeImage load_reference_le(const std::filesystem::path&,const DataProfile&);
 
 // The OpenBMH image format: "OPENBMH-IMAGE" NUL, u32 base, u32 size, the bytes. load_le()
 // reads it as well, so a translated image can stand in for BMH.exe in a data directory.

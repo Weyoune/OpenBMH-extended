@@ -116,6 +116,7 @@ public:
     bool key(std::string_view value) { return send_key(value).changed; }
     FlowResult send_key(std::string_view value);
     bool resume_manager_selection(SelectionContext context);
+    void begin_world_manager_selection(SelectionContext context);
     void show_manager_join(std::vector<ManagerChoice> existing, SelectionContext context);
     void resume_manager_join(SelectionContext context);
     void acknowledge_manager_join(CareerInitializationResult result);

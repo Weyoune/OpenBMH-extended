@@ -2,6 +2,7 @@
 #include "formats/badge_policy.hpp"
 #include "formats/executable_layout.hpp"
 #include "ui/manager.hpp"
+#include "formats/data_profile.hpp"
 
 #include <algorithm>
 #include <iomanip>
@@ -94,8 +95,8 @@ SelectionContext load_selection_context(const std::filesystem::path& path, uint6
 }
 
 ManagerScreen::ManagerScreen(const std::filesystem::path& data, int slot, const std::vector<ManagerChoice>& confirmed, SelectionContext context)
-    : confirmed_(confirmed), context_(std::move(context)), data_(data), exe_(load_le(asset_path(data, "BMH.exe"))),
-      db_(load_database(asset_path(data, "M3D.MAN"),
+    : confirmed_(confirmed), context_(std::move(context)), data_(data), exe_(context_.world?load_reference_le(asset_path(data,"BMH.exe"),DataProfile{}):load_le(asset_path(data, "BMH.exe"))),
+      db_(context_.world?Database{}:load_database(asset_path(data, "M3D.MAN"),
           {exe_.u32(::bmh::layout::CareerSession_DataDirectory_RuntimeField), exe_.u32(::bmh::layout::CareerSession_DataDirectory_RuntimeField3), exe_.u32(::bmh::layout::CareerSession_DataDirectory_RuntimeField2), exe_.u32(::bmh::layout::CareerSession_DataDirectory_RuntimeField4)})),
       texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
       small_(load_font(asset_path(data / "F", "BMH3.FNT"))),
@@ -108,14 +109,17 @@ ManagerScreen::ManagerScreen(const std::filesystem::path& data, int slot, const 
         throw FormatError("manager selection: expected preceding confirmed slots");
     for (int i = 0; i < slot; ++i) {
         const auto& c = confirmed[i];
-        if (c.slot != i || c.master_club < 0 || c.master_club >= int(db_.club_names.size()) || c.portrait < 0 || c.portrait > 11)
+        if (c.slot != i || (context_.world?!c.world_club.valid():(c.master_club < 0 || c.master_club >= int(db_.club_names.size()))) || c.portrait < 0 || c.portrait > 11)
             throw FormatError("manager selection: invalid preceding choice");
         for (int j = 0; j < i; ++j)
-            if (c.master_club == confirmed[j].master_club || c.portrait == confirmed[j].portrait)
+            if ((context_.world?c.world_club==confirmed[j].world_club:c.master_club == confirmed[j].master_club) || c.portrait == confirmed[j].portrait)
                 throw FormatError("manager selection: duplicate preceding club or portrait");
     }
     if (background_.width != 320 || background_.height != 240 || exe_.u8(::bmh::layout::LeaguePairings_LeaguePairingsConstants_RuntimeField) != 5)
         throw FormatError("manager selection: unsupported original layout");
+    choice_.slot=slot;choice_.roster_revision=context_.revision;
+    choice_.name=texts_[(::bmh::layout::Career_NewCareerMarketsAndMoods_ExecutableField-::bmh::layout::TextPointerTable)/4+slot];
+    if(!context_.world) {
     if (context_.club_order.empty()) {
         context_.club_order.resize(db_.club_names.size());
         std::iota(context_.club_order.begin(), context_.club_order.end(), 0);
@@ -126,10 +130,9 @@ ManagerScreen::ManagerScreen(const std::filesystem::path& data, int slot, const 
     for (int id : context_.club_order)
         if (id < 0 || id >= int(db_.club_names.size()) || !unique.insert(id).second)
             throw FormatError("manager selection: club order must contain unique valid master IDs");
-    choice_.slot = slot; choice_.roster_revision = context_.revision;
-    choice_.name = texts_[(::bmh::layout::Career_NewCareerMarketsAndMoods_ExecutableField - ::bmh::layout::TextPointerTable) / 4 + slot];
     while (club_locked(master_id(choice_.selection_club))) ++choice_.selection_club;
     choice_.master_club = master_id(choice_.selection_club);
+    }
     while (portrait_locked(choice_.portrait)) ++choice_.portrait;
     for (int i = 0; i < 4; ++i) {
         text_x_[i] = exe_.u16(::bmh::layout::Manager_FormatError_RuntimeField2 + i * 2) + 3;
@@ -138,6 +141,7 @@ ManagerScreen::ManagerScreen(const std::filesystem::path& data, int slot, const 
         field_y_[i] = exe_.u16(::bmh::layout::Manager_FormatError_RuntimeField4 + i * 2);
         field_width_[i] = exe_.u16(::bmh::layout::Manager_FormatError_RuntimeField5 + i * 2);
     }
+    if(!context_.world) {
     int text_id = (::bmh::layout::Achievements_FormatError_TextPointer3 - ::bmh::layout::TextPointerTable) / 4, start = 0;
     for (int i = 0; i < 5; ++i) {
         first_[i] = start; last_[i] = start + exe_.u8(::bmh::layout::LeagueSizes + i) - 1;
@@ -158,6 +162,73 @@ ManagerScreen::ManagerScreen(const std::filesystem::path& data, int slot, const 
     leagues_[6].back() = 'B';
     if (last_[6] >= int(context_.club_order.size()) || last_[6] - first_[6] >= 20)
         throw FormatError("manager: unsupported extra-team table");
+    }
+    if(context_.world) {
+        context_.world->scope.validate();
+        if(!context_.world->scope.club_play() || context_.revision!=context_.world->revision)throw FormatError("manager: invalid typed selection scope/revision");
+        for(const auto& confirmed:confirmed_) {
+            if(!context_.world->scope.domestic_enabled(confirmed.country)||confirmed.master_club!=-1||confirmed.start_league<0||confirmed.start_league>4||confirmed.strength<0||confirmed.strength>2)
+                throw FormatError("manager: preceding typed country/choice is invalid");
+            const auto& groups=confirmed.country==bmh::world12::Country::germany?context_.world->germany:context_.world->england;
+            bool found=false;for(const auto& group:groups)for(const auto& club:group.clubs)found|=club.id==confirmed.world_club;
+            if(!found)throw FormatError("manager: preceding club is absent from its country selection");
+        }
+        flags_=load_vga(asset_path(data_/"KB","24.VGA"));
+        select_country(context_.world->scope.germany?bmh::world12::Country::germany:bmh::world12::Country::england);
+    }
+}
+
+int ManagerScreen::master_of(int selection)const {
+    if(context_.world)throw FormatError("manager: typed club is not a legacy master ID");
+    return master_id(selection);
+}
+const std::string& ManagerScreen::club_name(int master)const {
+    if(context_.world)throw FormatError("manager: typed club name requires its selection context");
+    return db_.club_names.at(size_t(master));
+}
+bmh::world12::ClubId ManagerScreen::world_club_of(int selection)const {
+    if(!context_.world)throw FormatError("manager: no typed club context");
+    return world_clubs_.at(size_t(selection)).id;
+}
+const std::string& ManagerScreen::selection_name(int selection)const {
+    return context_.world?world_clubs_.at(size_t(selection)).name:db_.club_names.at(size_t(master_id(selection)));
+}
+bool ManagerScreen::selection_locked(int selection)const {
+    if(!context_.world)return club_locked(master_id(selection));
+    const auto id=world_clubs_.at(size_t(selection)).id;
+    return std::any_of(confirmed_.begin(),confirmed_.end(),[&](const auto& c){return c.world_club==id;});
+}
+void ManagerScreen::select_club(int selection) {
+    choice_.selection_club=selection;
+    if(context_.world){choice_.master_club=-1;choice_.world_club=world_clubs_.at(size_t(selection)).id;}
+    else choice_.master_club=master_id(selection);
+}
+void ManagerScreen::select_country(bmh::world12::Country country) {
+    using bmh::world12::Country;
+    if(!context_.world || !context_.world->scope.domestic_enabled(country))throw FormatError("manager: country is unavailable");
+    const auto& groups=country==Country::germany?context_.world->germany:context_.world->england;
+    std::vector<ManagerClubView> clubs;std::set<bmh::world12::ClubId> seen;
+    auto firsts=first_,lasts=last_;auto labels=leagues_;
+    for(size_t group=0;group<groups.size();++group) {
+        const auto required=country==Country::germany?18u:group==4?10u:20u;
+        if(groups[group].clubs.size()>20 || (group<5&&groups[group].clubs.size()!=required))throw FormatError("manager: unsupported typed country group");
+        firsts[group]=int(clubs.size());labels[group]=groups[group].label;
+        for(const auto& club:groups[group].clubs) {
+            if(!club.id.valid()||!seen.insert(club.id).second||club.name.empty()||club.crest_cell>=8||club.crest_path.empty()||club.crest_path.find("..")!=std::string::npos||club.crest_path.find(':')!=std::string::npos||club.crest_path.front()=='/'||club.crest_path.find('\\')!=std::string::npos)throw FormatError("manager: invalid typed club entry");
+            clubs.push_back(club);
+        }
+        lasts[group]=int(clubs.size())-1;
+    }
+    int first=0;while(first<=lasts[0]&&std::any_of(confirmed_.begin(),confirmed_.end(),[&](const auto& c){return c.world_club==clubs[size_t(first)].id;}))++first;
+    if(first>lasts[0])throw FormatError("manager: first league has no available club");
+    world_clubs_=std::move(clubs);first_=std::move(firsts);last_=std::move(lasts);leagues_=std::move(labels);
+    choice_.country=country;choice_.start_league=0;group_=0;hover_=-1;select_club(first);
+}
+void ManagerScreen::country_flag(Image& out,int x,int y)const {
+    border(out,x,y);rect(out,x,y,38,38,0x5f);const int index=int(choice_.country);
+    const int sx=index%12*9,sy=index/12*6;
+    if(flags_.width<sx+9||flags_.height<sy+6)throw FormatError("manager: country flag atlas is incomplete");
+    for(int row=0;row<24;++row)for(int col=0;col<36;++col)out.at(x+1+col,y+7+row)=flags_.pixels[size_t(sy+row/4)*size_t(flags_.width)+size_t(sx+col/4)];
 }
 
 int ManagerScreen::master_id(int selection_id) const {
@@ -206,17 +277,23 @@ bool ManagerScreen::click(int x, int y, bool right) {
         for (int i = 0; i < 7; ++i) {
             int bx = i < 4 ? 64 : 161, by = 175 + (i < 4 ? i : i - 4) * 11;
             if (x >= bx && x <= bx + 94 && y >= by && y <= by + 10) {
+                if(context_.world&&last_[i]<first_[i])return false;
                 bool changed = group_ != i; group_ = i; hover_ = hovered_club(x, y); return changed;
             }
         }
         int id = hovered_club(x, y); bool moved = move(x, y);
-        if (id >= 0 && !club_locked(master_id(id)) && id != choice_.selection_club) {
-            choice_.selection_club = id; choice_.master_club = master_id(id); return true;
+        if (id >= 0 && !selection_locked(id) && id != choice_.selection_club) {
+            select_club(id); return true;
         }
         return moved;
     }
     if (right) { view_ = ManagerView::confirmation; return true; }
-    bool open_clubs = x > 185 && x < 225 && y > 76 && y < 116;
+    if(context_.world && x>185 && x<225 && y>76 && y<116) {
+        const auto country=choice_.country==bmh::world12::Country::germany?bmh::world12::Country::england:bmh::world12::Country::germany;
+        if(!context_.world->scope.domestic_enabled(country))return false;
+        select_country(country);return true;
+    }
+    bool open_clubs = x > (context_.world?234:185) && x < (context_.world?274:225) && y > 76 && y < 116;
     for (int i = 0; i < 12; ++i) {
         int px = (i < 6 ? 26 : 27) + (i % 6) * 45, py = i < 6 ? 151 : 197;
         if (x >= px && x < px + 38 && y >= py && y < py + 38) {
@@ -234,7 +311,7 @@ bool ManagerScreen::click(int x, int y, bool right) {
     if (open_clubs) {
         // Original uses <= end when finding the initial group, including its boundary quirk.
         group_ = 0;
-        while (group_ < 6 && last_[group_] <= choice_.selection_club) ++group_;
+        while (group_ < 6 && (context_.world?last_[group_]<choice_.selection_club:last_[group_]<=choice_.selection_club)) ++group_;
         view_ = ManagerView::club_picker; hover_ = hovered_club(x, y); return true;
     }
     return false;
@@ -247,7 +324,7 @@ bool ManagerScreen::text(std::string_view value) {
         bool letter = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
         if (!letter && std::string_view(" ,:.'\\[{|}]~").find(char(c)) == std::string_view::npos) continue;
         const auto next = choice_.name + char(c);
-        if (choice_.name.size() < 25 && small_.text_width(next) < 65) choice_.name = next;
+        if (choice_.name.size() < size_t(context_.world?20:25) && small_.text_width(next) < 65) choice_.name = next;
     }
     return before != choice_.name;
 }
@@ -263,7 +340,12 @@ void ManagerScreen::portrait(Image& out, int x, int y, int id) const {
 }
 void ManagerScreen::badge(Image& out, int x, int y, int id) const {
     border(out, x, y);
-    if (original_badge_fallback(id, &exe_)) { copy(out, widgets_, 8, 0, x, y, 38, 38); return; }
+    if (!context_.world && original_badge_fallback(id, &exe_)) { copy(out, widgets_, 8, 0, x, y, 38, 38); return; }
+    if(context_.world) {
+        const auto& club=world_clubs_.at(size_t(id));const auto atlas=load_vga(asset_path(data_,club.crest_path));
+        if(atlas.width!=304||atlas.height!=38)throw FormatError("manager: unsupported typed crest atlas");
+        copy(out,atlas,club.crest_cell*38,0,x,y,38,38);return;
+    }
     int sprite = le16(db_.raw_club_badge_selectors, size_t(id) * 2) & 0x1ff;
     auto atlas = load_vga(asset_path(data_ / "W", std::to_string(sprite >> 3) + ".VGA"));
     copy(out, atlas, (sprite & 7) * 38, 0, x, y, 38, 38);
@@ -344,9 +426,11 @@ Image ManagerScreen::render() const {
         portrait(out, x, y, i);
         if (portrait_locked(i)) copy(out, faces_, 228, 13, x + 5, y + 4, 28, 30, true);
     }
-    portrait(out, 103, 77, choice_.portrait); badge(out, 186, 77, choice_.master_club);
+    portrait(out, 103, 77, choice_.portrait);
+    if(context_.world)country_flag(out,186,77);
+    badge(out, context_.world?235:186, 77, context_.world?choice_.selection_club:choice_.master_club);
     const std::array<std::string, 4> values = {choice_.name, leagues_[choice_.start_league],
-        db_.club_names.at(choice_.master_club), texts_[(::bmh::layout::Manager_Render_TextPointer - ::bmh::layout::TextPointerTable) / 4 + choice_.strength]};
+        selection_name(choice_.selection_club), texts_[(::bmh::layout::Manager_Render_TextPointer - ::bmh::layout::TextPointerTable) / 4 + choice_.strength]};
     for (int i = 0; i < 4; ++i) {
         copy(out, background_, field_x_[i], field_y_[i], field_x_[i], field_y_[i], field_width_[i], 11);
         // TextWidth3 refuses strings extending outside the framebuffer.
@@ -364,17 +448,17 @@ Image ManagerScreen::render() const {
             int x = 60 + (i % 5) * 40, y = 15 + (i / 5) * 40, id = first_[group_] + i;
             if (id > last_[group_]) rect(out, x, y, 38, 38, 100);
             else {
-                badge(out, x, y, master_id(id));
-                if (club_locked(master_id(id))) copy(out, faces_, 228, 13, x + 5, y + 4, 28, 30, true);
+                badge(out, x, y, context_.world?id:master_id(id));
+                if (selection_locked(id)) copy(out, faces_, 228, 13, x + 5, y + 4, 28, 30, true);
                 if (choice_.selection_club == id) copy(out, faces_, 228, 0, x + 24, y + 23, 11, 13, true);
             }
         }
         for (int i = 0; i < 7; ++i)
-            button(out, i < 4 ? 64 : 161, 175 + (i < 4 ? i : i - 4) * 11, 94, leagues_[i], group_ == i);
+            if(!context_.world||last_[i]>=first_[i])button(out, i < 4 ? 64 : 161, 175 + (i < 4 ? i : i - 4) * 11, 94, leagues_[i], group_ == i);
         // Hover clear uses a new local pattern origin, even when no club is hovered.
         pattern(out, 81, 222, 151, 8);
         if (hover_ >= 0) {
-            const auto& name = db_.club_names.at(master_id(hover_));
+            const auto& name = selection_name(hover_);
             small_text(out, 159 - small_.text_width(name) / 2, 228, name);
         }
     } else if (view_ == ManagerView::confirmation || view_ == ManagerView::accepted) {
@@ -384,7 +468,7 @@ Image ManagerScreen::render() const {
         copy(out, widgets_, 55, 66, 99, 90, 22, 21); copy(out, widgets_, 55, 66, 192, 90, 22, 21);
         rect(out, 53, 131, 207, 1, 105); rect(out, 53, 163, 207, 1, 105);
         frame(out, 52, 87, 42, 42, false); frame(out, 219, 87, 42, 42, false);
-        badge(out, 54, 89, choice_.master_club); portrait(out, 221, 89, choice_.portrait);
+        badge(out, 54, 89, context_.world?choice_.selection_club:choice_.master_club); portrait(out, 221, 89, choice_.portrait);
         const auto& prompt = texts_[(::bmh::layout::Manager_SmallText_TextPointer - ::bmh::layout::TextPointerTable) / 4];
         small_text(out, 73 + 170 / 2 - small_.text_width(prompt) / 2, 140, prompt);
         button(out, 62, 166, 75, texts_[(::bmh::layout::GameEnd_Copy_TextPointer - ::bmh::layout::TextPointerTable) / 4], false);
@@ -398,7 +482,9 @@ std::string manager_json(const ManagerChoice& c) {
     out << "{\"slot\":" << c.slot << ",\"name\":" << json_quote(original_to_utf8(c.name))
         << ",\"master_club\":" << c.master_club << ",\"start_league\":" << c.start_league
         << ",\"strength\":" << c.strength << ",\"portrait\":" << c.portrait
-        << ",\"selection_club\":" << c.selection_club << ",\"roster_revision\":" << c.roster_revision << '}';
+        << ",\"selection_club\":" << c.selection_club << ",\"roster_revision\":" << c.roster_revision;
+    if(c.world_club.valid())out<<",\"world_club\":"<<c.world_club.value<<",\"country\":"<<int(c.country);
+    out<<'}';
     return out.str();
 }
 

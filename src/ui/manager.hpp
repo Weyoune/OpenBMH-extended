@@ -4,6 +4,9 @@
 #include <array>
 #include <filesystem>
 #include <vector>
+#include <memory>
+#include "game/world12/identity.hpp"
+#include "game/world12/scope.hpp"
 
 #include "formats/font.hpp"
 #include "formats/le.hpp"
@@ -24,7 +27,20 @@ struct ManagerChoice {
     int portrait = 0;              // 0..11
     int selection_club = 0;        // Index in the selection context at confirmation
     uint64_t roster_revision = 0;  // Prevent applying an ID against a later club order
+    bmh::world12::ClubId world_club;
+    bmh::world12::Country country=bmh::world12::Country::germany;
     bool operator==(const ManagerChoice&) const = default;
+};
+struct ManagerClubView {
+    bmh::world12::ClubId id;
+    std::string name,crest_path;
+    uint8_t crest_cell=0;
+};
+struct ManagerCountryGroup {std::string label;std::vector<ManagerClubView> clubs;};
+struct ManagerWorldSelection {
+    bmh::world12::GameScope scope;
+    std::array<ManagerCountryGroup,7> germany,england;
+    uint64_t revision=0;
 };
 
 struct SelectionContext {
@@ -33,6 +49,7 @@ struct SelectionContext {
     std::vector<int> club_order;
     uint64_t revision = 0;
     std::string source = "master_database";
+    std::shared_ptr<const ManagerWorldSelection> world;
 };
 SelectionContext load_selection_context(const std::filesystem::path& path, uint64_t revision);
 
@@ -59,11 +76,17 @@ public:
     const std::string& group_label(int group) const { return leagues_.at(size_t(group)); }
     int group_first(int group) const { return first_.at(size_t(group)); }
     int group_last(int group) const { return last_.at(size_t(group)); }
-    int master_of(int selection_id) const { return master_id(selection_id); }
-    const std::string& club_name(int master) const { return db_.club_names.at(size_t(master)); }
+    int master_of(int selection_id) const;
+    const std::string& club_name(int master) const;
+    bmh::world12::ClubId world_club_of(int selection_id)const;
 
 private:
     bool club_locked(int id) const;
+    bool selection_locked(int selection)const;
+    void select_club(int selection);
+    void select_country(bmh::world12::Country);
+    const std::string& selection_name(int selection)const;
+    void country_flag(Image&,int x,int y)const;
     bool portrait_locked(int id) const;
     int master_id(int selection_id) const;
     int hovered_club(int x, int y) const;
@@ -85,6 +108,8 @@ private:
     TextDb texts_;
     Font small_, large_;
     Image background_, faces_, widgets_, letters_;
+    Image flags_;
+    std::vector<ManagerClubView> world_clubs_;
     std::array<int, 4> text_x_{}, baseline_{}, field_x_{}, field_y_{}, field_width_{};
     std::array<std::string, 7> leagues_;
     std::array<int, 7> first_{}, last_{};

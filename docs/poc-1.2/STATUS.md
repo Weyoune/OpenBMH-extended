@@ -125,3 +125,9 @@ Validation of this initialization milestone: all 19 targeted Linux checks and th
 ## Typed league predictions
 
 The [shared forecast kernel](PREDICTION.md) now supports country-qualified 10/18/20-team tables without packed club IDs. Source two-point prediction tables, future-win rates, tie/word behavior, goal transitions and stale-size semantics are preserved. Typed forecasts return read-only data for the upcoming human match owner. 600 typed/native comparisons, 50 ten-team cases, 15,120 pre-refactor Core comparisons and all 20 targeted Linux regressions pass; the application builds. Human live/scoring ownership remains pending.
+
+## Classic country/club manager UI
+
+The [manager selection](MANAGER_SELECTION.md) now follows the requested flag/crest layout. Germany/England toggles choose the first available first-division club, retaining name/portrait/strength; the crest opens the Original picker with twenty English cells and current country tabs. Typed immutable contexts preserve wide IDs/crest resources and disabled-country/locking rules. The setup flow has a checked typed-selection handoff and newer-context continuation between managers. Source-backed images and input checks cover both countries and a two-manager flow; the complete typed career/desktop owner is still pending.
+
+Validation: all 23 targeted Linux checks and the application build pass. The real 1.2 package renders both country states and all twenty English crests; UI tests also cover a two-manager continuation and a synthetic global ID above INT_MAX. Existing setup/manager rendering tests pass with the legacy reference package. Comparison images, input-world hash and selection JSON are recorded privately; this is a pre-career UI state, not a played save.
