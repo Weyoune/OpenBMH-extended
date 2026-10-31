@@ -29,9 +29,14 @@ struct Loan {
     PlayerId player;ClubId owner,borrower;uint8_t months=0;
     bool operator==(const Loan&)const=default;
 };
+struct ManagerFinanceBaseline {
+    uint32_t starting_balance=0,account_flags=0;
+    bool operator==(const ManagerFinanceBaseline&)const=default;
+};
 struct ManagerFinance {
     int32_t balance=0;
     uint32_t credit=0,income=0,expenses=0,bonus_paid=0;
+    std::optional<ManagerFinanceBaseline> baseline={};
     bool operator==(const ManagerFinance&)const=default;
 };
 struct ManagerTacticalRow {
@@ -65,6 +70,7 @@ struct Manager {
 };
 struct CrestResource {std::string path;uint8_t cell=0;bool operator==(const CrestResource&)const=default;};
 struct World {
+    bool players_initialized=false;
     int32_t development_balance=0;
     uint8_t trend_rotation=0;
     Catalogue catalogue=Catalogue::dual_classic();

@@ -5,7 +5,7 @@ The active objective is a playable, verified 1.2, not another isolated format pr
 | Gate | Current evidence | Work still required |
 | --- | --- | --- |
 | World and source data | 13 league identities, 234 full-scope clubs, wide IDs, scoped data and snapshots | Final editor/package binding and full career state |
-| Human management | Finances, full tactical/contract row backing, formations and pre-match roster swaps | Career initialization, remaining manager policy/records and other management actions |
+| Human management | Finances, full tactical/contract row backing, formations and pre-match roster swaps | Player generation and account/board phase verified; full club-placement/strength/stadium initialization, remaining manager policy/records and other management actions |
 | Matchday | Actual AI shared-clock groups, settled league days, deterministic seeds | Human/live ownership and financial settlement; cup/indoor/national simulation |
 | Competitions | Source calendars, fixtures, standings, domestic draws/stages and scoped other-games UI | Complete competition results, qualification, promotions and season transitions |
 | Career services | Bounded Original adapters | Daily/weekly/monthly finance, training, transfers, bank, stadium and notification publication |

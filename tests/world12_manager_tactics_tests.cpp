@@ -2,6 +2,8 @@
 #include "world12_fixture.hpp"
 #include "app/world12_manager.hpp"
 #include "game/lineup.hpp"
+#include "game/career.hpp"
+#include "game/national.hpp"
 #include "game/world12/codec.hpp"
 #include "game/world12/save.hpp"
 #include "cli/json.hpp"
@@ -222,6 +224,45 @@ void complete_tactical_cases() {
     rejects([&]{calculate_manager_tactical_action(missing,3,action,{});},"incomplete tactical record guessed a formation");
     std::cout<<cases<<" complete-board formation/save/entry cases, cross-club wide references and numeric-payload guards passed\n";
 }
+app::ManagerActionOwner* initializing_owner=nullptr;
+void interrupt_initial_owner(int){bmh::draw_hook=nullptr;++initializing_owner->revision;}
+void initial_contract_cases() {
+    size_t cases=0;
+    for(bool english:{false,true})for(uint32_t tier=0;tier<5;++tier)for(int difficulty:{0,1,6,9}) {
+        auto w=world(english);const auto old_club=w.managers[0].club;const auto target=w.membership[(english?5:0)+tier].clubs[0];
+        if(target!=old_club)std::swap(w.clubs.at(old_club).roster,w.clubs.at(target).roster);
+        w.managers[0].club=target;w.managers[0].start_league={(english?5u:0u)+tier};w.players_initialized=true;
+        TacticalPolicy policy{3,false,false,true,difficulty};auto rules=native(w,policy);
+        const uint8_t depth[]={0,5,5,5,5,10,10,10,10,17,17},lane[]={4,1,3,5,7,1,3,5,7,3,5};
+        for(size_t m=0;m<4;++m)for(size_t mode=0;mode<2;++mode)for(size_t f=0;f<8;++f)for(size_t r=0;r<11;++r){const auto at=m*0x160+mode*0xb0+f*22+r;rules.formations[at]=depth[r];rules.formations[at+11]=lane[r];}
+        rules.manager_options[15]=1;auto expected=rules;
+        std::fill(expected.manager_records.begin()+3*0xb0c,expected.manager_records.end(),0);expected.manager_records[3*0xb0c+0x290]=72;
+        expected.manager_records[3*0xb0c+0x288]=0x16;expected.manager_records[3*0xb0c+0x218]=expected.manager_records[3*0xb0c+0x219]=15;
+        for(size_t r=0;r<24;++r)for(size_t offset:{0x44u,0x46u}){expected.tactics[3*0x840+r*0x58+offset]=0xff;expected.tactics[3*0x840+r*0x58+offset+1]=0x0f;}
+        std::vector<PlayerId> mapping(24);const auto start=bmh::squad_range(72).first;
+        for(size_t r=0;r<20;++r)mapping[23-r]=w.clubs.at(target).roster[r].player;
+        bmh::WatcomRandom a(91),b(91);
+        for(size_t r=0;r<20;++r){auto& p=expected.players.at(expected.squad_slots[start+r]&0xfff);p.w364=(p.w364&~(0x1fu<<21))|(uint32_t(a.range(4,9))<<21);bmh::new_board_entry(expected,3,int(r),int(start+r),a);expected.tactics[3*0x840+r*0x58+0xd]=100;}
+        int normalized=int(tier);if(normalized>2)--normalized;if(normalized>2)normalized=2;
+        bmh::initialize_career_manager_funds(expected,3,difficulty,normalized);bmh::auto_lineup(expected,72,100);
+        w.managers[0].finance.reset();w.managers[0].tactics.reset();const auto before=w;
+        app::ManagerActionOwner owner{71,8};const app::ManagerActionIdentity identity{3,target,71,8};
+        const auto draws=app::initialize_manager_contracts(w,owner,identity,rules,policy,b);
+        check(draws==a.calls()&&b.seed()==a.seed()&&owner.revision==9,"initial contracts lost Source RNG or owner revision");
+        check(w.managers[0].tactics==manager_full_tactics_from_legacy(expected,3,mapping),"initial board/contracts differ from direct Source phase");
+        check(w.managers[0].finance==manager_initial_finance_from_legacy(expected,3),"initial account/baseline differs from Source financial phase");
+        check(w.managers[0].finance->balance==(difficulty==0?50000000:4000000-difficulty*200000)&&w.managers[0].finance->credit==uint32_t(400000-normalized*100000),"initial difficulty/league account policy wrong");
+        for(size_t r=0;r<20;++r){const auto raw=expected.squad_slots[start+r];const auto id=mapping.at(raw&0xfff);check(w.clubs.at(target).roster[r].player==id&&w.players.at(id).attributes.w364==expected.players.at(raw&0xfff).w364,"initial age/lineup lost global identity");}
+        CareerSnapshot snap;snap.world=w;snap.results=SeasonResults::empty(w.catalogue);check(read_save(make_save(snap))==snap,"initial contracts/account baseline lost on reload");
+        const auto initialized=w;rejects([&]{app::initialize_manager_contracts(w,owner,identity,rules,policy,b);},"initial contract request replayed");check(w==initialized&&owner.revision==9,"replayed creation changed initialized fields");
+        auto financial=*w.managers[0].finance;const auto booked=calculate_manager_booking(financial,difficulty,-100,true,true);check(booked.finance.baseline==financial.baseline,"ordinary booking discarded starting account baseline");
+        auto interrupted=before;auto interrupted_owner=app::ManagerActionOwner{71,8};bmh::WatcomRandom untouched(91);initializing_owner=&interrupted_owner;bmh::draw_hook=interrupt_initial_owner;
+        rejects([&]{app::initialize_manager_contracts(interrupted,interrupted_owner,identity,rules,policy,untouched);},"initial owner interruption was overwritten");bmh::draw_hook=nullptr;
+        check(interrupted==before&&interrupted_owner.revision==9&&untouched.calls()==0,"partial contracts/RNG leaked after owner interruption");
+        ++cases;
+    }
+    std::cout<<cases<<" source board/account initialization phases, both country ladders/difficulty, baseline persistence and interrupted-owner rollback passed\n";
+}
 void original_save(const std::filesystem::path& data,const std::filesystem::path& save) {
     const auto exe=bmh::load_le(data/"BMH.exe");const bmh::DbCounts counts{exe.u32(bmh::layout::CareerSession_DataDirectory_RuntimeField),exe.u32(bmh::layout::CareerSession_DataDirectory_RuntimeField3),exe.u32(bmh::layout::CareerSession_DataDirectory_RuntimeField2),exe.u32(bmh::layout::CareerSession_DataDirectory_RuntimeField4)};
     const auto file=bmh::load_savegame(save);check(file.checksum_ok&&file.version=="V2.24","invalid reference save");
@@ -244,6 +285,6 @@ void original_save(const std::filesystem::path& data,const std::filesystem::path
 }
 }
 int main(int argc,char** argv)try {
-    core_cases();ownership_codec();swap_cases();complete_tactical_cases();if(argc==3)original_save(argv[1],argv[2]);else if(argc!=1)throw std::runtime_error("usage: world12_manager_tactics_tests [reference-directory original.FBM]");
+    core_cases();ownership_codec();swap_cases();complete_tactical_cases();initial_contract_cases();if(argc==3)original_save(argv[1],argv[2]);else if(argc!=1)throw std::runtime_error("usage: world12_manager_tactics_tests [reference-directory original.FBM]");
     std::cout<<"Tactical persistence, ownership, wide player IDs, no-op/frozen handling and snapshot compatibility passed\n";return 0;
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}

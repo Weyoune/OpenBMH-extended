@@ -46,6 +46,9 @@ void generate_player(GameState& g, int id, int level_flags, GameRandom& game, Wa
 // from the league's maximum (first club) down towards its minimum (LeagueStrengthRanges pairs,
 // club counts LeagueSizes), keeping the age at 0 for InitializeCareer.
 void startup_players(GameState& g, GameRandom& game, WatcomRandom& rand);
+// Verified account phase of CareerAddManager after board/stadium setup. The
+// normalized league is the Source financial tier (0..2), not a global ID.
+void initialize_career_manager_funds(GameState&,int manager,int difficulty,int normalized_league);
 
 // The squad list as CareerFirstSteps2 leaves it: all slots 0xfff, the database list read
 // over them and its tail (from slot CareerRuntimeField + 40) moved up to slot CareerRuntimeField2

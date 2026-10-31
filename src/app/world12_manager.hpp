@@ -13,4 +13,6 @@ bmh::world12::ManagerMoneyOutcome book_manager_funds(bmh::world12::World&,Manage
     const ManagerActionIdentity&,int difficulty,int32_t amount,bool force,bool statistics);
 bmh::world12::TacticalOutcome apply_manager_tactical_action(bmh::world12::World&,ManagerActionOwner&,
     const ManagerActionIdentity&,const bmh::world12::TacticalAction&,bmh::world12::TacticalPolicy);
+uint64_t initialize_manager_contracts(bmh::world12::World&,ManagerActionOwner&,
+    const ManagerActionIdentity&,const bmh::GameState& initial_rules,bmh::world12::TacticalPolicy,bmh::WatcomRandom&);
 }

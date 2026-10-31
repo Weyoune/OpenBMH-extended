@@ -23,7 +23,13 @@ ManagerMoneyOutcome calculate_manager_booking(const ManagerFinance& input,int di
     set_word(workspace.manager_records,balance_at,std::bit_cast<uint32_t>(input.balance));set_word(workspace.manager_records,credit_at,input.credit);
     set_word(workspace.manager_records,income_at,input.income);set_word(workspace.manager_records,expenses_at,input.expenses);set_word(workspace.manager_records,bonus_at,input.bonus_paid);
     const bool allowed=bmh::book_money(workspace,0,amount,force,statistics);
-    const auto result=manager_finance_from_legacy(workspace,0);
+    auto result=manager_finance_from_legacy(workspace,0);result.baseline=input.baseline;
     return {allowed,result!=input,result};
+}
+ManagerFinance manager_initial_finance_from_legacy(const GameState& state,int manager) {
+    auto result=manager_finance_from_legacy(state,manager);
+    const auto at=size_t(manager)*record_size;
+    result.baseline=ManagerFinanceBaseline{word(state.manager_records,at+0x324),word(state.manager_records,at+0x310)};
+    return result;
 }
 }

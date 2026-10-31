@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "game/world12/manager_tactics.hpp"
 #include "game/lineup.hpp"
+#include "game/career.hpp"
+#include "game/national.hpp"
+#include "game/world12/manager_finance.hpp"
 #include <algorithm>
 #include <stdexcept>
 namespace bmh::world12 {
@@ -48,7 +51,10 @@ GameState workspace(const World& world,const Manager& manager,TacticalPolicy pol
     state.memory.add_block(layout::ActiveManager,1);state.memory.set8(layout::ActiveManager,0);
     state.memory.add_block(layout::GameMode,1);state.memory.set8(layout::GameMode,uint8_t(policy.mode));
     state.squad_slots.assign(24,0xfff);
-    for(auto id:mapping){const auto& p=world.players.at(id);state.players.push_back(p.attributes);state.player_cards.push_back(p.cards);state.player_bonus.push_back(p.bonus);}
+    for(auto id:mapping){const auto& p=world.players.at(id);state.players.push_back(p.attributes);state.player_cards.push_back(p.cards);state.player_bonus.push_back(p.bonus);
+        if(state.player_names.size()+p.attributes.name.size()+1>65535)throw std::invalid_argument("world12: tactical name pool overflow");
+        state.player_name_offsets.push_back(uint16_t(state.player_names.size()));state.player_names.insert(state.player_names.end(),p.attributes.name.begin(),p.attributes.name.end());state.player_names.push_back(0);}
+    state.counts.players=uint32_t(state.players.size());
     for(size_t row=0;row<24;++row)if(!club.roster[row].empty()) {
         const auto& slot=club.roster[row];const auto local=uint16_t(std::find(mapping.begin(),mapping.end(),slot.player)-mapping.begin());
         state.squad_slots[row]=uint16_t(local|((slot.flags&1)?0x8000:0)|((slot.flags&2)?0x4000:0)|((slot.flags&4)?0x2000:0)|((slot.flags&8)?0x1000:0));
@@ -135,4 +141,49 @@ TacticalOutcome calculate_manager_tactical_action(const World& world,uint8_t sea
             for(size_t row=0;row<24;++row)if(!result.lineup->roster[row].empty())result.changed|=world.players.at(result.lineup->roster[row].player).cards!=result.lineup->cards_by_row[row];}}
     return result;
 }
+uint64_t initialize_manager_contracts(World& world,uint8_t seat,const GameState& rules,TacticalPolicy policy,WatcomRandom& random) {
+    world.validate();
+    if(!world.players_initialized || policy.mode<1 || policy.mode>3 || policy.difficulty<0 || policy.difficulty>9 || policy.indoor || policy.frozen ||
+        world.development_balance || world.trend_rotation || !world.loans.empty())
+        throw std::invalid_argument("world12: initial manager contracts require the fresh outdoor career phase");
+    for(const auto& [id,club]:world.clubs)if(club.season_stats!=ClubSeasonStats{})throw std::invalid_argument("world12: played career cannot initialize manager contracts");
+    const auto found=std::find_if(world.managers.begin(),world.managers.end(),[&](const auto& manager){return manager.seat==seat;});
+    if(found==world.managers.end() || found->finance || found->tactics)throw std::invalid_argument("world12: manager contract/account state already exists or seat is missing");
+    if(rules.manager_options.size()<size_t(seat+1)*5 || rules.manager_options[size_t(seat)*5]!=1 || rules.formations.size()<0x580 ||
+        rules.tactics.size()<size_t(seat+1)*board_size || rules.manager_records.size()<size_t(seat+1)*record_size)
+        throw std::invalid_argument("world12: initial manager formation/automation rules missing");
+    const auto before=world;auto candidate=world;const auto old_seed=random.seed();const auto old_calls=random.calls();auto staged_random=random;
+    const auto index=size_t(found-world.managers.begin());auto& manager=candidate.managers[index];
+    auto initial=rules;
+    initial.manager_records[size_t(seat)*record_size+0x288]=0x16;
+    initial.manager_records[size_t(seat)*record_size+0x218]=initial.manager_records[size_t(seat)*record_size+0x219]=15;
+    // Unoccupied initial rows have no player to mark. Do not reinterpret the
+    // zeroed Original BSS words as references to the first global player.
+    for(size_t row=0;row<24;++row)for(size_t offset:{0x44u,0x46u}){
+        const auto at=size_t(seat)*board_size+row*row_size+offset;initial.tactics[at]=0xff;initial.tactics[at+1]=0x0f;}
+    manager.tactics=manager_full_tactics_from_legacy(initial,seat,{});
+    auto local=workspace(candidate,manager,policy);const auto mapping=mapped_players(candidate,manager);
+    for(size_t row=0;row<24;++row) {
+        const auto raw=local.squad_slots[row];if((raw&0xfff)==0xfff)break;
+        auto& p=local.players.at(raw&0xfff);p.w364=(p.w364&~(0x1fu<<21))|(uint32_t(staged_random.range(4,9))<<21);
+        bmh::new_board_entry(local,0,int(row),int(row),staged_random);local.tactics[row*row_size+0xd]=100;
+    }
+    int tier=candidate.catalogue.league(candidate.clubs.at(manager.club).league).local_index;
+    if(tier>2)--tier;if(tier>2)tier=2;
+    bmh::initialize_career_manager_funds(local,0,policy.difficulty,tier);
+    bmh::auto_lineup(local,0,100);
+    manager.tactics=manager_full_tactics_from_legacy(local,0,mapping);
+    manager.finance=manager_initial_finance_from_legacy(local,0);
+    auto& club=candidate.clubs.at(manager.club);club.match_flags=local.team_flags[0];club.lineup_indoor=(local.club_heap_78[1]&2)!=0;
+    for(size_t row=0;row<24;++row) {
+        const auto raw=local.squad_slots[row];if((raw&0xfff)==0xfff){club.roster[row]={};continue;}
+        const auto local_id=raw&0xfff;const auto id=mapping.at(local_id);
+        club.roster[row]={id,uint16_t(((raw&0x8000)?1:0)|((raw&0x4000)?2:0)|((raw&0x2000)?4:0)|((raw&0x1000)?8:0))};
+        candidate.players.at(id).attributes=local.players.at(local_id);candidate.players.at(id).cards=local.player_cards.at(local_id);
+    }
+    candidate.validate();
+    if(world!=before || random.seed()!=old_seed || random.calls()!=old_calls)throw std::invalid_argument("world12: manager initialization owner/RNG changed");
+    const auto draws=staged_random.calls()-old_calls;world=std::move(candidate);random=staged_random;return draws;
+}
+
 }

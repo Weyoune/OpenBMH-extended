@@ -29,4 +29,8 @@ struct TacticalLineup {
 struct TacticalOutcome {bool allowed=false,changed=false;ManagerTactics tactics;std::optional<TacticalLineup> lineup={};};
 TacticalOutcome calculate_manager_tactical_action(const World&,uint8_t manager,
     const TacticalAction&,TacticalPolicy);
+// CareerAddManager's account/board phase, after club strength and stadium
+// selection. Uses supplied initial formation data, never an existing career.
+uint64_t initialize_manager_contracts(World&,uint8_t manager,const GameState& initial_rules,
+    TacticalPolicy,WatcomRandom&);
 }

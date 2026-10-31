@@ -5,6 +5,7 @@
 namespace bmh::world12 {
 // Extract only verified financial words, never club/player/name-pool references.
 ManagerFinance manager_finance_from_legacy(const GameState&,int manager);
+ManagerFinance manager_initial_finance_from_legacy(const GameState&,int manager);
 struct ManagerMoneyOutcome {
     bool allowed=false,changed=false;
     ManagerFinance finance;
