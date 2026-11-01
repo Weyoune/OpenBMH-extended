@@ -8,6 +8,7 @@ describe deliberate changes; they are not a list of every known compatibility li
 - [src/app/career_session.cpp](../src/app/career_session.cpp): supports designated set-piece record initialization and validation.
 - [src/app/main.cpp](../src/app/main.cpp): show only the static title until a complete left or right click, without the DOS loading animation.
 - [src/app/quit_confirmation.hpp](../src/app/quit_confirmation.hpp): confirms application exit with a localized native dialog, with cancellation selected by default.
+- [src/app/world12_weather.cpp](../src/app/world12_weather.cpp): referee availability is scoped to each country's programme so the shared world can exceed 49 matches.
 - [src/game/career.cpp](../src/game/career.cpp): skips reserved calendar positions when assigning a joining manager to a club.
 - [src/game/career.hpp](../src/game/career.hpp): uses the supported player-generation ranges and excludes reserved calendar positions when assigning managers.
 - [src/game/desk_actions.cpp](../src/game/desk_actions.cpp): uses the supported transfer-fee arithmetic and designated set-piece fields.

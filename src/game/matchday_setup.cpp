@@ -167,24 +167,13 @@ bool sportschau_selected(const GameState& g, int home) {
 
 void match_weather(MatchGroup& grp, int m, const MatchdayContext& ctx, GameRandom& game, WatcomRandom& rand) {
     const int home = grp.fixtures.at(size_t(m) * 2), away = grp.fixtures.at(size_t(m) * 2 + 1);
-    const int region = team_region(home);
-    int8_t base = int8_t(month_temperature(ctx.month) + region_temperature(region));
-    const uint8_t temperature = uint8_t(rand.range(0, 6) + base - 3);
-    grp.desc.at(0x30 + size_t(m)) = temperature;
-    int rain = rand.range(0, 5);
-    // the temperature is compared as an unsigned byte: only 0 and 1 degrees bring snow
-    if (temperature < 2 && rain > 3) rain += 2;
-    grp.desc.at(0x50 + size_t(m)) = uint8_t(rain);
-    if (int16_t(home) < kNoTeam && uint16_t(away) < kNoTeam && !(grp.desc.at(1) & 0x80)) {
-        // Range(1): a referee not yet chosen today
-        std::vector<uint8_t>& refs = *ctx.referees;
-        int r;
-        do {
-            r = game.range(1, 0x31);
-        } while (refs.at(size_t(r)) & 0x80);
-        refs.at(size_t(r)) |= 0x80;
-        grp.desc.at(0x10 + size_t(m)) = uint8_t(r);
-    }
+    const bool choose=int16_t(home)<kNoTeam&&uint16_t(away)<kNoTeam&&!(grp.desc.at(1)&0x80);
+    std::vector<uint8_t> unused;
+    auto& referees=ctx.referees?*ctx.referees:unused;
+    const auto weather=draw_match_weather(team_region(home),ctx.month,choose,referees,game,rand);
+    grp.desc.at(0x30+size_t(m))=weather.temperature;
+    grp.desc.at(0x50+size_t(m))=weather.rain;
+    if(choose)grp.desc.at(0x10+size_t(m))=weather.referee;
 }
 
 void prepare_team(GameState& g, int team, int cls, int index) {
@@ -974,6 +963,22 @@ void reset_match_played_flags(GameState& g) {
 }
 uint8_t match_competition_class(uint8_t type) {
     return type<24?kCompetitionClass[type]:255;
+}
+MatchWeatherOutcome draw_match_weather(int region,int month,bool choose,
+    std::vector<uint8_t>& refs,GameRandom& game,WatcomRandom& random) {
+    if(region<0||region>=62||month<0||month>12||
+       (choose&&(refs.size()<50||std::none_of(refs.begin()+1,refs.begin()+50,[](uint8_t r){return !(r&0x80);}))))
+        throw FormatError("match preparation: invalid or exhausted referee/weather context");
+    const auto base=int8_t(month_temperature(month)+region_temperature(region));
+    MatchWeatherOutcome result;result.temperature=uint8_t(random.range(0,6)+base-3);
+    result.rain=uint8_t(random.range(0,5));
+    // Preserve the Original unsigned-byte snow test, including sub-zero weather.
+    if(result.temperature<2&&result.rain>3)result.rain=uint8_t(result.rain+2);
+    if(choose) {
+        int referee;do{referee=game.range(1,49);}while(refs[size_t(referee)]&0x80);
+        refs[size_t(referee)]|=0x80;result.referee=uint8_t(referee);
+    }
+    return result;
 }
 void kick_off(GameState& g, std::vector<MatchGroup>& groups, const MatchdayContext& ctx, WatcomRandom& rand,
               GameRandom& game, MinuteReport& report, bool select_sportschau, uint16_t club_threshold) {

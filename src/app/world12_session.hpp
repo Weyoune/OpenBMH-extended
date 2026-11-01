@@ -16,6 +16,8 @@ struct RuntimeResources {
     bmh::world12::World master;
     LeImage german,english;
     GameState reference;
+    std::vector<uint8_t> referee_properties;
+    std::vector<std::string> referee_names;
     bmh::world12::SeasonCalendar calendar;
 };
 // Explicit reference layout is a Core workspace, never legacy admission of the

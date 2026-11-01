@@ -43,6 +43,14 @@ struct MatchdayContext {
     // check of the other days (no take-over, no hand-back)
     bool national_team_day = false;
 };
+struct MatchWeatherOutcome {
+    uint8_t temperature=0,rain=0,referee=0;
+    bool operator==(const MatchWeatherOutcome&)const=default;
+};
+// Explicit geography for typed/bounded workspaces; native callers obtain the
+// same region from their ordinary team token. Temperature stays a source byte.
+MatchWeatherOutcome draw_match_weather(int region,int month,bool choose_referee,
+    std::vector<uint8_t>& referee_properties,GameRandom&,WatcomRandom&);
 
 // The 0xD0-byte descriptor of match group `index` as it is left in memory (block MatchdayGroupDescriptors) from
 // the previous matchday: the preparation only overwrites what it needs, so for example

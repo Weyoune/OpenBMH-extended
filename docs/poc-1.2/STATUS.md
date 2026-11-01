@@ -5,6 +5,13 @@ The application is **not yet a playable shared-career Beta**. Development is on 
 
 ## Latest integrated career work
 
+The preparation layer now exposes [Core weather/referee calculation](MATCH_WEATHER.md)
+for typed fixture identities. Country-scoped availability supports all 117
+simultaneous fixtures with the supplied source catalogue. Standalone exports add
+validated `REFEREES.JSON`; the runtime still needs no original executable or
+legacy master database. Persistence and visible use of prepared conditions belong
+to the upcoming general event owner.
+
 The next match calculation milestone is described in
 [domestic matches](DOMESTIC_MATCHES.md): both fixed country finals are initialized;
 the shared Core runner calculates actual knockout legs, extra time/shootouts,

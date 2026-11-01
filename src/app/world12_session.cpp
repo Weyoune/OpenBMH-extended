@@ -11,6 +11,8 @@
 #include "game/schedule.hpp"
 #include "formats/data_profile.hpp"
 #include "ui/setup.hpp"
+#include "app/world12_weather.hpp"
+#include "formats/resource_bundle.hpp"
 #include <stdexcept>
 namespace bmh::app::world12 {
 using namespace bmh::world12;
@@ -24,6 +26,10 @@ RuntimeResources load_runtime_resources(const std::filesystem::path& data) {
         r.german.u16(layout::CareerSession_DispatchLineup_RuntimeField)!=layout_profile.counts.league_teams||!r.english.runtime_policy())throw FormatError("world12: unsupported numeric workspace or missing English runtime policy");
     install_runtime_profile(layout_profile);install_fixture_tables(r.german);uint8_t sizes[kLeagueCount];for(size_t i=0;i<kLeagueCount;++i)sizes[i]=layout_profile.leagues[i];set_league_sizes(sizes);
     r.reference=startup_reference_state(r.german,layout_profile.counts,read_file(ui::asset_path(data,"M3.MEN")),read_file(ui::asset_path(data,"M3.DAT")));
+    if(!resource_exists(data/"REFEREES.JSON"))
+        throw FormatError("world12: REFEREES.JSON missing; rebuild the standalone data package with current tools");
+    const auto referees=decode_referee_catalogue(read_file(ui::asset_path(data,"REFEREES.JSON")));
+    r.referee_properties=referees.properties;r.referee_names=referees.names;
     install_bank_credit_rules(r.reference,r.german);
     std::vector<uint16_t> de(366),en(366);for(uint32_t day=0;day<366;++day){de[day]=r.german.u16(layout::CompetitionCalendar+day*2);en[day]=r.english.u16(layout::CompetitionCalendar+day*2);}
     const auto epoch=calendar_epoch_from_executable(r.german);const auto aligned=align_source_calendar(en,int(r.english.runtime_policy()->weekday),epoch.weekday,366);

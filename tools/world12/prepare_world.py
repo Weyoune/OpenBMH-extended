@@ -168,6 +168,10 @@ def prepare(base,tables,output,english,english_runtime=None):
         for y in range(38):pages[page][y*304+c['cell']*38:y*304+c['cell']*38+38]=pixels[y*38:(y+1)*38]
     for page,pixels in pages.items():asset_entries['W/'+str(page)+'.VGA']=encode_vga(304,38,pixels)
     world={'format':'openbmh-world-12','version':1,'profile':'dual-classic-2','players':players,'clubs':clubs,'leagues':members,'crests':crests,'loans':[],'managers':[]}
+    referee_names=[value.decode('ascii') for value in db['pools'][2].split(b'\0')[:-1]]
+    if len(referee_names)!=50 or len(db['refs'])!=50:raise ValueError('Source referee catalogue is incomplete')
+    asset_entries['REFEREES.JSON']=(json.dumps({'format':'openbmh-referees','version':1,
+        'names':referee_names,'properties':list(db['refs'])},separators=(',',':'))+'\n').encode()
     asset_entries['WORLD12.JSON']=(json.dumps(world,separators=(',',':'))+'\n').encode();asset_entries['OBMHPROF.INI']=b'[OpenBMH]\nprofile=dual-classic-2\n'
     asset_entries['KB/SETUP12.VGA']=setup_symbol;provenance['setup_symbol']=setup_report
     asset_entries['PACKAGE.json']=(json.dumps({'format':'openbmh-community-12','profile':'dual-classic-2','playable':False,'requires':'runtime:dual-classic-2','files':{n:sha(v) for n,v in asset_entries.items()}},indent=2)+'\n').encode()
