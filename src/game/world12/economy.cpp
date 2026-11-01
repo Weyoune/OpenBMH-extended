@@ -9,6 +9,7 @@ namespace bmh::world12 {
 namespace {
 constexpr size_t record_size=0xb0c;
 constexpr size_t offer_offsets[]={0x170,0x171,0x174,0x175,0x176,0x177,0x178,0x179};
+constexpr size_t monthly_offsets[]={0x338,0x33c,0x85c,0x860,0x864,0x86c,0x878,0x87c,0x880,0x884,0x888,0x88c,0x890,0x894,0x898};
 constexpr size_t history_offsets[]={0x3d8,0x4a8,0x578,0x648};
 uint32_t word(const Bytes& b,size_t p){return uint32_t(b.at(p))|uint32_t(b.at(p+1))<<8|uint32_t(b.at(p+2))<<16|uint32_t(b.at(p+3))<<24;}
 void put(Bytes& b,size_t p,uint32_t v){for(size_t n=0;n<4;++n)b.at(p+n)=uint8_t(v>>(n*8));}
@@ -20,6 +21,9 @@ std::array<uint8_t,4> seats(const AiMatchProjection& p){
 }
 ManagerEconomy read_manager(const GameState& g,size_t local,const std::array<uint8_t,4>& map){
     ManagerEconomy m;const auto rec=local*record_size;
+    auto& monthly=m.monthly.emplace();monthly.history_count=g.manager_records.at(rec+0x286);
+    for(size_t n=0;n<2;++n)monthly.expenses[n]=word(g.manager_records,rec+0x854+n*4);
+    for(size_t n=0;n<15;++n)monthly.counters[n]=word(g.manager_records,rec+monthly_offsets[n]);
     m.deposit=word(g.manager_records,rec+0x318);m.interest_income=word(g.manager_records,rec+0x870);m.overdraft_interest=word(g.manager_records,rec+0x89c);
     m.submitted_balance_plan=word(g.manager_records,rec+0x320);
     std::copy_n(g.manager_records.begin()+ptrdiff_t(rec+0x54),8,m.planned_stand_capacity.begin());
@@ -34,6 +38,9 @@ ManagerEconomy read_manager(const GameState& g,size_t local,const std::array<uin
 }
 void write_manager(GameState& g,size_t local,const ManagerEconomy& m,const std::array<uint8_t,4>& map){
     const auto rec=local*record_size;
+    if(m.monthly){g.manager_records.at(rec+0x286)=m.monthly->history_count;
+        for(size_t n=0;n<2;++n)put(g.manager_records,rec+0x854+n*4,m.monthly->expenses[n]);
+        for(size_t n=0;n<15;++n)put(g.manager_records,rec+monthly_offsets[n],m.monthly->counters[n]);}
     put(g.manager_records,rec+0x318,m.deposit);put(g.manager_records,rec+0x870,m.interest_income);put(g.manager_records,rec+0x89c,m.overdraft_interest);
     put(g.manager_records,rec+0x320,m.submitted_balance_plan);
     std::copy(m.planned_stand_capacity.begin(),m.planned_stand_capacity.end(),g.manager_records.begin()+ptrdiff_t(rec+0x54));
@@ -91,7 +98,7 @@ void capture_career_economy(World& world,const AiMatchProjection& projection){
     if(!world.economy||!world.markets)throw std::invalid_argument("world12: career economy/market is missing");
     const auto map=seats(projection);const auto& g=projection.state;auto& e=*world.economy;
     e.week=g.memory.u8(layout::Savestate_Layout_ExecutableField);
-    for(uint8_t n=0;n<projection.human_managers();++n)e.managers[map[n]]=read_manager(g,n,map);
+    for(uint8_t n=0;n<projection.human_managers();++n){const auto had_monthly=e.managers[map[n]].monthly.has_value();e.managers[map[n]]=read_manager(g,n,map);if(!had_monthly)e.managers[map[n]].monthly.reset();}
     capture_mailbox(e,g,map);
 }
 void append_economy_message(CareerEconomy& economy,const EconomyMessage& message){

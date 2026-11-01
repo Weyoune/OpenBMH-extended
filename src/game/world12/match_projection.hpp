@@ -30,9 +30,10 @@ public:
     void commit_player_attributes(World&)const;
     void commit_match_state(World&,bool capture_season_services=false)const;
     void commit_transfer_state(World&,PlayerId,ClubId seller,ClubId buyer,bool moved)const;
+    void commit_released_players(World&,const std::vector<std::pair<PlayerId,ClubId>>&)const;
 private:
     struct TransferMove {PlayerId player;ClubId seller,buyer;};
-    void commit_state(World&,bool,std::optional<TransferMove>)const;
+    void commit_state(World&,bool,const std::vector<TransferMove>&)const;
     std::vector<ClubId> clubs_;
     std::vector<PlayerId> players_;
     std::vector<PlayerRecord> originals_;

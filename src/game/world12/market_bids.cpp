@@ -109,6 +109,31 @@ MarketBidOutcome run(CareerSnapshot& state,const GameState& reference,MarketBidP
     outcome.watcom_draws=random.calls();state=std::move(candidate);return outcome;
 }
 }
+ClubId place_unlisted_player(CareerSnapshot& state,PlayerId player,const GameState& reference,WatcomRandom& random,MarketBidPolicy policy){
+    state.validate();const auto before=state;auto candidate=state;auto staged=random;
+    if(!candidate.world.transfer_market||!candidate.world.players.contains(player))throw FormatError("world12: missing unlisted player owner");
+    for(const auto& [id,club]:candidate.world.clubs)for(const auto& slot:club.roster)if(slot.player==player)throw FormatError("world12: unlisted player still belongs to club");
+    if(candidate.world.free_players){for(auto id:candidate.world.free_players->domestic)if(id==player)throw FormatError("world12: unlisted player still belongs to pool");for(auto id:candidate.world.free_players->foreign)if(id==player)throw FormatError("world12: unlisted player still belongs to foreign pool");}
+    const auto clubs=candidates(candidate,reference,policy);const auto& person=candidate.world.players.at(player);
+    const int nationality=person.attributes.nationality()+((person.bonus&128)?32:0),strength=(person.attributes.condition()+person.attributes.technique())/2;
+    ClubId chosen;uint8_t foreign_skip=0;
+    for(int pass=0;pass<2&&!chosen.valid();++pass){std::vector<int16_t> order;std::vector<uint32_t> keys;
+        for(size_t n=0;n<clubs.size();++n){const auto& club=clubs[n];
+            if(pass==0&&nationality<5&&nationality!=club.country&&foreign_skip++%10==0)continue;
+            if(club.players>(club.domestic?21:15))continue;
+            int16_t average=0;for(auto value:club.averages)average=int16_t(average+value);average=int16_t(average>>2);
+            TransferClubScoreInput input;input.averages=club.averages;input.counts=club.counts;input.nationality=nationality;input.region=club.country;input.position=person.attributes.position();input.player_strength=strength;input.players=club.players;input.flags=club.flags;input.large_squad=true;input.domestic_capacity=club.domestic;
+            input.need=club.round>10?transfer_recruitment_need(club.league,club.rank,average,strength):0;
+            if(club.players<(club.domestic?17:14)){const auto& market=*candidate.world.transfer_market;if(!market.entry40_history_known&&!market.rows[40])throw FormatError("world12: release lacks retained bidder history");for(size_t b=0;b<4;++b)input.entry40_bids+=(market.rows[40]?market.rows[40]->bids[b].bidder:market.last_entry40_bidders[b])==club.id;}
+            keys.push_back(uint32_t(transfer_club_score(input,staged)+100000));order.push_back(int16_t(n));
+        }
+        if(!order.empty()){quicksort_by_key(order.data(),keys.data(),int(order.size()));chosen=clubs.at(size_t(order[0])).id;}
+    }
+    if(!chosen.valid())throw FormatError("world12: no club for released player");
+    auto& roster=candidate.world.clubs.at(chosen).roster;const auto free=std::find_if(roster.begin(),roster.end(),[](const auto& slot){return slot.empty();});if(free==roster.end())throw FormatError("world12: released player destination is full");*free={player,0};
+    auto p=AiMatchProjection::create(candidate.world,{chosen},reference);auto_lineup(p.state,0,100);p.commit_match_state(candidate.world);
+    candidate.validate();if(state!=before)throw FormatError("world12: release destination changed during scoring");state=std::move(candidate);random=staged;return chosen;
+}
 MarketBidOutcome add_computer_market_bid(CareerSnapshot& state,uint8_t row,const GameState& reference,MarketBidPolicy policy,bool high){return run(state,reference,policy,row,high);}
 MarketBidOutcome generate_weekly_market_bids(CareerSnapshot& state,const GameState& reference,MarketBidPolicy policy){return run(state,reference,policy,{},false);}
 }

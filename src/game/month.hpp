@@ -24,12 +24,20 @@
 #include "game/state.hpp"
 
 namespace bmh {
+using MonthlyPlayerRelease=std::function<bool(GameState&,int,GameRandom&,WatcomRandom&,MinuteReport&)>;
+void monthly_manager_board(GameState&,int manager,WatcomRandom&,MinuteReport&,GameRandom*,const MonthlyPlayerRelease& release={});
+void expire_monthly_advertising(GameState&);
+void monthly_manager_accounts(GameState&,int manager);
+// Original policy remains the default. Typed careers explicitly book each
+// holder's dividend into their own account rather than a nonparticipant record.
+void monthly_shares_and_loans(GameState&,bool per_holder_dividends=false);
+
 // One physical roster slot of the Source monthly return pass.
 void return_loan_at(GameState&,int slot,WatcomRandom&,GameRandom*,MinuteReport&);
 
 
 // `game` is needed when a player leaves at the end of his contract (MonthChange).
-void month_change(GameState& g, WatcomRandom& rand, MinuteReport& report, GameRandom* game = nullptr);
+void month_change(GameState& g, WatcomRandom& rand, MinuteReport& report, GameRandom* game = nullptr,bool per_holder_dividends=false);
 
 // CareerFirstSteps: new players on the transfer list (part of the month change; also at the
 // start of a season).

@@ -206,6 +206,11 @@ void season_players(GameState& g, GameRandom& game, WatcomRandom& rand, MinuteRe
 // values (W and game draws) and an age W(4, 15); his club closes the gap (ReleasePlayer,
 // with a human club its tactics board as well). False if the source ownership/state
 // cannot be validated; the player movement and human board compaction are implemented.
-bool release_player(GameState& g, int slot, GameRandom& game, WatcomRandom& rand, MinuteReport& report);
+struct PlayerReleaseDestination {
+    std::function<int(const GameState&,int player)> pool_slot;
+    std::function<void(GameState&,int source_slot,GameRandom&,WatcomRandom&,MinuteReport&)> overflow;
+};
+bool release_player(GameState& g, int slot, GameRandom& game, WatcomRandom& rand, MinuteReport& report,
+    const PlayerReleaseDestination* destination=nullptr);
 
 }  // namespace bmh

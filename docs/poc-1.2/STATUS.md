@@ -427,3 +427,14 @@ questions and return-offer editors, and preserves physical ledger/board holes
 through schema19/SA snapshots. See [loan return boundaries](LOAN_RETURNS.md).
 The36 actual-data countdown/expiry comparisons are controlled service fixtures;
 general day advancement and the remaining monthly services remain unfinished.
+
+## Complete monthly service transaction
+
+The staged monthly sequence now composes sponsors, listings, loan returns,
+per-manager billing/contracts/retirement and funds/credits. World20 retains
+monthly categorized counters and the history cursor; outer SA is unchanged.
+Typed1.2 deliberately credits dividends to each holder, preserving the old
+Classic default policy. Controlled complete-month and cancellation/full-pool
+checks are described in [monthly services](MONTHLY_SERVICES.md).
+The general day/event owner, GUI presenters and played-career release gates
+remain unfinished.

@@ -41,3 +41,11 @@ Older drawing gates retain their own behaviour; no external crest pack is needed
 The automatic lineup installs the supplied foreign-player rule switch alongside the career tables. Where enabled, it restores the original three/two-player limit, reserve swaps with board-coordinate preservation and the short-lineup outcome when domestic reserves are unavailable. This does not consume additional random draws.
 
 New careers correct the original all-zero EM qualification placeholders to the original national-team placeholders. Supplied nonzero seeds and restored savegame state are not rewritten by this initialization.
+
+## Development 1.2 monthly dividends
+
+Typed shared-country careers credit each fund holder's own monthly dividend to
+that holder's account. The Original instead retains only the last holder's
+amount and books it into the record after the active managers. This correction
+is selected explicitly for typed1.2 processing; the ordinary Classic caller
+keeps its existing policy. See [monthly services](poc-1.2/MONTHLY_SERVICES.md).

@@ -54,7 +54,8 @@ pools; subjects, owners, quotes, parity, search news, RNG and snapshots match.
 Twenty-four frozen-baseline/current legacy economic-week outputs remain
 byteidentical. No fresh Original DOS recording is claimed.
 
-The remaining monthly steps are advertising expiry, loan returns, manager
-billing/contracts and shares/credits. Loan-return dialogs, monthly settlement,
-general saved events/daily progression and GUI binding remain open. A playable
-1.2 release must prove those paths in the actual application.
+Monthly services, including advertising expiry, loan returns, manager billing/
+contracts and funds/credits, are now composed by the separate atomic
+[monthly service transaction](MONTHLY_SERVICES.md). General saved events/daily
+progression and GUI binding remain open. A playable1.2 release must prove those
+paths in the actual application.

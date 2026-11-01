@@ -16,6 +16,8 @@
 #include "game/world12/weekly_services.hpp"
 #include "game/world12/monthly_market.hpp"
 #include "game/world12/loan_returns.hpp"
+#include "game/world12/monthly_accounts.hpp"
+#include "game/world12/monthly_services.hpp"
 #include "game/world12/standings.hpp"
 #include "game/bank_credit.hpp"
 #include "game/pending_offer.hpp"
@@ -210,6 +212,54 @@ int main(int argc,char** argv)try {
         }
         if(!moves||!loans)throw std::runtime_error("auction oracle exercised no movement/loans");
         std::cout<<auctions<<" full-Core auction comparisons, "<<moves<<" actual moves and "<<loans<<" loans: AI/human/free-agent rosters/accounts/boards/pool slots/mail/RNG/snapshots match; 36 loan countdown/expiry comparisons match\n";
+    }
+    {
+        size_t passes=0;
+        for(int variant=0;variant<3;++variant){
+            auto typed=state;auto core=native;core.mailbox.assign(kMailboxEntries*kMailboxEntry,0);
+            const auto put=[&](size_t at,uint32_t value){for(size_t b=0;b<4;++b)core.manager_records.at(at+b)=uint8_t(value>>(8*b));};
+            put(0x854,uint32_t(variant+1)*15000);put(0x858,uint32_t(variant+1)*25000);
+            for(size_t k=0;k<6;++k)core.memory.set32(layout::Spending+uint32_t(k*4),uint32_t(variant+1)*uint32_t(k+1)*100);
+            typed.world.managers[0].career=manager_career_state_from_legacy(core,0,players,true);
+            for(size_t k=0;k<6;++k){const auto fund=layout::FundBlock+uint32_t(k*0x1c);core.memory.set32(fund,1000000);core.memory.set16(layout::Advertising_OriginalShareAdjustment_RuntimeField+uint32_t(k*0x1c),uint16_t(variant+1));for(size_t b=0;b<0x1c;++b)typed.world.markets->funds[k*0x1c+b]=core.memory.u8(fund+uint32_t(b));}
+            const auto credit=layout::Loans;core.memory.set32(credit,100000);core.memory.set32(credit+4,105000);core.memory.set32(credit+8,35000);core.memory.set32(credit+12,3);core.memory.set32(credit+16,0);core.memory.set32(credit+20,0);
+            initialize_career_economy(typed,core);
+            for(int pass=0;pass<3;++pass){
+                expire_monthly_advertising(core);monthly_manager_accounts(core,0);monthly_shares_and_loans(core,true);
+                expire_monthly_sponsors(typed,reference,texts);settle_monthly_accounts(typed,reference);settle_monthly_investments(typed,reference);
+                if(typed.world.managers[0].finance!=manager_initial_finance_from_legacy(core,0)||typed.world.managers[0].career!=manager_career_state_from_legacy(core,0,players,true)||typed.world.managers[0].match_state!=manager_match_state_from_legacy(core,0,{},{}))throw std::runtime_error("monthly accounts human fields differ");
+                auto p=AiMatchProjection::create_for_humans(typed,{typed.world.managers[0].club},reference,{3,3,false,true});install_career_economy(p,typed.world);
+                for(size_t at:{size_t(0x286),size_t(0x338),size_t(0x33c),size_t(0x854),size_t(0x858),size_t(0x85c),size_t(0x860),size_t(0x864),size_t(0x86c),size_t(0x870),size_t(0x878),size_t(0x87c),size_t(0x880),size_t(0x884),size_t(0x888),size_t(0x88c),size_t(0x890),size_t(0x894),size_t(0x898),size_t(0x89c)})for(size_t b=0;b<(at==0x286?1u:4u);++b)if(p.state.manager_records[at+b]!=core.manager_records[at+b])throw std::runtime_error("monthly categorized account differs at "+std::to_string(at));
+                for(uint32_t n=0;n<0x78;++n)if(p.state.memory.u8(layout::Loans+n)!=core.memory.u8(layout::Loans+n))throw std::runtime_error("monthly bank loan differs");
+                for(uint32_t n=0;n<6*0x1c;++n)if(p.state.memory.u8(layout::FundBlock+n)!=core.memory.u8(layout::FundBlock+n))throw std::runtime_error("monthly funds differ");
+                if(compare_mailbox(p.state.mailbox,core.mailbox))throw std::runtime_error("monthly expiry mailbox differs");
+                if(read_save(make_save(typed))!=typed)throw std::runtime_error("monthly account snapshot differs");++passes;
+            }
+        }
+        std::cout<<passes<<" full-Core monthly advertising/accounts/investment comparisons: ratings, costs, wages, categorized counters, actual-holder dividends, credit maturity, mailbox and snapshots match\n";
+    }
+    {
+        size_t passes=0,released=0;
+        for(int variant=0;variant<3;++variant)for(uint32_t seed:{1u,91u,703u}){
+            auto typed=state;auto core=native;core.mailbox.assign(kMailboxEntries*kMailboxEntry,0);typed.game_seed=17;typed.watcom_seed=seed;
+            const int team=core.manager_teams[0],row=19;const auto player=core.squad_slots.at(size_t(team*24+row))&0xfff;
+            if(variant){core.tactics.at(size_t(row)*0x58+0xc)=1;if(variant==2)core.tactics.at(size_t(row)*0x58+0xb)|=0x20;
+                typed.world.managers[0].tactics=manager_full_tactics_from_legacy(core,0,players);}
+            if(variant==2)core.manager_records.at(0x286)=12;
+            initialize_career_economy(typed,core);GameRandom gr(17);WatcomRandom wr(seed);MinuteReport report;
+            core.contract_screen=[](GameState&,int,int){return 0;};month_change(core,wr,report,&gr,true);if(report.unsupported)throw std::runtime_error(report.reason);
+            MonthlyContractHooks contracts;contracts.renew=[](GameState&,GameRandom&,WatcomRandom&,uint8_t,PlayerId,int,const AiMatchProjection&)->std::optional<bool>{return false;};
+            const auto result=process_monthly_services(typed,reference,texts,{}, {},contracts);released+=result.released;
+            if(typed.game_seed!=gr.seed()||typed.watcom_seed!=wr.seed()||result.game_draws!=gr.calls()||result.watcom_draws!=wr.calls())throw std::runtime_error("complete monthly RNG differs variant="+std::to_string(variant));
+            for(const auto& [id,person]:typed.world.players)if(person.attributes.w35c!=core.players[id.value].w35c||person.attributes.w364!=core.players[id.value].w364||person.attributes.w368!=core.players[id.value].w368||person.bonus!=core.player_bonus[id.value]||person.cards!=core.player_cards[id.value])throw std::runtime_error("complete monthly player differs");
+            for(size_t club=0;club<164;++club){const auto& roster=typed.world.clubs.at(identities.at(core.club_ids[club])).roster;for(size_t r=0;r<24;++r){const auto raw=core.squad_slots[club*24+r];const uint16_t flags=uint16_t(((raw&0x8000)?1:0)|((raw&0x4000)?2:0)|((raw&0x2000)?4:0)|((raw&0x1000)?8:0));if((roster[r].empty()?0xfffu:roster[r].player.value)!=(raw&0xfff)||roster[r].flags!=flags)throw std::runtime_error("complete monthly roster differs");}}
+            if(typed.world.managers[0].finance!=manager_initial_finance_from_legacy(core,0)||typed.world.managers[0].career!=manager_career_state_from_legacy(core,0,players,true)||typed.world.managers[0].tactics!=manager_full_tactics_from_legacy(core,0,players)||typed.world.managers[0].match_state!=manager_match_state_from_legacy(core,0,{},{}))throw std::runtime_error("complete monthly human record differs");
+            const size_t pool_first[]={size_t(runtime_dimensions.free_first),size_t(runtime_dimensions.foreign_free_first)};for(size_t pool=0;pool<2;++pool)for(size_t n=0;n<(pool?20u:80u);++n){const auto actual=pool?typed.world.free_players->foreign[n]:typed.world.free_players->domestic[n];if((actual.valid()?actual.value:0xfffu)!=(core.squad_slots[pool_first[pool]+n]&0xfff))throw std::runtime_error("complete monthly pool differs");}
+            auto projection=AiMatchProjection::create_for_humans(typed,{typed.world.managers[0].club},reference,{3,3,false,true});install_career_economy(projection,typed.world);if(compare_mailbox(projection.state.mailbox,core.mailbox))throw std::runtime_error("complete monthly mailbox differs");
+            if(read_save(make_save(typed))!=typed)throw std::runtime_error("complete month snapshot differs");
+            if(!proof.empty()&&variant==2&&seed==91)write_savegame(proof/"complete-month.FBM",make_save(typed));++passes;
+        }
+        std::cout<<passes<<" full-Core complete monthly transactions: "<<released<<" contract/retirement releases, listings, boards, accounts, rosters, pools, messages, aggregate RNG and snapshots match (per-holder dividend fix enabled)\n";
     }
     {
         size_t passes=0;

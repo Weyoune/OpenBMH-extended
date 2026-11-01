@@ -137,8 +137,17 @@ struct EconomyMessage {
     std::array<uint8_t,150> text{};
     bool operator==(const EconomyMessage&)const=default;
 };
+struct ManagerMonthlyEconomy {
+    uint8_t history_count=0;
+    std::array<uint32_t,2> expenses{};
+    // Salary/bonus totals and categorized income/expenses. The shared main
+    // account, ticket, interest and overdraft counters have separate owners.
+    std::array<uint32_t,15> counters{};
+    bool operator==(const ManagerMonthlyEconomy&)const=default;
+};
 struct ManagerEconomy {
     uint32_t deposit=0,interest_income=0,overdraft_interest=0;
+    std::optional<ManagerMonthlyEconomy> monthly={};
     // bank, then four global human lender seats; principal,total,payment,term,
     // elapsed months,payments made (bank_credit.hpp).
     std::array<std::array<uint32_t,6>,5> loans{};

@@ -441,7 +441,7 @@ int32_t monthly_income(GameState& g, int m) {
 }
 
 // The monthly bookkeeping of the players on a human manager's tactics board.
-void board_month(GameState& g, int m, WatcomRandom& rand, MinuteReport& report, GameRandom* game) {
+void board_month(GameState& g, int m, WatcomRandom& rand, MinuteReport& report, GameRandom* game,const MonthlyPlayerRelease& release={}) {
     std::vector<uint8_t>& r = g.manager_records;
     const size_t rec = size_t(m) * kRecord;
     const SquadRange range = squad_range(g.manager_teams.at(size_t(m)));
@@ -512,7 +512,7 @@ void board_month(GameState& g, int m, WatcomRandom& rand, MinuteReport& report, 
                         report.fail("month change: a player goes (MonthChange) without the game generator");
                         return;
                     }
-                    if (!release_player(g, int(range.first) + s, *game, rand, report)) return;
+                    if (!(release?release(g,int(range.first)+s,*game,rand,report):release_player(g, int(range.first) + s, *game, rand, report))) return;
                     s = 0;
                     goto next_player;
                 }
@@ -531,7 +531,7 @@ void board_month(GameState& g, int m, WatcomRandom& rand, MinuteReport& report, 
                     report.fail("month change: a player retires (MonthChange) without the game generator");
                     return;
                 }
-                if (!release_player(g, int(range.first) + s, *game, rand, report)) return;
+                if (!(release?release(g,int(range.first)+s,*game,rand,report):release_player(g, int(range.first) + s, *game, rand, report))) return;
                 goto next_player;
             }
         }
@@ -548,7 +548,7 @@ void board_month(GameState& g, int m, WatcomRandom& rand, MinuteReport& report, 
 }
 
 // MonthChange2: share prices grow by 2.5 %, dividends, loans between the managers.
-void shares_and_loans(GameState& g) {
+void shares_and_loans(GameState& g,bool per_holder_dividends) {
     StaticMemory& mem = g.memory;
     std::vector<uint8_t>& r = g.manager_records;
     static const int kShareFactor[6] = {15, 18, 21, 24, 27, 30};  // MonthRuntimeField10
@@ -561,11 +561,12 @@ void shares_and_loans(GameState& g) {
         // (a bug of the original: only the last manager's dividend is kept and it is booked
         //  for the manager after the last one)
         int32_t dividend = 0;
-        for (int m = 0; m < managers; m++)
+        for (int m = 0; m < managers; m++) {
             dividend = int32_t(mem.u16(::bmh::layout::Advertising_OriginalShareAdjustment_RuntimeField + uint32_t(m) * 2 + uint32_t(k) * 0x1c) *
                                ((price * uint32_t(kShareFactor[k])) / 10000));
-        book_money(g, managers, -dividend, true);
-        add32(r, size_t(managers) * kRecord + 0x870, dividend);
+            if(per_holder_dividends){book_money(g,m,-dividend,true);add32(r,size_t(m)*kRecord+0x870,dividend);}
+        }
+        if(!per_holder_dividends){book_money(g, managers, -dividend, true);add32(r, size_t(managers) * kRecord + 0x870, dividend);}
     }
     for (int m = 0; m < managers; m++)
         for (int l = 0; l <= managers; l++) {
@@ -586,6 +587,41 @@ void shares_and_loans(GameState& g) {
 }
 
 }  // namespace
+
+void monthly_manager_board(GameState& g,int manager,WatcomRandom& rand,MinuteReport& report,GameRandom* game,const MonthlyPlayerRelease& release){
+    if(manager<0||size_t(manager)>=g.manager_teams.size())throw std::invalid_argument("month: unknown board manager");
+    board_month(g,manager,rand,report,game,release);
+}
+void expire_monthly_advertising(GameState& g){
+    auto& mem=g.memory;auto& r=g.manager_records;const int managers=int(g.manager_teams.size());
+    if (mem.u8(::bmh::layout::GameMode) != 1 && mem.u8(::bmh::layout::CareerDuration) != 1)
+        for (int m = 0; m < managers; m++)
+            for (int k = 0; k < 0x12; k++) {
+                const size_t c = size_t(m) * kRecord + 0xa34 + size_t(k) * 0xc;
+                if (r.at(c + 5) == 0 && (r.at(c + 6) & 0x80)) {
+                    wr32(r, c, 0);
+                    r.at(c + 6) = 0;
+                }
+                if (r.at(c + 5) != 0 && --r.at(c + 5) == 0) {
+                    if ((r.at(c + 6) & 0x7F) == 0) wr32(r, c, 0);
+                    else turn_step = "month_change: advertising text", post_text(g, m, text_id(::bmh::layout::Month_MonthChange_TextPointer));  // the contract can be renewed
+                }
+            }
+}
+void monthly_manager_accounts(GameState& g,int m){
+    if(m<0||size_t(m)>=g.manager_teams.size())throw std::invalid_argument("month: unknown account manager");
+    auto& mem=g.memory;auto& r=g.manager_records;
+    const size_t rec = size_t(m) * kRecord;
+    for (int k = 0; k < 3; k++)
+        rate_manager(g, m, uint8_t(int8_t(int32_t(mem.u32(::bmh::layout::Month_MonthChange_RuntimeField + uint32_t(k) * 4 + uint32_t(m) * 0x24)) / 0x96)),
+                     k + 1);
+    const int32_t expenses = monthly_expenses(g, m);
+    const int32_t income = monthly_income(g, m);
+    book_money(g, m, expenses - income, true);
+    for (int k = 0; k < 2; k++)
+        rate_manager(g, m, uint8_t(int8_t(((rd32(r, rec + 0x854 + size_t(k) * 4) / 5000) * 200) / 7)), k + 4);
+}
+void monthly_shares_and_loans(GameState& g,bool per_holder_dividends){shares_and_loans(g,per_holder_dividends);}
 
 void return_loan_at(GameState& g,int slot,WatcomRandom& rand,GameRandom* game,MinuteReport& report){
     if(slot<0||slot>=kPoolFirst){report.fail("month change: return slot outside club rosters");return;}
@@ -850,25 +886,13 @@ void search_profile_news(GameState& g, int manager, uint32_t list, int player) {
         post_composed(g, manager, message_text(g, ::bmh::layout::Month_SearchProfileNews_TextPointer) + g.player_name(player) + message_text(g, ::bmh::layout::Month_SearchProfileNews_TextPointer2));
 }
 
-void month_change(GameState& g, WatcomRandom& rand, MinuteReport& report, GameRandom* game) {
+void month_change(GameState& g, WatcomRandom& rand, MinuteReport& report, GameRandom* game,bool per_holder_dividends) {
     StaticMemory& mem = g.memory;
     std::vector<uint8_t>& r = g.manager_records;
     const int managers = int(g.manager_teams.size());
     // 1. advertising contracts
     turn_step = "month_change: advertising";
-    if (mem.u8(::bmh::layout::GameMode) != 1 && mem.u8(::bmh::layout::CareerDuration) != 1)
-        for (int m = 0; m < managers; m++)
-            for (int k = 0; k < 0x12; k++) {
-                const size_t c = size_t(m) * kRecord + 0xa34 + size_t(k) * 0xc;
-                if (r.at(c + 5) == 0 && (r.at(c + 6) & 0x80)) {
-                    wr32(r, c, 0);
-                    r.at(c + 6) = 0;
-                }
-                if (r.at(c + 5) != 0 && --r.at(c + 5) == 0) {
-                    if ((r.at(c + 6) & 0x7F) == 0) wr32(r, c, 0);
-                    else turn_step = "month_change: advertising text", post_text(g, m, text_id(::bmh::layout::Month_MonthChange_TextPointer));  // the contract can be renewed
-                }
-            }
+    expire_monthly_advertising(g);
     // 2. new players on the transfer list
     turn_step = "month_change: new list entries";
     new_list_entries(g, rand, report);
@@ -880,21 +904,13 @@ void month_change(GameState& g, WatcomRandom& rand, MinuteReport& report, GameRa
     // 4. the human managers
     turn_step = "month_change: managers";
     for (int m = 0; m < managers && !report.unsupported; m++) {
-        const size_t rec = size_t(m) * kRecord;
-        for (int k = 0; k < 3; k++)
-            rate_manager(g, m, uint8_t(int8_t(int32_t(mem.u32(::bmh::layout::Month_MonthChange_RuntimeField + uint32_t(k) * 4 + uint32_t(m) * 0x24)) / 0x96)),
-                         k + 1);
-        const int32_t expenses = monthly_expenses(g, m);
-        const int32_t income = monthly_income(g, m);
-        book_money(g, m, expenses - income, true);
-        for (int k = 0; k < 2; k++)
-            rate_manager(g, m, uint8_t(int8_t(((rd32(r, rec + 0x854 + size_t(k) * 4) / 5000) * 200) / 7)), k + 4);
+        monthly_manager_accounts(g,m);
         board_month(g, m, rand, report, game);
     }
     if (report.unsupported) return;
     // 5. shares and loans
     turn_step = "month_change: shares";
-    shares_and_loans(g);
+    monthly_shares_and_loans(g,per_holder_dividends);
 }
 
 }  // namespace bmh

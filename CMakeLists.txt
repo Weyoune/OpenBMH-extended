@@ -1227,6 +1227,9 @@ add_library(bmhworld12 STATIC
     src/game/world12/weekly_services.cpp
     src/game/world12/monthly_market.cpp
     src/game/world12/loan_returns.cpp
+    src/game/world12/monthly_accounts.cpp
+    src/game/world12/monthly_rosters.cpp
+    src/game/world12/monthly_services.cpp
     src/cli/json.cpp)
 target_include_directories(bmhworld12 PUBLIC src)
 target_link_libraries(bmhworld12 PUBLIC bmhcore)
@@ -1239,6 +1242,10 @@ target_link_libraries(bmhworld12_session PUBLIC bmhworld12_app bmhworld12_ui)
 if(TARGET openbmh_play)
     target_link_libraries(openbmh_play PRIVATE bmhworld12_session)
 endif()
+
+add_executable(world12_monthly_accounts_tests tests/world12_monthly_accounts_tests.cpp)
+target_link_libraries(world12_monthly_accounts_tests PRIVATE bmhworld12)
+add_test(NAME world12_monthly_accounts_tests COMMAND world12_monthly_accounts_tests)
 
 add_executable(world12_loan_returns_tests tests/world12_loan_returns_tests.cpp)
 target_link_libraries(world12_loan_returns_tests PRIVATE bmhworld12)

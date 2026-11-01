@@ -1046,7 +1046,7 @@ void regenerate_released_player(GameState& g,int player,GameRandom& game,WatcomR
 // MonthChange(slot): a player leaves his club for the free agents (foreigners to their own
 // pool): his loan entry and youth mark go, he gets new values (RegeneratePlayer: all but w35c),
 // an age W(4, 15) and no injury; the club closes the gap (ReleasePlayer)
-bool release_player(GameState& g, int slot, GameRandom& game, WatcomRandom& rand, MinuteReport& report) {
+bool release_player(GameState& g, int slot, GameRandom& game, WatcomRandom& rand, MinuteReport& report,const PlayerReleaseDestination* destination) {
     StaticMemory& mem = g.memory;
     const int player = g.squad_slots.at(size_t(slot)) & 0xFFF;
     for (uint32_t k = 0; k < 200; k++) {
@@ -1065,12 +1065,22 @@ bool release_player(GameState& g, int slot, GameRandom& game, WatcomRandom& rand
     const bool foreign = nationality(g, player) != 0;
     const int start = foreign ? runtime_dimensions.foreign_free_first : runtime_dimensions.free_first, count = foreign ? 0x14 : 0x50;  // FirstFreeSlotSquad
     int free = -1;
-    for (int s = start; s < start + count && free < 0; s++)
+    if(destination){
+        if(!destination->pool_slot||!destination->overflow){report.fail("release: incomplete projected destination owner");return false;}
+        free=destination->pool_slot(g,player);
+        const bool domestic=free>=runtime_dimensions.free_first&&free<runtime_dimensions.free_first+80;
+        const bool foreign_pool=free>=runtime_dimensions.foreign_free_first&&free<runtime_dimensions.foreign_free_first+20;
+        if(free < -1 || (free>=0&&(!(domestic||foreign_pool)||size_t(free)>=g.squad_slots.size()||g.squad_slots.at(size_t(free))!=0xfff))){
+            report.fail("release: invalid or occupied projected pool destination");return false;
+        }
+    }
+    else for (int s = start; s < start + count && free < 0; s++)
         if (g.squad_slots.at(size_t(s)) == 0x0FFF) free = s;
     regenerate_released_player(g,player,game,rand);
     if (free < 0) {
         // no room among the free agents: a club takes him (TransferBid(slot, 0, 0, -1))
-        transfer_bid(g, slot, 0, false, -1, game, rand, report);
+        if(destination)destination->overflow(g,slot,game,rand,report);
+        else transfer_bid(g, slot, 0, false, -1, game, rand, report);
         if (report.unsupported) return false;
     } else {
         g.squad_slots.at(size_t(free)) = uint16_t(player);

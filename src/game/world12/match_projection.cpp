@@ -186,13 +186,18 @@ void AiMatchProjection::commit_player_attributes(World& world)const {
     for(size_t i=0;i<players_.size();++i){auto& target=candidate.players.at(players_[i]);target.attributes=state.players[i];target.bonus=state.player_bonus[i];}
     candidate.validate();world=std::move(candidate);
 }
-void AiMatchProjection::commit_match_state(World& world,bool capture_season_services)const {commit_state(world,capture_season_services,std::nullopt);}
+void AiMatchProjection::commit_match_state(World& world,bool capture_season_services)const {commit_state(world,capture_season_services,{});}
 void AiMatchProjection::commit_transfer_state(World& world,PlayerId player,ClubId seller,ClubId buyer,bool moved)const {
     if(seller==buyer||!player.valid())throw std::invalid_argument("world12: invalid transfer movement");
     if(seller.valid())local_club(seller);local_club(buyer);local_player(player);
-    commit_state(world,false,moved?std::optional<TransferMove>{{player,seller,buyer}}:std::nullopt);
+    commit_state(world,false,moved?std::vector<TransferMove>{{player,seller,buyer}}:std::vector<TransferMove>{});
 }
-void AiMatchProjection::commit_state(World& world,bool capture_season_services,std::optional<TransferMove> movement)const {
+void AiMatchProjection::commit_released_players(World& world,const std::vector<std::pair<PlayerId,ClubId>>& released)const{
+    std::vector<TransferMove> moves;std::set<PlayerId> seen;
+    for(const auto& [player,seller]:released){local_player(player);local_club(seller);if(!seen.insert(player).second)throw std::invalid_argument("world12: player released twice");moves.push_back({player,seller,{}});}
+    commit_state(world,true,moves);
+}
+void AiMatchProjection::commit_state(World& world,bool capture_season_services,const std::vector<TransferMove>& movements)const {
     if(!manager_seats_.empty()&&(state.manager_teams.size()!=manager_seats_.size()||state.manager_records.size()!=manager_seats_.size()*0xb0c||
         state.manager_options.size()!=manager_seats_.size()*5||state.manager_ratings.size()!=manager_seats_.size()*60||
         state.manager_results.size()!=manager_seats_.size()*size_t(runtime_dimensions.record_teams)*10))
@@ -216,7 +221,7 @@ void AiMatchProjection::commit_state(World& world,bool capture_season_services,s
             if((raw&0xfff)==0xfff){if(raw!=0xfff)throw std::invalid_argument("world12: match flags on an empty roster slot");slot={};}
             else {slot.player=global_player(raw&0xfff);slot.flags=uint16_t(((raw&0x8000)?1:0)|((raw&0x4000)?2:0)|((raw&0x2000)?4:0)|((raw&0x1000)?8:0));after.insert(slot.player);}
         }
-        if(movement){if(clubs_[team]==movement->seller){if(!before.erase(movement->player))throw std::invalid_argument("world12: transferred player was not at seller");}if(clubs_[team]==movement->buyer&&!before.insert(movement->player).second)throw std::invalid_argument("world12: transferred player was already at buyer");}
+        for(const auto& movement:movements){if(clubs_[team]==movement.seller){if(!before.erase(movement.player))throw std::invalid_argument("world12: transferred player was not at seller");}if(clubs_[team]==movement.buyer&&!before.insert(movement.player).second)throw std::invalid_argument("world12: transferred player was already at buyer");}
         if(before!=after)throw std::invalid_argument("world12: operation changed unowned roster membership");
         target.match_flags=state.team_flags.at(team);target.fairplay_points=state.memory.u16(layout::DeskRecords_Teams_RuntimeField+uint32_t(team*2));target.morale=state.team_morale.at(team)&63;
         const size_t record=team*0x4a;
@@ -229,9 +234,9 @@ void AiMatchProjection::commit_state(World& world,bool capture_season_services,s
             target.season_stats.dates[i]=uint16_t(state.club_table.at(record+0x3a+i*2)|uint16_t(state.club_table.at(record+0x3b+i*2))<<8);
         }
     }
-    if(movement&&!movement->seller.valid()) {
+    for(const auto& movement:movements)if(!movement.seller.valid()) {
         if(!candidate.free_players)throw std::invalid_argument("world12: acquired player has no free pool");
-        bool found=false;const auto remove=[&](auto& pool){const auto at=std::find(pool.begin(),pool.end(),movement->player);if(at==pool.end())return;if(found)throw std::invalid_argument("world12: free player belongs to duplicate pools");*at={};found=true;};
+        bool found=false;const auto remove=[&](auto& pool){const auto at=std::find(pool.begin(),pool.end(),movement.player);if(at==pool.end())return;if(found)throw std::invalid_argument("world12: free player belongs to duplicate pools");*at={};found=true;};
         remove(candidate.free_players->domestic);remove(candidate.free_players->foreign);
         if(!found)throw std::invalid_argument("world12: transferred free player was not available");
     }
