@@ -29,3 +29,7 @@ Six synthetic session scopes cover initialization, stable chooser identities/rev
 The Linux SDL executable was also opened under Xvfb with the same development flag; actual setup and England-toggle screenshots were captured and inspected. These tests use no legacy master database or Original executable in the runtime directory. Windows/macOS, first-day/desktop gameplay and release readiness remain unverified/incomplete.
 
 Validation of this integration checkpoint: all 28 targeted Linux regressions and the graphical application build pass. The real v8 one/two-manager GUI-input paths, actual SDL setup/England toggle, on-disk prepared snapshot, six source-data startup scopes, initial-offer predecessor and two byte-identical Original-save roundtrips pass. All v8 archive hashes verify; only RULES-EN.DAT was added relative to v7, and no legacy master/executable is present. First-day/desktop gameplay and native release QA remain open.
+
+## Desktop persistence
+
+Prepared sessions now include the [desktop runtime](DESKTOP_STATE.md). Layouts are copied during the same staged preparation commit. An initial DeskDate transaction is available for the future event owner, with checked revision, retained random streams, prestige and autosave state. It is deliberately not called by `serve_startup`: event preparation, pre-match offer/pools and presentation have to precede it.

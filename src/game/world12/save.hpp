@@ -7,6 +7,18 @@
 #include "formats/fbm.hpp"
 namespace bmh::world12 {
 struct CalendarCursor {SeasonCalendar schedule;uint16_t next_day=0;uint64_t revision=0;bool operator==(const CalendarCursor&)const=default;};
+struct ManagerDesktop {
+    uint8_t seat=0,prestige=0;
+    std::array<std::array<uint8_t,16>,54> layout{};
+    bool operator==(const ManagerDesktop&)const=default;
+};
+struct DesktopRuntime {
+    std::vector<ManagerDesktop> managers;
+    std::optional<uint8_t> active_seat;
+    bool autosave_pending=false;
+    uint16_t autosave_month=0,autosave_months=0;
+    bool operator==(const DesktopRuntime&)const=default;
+};
 struct CareerSnapshot {
     World world;
     SeasonResults results;
@@ -15,6 +27,7 @@ struct CareerSnapshot {
     std::array<uint8_t,kLeagueSlots> league_rounds{};
     std::optional<CalendarCursor> calendar;
     std::vector<KnockoutStage> cups;
+    std::optional<DesktopRuntime> desktop;
     // Typed active career snapshots will extend this record as their owning
     // progression transactions are integrated. No legacy FBM stream is guessed.
     void validate()const;
