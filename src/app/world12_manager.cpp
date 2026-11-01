@@ -8,6 +8,16 @@ namespace bmh::app::world12 {
 static_assert(std::is_nothrow_move_assignable_v<bmh::world12::World>);
 static_assert(std::is_nothrow_copy_assignable_v<std::optional<bmh::world12::ManagerFinance>>);
 static_assert(std::is_nothrow_copy_assignable_v<std::optional<bmh::world12::ManagerTactics>>);
+bmh::world12::PlayerInitializationOutcome add_initial_manager(bmh::world12::World& world,
+    ManagerActionOwner& owner,ManagerActionOwner expected,const bmh::world12::InitialManagerChoice& choice,
+    bmh::world12::CareerSettings settings,const bmh::world12::InitialStrengthRanges& ranges,
+    const bmh::GameState& reference,const bmh::LeImage& rules,bmh::GameRandom& game,bmh::WatcomRandom& random) {
+    if(!owner.scope||owner.scope!=expected.scope||owner.revision!=expected.revision||owner.revision==std::numeric_limits<uint64_t>::max())throw std::invalid_argument("world12: stale manager confirmation owner");
+    const auto before=world;const auto old_game=game;const auto old_random=random;auto candidate=world;auto staged_game=game;auto staged_random=random;
+    const auto outcome=bmh::world12::add_initial_manager(candidate,choice,settings,ranges,reference,rules,staged_game,staged_random);
+    if(world!=before||owner.scope!=expected.scope||owner.revision!=expected.revision||game.seed()!=old_game.seed()||game.calls()!=old_game.calls()||random.seed()!=old_random.seed()||random.calls()!=old_random.calls())throw std::invalid_argument("world12: manager confirmation owner changed");
+    world=std::move(candidate);game=staged_game;random=staged_random;++owner.revision;return outcome;
+}
 bmh::world12::PlayerInitializationOutcome initialize_club_player_state(bmh::world12::World& world,
     ManagerActionOwner& owner,ManagerActionOwner expected,const bmh::world12::PlayerInitializationPlan& plan,
     const bmh::GameState& reference,bool foreign_rule,bmh::GameRandom& game,bmh::WatcomRandom& random) {

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "game/world12/manager_tactics.hpp"
+#include "game/world12/manager_creation.hpp"
 #include "game/lineup.hpp"
 #include "game/career.hpp"
 #include "game/national.hpp"
@@ -15,6 +16,7 @@ std::vector<PlayerId> mapped_players(const World& world,const Manager& manager) 
     for(const auto& slot:world.clubs.at(manager.club).roster)if(!slot.empty())result.push_back(slot.player);
     if(manager.tactics->backing)for(const auto* refs:{&manager.tactics->backing->marks,&manager.tactics->backing->marked_by})for(auto id:*refs)
         if(id.valid()&&std::find(result.begin(),result.end(),id)==result.end())result.push_back(id);
+    if(manager.career)for(auto id:manager.career->poach_attempts)if(id.valid()&&std::find(result.begin(),result.end(),id)==result.end())result.push_back(id);
     return result;
 }
 void put_rows(GameState& state,const ManagerTactics& input,const std::vector<PlayerId>& mapping,size_t manager=0) {
@@ -50,6 +52,7 @@ GameState workspace(const World& world,const Manager& manager,TacticalPolicy pol
         std::copy(backing.automation.begin(),backing.automation.end(),state.manager_options.begin()+1);
     }
     put_rows(state,*manager.tactics,mapping);
+    if(manager.career)install_manager_career_state(state,0,*manager.career,mapping);
     state.memory.add_block(layout::ActiveManager,1);state.memory.set8(layout::ActiveManager,0);
     state.memory.add_block(layout::GameMode,1);state.memory.set8(layout::GameMode,uint8_t(policy.mode));
     state.squad_slots.assign(24,0xfff);
@@ -176,7 +179,6 @@ uint64_t initialize_manager_contracts(World& world,uint8_t seat,const GameState&
     auto initial=rules;
     bmh::initialize_career_manager_team_settings(initial,seat);
     initial.manager_records[size_t(seat)*record_size+0x288]=0x16;
-    initial.manager_records[size_t(seat)*record_size+0x218]=initial.manager_records[size_t(seat)*record_size+0x219]=15;
     // Unoccupied initial rows have no player to mark. Do not reinterpret the
     // zeroed Original BSS words as references to the first global player.
     for(size_t row=0;row<24;++row)for(size_t offset:{0x44u,0x46u}){

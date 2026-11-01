@@ -29,6 +29,7 @@ private:
     std::vector<PlayerRecord> originals_;
     std::vector<ClubRecord> original_clubs_;
     std::vector<Manager> original_managers_;
+    std::optional<CareerSettings> original_settings_;
     std::vector<uint8_t> manager_seats_;
     std::vector<ClubId> manager_reference_clubs_;
     std::map<uint16_t,ClubId> record_opponents_;

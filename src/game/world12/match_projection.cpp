@@ -5,6 +5,7 @@
 #include "game/world12/manager_match_state.hpp"
 #include "game/world12/manager_tactics.hpp"
 #include "game/world12/manager_finance.hpp"
+#include "game/world12/manager_creation.hpp"
 #include <algorithm>
 #include <set>
 #include <stdexcept>
@@ -19,6 +20,10 @@ AiMatchProjection AiMatchProjection::create(const World& world,const std::vector
     for(const auto& manager:world.managers)if(std::find(requested.begin(),requested.end(),manager.club)!=requested.end())throw std::invalid_argument("world12: human manager projection is not integrated");
     if(runtime_dimensions.big_squad_teams<32)throw std::invalid_argument("world12: legacy match workspace is unavailable");
     AiMatchProjection projection;projection.original_managers_=world.managers;projection.original_development_balance_=world.development_balance;projection.original_trend_rotation_=world.trend_rotation;projection.state=base;auto& state=projection.state;state.manager_teams.clear();state.players.clear();state.player_name_offsets.clear();state.player_names.clear();state.player_cards.clear();state.player_bonus.clear();state.live_matches.clear();state.live_scene=false;state.last_shooter=0xfff;state.projected_match_clubs.clear();state.development_balance=world.development_balance;state.trend_rotation=world.trend_rotation;
+    projection.original_settings_=world.settings;
+    if(world.settings){state.level=world.settings->difficulty;state.projected_foreign_rule=world.settings->foreign_rule;
+        const auto put=[&](uint32_t at,uint8_t value){state.memory.add_block(at,1);state.memory.set8(at,value);};
+        put(layout::GameMode,world.settings->mode);put(layout::Difficulty,world.settings->difficulty);put(layout::CareerDuration,world.settings->duration);}
     state.squad_slots.assign(size_t(runtime_dimensions.total_slots),0xfff);state.club_names.clear();state.club_ids.assign(base.club_ids.size(),0);state.club_kits.assign(base.club_ids.size(),0);state.club_short_offsets.assign(base.club_ids.size(),0);state.team_flags.assign(base.team_flags.size(),0);state.team_morale.assign(base.team_morale.size(),25);
     state.club_table.assign(base.club_ids.size()*0x4a,0);
     const auto discipline=layout::DeskRecords_Teams_RuntimeField;
@@ -55,6 +60,7 @@ AiMatchProjection AiMatchProjection::create(const World& world,const std::vector
 }
 AiMatchProjection AiMatchProjection::create_for_humans(const CareerSnapshot& snapshot,const std::vector<ClubId>& requested,const GameState& base,HumanProjectionPolicy policy) {
     snapshot.validate();const auto& world=snapshot.world;
+    if(world.settings&&(policy.mode!=world.settings->mode||policy.difficulty!=world.settings->difficulty||policy.foreign_rule!=world.settings->foreign_rule))throw std::invalid_argument("world12: human match policy differs from saved career settings");
     if(policy.mode<1||policy.mode>3||policy.difficulty<0||policy.difficulty>9||base.formations.size()<0x580)throw std::invalid_argument("world12: incomplete human projection policy/rules");
     std::vector<const Manager*> managers;
     for(const auto& manager:world.managers)if(std::find(requested.begin(),requested.end(),manager.club)!=requested.end()) {
@@ -85,6 +91,7 @@ AiMatchProjection AiMatchProjection::create_for_humans(const CareerSnapshot& sna
         for(auto id:manager->match_state->recent_fixtures)if(id.valid()&&std::find(result.manager_reference_clubs_.begin(),result.manager_reference_clubs_.end(),id)==result.manager_reference_clubs_.end())result.manager_reference_clubs_.push_back(id);
         for(const auto* refs:{&manager->tactics->backing->marks,&manager->tactics->backing->marked_by})for(auto id:*refs)add_player(id);
         for(auto id:manager->match_state->takers)add_player(id);
+        if(manager->career)for(auto id:manager->career->poach_attempts)add_player(id);
     }
     if(result.manager_reference_clubs_.size()>local.club_ids.size()||result.manager_reference_clubs_.size()>size_t(runtime_dimensions.record_teams))throw std::invalid_argument("world12: manager history club workspace exceeded");
     for(size_t i=requested.size();i<result.manager_reference_clubs_.size();++i) {
@@ -118,6 +125,7 @@ AiMatchProjection AiMatchProjection::create_for_humans(const CareerSnapshot& sna
         local.manager_records[at+0x290]=uint8_t(team);local.manager_records[at+0x291]=uint8_t(team>>8);local.team_morale[team]|=0x80;
         install_manager_finance(local,int(m),*manager.finance);install_manager_tactics(local,int(m),*manager.tactics,result.players_);
         install_manager_match_state(local,int(m),*manager.match_state,result.manager_reference_clubs_,result.players_);
+        if(manager.career)install_manager_career_state(local,uint8_t(m),*manager.career,result.players_);
     }
     local.counts.players=uint32_t(local.players.size());return result;
 }
@@ -127,7 +135,7 @@ uint32_t AiMatchProjection::local_club(ClubId id)const{auto it=std::find(clubs_.
 uint32_t AiMatchProjection::local_player(PlayerId id)const{auto it=std::find(players_.begin(),players_.end(),id);if(it==players_.end())throw std::out_of_range("world12: player is not projected");return uint32_t(it-players_.begin());}
 void AiMatchProjection::commit_player_attributes(World& world)const {
     if(!manager_seats_.empty())throw std::invalid_argument("world12: human projection requires complete match-state commit");
-    if(world.managers!=original_managers_)throw std::invalid_argument("world12: manager ownership changed during projection");
+    if(world.managers!=original_managers_||world.settings!=original_settings_)throw std::invalid_argument("world12: manager ownership/settings changed during projection");
     if(state.players.size()!=players_.size()||state.player_bonus.size()!=players_.size())throw std::invalid_argument("world12: local player storage resized");
     for(size_t i=0;i<players_.size();++i)if(!world.players.contains(players_[i])||world.players.at(players_[i])!=originals_.at(i))throw std::invalid_argument("world12: projected player was removed or changed externally");
     auto candidate=world;
@@ -141,7 +149,7 @@ void AiMatchProjection::commit_match_state(World& world)const {
         throw std::invalid_argument("world12: human manager workspace resized");
     if(world.development_balance!=original_development_balance_ || world.trend_rotation!=original_trend_rotation_)
         throw std::invalid_argument("world12: development stream changed during projection");
-    if(world.managers!=original_managers_)throw std::invalid_argument("world12: manager ownership changed during projection");
+    if(world.managers!=original_managers_||world.settings!=original_settings_)throw std::invalid_argument("world12: manager ownership/settings changed during projection");
     if(state.players.size()!=players_.size() || state.player_bonus.size()!=players_.size() || state.player_cards.size()!=players_.size())
         throw std::invalid_argument("world12: projected player storage resized");
     for(size_t i=0;i<players_.size();++i)if(!world.players.contains(players_[i]) || world.players.at(players_[i])!=originals_.at(i))
@@ -182,6 +190,7 @@ void AiMatchProjection::commit_match_state(World& world)const {
         found->tactics=manager_full_tactics_from_legacy(state,int(local),players_);
         const auto previous=found->match_state;
         found->match_state=manager_match_state_from_legacy(state,int(local),manager_reference_clubs_,players_,previous?&*previous:nullptr);
+        if(found->career)found->career=manager_career_state_from_legacy(state,uint8_t(local),players_);
         const auto team=local_club(found->club);candidate.clubs.at(found->club).lineup_indoor=(state.club_heap_78.at(team*2+1)&2)!=0;
     }
     candidate.development_balance=state.development_balance;

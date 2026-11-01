@@ -76,11 +76,45 @@ struct ManagerMatchState {
     std::array<PlayerId,3> takers;
     bool operator==(const ManagerMatchState&)const=default;
 };
+struct CareerSettings {
+    uint8_t mode=3,difficulty=2,duration=5,planned_managers=1;
+    bool foreign_rule=false;
+    bool operator==(const CareerSettings&)const=default;
+};
+struct ManagerStadium {
+    std::array<uint8_t,22> facility_values{};
+    std::array<uint8_t,8> stand_condition{},facility_levels{},stand_capacity{};
+    uint8_t capacity_sum=0;
+    bool operator==(const ManagerStadium&)const=default;
+};
+struct ManagerYouthTeam {
+    uint8_t strength=0,position=0,league=0;
+    bool operator==(const ManagerYouthTeam&)const=default;
+};
+struct ManagerEnvironment {
+    std::array<ManagerYouthTeam,3> youth;
+    std::array<int32_t,6> monthly{};
+    bool operator==(const ManagerEnvironment&)const=default;
+};
+struct ManagerSponsorContract {
+    uint32_t amount=0;uint8_t months=0;
+    bool operator==(const ManagerSponsorContract&)const=default;
+};
+struct ManagerCareerState {
+    ManagerStadium stadium;
+    ManagerEnvironment environment;
+    std::array<ManagerSponsorContract,3> sponsors;
+    uint8_t board_patience=0,training_plan=0;
+    std::array<uint8_t,18> transfer_filters{};
+    std::array<PlayerId,5> poach_attempts;
+    bool operator==(const ManagerCareerState&)const=default;
+};
 struct Manager {
     uint8_t seat=0;std::string name;ClubId club;LeagueId start_league;uint8_t portrait=0;
     std::optional<ManagerFinance> finance={};
     std::optional<ManagerTactics> tactics={};
     std::optional<ManagerMatchState> match_state={};
+    std::optional<ManagerCareerState> career={};
     bool operator==(const Manager&)const=default;
 };
 struct CrestResource {std::string path;uint8_t cell=0;bool operator==(const CrestResource&)const=default;};
@@ -100,6 +134,7 @@ struct World {
     // Present after the market/mood phase; old saves do not invent these values.
     std::optional<CareerMarkets> markets={};
     std::optional<CareerPlayerPools> free_players={};
+    std::optional<CareerSettings> settings={};
     int32_t development_balance=0;
     uint8_t trend_rotation=0;
     Catalogue catalogue=Catalogue::dual_classic();

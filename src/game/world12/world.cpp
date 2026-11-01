@@ -17,6 +17,13 @@ void validate_manager_tactics(const ManagerTactics& tactics) {
 }
 void World::validate(bool complete)const {
     if(markets && (!players_initialized || markets->first_default_name>1))throw std::invalid_argument("world12: invalid career market state");
+    if(settings && (!free_players || settings->mode<1 || settings->mode>3 || settings->difficulty>9 || settings->duration>5 || settings->planned_managers<1 || settings->planned_managers>4 || managers.size()>settings->planned_managers))throw std::invalid_argument("world12: invalid career settings");
+    for(const auto& manager:managers)if(manager.career) {
+        if(!settings)throw std::invalid_argument("world12: initial manager state requires career settings");
+        std::set<PlayerId> attempts;for(auto player:manager.career->poach_attempts)if(player.valid()&&(!players.contains(player)||!attempts.insert(player).second))throw std::invalid_argument("world12: invalid poaching history identity");
+        for(const auto& youth:manager.career->environment.youth)if(youth.position>11||youth.league>2)throw std::invalid_argument("world12: invalid youth team state");
+        for(auto value:manager.career->environment.monthly)if(value<0)throw std::invalid_argument("world12: invalid negative environment budget");
+    }
     catalogue.validate();if(trend_rotation>2)throw std::invalid_argument("world12: invalid development trend rotation");std::set<ClubId> league_clubs;std::set<PlayerId> rostered;
     for(size_t i=0;i<membership.size();++i){const auto& m=membership[i];const auto& league=catalogue.leagues[i];if(m.league!=league.id)throw std::invalid_argument("world12: league membership identity mismatch");if(complete&&m.clubs.size()!=(league.active?league.clubs:0))throw std::invalid_argument("world12: incomplete league membership");if(m.clubs.size()>(league.active?league.clubs:0))throw std::invalid_argument("world12: league capacity exceeded");
         for(auto id:m.clubs){const auto found=clubs.find(id);if(found==clubs.end()||!league_clubs.insert(id).second)throw std::invalid_argument("world12: missing/duplicate league club");const auto& club=found->second;if(club.kind!=ClubKind::club||club.country!=league.country||club.league!=league.id)throw std::invalid_argument("world12: club assigned to the wrong country/league");}

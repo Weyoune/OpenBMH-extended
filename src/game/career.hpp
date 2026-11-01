@@ -142,6 +142,10 @@ void career_managers_begin(GameState& g, bool adding = false);
 // one-year career before season day 0. The date check uses GameState.date,
 // because the serialized CalendarDay mirror can be stale during startup/reset.
 void starting_sponsors(GameState& g, int manager);
+// Shared numeric phases of initial manager creation. The caller owns club
+// placement and supplies that country's league range and rules image.
+void initialize_career_club_strength(GameState&,int team,int mode,std::pair<int,int> range,WatcomRandom&);
+int initialize_career_manager_facilities(GameState&,const LeImage&,int manager,int local_league,int duration,WatcomRandom&);
 
 // OpenBMH deviates from the original: uses the supported player-generation ranges and excludes reserved calendar positions when assigning managers.
 // The body of ConfirmManager's loop for manager `m` (`adding` = a manager joins a running

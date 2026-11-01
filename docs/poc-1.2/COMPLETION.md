@@ -5,11 +5,11 @@ The active objective is a playable, verified 1.2, not another isolated format pr
 | Gate | Current evidence | Work still required |
 | --- | --- | --- |
 | World and source data | 13 league identities, 234 full-scope clubs, wide IDs, scoped data and snapshots | Final editor/package binding and full career state |
-| Human management | Finances, tactical/contract backing, formations, roster swaps and human match state | Player generation, markets/moods, age/free-pool release and account/board phase verified; full club-placement/strength/stadium initialization, remaining manager policy/records and other management actions |
+| Human management | Full initial player/manager confirmation, facilities/environment/sponsors, finance/tactics and human match state | Remaining live manager records/policy and other management actions |
 | Matchday | AI/human minute calculation, settled league days, account/statistics/RNG publication | Visible live ownership and full matchday services; cup/indoor/national simulation |
 | Competitions | Source calendars, fixtures, standings, domestic draws/stages and scoped other-games UI | Complete competition results, qualification, promotions and season transitions |
 | Career services | Bounded Original adapters | Daily/weekly/monthly finance, training, transfers, bank, stadium and notification publication |
-| GUI | Four scope controls; other-games projection | Connect accepted setup to typed manager/session; desktop/menu actions, tables and persistence |
+| GUI | Four scope controls; other-games projection | Connect accepted setup/manager confirmations to the typed session and first season; desktop/menu actions, tables and persistence |
 | Delivery | Current source/data regression evidence | Three complete seasons, two/four-manager sessions, native build/UI checks, screenshots/saves and Beta package |
 
 No gate is complete merely because its data model or a bounded Core test passes. Missing backends remain explicit until integrated, rather than manufacturing outcomes or silently using the German legacy career. Progress and validation receipts are recorded in `STATUS.md` and the private QA repository.

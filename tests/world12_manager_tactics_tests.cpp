@@ -237,7 +237,7 @@ void initial_contract_cases() {
         for(size_t m=0;m<4;++m)for(size_t mode=0;mode<2;++mode)for(size_t f=0;f<8;++f)for(size_t r=0;r<11;++r){const auto at=m*0x160+mode*0xb0+f*22+r;rules.formations[at]=depth[r];rules.formations[at+11]=lane[r];}
         rules.manager_options[15]=1;auto expected=rules;
         std::fill(expected.manager_records.begin()+3*0xb0c,expected.manager_records.end(),0);expected.manager_records[3*0xb0c+0x290]=72;
-        bmh::initialize_career_manager_team_settings(expected,3);expected.manager_records[3*0xb0c+0x288]=0x16;expected.manager_records[3*0xb0c+0x218]=expected.manager_records[3*0xb0c+0x219]=15;
+        bmh::initialize_career_manager_team_settings(expected,3);expected.manager_records[3*0xb0c+0x288]=0x16;
         for(size_t r=0;r<24;++r)for(size_t offset:{0x44u,0x46u}){expected.tactics[3*0x840+r*0x58+offset]=0xff;expected.tactics[3*0x840+r*0x58+offset+1]=0x0f;}
         std::vector<PlayerId> mapping(24);const auto start=bmh::squad_range(72).first;
         for(size_t r=0;r<20;++r)mapping[23-r]=w.clubs.at(target).roster[r].player;

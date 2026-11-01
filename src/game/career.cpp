@@ -350,7 +350,15 @@ void put32(std::vector<uint8_t>& v, size_t o, uint32_t x) {
 void set_club_strength(GameState& g, int team, int mode, WatcomRandom& rand) {
     if (team >= kLeagueTeams) return;
     const int league = team_league(team);
-    const int lo = kLeagueStrength[league][0], hi = kLeagueStrength[league][1];
+    initialize_career_club_strength(g,team,mode,{kLeagueStrength[league][0],kLeagueStrength[league][1]},rand);
+}
+
+} // namespace
+
+void initialize_career_club_strength(GameState& g,int team,int mode,std::pair<int,int> range,WatcomRandom& rand) {
+    const auto [lo,hi]=range;
+    if(team<0||team>=runtime_dimensions.league_teams||mode<0||mode>3||lo<0||hi>99||lo>hi)
+        throw std::invalid_argument("career: invalid initial club strength context");
     int level = mode;
     switch (mode) {
         case 0: level = rand.range(lo, hi); break;
@@ -371,6 +379,7 @@ void set_club_strength(GameState& g, int team, int mode, WatcomRandom& rand) {
     }
 }
 
+namespace {
 // CareerAddManager3(record, league, mode): the stadium of a human club - eight stand blocks
 // (Career_BuildStadium_RuntimeField4[league] thousand places each), the facilities of the league
 // (Career_BuildStadium_RuntimeField, levels W(Career_BuildStadium_RuntimeField2, Career_BuildStadium_RuntimeField3) << 2) and eight block values W(100, 140).
@@ -410,6 +419,24 @@ void starting_sponsors(GameState& g, int m) {
     const int v = (((league * -20 + 80) * 60000 + 1000000) / 12 * (mem.u8(::bmh::layout::Difficulty) * -5 + 0xaa)) / 3000000 * 10000;
     for (size_t o : {size_t(0xae8), size_t(0xadc), size_t(0xa34)}) put32(g.manager_records, rec + o, uint32_t(v));
     for (size_t o : {size_t(0xaed), size_t(0xae1), size_t(0xa39)}) g.manager_records.at(rec + o) = 1;
+}
+
+int initialize_career_manager_facilities(GameState& g,const LeImage& exe,int m,int league,int duration,WatcomRandom& rand) {
+    if(m<0||m>3||league<0||league>4||duration<0||duration>5||g.manager_records.size()<size_t(m+1)*kRecord)
+        throw std::invalid_argument("career: invalid initial manager facility context");
+    const auto rec=size_t(m)*kRecord;
+    g.manager_records.at(rec+0x26f)=0x32;
+    if(league>2)--league;
+    starting_sponsors(g,m);
+    g.manager_records.at(rec+0x26e)=uint8_t(std::max(20-2*league,14));
+    build_stadium(g,exe,m,league,duration,rand);
+    if(league>2)league=2;
+    for(uint32_t i=0;i<3;++i) {
+        const auto base=layout::Career_CareerAddManager_RuntimeField2+uint32_t(m)*0x24;
+        g.memory.set8(base+i,uint8_t(0x52-league*15));g.memory.set8(base+3+i,6);g.memory.set8(base+6+i,uint8_t(league));
+        g.memory.set32(base+0x18+i*4,5000);
+    }
+    return league;
 }
 
 void initialize_career_manager_team_settings(GameState& g,int manager) {
@@ -535,19 +562,7 @@ bool career_add_manager(GameState& g, const LeImage& exe, int m, const CareerMan
     const int club = int16_t(team_of(g, m));
     if (adding && !remove_join_loans(g, club, report)) return false;
     g.team_morale.at(size_t(club)) |= 0x80;
-    r.at(rec + 0x26f) = 0x32;
-    if (league > 2) league--;
-    starting_sponsors(g, m);
-    r.at(rec + 0x26e) = uint8_t(std::max(20 - 2 * league, 14));
-    build_stadium(g, exe, m, league, mem.u8(::bmh::layout::CareerDuration), rand);
-    if (league > 2) league = 2;
-    for (uint32_t i = 0; i < 3; i++) {
-        const uint32_t base = ::bmh::layout::Career_CareerAddManager_RuntimeField2 + uint32_t(m) * 0x24;
-        mem.set8(base + i, uint8_t(0x52 - league * 15));
-        mem.set8(base + 3 + i, 6);
-        mem.set8(base + 6 + i, uint8_t(league));
-        mem.set32(base + 0x18 + i * 4, 5000);
-    }
+    league=initialize_career_manager_facilities(g,exe,m,league,mem.u8(layout::CareerDuration),rand);
     const SquadRange squad = squad_range(club);
     initialize_career_manager_team_settings(g,m);
     const int players = adding ? squad_count(g, club, 2) : 20;
