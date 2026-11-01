@@ -19,6 +19,7 @@
 #include "game/memory.hpp"
 #include "game/profile_runtime.hpp"
 #include "game/random.hpp"
+#include "game/long_career.hpp"
 #include "game/reality_motion.hpp"
 
 namespace bmh {
@@ -38,6 +39,8 @@ constexpr uint16_t kEmptySlot = 0x0FFF;
 constexpr uint16_t kSlotInLineup = 0x8000;
 
 struct GameState {
+    PlayerStatisticsArchive player_statistics;
+    TitleHistoryArchive title_history;
     struct ProjectedTablePrediction {
         int mode=0,best_rank=0;
         std::array<uint8_t,24> ranks{};
