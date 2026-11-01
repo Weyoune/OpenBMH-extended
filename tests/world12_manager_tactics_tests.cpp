@@ -34,7 +34,7 @@ bmh::GameState native(const World& w,TacticalPolicy policy={}) {
     const auto& t=*w.managers[0].tactics;const auto& club=w.clubs.at(w.managers[0].club);
     constexpr size_t manager=3,team=72;
     bmh::GameState g;g.manager_teams={0xfff,0xfff,0xfff,int(team)};g.club_ids.resize(445);g.team_flags.resize(445);g.club_heap_78.resize(445*2);
-    g.manager_records.assign(4*0xb0c,0x5a);g.manager_options.assign(20,0x5a);g.tactics.assign(4*0x840,0xa5);g.formations.resize(4*0x160);
+    g.manager_records.assign(4*0xb0c,0);g.manager_options.assign(20,0x5a);g.manager_ratings.resize(4*60);g.tactics.assign(4*0x840,0xa5);g.formations.resize(4*0x160);
     g.manager_records[manager*0xb0c+0x290]=uint8_t(team);g.manager_records[manager*0xb0c+0x291]=0;
     g.manager_records[manager*0xb0c+0x288]=t.automatic_weights;g.manager_options[manager*5]=t.automatic_formation;
     g.memory.add_block(bmh::layout::ActiveManager,1);g.memory.set8(bmh::layout::ActiveManager,3);
@@ -237,7 +237,7 @@ void initial_contract_cases() {
         for(size_t m=0;m<4;++m)for(size_t mode=0;mode<2;++mode)for(size_t f=0;f<8;++f)for(size_t r=0;r<11;++r){const auto at=m*0x160+mode*0xb0+f*22+r;rules.formations[at]=depth[r];rules.formations[at+11]=lane[r];}
         rules.manager_options[15]=1;auto expected=rules;
         std::fill(expected.manager_records.begin()+3*0xb0c,expected.manager_records.end(),0);expected.manager_records[3*0xb0c+0x290]=72;
-        expected.manager_records[3*0xb0c+0x288]=0x16;expected.manager_records[3*0xb0c+0x218]=expected.manager_records[3*0xb0c+0x219]=15;
+        bmh::initialize_career_manager_team_settings(expected,3);expected.manager_records[3*0xb0c+0x288]=0x16;expected.manager_records[3*0xb0c+0x218]=expected.manager_records[3*0xb0c+0x219]=15;
         for(size_t r=0;r<24;++r)for(size_t offset:{0x44u,0x46u}){expected.tactics[3*0x840+r*0x58+offset]=0xff;expected.tactics[3*0x840+r*0x58+offset+1]=0x0f;}
         std::vector<PlayerId> mapping(24);const auto start=bmh::squad_range(72).first;
         for(size_t r=0;r<20;++r)mapping[23-r]=w.clubs.at(target).roster[r].player;
@@ -250,6 +250,7 @@ void initial_contract_cases() {
         const auto draws=app::initialize_manager_contracts(w,owner,identity,rules,policy,b);
         check(draws==a.calls()&&b.seed()==a.seed()&&owner.revision==9,"initial contracts lost Source RNG or owner revision");
         check(w.managers[0].tactics==manager_full_tactics_from_legacy(expected,3,mapping),"initial board/contracts differ from direct Source phase");
+        check(w.managers[0].match_state&&w.managers[0].match_state->staff_ratings[2]==0x226&&std::all_of(w.managers[0].match_state->rating_history.begin(),w.managers[0].match_state->rating_history.end(),[](auto x){return x==100;}),"initial match staff/ratings were not supplied by Source settings");
         check(w.managers[0].finance==manager_initial_finance_from_legacy(expected,3),"initial account/baseline differs from Source financial phase");
         check(w.managers[0].finance->balance==(difficulty==0?50000000:4000000-difficulty*200000)&&w.managers[0].finance->credit==uint32_t(400000-normalized*100000),"initial difficulty/league account policy wrong");
         for(size_t r=0;r<20;++r){const auto raw=expected.squad_slots[start+r];const auto id=mapping.at(raw&0xfff);check(w.clubs.at(target).roster[r].player==id&&w.players.at(id).attributes.w364==expected.players.at(raw&0xfff).w364,"initial age/lineup lost global identity");}

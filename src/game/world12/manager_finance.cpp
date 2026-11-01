@@ -10,6 +10,13 @@ constexpr size_t balance_at=0x314,credit_at=0x31c,income_at=0x874,expenses_at=0x
 uint32_t word(const Bytes& bytes,size_t at){return uint32_t(bytes.at(at))|uint32_t(bytes.at(at+1))<<8|uint32_t(bytes.at(at+2))<<16|uint32_t(bytes.at(at+3))<<24;}
 void set_word(Bytes& bytes,size_t at,uint32_t value){for(size_t i=0;i<4;++i)bytes.at(at+i)=uint8_t(value>>(i*8));}
 }
+void install_manager_finance(GameState& state,int manager,const ManagerFinance& input) {
+    if(manager<0||manager>3||state.manager_records.size()<size_t(manager+1)*record_size)throw std::invalid_argument("world12: missing financial workspace");
+    const auto at=size_t(manager)*record_size;
+    set_word(state.manager_records,at+balance_at,std::bit_cast<uint32_t>(input.balance));set_word(state.manager_records,at+credit_at,input.credit);
+    set_word(state.manager_records,at+income_at,input.income);set_word(state.manager_records,at+expenses_at,input.expenses);set_word(state.manager_records,at+bonus_at,input.bonus_paid);
+    if(input.baseline){set_word(state.manager_records,at+0x324,input.baseline->starting_balance);set_word(state.manager_records,at+0x310,input.baseline->account_flags);}
+}
 ManagerFinance manager_finance_from_legacy(const GameState& state,int manager) {
     if(manager<0||manager>4||state.manager_records.size()<(size_t(manager)+1)*record_size)
         throw std::invalid_argument("world12: missing initialized manager financial record");

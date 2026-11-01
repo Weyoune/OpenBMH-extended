@@ -148,7 +148,9 @@ int team_rating(GameState& g, int team, const RatingProfile& profile, RatingCont
     if (manager >= 0) {
         const size_t rec = size_t(manager) * 0xB0C;
         const int league = g.manager_records.at(rec + 0x210);
-        const int mode = (league < int(g.league_rounds.size()) && g.league_rounds[size_t(league)] > 9) + 1;
+        const int cursor=g.projected_match_clubs.empty()?(league<int(g.league_rounds.size())?g.league_rounds[size_t(league)]:0):g.projected_match_clubs.at(size_t(team)).round_cursor;
+        if(cursor<0)throw std::invalid_argument("rating: projected league cursor missing");
+        const int mode=(cursor>9)+1;
         std::array<uint8_t, 24> buf;
         int size_word = -1;
         const int r = table_prediction(g, g.manager_teams.at(size_t(manager)), mode, buf, &size_word);

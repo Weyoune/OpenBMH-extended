@@ -4,6 +4,7 @@
 #include "game/career.hpp"
 #include "game/national.hpp"
 #include "game/world12/manager_finance.hpp"
+#include "game/world12/manager_match_state.hpp"
 #include <algorithm>
 #include <stdexcept>
 namespace bmh::world12 {
@@ -16,15 +17,15 @@ std::vector<PlayerId> mapped_players(const World& world,const Manager& manager) 
         if(id.valid()&&std::find(result.begin(),result.end(),id)==result.end())result.push_back(id);
     return result;
 }
-void put_rows(GameState& state,const ManagerTactics& input,const std::vector<PlayerId>& mapping) {
+void put_rows(GameState& state,const ManagerTactics& input,const std::vector<PlayerId>& mapping,size_t manager=0) {
     if(input.backing) {
-        for(size_t row=0;row<24;++row)std::copy(input.backing->scalar_rows[row].begin(),input.backing->scalar_rows[row].end(),state.tactics.begin()+row*row_size);
+        for(size_t row=0;row<24;++row)std::copy(input.backing->scalar_rows[row].begin(),input.backing->scalar_rows[row].end(),state.tactics.begin()+manager*board_size+row*row_size);
         const auto put=[&](size_t row,size_t offset,PlayerId id){uint16_t local=0xfff;
             if(id.valid()){const auto found=std::find(mapping.begin(),mapping.end(),id);if(found==mapping.end())throw std::invalid_argument("world12: missing mapped tactical reference");local=uint16_t(found-mapping.begin());}
-            state.tactics[row*row_size+offset]=uint8_t(local);state.tactics[row*row_size+offset+1]=uint8_t(local>>8);};
+            state.tactics[manager*board_size+row*row_size+offset]=uint8_t(local);state.tactics[manager*board_size+row*row_size+offset+1]=uint8_t(local>>8);};
         for(size_t row=0;row<24;++row){put(row,0x44,input.backing->marks[row]);put(row,0x46,input.backing->marked_by[row]);}
     }
-    for(size_t i=0;i<24;++i){const auto at=i*row_size;const auto& r=input.rows[i];
+    for(size_t i=0;i<24;++i){const auto at=manager*board_size+i*row_size;const auto& r=input.rows[i];
         std::copy(r.orders.begin(),r.orders.end(),state.tactics.begin()+at+2);
         state.tactics[at+0x3f]=r.partner;state.tactics[at+0x41]=r.depth;state.tactics[at+0x42]=r.lane;}
 }
@@ -44,6 +45,7 @@ GameState workspace(const World& world,const Manager& manager,TacticalPolicy pol
         const auto& backing=*manager.tactics->backing;
         std::copy(backing.formations.begin(),backing.formations.end(),state.formations.begin());
         std::copy(backing.formation_tail.begin(),backing.formation_tail.end(),state.formations.begin()+0x160);
+        state.projected_formation_tails={backing.formation_tail};
         std::copy(backing.enabled_formations.begin(),backing.enabled_formations.end(),state.manager_records.begin()+0x218);
         std::copy(backing.automation.begin(),backing.automation.end(),state.manager_options.begin()+1);
     }
@@ -61,6 +63,22 @@ GameState workspace(const World& world,const Manager& manager,TacticalPolicy pol
     }
     return state;
 }
+}
+void install_manager_tactics(GameState& state,int manager,const ManagerTactics& input,const std::vector<PlayerId>& mapping) {
+    validate_manager_tactics(input);
+    if(manager<0||manager>3||!input.backing||mapping.size()>4095||state.tactics.size()<size_t(manager+1)*board_size||state.formations.size()<0x580||
+        state.manager_records.size()<size_t(manager+1)*record_size||state.manager_options.size()<size_t(manager+1)*5)
+        throw std::invalid_argument("world12: complete manager tactical installation context missing");
+    for(const auto* refs:{&input.backing->marks,&input.backing->marked_by})for(auto id:*refs)if(id.valid()&&std::find(mapping.begin(),mapping.end(),id)==mapping.end())
+        throw std::invalid_argument("world12: missing tactical player reference");
+    if(state.projected_formation_tails.size()<size_t(manager+1))state.projected_formation_tails.resize(size_t(manager+1));
+    put_rows(state,input,mapping,size_t(manager));
+    const auto rec=size_t(manager)*record_size;state.manager_records[rec+0x288]=input.automatic_weights;
+    std::copy(input.backing->enabled_formations.begin(),input.backing->enabled_formations.end(),state.manager_records.begin()+rec+0x218);
+    state.manager_options[size_t(manager)*5]=input.automatic_formation;
+    std::copy(input.backing->automation.begin(),input.backing->automation.end(),state.manager_options.begin()+size_t(manager)*5+1);
+    std::copy(input.backing->formations.begin(),input.backing->formations.end(),state.formations.begin()+size_t(manager)*0x160);
+    state.projected_formation_tails[size_t(manager)]=input.backing->formation_tail;
 }
 ManagerTactics manager_tactics_from_legacy(const GameState& state,int manager) {
     if(manager<0 || manager>3 || state.tactics.size()<size_t(manager+1)*board_size ||
@@ -87,7 +105,8 @@ ManagerTactics manager_full_tactics_from_legacy(const GameState& state,int manag
     }
     const auto form=size_t(manager)*0x160;
     std::copy_n(state.formations.begin()+form,0x160,backing.formations.begin());
-    for(size_t i=0;i<13;++i){const auto at=form+0x160+i;backing.formation_tail[i]=at<0x580?state.formations.at(at):state.tactics.at(at-0x580);}
+    if(!state.projected_formation_tails.empty())backing.formation_tail=state.projected_formation_tails.at(size_t(manager));
+    else for(size_t i=0;i<13;++i){const auto at=form+0x160+i;backing.formation_tail[i]=at<0x580?state.formations.at(at):state.tactics.at(at-0x580);}
     std::copy_n(state.manager_records.begin()+size_t(manager)*record_size+0x218,2,backing.enabled_formations.begin());
     std::copy_n(state.manager_options.begin()+size_t(manager)*5+1,4,backing.automation.begin());
     result.backing=backing;validate_manager_tactics(result);return result;
@@ -155,6 +174,7 @@ uint64_t initialize_manager_contracts(World& world,uint8_t seat,const GameState&
     const auto before=world;auto candidate=world;const auto old_seed=random.seed();const auto old_calls=random.calls();auto staged_random=random;
     const auto index=size_t(found-world.managers.begin());auto& manager=candidate.managers[index];
     auto initial=rules;
+    bmh::initialize_career_manager_team_settings(initial,seat);
     initial.manager_records[size_t(seat)*record_size+0x288]=0x16;
     initial.manager_records[size_t(seat)*record_size+0x218]=initial.manager_records[size_t(seat)*record_size+0x219]=15;
     // Unoccupied initial rows have no player to mark. Do not reinterpret the
@@ -174,6 +194,7 @@ uint64_t initialize_manager_contracts(World& world,uint8_t seat,const GameState&
     bmh::auto_lineup(local,0,100);
     manager.tactics=manager_full_tactics_from_legacy(local,0,mapping);
     manager.finance=manager_initial_finance_from_legacy(local,0);
+    manager.match_state=manager_match_state_from_legacy(initial,seat,{},{});
     auto& club=candidate.clubs.at(manager.club);club.match_flags=local.team_flags[0];club.lineup_indoor=(local.club_heap_78[1]&2)!=0;
     for(size_t row=0;row<24;++row) {
         const auto raw=local.squad_slots[row];if((raw&0xfff)==0xfff){club.roster[row]={};continue;}

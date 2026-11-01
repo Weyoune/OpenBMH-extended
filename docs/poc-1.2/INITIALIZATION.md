@@ -1,6 +1,6 @@
 # Typed career initialization
 
-World schema 8 records whether the fresh player pool has been initialized. It also retains an optional initial account baseline (starting capital and account flags). Older worlds leave these initialization fields absent/defaulted; they are not silently regenerated once managers or played records exist.
+World schema 8 introduced the marker that records whether the fresh player pool has been initialized. It also retains an optional initial account baseline (starting capital and account flags). Older worlds leave these initialization fields absent/defaulted; they are not silently regenerated once managers or played records exist.
 
 ## Player pool
 
@@ -25,3 +25,5 @@ Unoccupied initial marking words are normalized to the explicit no-player sentin
 Synthetic checks cover all seven scopes, deterministic generation/reload, malformed plans, replay and external world/RNG ownership. Forty additional manager cases compare the account/board phase directly with Core calls in both domestic ladders and at difficulties 0/1/6/9, including initial-capital persistence and interrupted-owner rollback.
 
 `world12_creation_validate` compares the private Germany/Premier-League-fallback dataset with direct `startup_players`: all 3,334 player records and both RNG streams match. It then compares manager contracts, ages, board, initial account, lineup and RNG with the direct known Source phase. This does not certify the earlier club-strength/placement/stadium selection, markets/moods, national-only manager ownership, complete human matches or GUI career binding. Those remain completion gates, not guessed defaults.
+
+Schema 9 additionally preserves the known initial human match settings, staff ratings and histories through the shared Source team-settings initializer. The real creation probe now runs an isolated human league round after the known initialization phase; it still does not certify earlier club/stadium selection or the complete GUI career.

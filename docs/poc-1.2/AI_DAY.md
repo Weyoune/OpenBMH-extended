@@ -19,3 +19,7 @@ Synthetic tests compare 261 actual first-date fixtures across full German/Englis
 `world12_day_validate <WORLD12.JSON> <German rules directory> <supplied FLTD.EXE>` is a private-data probe. It imports the supplied fixture tables and weekday-aligned league calendars and runs/repeats the first three league dates for each of those scopes. It explicitly removes and reports non-league appointments for this isolated verification. Its fixed weather/attendance inputs and excluded cup/national events are not evidence of a complete career or Original-save equivalence.
 
 Human tactical state and match ownership, cup/national/indoor simulation, daily/weekly/monthly finances, promotion settlement and GUI progression remain pending. This packet does not enable the 1.2 profile in the legacy GUI.
+
+## Human-capable extension
+
+`play_league_day` now uses the same complete-day owner with explicit human policy and synchronous presenters. Human groups run through the dedicated Source human projection and settlement, not the AI factory. The original `play_ai_league_day` still rejects human fixtures. Both retain the league-only competition/economy boundary; see [human match ownership](HUMAN_MATCHES.md).

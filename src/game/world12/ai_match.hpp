@@ -3,6 +3,7 @@
 #include "game/world12/match_projection.hpp"
 #include "game/world12/fixtures.hpp"
 #include "game/random.hpp"
+#include "game/match_engine.hpp"
 namespace bmh::world12 {
 struct AiLeagueConditions {
     int month=0,temperature=0,rain=0;
@@ -22,6 +23,13 @@ struct AiLeagueRoundOutcome {
     std::vector<AiLeagueOutcome> matches;
     uint64_t game_draws=0,watcom_draws=0;
 };
+struct HumanRoundHooks {
+    // Trusted synchronous presenters; group storage must stay stable while
+    // MatchEngine retains references. Gameplay changes use existing Core actions.
+    std::function<void(AiMatchProjection&,bmh::MatchEngine&,const bmh::LiveMatchEvent&)> live_event;
+    std::function<void(AiMatchProjection&,bmh::MatchEngine&,int)> after_minute;
+    bool decline_unpresented_events=false;
+};
 // Actual Original scoring phases and AI events; no generated/test score input.
 // Conditions/formation tables come from the session owner. After-match economy,
 // development, standings and human tactics are deliberately outside this API.
@@ -36,4 +44,11 @@ AiLeagueOutcome simulate_and_settle_ai_league_match(World&,const GameState& rule
 // belongs to the whole group; individual outcome draw counts are zero.
 AiLeagueRoundOutcome simulate_and_settle_ai_league_round(World&,const GameState& rules_template,
     LeagueId,int round,const std::vector<AiLeagueConditions>&,GameRandom&,WatcomRandom&);
+// Calculation on the day owner's staged snapshot. Includes real human rating,
+// development, account/bonus/statistics state. Does not advance results/date.
+// Missing human event presenters are an explicit error unless the caller
+// deliberately chooses the existing headless decline behavior for a probe.
+AiLeagueRoundOutcome simulate_and_settle_human_league_round(CareerSnapshot&,const GameState& rules_template,
+    LeagueId,int round,const std::vector<AiLeagueConditions>&,HumanProjectionPolicy,
+    GameRandom&,WatcomRandom&,const HumanRoundHooks& hooks={});
 }

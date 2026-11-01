@@ -1211,6 +1211,7 @@ add_library(bmhworld12 STATIC
     src/game/world12/save.cpp
     src/game/world12/match_projection.cpp
     src/game/world12/ai_match.cpp
+    src/game/world12/manager_match_state.cpp
     src/game/world12/manager_finance.cpp
     src/game/world12/manager_tactics.cpp
     src/game/world12/initialization.cpp
@@ -1252,6 +1253,12 @@ add_test(NAME world12_manager_selection_tests COMMAND world12_manager_selection_
 add_executable(world12_manager_finance_tests tests/world12_manager_finance_tests.cpp)
 target_link_libraries(world12_manager_finance_tests PRIVATE bmhworld12_app)
 add_test(NAME world12_manager_finance_tests COMMAND world12_manager_finance_tests)
+add_executable(world12_manager_match_state_tests tests/world12_manager_match_state_tests.cpp)
+target_link_libraries(world12_manager_match_state_tests PRIVATE bmhworld12_app)
+add_test(NAME world12_manager_match_state_tests COMMAND world12_manager_match_state_tests)
+add_executable(world12_human_projection_tests tests/world12_human_projection_tests.cpp)
+target_link_libraries(world12_human_projection_tests PRIVATE bmhworld12_app)
+add_test(NAME world12_human_projection_tests COMMAND world12_human_projection_tests)
 add_executable(world12_manager_tactics_tests tests/world12_manager_tactics_tests.cpp)
 target_link_libraries(world12_manager_tactics_tests PRIVATE bmhworld12_app)
 add_test(NAME world12_manager_tactics_tests COMMAND world12_manager_tactics_tests)

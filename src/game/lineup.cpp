@@ -28,7 +28,13 @@ constexpr size_t kBoardRowSize = 0x58;
 constexpr size_t kFormationManagerSize = 0x160;
 constexpr size_t kNativeFormationBlockSize = 0x580;
 
-uint8_t formation_byte(const GameState& g, size_t index) {
+uint8_t formation_byte(const GameState& g, size_t index,int manager=-1) {
+    if(manager<0&&g.projected_ai_formations)return g.projected_ai_formations->at(index);
+    if(manager>=0&&!g.projected_formation_tails.empty()&&index>=size_t(manager+1)*kFormationManagerSize) {
+        const auto offset=index-size_t(manager+1)*kFormationManagerSize;
+        if(offset>=13)throw std::invalid_argument("lineup: projected formation tail exceeded");
+        return g.projected_formation_tails.at(size_t(manager)).at(offset);
+    }
     // The native byte table runs directly into the tactics block at 0x580.
     // Int2 indexes through that contiguous memory for manager 3's
     // indoor formations and reserve rows.
@@ -488,7 +494,7 @@ static void auto_lineup_impl(GameState& g, int team, int mode, int manager) {
 
     for (int pos = 0; pos < players; pos++) {
         int type;
-        if (pos < 11) type = kTypeByDepth[formation_byte(g, table + size_t(pos))];
+        if (pos < 11) type = kTypeByDepth[formation_byte(g, table + size_t(pos), manager)];
         else type = kTypeBySlot[pos];
         int best = -1;
         for (int j = pos; j < players; j++) {
@@ -506,8 +512,8 @@ static void auto_lineup_impl(GameState& g, int team, int mode, int manager) {
             // level-6, non-goalkeeper branch. Normal and keeper/bench paths must
             // not require bytes beyond the eleven formation coordinates.
             if (detail != 0 && candidate.position() != 0) {
-                const int x = formation_byte(g, table + size_t(pos));
-                const int y = formation_byte(g, table + 0xb + size_t(pos));
+                const int x = formation_byte(g, table + size_t(pos), manager);
+                const int y = formation_byte(g, table + 0xb + size_t(pos), manager);
                 position_value = detailed_position_value(value[j], candidate, x, y, detail);
             }
             int score = int16_t(position_value - mismatch);
@@ -520,8 +526,8 @@ static void auto_lineup_impl(GameState& g, int team, int mode, int manager) {
         if (type != 9) {
             if (manager >= 0) {
                 // the chosen player gets the place on the board
-                board(best)[0x41] = formation_byte(g, table + size_t(pos));
-                board(best)[0x42] = formation_byte(g, table + 0xb + size_t(pos));
+                board(best)[0x41] = formation_byte(g, table + size_t(pos), manager);
+                board(best)[0x42] = formation_byte(g, table + 0xb + size_t(pos), manager);
             }
             if (value[best] != kUnavailable) g.squad_slots.at(range.first + best) |= uint16_t(pos < 11 ? 0x8000 : 0x4000);
         }
@@ -538,7 +544,7 @@ static void auto_lineup_impl(GameState& g, int team, int mode, int manager) {
     // The keeper is excluded; first-eleven-only modes have no reserve range.
     if (improve_from_reserves) {
         for (int pos = 1; pos < 11; ++pos) {
-            const int type = kTypeByDepth[formation_byte(g, table + size_t(pos))];
+            const int type = kTypeByDepth[formation_byte(g, table + size_t(pos), manager)];
             int16_t best = best_score[pos];
             int replacement = -1;
             for (int row = 11; row < players; ++row) {
@@ -560,8 +566,8 @@ static void auto_lineup_impl(GameState& g, int team, int mode, int manager) {
             std::swap(field, reserve);
             if (manager >= 0) {
                 std::swap_ranges(board(pos), board(pos) + 0x58, board(replacement));
-                board(pos)[0x41] = formation_byte(g, table + size_t(pos));
-                board(pos)[0x42] = formation_byte(g, table + 0xb + size_t(pos));
+                board(pos)[0x41] = formation_byte(g, table + size_t(pos), manager);
+                board(pos)[0x42] = formation_byte(g, table + 0xb + size_t(pos), manager);
             }
             std::swap(value[pos], value[replacement]);
         }

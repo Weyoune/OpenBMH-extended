@@ -3,9 +3,11 @@
 #include "game/prediction.hpp"
 
 #include <string>
+#include <algorithm>
 #include <stdexcept>
 
 #include "game/matchday.hpp"
+#include "game/match.hpp"
 #include "game/messages.hpp"
 #include "game/schedule.hpp"
 #include "game/table.hpp"
@@ -52,8 +54,68 @@ TablePredictionResult calculate_table_prediction(const LeagueTable& full,const L
     return result;
 }
 
+namespace {
+void emit_prediction_notices(GameState& g,int team,int league,const TablePredictionResult& prediction,
+    std::string_view league_name={},bool english=false) {
+    const int manager=g.manager_of(team);const auto rec=size_t(manager)*kRecord;
+    int league_index = league;  // local_30 is changed by the league name of message 1
+    {
+        for (int k = 0; k < 3; k++) {
+            if (!(prediction.lost_goals & (1u<<k))) continue;
+            if (manager >= 0 && (g.manager_records.at(rec + 0x28b) >> k & 1)) continue;
+            // the goal can no longer be reached
+            if (manager >= 0) g.manager_records.at(rec + 0x28b) |= uint8_t(1 << k);
+            std::string msg = g.club_name(team) + message_text(g, ::bmh::layout::Prediction_TablePrediction_TextPointer2);
+            if (k == 0) msg += message_text(g, ::bmh::layout::Prediction_TablePrediction_TextPointer3);
+            if (k == 1) {
+                std::string tail;
+                if (league_index == 0) {
+                    tail = message_text(g, ::bmh::layout::Prediction_TablePrediction_TextPointer4);
+                } else if (!english && (league_index == 2 || league_index == 3)) {
+                    tail = message_text(g, ::bmh::layout::Prediction_TablePrediction_TextPointer5);
+                } else {
+                    msg += message_text(g, ::bmh::layout::Prediction_TablePrediction_TextPointer6);
+                    if (!english && league_index > 2) league_index--;
+                    msg += english?std::string(league_name):message_text(g, ::bmh::layout::Prediction_TablePrediction_TextPointer + uint32_t(league_index) * 4);  // league name
+                    tail = message_text(g, ::bmh::layout::Prediction_TablePrediction_TextPointer7);
+                }
+                msg += tail;
+            }
+            if (k == 2) msg += message_text(g, ::bmh::layout::Prediction_TablePrediction_TextPointer8);
+            if (manager >= 0) post_composed(g, manager, msg);
+        }
+    }
+
+    {
+        for (int k = 0; k < 3; k++) {
+            if (!(prediction.secured_goals & (1u<<k))) continue;
+            if (manager >= 0 && (g.manager_records.at(rec + 0x28b) >> (k + 3) & 1)) continue;
+            // the goal is secured (or relegation avoided / certain)
+            if (manager >= 0) g.manager_records.at(rec + 0x28b) |= uint8_t(1 << (k + 3));
+            std::string msg = g.club_name(team) + message_text(g, ::bmh::layout::Prediction_TablePrediction_TextPointer9);
+            if (k == 0) msg += message_text(g, ::bmh::layout::Prediction_TablePrediction_TextPointer10);
+            else if (k == 1)
+                msg += message_text(g, league_index == 0 ? ::bmh::layout::Prediction_TablePrediction_TextPointer11 : (!english && (league_index == 2 || league_index == 3)) ? ::bmh::layout::Prediction_TablePrediction_TextPointer12 : ::bmh::layout::Prediction_TablePrediction_TextPointer13);
+            else msg += message_text(g, ::bmh::layout::Prediction_TablePrediction_TextPointer14);
+            msg += message_text(g, ::bmh::layout::Prediction_TablePrediction_TextPointer15);
+            // without a manager the original posts to "manager" 0xFE; not needed here
+            if (manager >= 0) post_composed(g, manager, msg);
+        }
+    }
+}
+}
+
 int table_prediction(GameState& g, int team, int mode, std::array<uint8_t, 24>& buf, int* size_word) {
     buf.fill(1);
+    if(!g.projected_match_clubs.empty()) {
+        if(team<0||size_t(team)>=g.projected_match_clubs.size())throw std::invalid_argument("prediction: team is outside projected context");
+        const auto& club=g.projected_match_clubs[size_t(team)];
+        const auto found=std::find_if(club.predictions.begin(),club.predictions.end(),[&](const auto& value){return value.mode==mode;});
+        if(found==club.predictions.end())throw std::invalid_argument("prediction: typed league forecast is missing");
+        buf=found->ranks;if(found->size_word&&size_word)*size_word=*found->size_word;
+        if(mode==1)emit_prediction_notices(g,team,club.league_class,TablePredictionResult{found->ranks,found->best_rank,found->lost_goals,found->secured_goals},club.league_name,club.climate_region==2);
+        return found->best_rank;
+    }
     int league = team_league(team);  // local_30
     if (league >= kLeagueCount) return 0;  // reads CareerRuntimeField6[0] = 0 as the round count
     const int rounds = int8_t(g.league_rounds.at(size_t(league)));  // local_1c
@@ -79,60 +141,23 @@ int table_prediction(GameState& g, int team, int mode, std::array<uint8_t, 24>& 
     const auto prediction=calculate_table_prediction(full,recent,pos,mode,matchdays,target[1],kLeagueRelegation[league]);
     buf=prediction.ranks;
 
-    int league_index = league;  // local_30 is changed by the league name of message 1
-    if (mode == 1) {
-        for (int k = 0; k < 3; k++) {
-            if (!(prediction.lost_goals & (1u<<k))) continue;
-            if (manager >= 0 && (g.manager_records.at(rec + 0x28b) >> k & 1)) continue;
-            // the goal can no longer be reached
-            if (manager >= 0) g.manager_records.at(rec + 0x28b) |= uint8_t(1 << k);
-            std::string msg = g.club_name(team) + message_text(g, ::bmh::layout::Prediction_TablePrediction_TextPointer2);
-            if (k == 0) msg += message_text(g, ::bmh::layout::Prediction_TablePrediction_TextPointer3);
-            if (k == 1) {
-                std::string tail;
-                if (league_index == 0) {
-                    tail = message_text(g, ::bmh::layout::Prediction_TablePrediction_TextPointer4);
-                } else if (league_index == 2 || league_index == 3) {
-                    tail = message_text(g, ::bmh::layout::Prediction_TablePrediction_TextPointer5);
-                } else {
-                    msg += message_text(g, ::bmh::layout::Prediction_TablePrediction_TextPointer6);
-                    if (league_index > 2) league_index--;
-                    msg += message_text(g, ::bmh::layout::Prediction_TablePrediction_TextPointer + uint32_t(league_index) * 4);  // league name
-                    tail = message_text(g, ::bmh::layout::Prediction_TablePrediction_TextPointer7);
-                }
-                msg += tail;
-            }
-            if (k == 2) msg += message_text(g, ::bmh::layout::Prediction_TablePrediction_TextPointer8);
-            if (manager >= 0) post_composed(g, manager, msg);
-        }
-    }
-
-    if (mode == 1) {
-        for (int k = 0; k < 3; k++) {
-            if (!(prediction.secured_goals & (1u<<k))) continue;
-            if (manager >= 0 && (g.manager_records.at(rec + 0x28b) >> (k + 3) & 1)) continue;
-            // the goal is secured (or relegation avoided / certain)
-            if (manager >= 0) g.manager_records.at(rec + 0x28b) |= uint8_t(1 << (k + 3));
-            std::string msg = g.club_name(team) + message_text(g, ::bmh::layout::Prediction_TablePrediction_TextPointer9);
-            if (k == 0) msg += message_text(g, ::bmh::layout::Prediction_TablePrediction_TextPointer10);
-            else if (k == 1)
-                msg += message_text(g, league_index == 0 ? ::bmh::layout::Prediction_TablePrediction_TextPointer11 : (league_index == 2 || league_index == 3) ? ::bmh::layout::Prediction_TablePrediction_TextPointer12 : ::bmh::layout::Prediction_TablePrediction_TextPointer13);
-            else msg += message_text(g, ::bmh::layout::Prediction_TablePrediction_TextPointer14);
-            msg += message_text(g, ::bmh::layout::Prediction_TablePrediction_TextPointer15);
-            // without a manager the original posts to "manager" 0xFE; not needed here
-            if (manager >= 0) post_composed(g, manager, msg);
-        }
-    }
+    if(mode==1)emit_prediction_notices(g,team,league,prediction);
     return prediction.best_rank;
 }
 
 static uint32_t season_bonus_impl(GameState& g, int manager, int team, int board_slot, int rank, bool pay) {
-    const int league = team_league(team);
+    const int league = g.projected_match_clubs.empty()?team_league(team):match_team_league(g,team);
+    int size=league<kLeagueCount?kLeagueSizes[league]:0,relegation=league<kLeagueCount?kLeagueRelegation[league]:0;
+    if(!g.projected_match_clubs.empty()) {
+        const auto& context=g.projected_match_clubs.at(size_t(team));
+        if(context.league_size<2||context.relegation_places<0)throw std::invalid_argument("season bonus: projected league dimensions missing");
+        size=context.league_size;relegation=context.relegation_places;
+    }
     uint32_t amount = 0;
     if (league == 0 && rank == 0) amount = pay_bonus(g, manager, board_slot, 3, pay);
     if (amount == 0 && rank < 5) amount = pay_bonus(g, manager, board_slot, 4, pay);
     if (amount == 0 && rank < 10) amount = pay_bonus(g, manager, board_slot, 5, pay);
-    if (amount == 0 && league < kLeagueCount && rank < kLeagueSizes[league] - kLeagueRelegation[league])
+    if (amount == 0 && league < kLeagueCount && rank < size - relegation)
         amount = pay_bonus(g, manager, board_slot, 6, pay);
     return amount;
 }

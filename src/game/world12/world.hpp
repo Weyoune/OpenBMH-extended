@@ -19,7 +19,7 @@ struct ClubSeasonStats {
 struct ClubRecord {
     ClubId id;std::string name;Country country=Country::germany;ClubKind kind=ClubKind::club;
     LeagueId league;CrestId crest;uint8_t kit=0,rating=0,short_span=0;
-    uint16_t match_flags=0;uint8_t morale=25;bool lineup_indoor=false;
+    uint16_t match_flags=0,fairplay_points=0;uint8_t morale=25;bool lineup_indoor=false;
     ClubSeasonStats season_stats;
     std::array<RosterSlot,24> roster;
     bool operator==(const ClubRecord&)const=default;
@@ -62,10 +62,25 @@ struct ManagerTactics {
     bool operator==(const ManagerTactics&)const=default;
 };
 void validate_manager_tactics(const ManagerTactics&);
+struct ManagerMatchState {
+    std::array<uint8_t,21> preferences{}; // Source c5..d9, including attitude/fitness.
+    uint8_t tax_policy=0,sponsor_win_bonus=0,crowd_pressure=0,goal_notices=0,point_deduction=0;
+    std::array<uint8_t,21> best_streaks{};
+    std::array<uint8_t,72> timing_stats{};
+    std::array<uint16_t,6> staff_ratings{};
+    std::array<uint8_t,60> rating_history{};
+    std::array<uint8_t,6> recent_scores{};
+    std::array<ClubId,12> recent_fixtures;
+    std::map<ClubId,std::array<uint8_t,10>> head_to_head;
+    bool designated_takers=false;
+    std::array<PlayerId,3> takers;
+    bool operator==(const ManagerMatchState&)const=default;
+};
 struct Manager {
     uint8_t seat=0;std::string name;ClubId club;LeagueId start_league;uint8_t portrait=0;
     std::optional<ManagerFinance> finance={};
     std::optional<ManagerTactics> tactics={};
+    std::optional<ManagerMatchState> match_state={};
     bool operator==(const Manager&)const=default;
 };
 struct CrestResource {std::string path;uint8_t cell=0;bool operator==(const CrestResource&)const=default;};

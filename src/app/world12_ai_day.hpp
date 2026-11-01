@@ -22,4 +22,10 @@ struct AiDayOutcome {
 AiDayOutcome play_ai_league_day(bmh::world12::CareerSnapshot&,AiDayOwner&,
     const AiDayIdentity&,const bmh::world12::DayTicket&,const bmh::GameState& rules,
     const std::vector<AiDayLeagueConditions>&);
+// Same complete league-day transaction, with explicit human policy/presenters.
+// It still rejects cup/national/indoor dates and does not perform daily economy.
+AiDayOutcome play_league_day(bmh::world12::CareerSnapshot&,AiDayOwner&,
+    const AiDayIdentity&,const bmh::world12::DayTicket&,const bmh::GameState& rules,
+    const std::vector<AiDayLeagueConditions>&,bmh::world12::HumanProjectionPolicy,
+    const bmh::world12::HumanRoundHooks&);
 }

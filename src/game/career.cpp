@@ -404,6 +404,15 @@ void starting_sponsors(GameState& g, int m) {
     for (size_t o : {size_t(0xaed), size_t(0xae1), size_t(0xa39)}) g.manager_records.at(rec + o) = 1;
 }
 
+void initialize_career_manager_team_settings(GameState& g,int manager) {
+    if(manager<0||manager>3||g.manager_records.size()<size_t(manager+1)*kRecord||g.manager_ratings.size()<size_t(manager+1)*0x3c)
+        throw std::invalid_argument("career: incomplete initial manager team settings");
+    const auto rec=size_t(manager)*kRecord;g.manager_records[rec+0x288]=0x16;
+    for(size_t i=0;i<0xd;++i)g.manager_records[rec+0xc5+i]=2;
+    for(size_t i=0;i<6;++i){g.manager_records[rec+0x8aa+i*2]=0x26;g.manager_records[rec+0x8ab+i*2]=2;}
+    std::fill_n(g.manager_ratings.begin()+size_t(manager)*0x3c,0x3c,uint8_t(100));
+}
+
 void initialize_career_manager_funds(GameState& g,int manager,int difficulty,int league) {
     if(manager<0||manager>3||difficulty<0||difficulty>9||league<0||league>2||g.manager_records.size()<size_t(manager+1)*kRecord)
         throw std::invalid_argument("career: invalid initial manager financial context");
@@ -532,10 +541,7 @@ bool career_add_manager(GameState& g, const LeImage& exe, int m, const CareerMan
         mem.set32(base + 0x18 + i * 4, 5000);
     }
     const SquadRange squad = squad_range(club);
-    r.at(rec + 0x288) = 0x16;
-    for (size_t i = 0; i < 0xd; i++) r.at(rec + 0xc5 + i) = 2;
-    for (size_t i = 0; i < 6; i++) r.at(rec + 0x8aa + 2 * i) = 0x26, r.at(rec + 0x8ab + 2 * i) = 0x02;
-    for (size_t i = 0; i < 0x3c; i++) g.manager_ratings.at(size_t(m) * 0x3c + i) = 100;
+    initialize_career_manager_team_settings(g,m);
     const int players = adding ? squad_count(g, club, 2) : 20;
     for (int i = 0; i < players; i++) {
         const size_t slot = squad.first + size_t(i);

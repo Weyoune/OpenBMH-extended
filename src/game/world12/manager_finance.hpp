@@ -4,6 +4,7 @@
 #include "game/state.hpp"
 namespace bmh::world12 {
 // Extract only verified financial words, never club/player/name-pool references.
+void install_manager_finance(GameState&,int manager,const ManagerFinance&);
 ManagerFinance manager_finance_from_legacy(const GameState&,int manager);
 ManagerFinance manager_initial_finance_from_legacy(const GameState&,int manager);
 struct ManagerMoneyOutcome {

@@ -3,17 +3,24 @@
 #include "game/world12/world.hpp"
 #include "game/state.hpp"
 namespace bmh::world12 {
+struct CareerSnapshot;
+struct HumanProjectionPolicy {int mode=3,difficulty=0;bool foreign_rule=false,three_points=true;};
 // The original match calculations operate on bounded local references. Global
 // 32-bit IDs never enter their packed fields; mutations are mapped back explicitly.
-// Human manager/tactics projection is deliberately not enabled yet.
+// The AI factory rejects humans. The separate human factory requires complete
+// account/tactical/match state plus an authoritative forecast snapshot.
 class AiMatchProjection {
 public:
     static AiMatchProjection create(const World&,const std::vector<ClubId>&,const GameState& rules_template);
+    static AiMatchProjection create_for_humans(const CareerSnapshot&,const std::vector<ClubId>&,
+        const GameState& rules_template,HumanProjectionPolicy);
     GameState state;
     ClubId global_club(uint32_t local)const;
     PlayerId global_player(uint32_t local)const;
     uint32_t local_club(ClubId)const;
     uint32_t local_player(PlayerId)const;
+    uint8_t global_manager(uint8_t local)const{return manager_seats_.at(local);}
+    size_t human_managers()const{return manager_seats_.size();}
     void commit_player_attributes(World&)const;
     void commit_match_state(World&)const;
 private:
@@ -22,6 +29,8 @@ private:
     std::vector<PlayerRecord> originals_;
     std::vector<ClubRecord> original_clubs_;
     std::vector<Manager> original_managers_;
+    std::vector<uint8_t> manager_seats_;
+    std::vector<ClubId> manager_reference_clubs_;
     std::map<uint16_t,ClubId> record_opponents_;
     int32_t original_development_balance_=0;
     uint8_t original_trend_rotation_=0;

@@ -590,6 +590,11 @@ bool league_screen_shown(const std::vector<uint8_t>& buttons, int param_1, int p
 
 
 int table_position(const GameState& g, int team) {
+    if(!g.projected_match_clubs.empty()) {
+        const auto rank=g.projected_match_clubs.at(size_t(team)).table_rank;
+        if(rank<-1)throw std::invalid_argument("table position: projected rank missing");
+        return rank;
+    }
     if (team >= runtime_dimensions.league_teams) return 2;
     int league = league_of(team);
     int rounds = league < int(g.league_rounds.size()) ? g.league_rounds[league] : 0;
@@ -664,8 +669,9 @@ void manager_match_record(GameState& g, const MatchGroup& grp, int m, int home_g
                 }
                 rating += int16_t(add);
             } else {
-                int league = league_of(g.manager_teams[k]);
-                int size = league < 9 ? kLeagueSizes[league] : 0;
+                const auto team=g.manager_teams[k];const int league=match_team_league(g,team);
+                const int size=g.projected_match_clubs.empty()?(league<9?kLeagueSizes[league]:0):g.projected_match_clubs.at(size_t(team)).league_size;
+                if(!g.projected_match_clubs.empty()&&size<2)throw std::invalid_argument("manager rating: league size missing");
                 rating += (size - table_position(g, g.manager_teams[k])) * 4;
             }
             rating = std::clamp(int16_t(rating), int16_t(0), int16_t(200));

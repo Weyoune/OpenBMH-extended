@@ -5,6 +5,7 @@
 namespace bmh::world12 {
 // Verified scalar/row fields only, never pointers, packed player IDs or an
 // implicit conversion of the legacy manager/club ownership.
+void install_manager_tactics(GameState&,int manager,const ManagerTactics&,const std::vector<PlayerId>&);
 ManagerTactics manager_tactics_from_legacy(const GameState&,int manager);
 ManagerTactics manager_full_tactics_from_legacy(const GameState&,int manager,
     const std::vector<PlayerId>& local_players);

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "game/world12/ai_match.hpp"
+#include "game/world12/save.hpp"
 #include "game/driver.hpp"
 #include "game/lineup.hpp"
 #include "game/match.hpp"
@@ -12,7 +13,8 @@ namespace bmh::world12 {
 static_assert(std::is_nothrow_move_assignable_v<World>);
 namespace {
 AiLeagueRoundOutcome run_ai_league_matches(World& world,const GameState& base,const std::vector<Fixture>& fixtures,
-    const std::vector<AiLeagueConditions>& conditions,GameRandom& game,WatcomRandom& random,bool settle) {
+    const std::vector<AiLeagueConditions>& conditions,GameRandom& game,WatcomRandom& random,bool settle,
+    const CareerSnapshot* human_snapshot=nullptr,HumanProjectionPolicy policy={},const HumanRoundHooks* hooks=nullptr) {
     if(fixtures.empty() || fixtures.size()>10 || conditions.size()!=fixtures.size())throw std::invalid_argument("world12: incomplete AI league match batch");
     std::vector<ClubId> participants;LeagueId league;
     for(size_t m=0;m<fixtures.size();++m) {
@@ -27,7 +29,8 @@ AiLeagueRoundOutcome run_ai_league_matches(World& world,const GameState& base,co
             throw std::invalid_argument("world12: AI league fixture crosses league ownership");
         league=home.league;participants.push_back(fixture.home);participants.push_back(fixture.away);
     }
-    auto projection=AiMatchProjection::create(world,participants,base);auto& local=projection.state;
+    if(human_snapshot&&(human_snapshot->world!=world||conditions[0].date!=human_snapshot->date))throw std::invalid_argument("world12: human forecast snapshot/date does not match round owner");
+    auto projection=human_snapshot?AiMatchProjection::create_for_humans(*human_snapshot,participants,base,policy):AiMatchProjection::create(world,participants,base);auto& local=projection.state;
     local.indoor=false;local.lineups_frozen=false;local.pools_open=false;local.date=conditions[0].date;
     local.chance_rain=conditions[0].rain;local.chance_temperature=conditions[0].temperature;
     for(size_t team=0;team<participants.size();++team) {
@@ -36,7 +39,9 @@ AiLeagueRoundOutcome run_ai_league_matches(World& world,const GameState& base,co
         if(formation+22>local.formations.size())throw std::invalid_argument("world12: missing Original formation table");
         for(size_t row=0;row<11;++row)if(local.formations[formation+row]>=24 || local.formations[formation+11+row]>8)
             throw std::invalid_argument("world12: invalid Original formation coordinates");
-        bmh::auto_lineup(local,int(team),100);
+        bmh::auto_lineup(local,int(team),local.manager_of(int(team))>=0?0xe4:100);
+        if(local.manager_of(int(team))>=0){bmh::prepare_lineup_entry(local,int(team));const auto manager=local.manager_of(int(team));
+            for(size_t row=0;row<24;++row){const auto slot=local.squad_slots[team*24+row];local.tactics[size_t(manager)*0x840+row*0x58+0x10]=uint8_t(slot&0x8000?0:slot&0x4000?0x7f:0x7e);}}
         const auto fit=bmh::team_average(local,int(team),0x1f1,nullptr);
         if(fit.players<8)throw std::invalid_argument("world12: short-squad forfeit needs the full matchday settlement owner");
     }
@@ -56,9 +61,11 @@ AiLeagueRoundOutcome run_ai_league_matches(World& world,const GameState& base,co
     }
     std::vector<bmh::MatchGroup> groups;groups.push_back(std::move(group));
     bmh::MatchEngine engine(local,groups,staged_game,staged_random,conditions[0].referee_properties);
-    engine.month=conditions[0].month;engine.buttons=conditions[0].presentation_buttons;engine.leave_screens=true;
+    engine.month=conditions[0].month;engine.buttons=conditions[0].presentation_buttons;engine.leave_screens=!human_snapshot||(hooks&&hooks->decline_unpresented_events);
+    if(hooks&&hooks->live_event)engine.live_event=[&](const bmh::LiveMatchEvent& event){hooks->live_event(projection,engine,event);};
     bmh::MinuteReport report;
-    bmh::play_matchday(engine,local,groups,conditions[0].presentation_buttons,staged_game,staged_random,report);
+    bmh::play_matchday(engine,local,groups,conditions[0].presentation_buttons,staged_game,staged_random,report,
+        hooks&&hooks->after_minute?std::function<void(int)>([&](int minute){hooks->after_minute(projection,engine,minute);}):std::function<void(int)>{});
     if(report.unsupported)throw std::runtime_error("world12: Original AI match could not complete: "+report.reason);
     const auto& finished=groups[0];
     for(auto minute:finished.end_minute)if(minute<90 || minute>94)throw std::runtime_error("world12: Original AI league match did not reach full time");
@@ -83,4 +90,16 @@ AiLeagueOutcome simulate_and_settle_ai_league_match(World& world,const GameState
 AiLeagueRoundOutcome simulate_and_settle_ai_league_round(World& world,const GameState& base,LeagueId league,int round,const std::vector<AiLeagueConditions>& conditions,GameRandom& game,WatcomRandom& random) {
     return run_ai_league_matches(world,base,league_fixtures(world,league,round),conditions,game,random,true);
 }
+AiLeagueRoundOutcome simulate_and_settle_human_league_round(CareerSnapshot& staged,const GameState& base,LeagueId league,int round,
+    const std::vector<AiLeagueConditions>& conditions,HumanProjectionPolicy policy,GameRandom& game,WatcomRandom& random,const HumanRoundHooks& hooks) {
+    const auto before=staged;auto candidate=staged;auto staged_game=game;auto staged_random=random;
+    const auto game_seed=game.seed();const auto game_calls=game.calls();const auto random_seed=random.seed();const auto random_calls=random.calls();
+    const auto fixtures=league_fixtures(candidate.world,league,round);
+    const auto outcome=run_ai_league_matches(candidate.world,base,fixtures,conditions,staged_game,staged_random,true,&candidate,policy,&hooks);
+    candidate.game_seed=staged_game.seed();candidate.watcom_seed=staged_random.seed();candidate.validate();
+    if(staged!=before||game.seed()!=game_seed||game.calls()!=game_calls||random.seed()!=random_seed||random.calls()!=random_calls)
+        throw std::invalid_argument("world12: human round snapshot/RNG owner changed");
+    staged=std::move(candidate);game=staged_game;random=staged_random;return outcome;
+}
+
 }

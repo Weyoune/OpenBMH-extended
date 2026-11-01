@@ -38,10 +38,23 @@ constexpr uint16_t kEmptySlot = 0x0FFF;
 constexpr uint16_t kSlotInLineup = 0x8000;
 
 struct GameState {
-    struct ProjectedMatchClub {int league_class=0,climate_region=0,foreign_player_limit=3;};
+    struct ProjectedTablePrediction {
+        int mode=0,best_rank=0;
+        std::array<uint8_t,24> ranks{};
+        std::optional<uint8_t> size_word;
+        uint8_t lost_goals=0,secured_goals=0;
+    };
+    struct ProjectedMatchClub {
+        int league_class=0,climate_region=0,foreign_player_limit=3;
+        int league_size=-1,relegation_places=-1,round_cursor=-1,table_rank=-2;
+        std::string league_name;
+        std::vector<ProjectedTablePrediction> predictions;
+    };
     // Runtime-only context for bounded typed-world projections. Empty retains
     // the original positional lookup; never serialized into a legacy save.
     std::vector<ProjectedMatchClub> projected_match_clubs;
+    std::vector<std::array<uint8_t,13>> projected_formation_tails;
+    std::optional<std::array<uint8_t,0x160>> projected_ai_formations;
     std::optional<bool> projected_foreign_rule; // Session rule for a bounded workspace; not saved.
     DbCounts counts{};
     std::vector<uint8_t> club_kits, club_short_offsets;
