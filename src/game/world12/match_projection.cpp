@@ -15,7 +15,8 @@ namespace {
 uint16_t flags(uint16_t source){return uint16_t(((source&1)?0x8000:0)|((source&2)?0x4000:0)|((source&4)?0x2000:0)|((source&8)?0x1000:0));}
 }
 AiMatchProjection AiMatchProjection::create(const World& world,const std::vector<ClubId>& requested,const GameState& base){
-    if(requested.empty()||requested.size()>32)throw std::invalid_argument("world12: match projection requires 1-32 clubs");
+    if(requested.empty()||requested.size()>64||requested.size()>size_t(runtime_dimensions.big_squad_teams))
+        throw std::invalid_argument("world12: match projection requires 1-64 clubs within the native squad workspace");
     world.validate();
     for(const auto& manager:world.managers)if(std::find(requested.begin(),requested.end(),manager.club)!=requested.end())throw std::invalid_argument("world12: human manager projection is not integrated");
     if(runtime_dimensions.big_squad_teams<32)throw std::invalid_argument("world12: legacy match workspace is unavailable");

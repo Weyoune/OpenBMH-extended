@@ -5,6 +5,8 @@
 #include "game/month.hpp"
 #include "game/prediction.hpp"
 #include "game/lineup.hpp"
+#include "game/world12/market_bids.hpp"
+#include "game/world12/pools.hpp"
 #include <algorithm>
 #include <limits>
 #include <stdexcept>
@@ -90,6 +92,13 @@ std::optional<PendingDeskOffer> initial_offer(CareerSnapshot& state,uint8_t seat
     for(size_t n=0;n<4;++n)state.world.transfer_market->last_entry40_bidders[n]=listing.bids[n].bidder;state.world.transfer_market->entry40_history_known=true;return notice;
 }
 }
+std::optional<PendingDeskOffer> prepare_manager_desk_offer(CareerSnapshot& state,uint8_t seat,
+    const GameState& reference,WatcomRandom& random) {
+    if(!state.prepared_event)return initial_offer(state,seat,reference,random);
+    const auto notice=prepare_unsolicited_offer(state,seat,reference,random,{true});
+    if(!notice)return {};
+    return PendingDeskOffer{seat,notice->row,notice->salary_only,notice->warned};
+}
 DesktopEntryOutcome prepare_first_desk_event(CareerSnapshot& state,ManagerActionOwner& owner,
     ManagerActionOwner expected,const GameState& reference) {
     state.validate();
@@ -121,7 +130,9 @@ DesktopEntryOutcome advance_initial_manager(CareerSnapshot& state,ManagerActionO
     const auto before=state;auto candidate=state;WatcomRandom random(state.watcom_seed);
     auto& next=*candidate.desktop->initial_event;++next.manager_position;
     const auto seat=next.manager_order[next.manager_position];candidate.desktop->active_seat.reset();
-    next.offer=initial_offer(candidate,seat,reference,random);
+    const auto offer=prepare_manager_desk_offer(candidate,seat,reference,random);
+    candidate.desktop->initial_event->offer=offer;
+    if(candidate.prepared_event)prepare_scheduled_pools(candidate,reference,random);
     candidate.watcom_seed=random.seed();candidate.desktop->active_seat.reset();
     ManagerActionOwner staged{owner.scope,0};const auto entered=enter_initial_manager_desktop(candidate,staged,staged,seat,reference);
     candidate.validate();

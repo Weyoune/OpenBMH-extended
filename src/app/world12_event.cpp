@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "app/world12_event.hpp"
+#include "app/world12_first_event.hpp"
+#include "game/world12/pools.hpp"
 #include "game/world12/match_projection.hpp"
 #include "game/matchday_setup.hpp"
 #include "game/lineup.hpp"
@@ -24,8 +26,8 @@ DesktopEntryOutcome begin_scheduled_desks(CareerSnapshot& state,ManagerActionOwn
     ManagerActionOwner expected,const GameState& reference) {
     owned(state,owner,expected);
     if(state.prepared_event->desk_phase!=PreparedEvent::DeskPhase::unstarted||state.prepared_event->gates_booked||
-       !state.world.settings||state.world.settings->mode!=1)
-        throw FormatError("world12: scheduled player-offer/coupon desks require their mode-specific owner");
+       !state.world.settings)
+        throw FormatError("world12: scheduled desks are already prepared or lack their settings");
     const auto before=state;auto candidate=state;const auto settings=*state.world.settings;
     const HumanProjectionPolicy policy{settings.mode,settings.difficulty,settings.foreign_rule,true};
     for(const auto& group:candidate.prepared_event->groups)for(const auto& match:group.matches) {
@@ -57,6 +59,8 @@ DesktopEntryOutcome begin_scheduled_desks(CareerSnapshot& state,ManagerActionOwn
     candidate.desktop->matchday_number=uint16_t(local.memory.u32(layout::CurrentMatchday));
     InitialDeskEvent event;event.matchday_number=*candidate.desktop->matchday_number;event.manager_order=candidate.desktop->manager_order;
     candidate.desktop->initial_event=std::move(event);candidate.prepared_event->desk_phase=PreparedEvent::DeskPhase::desks;
+    candidate.desktop->initial_event->offer=prepare_manager_desk_offer(candidate,candidate.desktop->manager_order.front(),reference,random);
+    prepare_scheduled_pools(candidate,reference,random);
     candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();ManagerActionOwner staged{owner.scope,0};
     const auto entered=enter_initial_manager_desktop(candidate,staged,staged,candidate.desktop->manager_order.front(),reference);
     candidate.validate();if(state!=before||owner.scope!=expected.scope||owner.revision!=expected.revision)
@@ -70,7 +74,8 @@ void finish_scheduled_desks(CareerSnapshot& state,ManagerActionOwner& owner,Mana
        !state.desktop->active_seat||state.desktop->autosave_pending||state.desktop->initial_event->offer||
        size_t(state.desktop->initial_event->manager_position)+1!=state.desktop->initial_event->manager_order.size())
         throw FormatError("world12: scheduled manager loop has unfinished decisions");
-    auto candidate=state;candidate.desktop->initial_event.reset();candidate.desktop->active_seat.reset();
+    auto candidate=state;candidate.progress->last_manager=*candidate.desktop->active_seat;
+    candidate.desktop->initial_event.reset();candidate.desktop->active_seat.reset();
     candidate.prepared_event->desk_phase=PreparedEvent::DeskPhase::complete;candidate.validate();
     state=std::move(candidate);++owner.revision;
 }

@@ -136,6 +136,7 @@ public:
     struct World12DesktopView {std::unique_ptr<DesktopScreen> desktop;std::unique_ptr<LeImage> reference;std::vector<int> teams;};
     World12DesktopView prepare_world12_file_result(DeskState,const LeImage&,const SaveLoadRequest&)const;
     World12DesktopView prepare_world12_manager_result(DeskState,const LeImage&,const DeskRequest&)const;
+    World12DesktopView prepare_world12_turn_result(DeskState,const LeImage&,const DeskRequest&)const;
     void finish_world12_desktop(World12DesktopView) noexcept;
     const std::filesystem::path& save_directory()const{return save_directory_;}
     void acknowledge_desk(DeskState state);

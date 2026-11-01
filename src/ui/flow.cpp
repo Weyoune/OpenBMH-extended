@@ -745,6 +745,14 @@ StartupFlow::World12DesktopView StartupFlow::prepare_world12_manager_result(Desk
     if(state.options!=desktop_->state().options||state.managers!=desktop_->state().managers||state.day_counter!=desktop_->state().day_counter)throw FormatError("world12: initial manager transition changed roster or date");
     World12DesktopView view;view.reference=std::make_unique<LeImage>(reference);view.teams=state.manager_teams;view.desktop=std::make_unique<DesktopScreen>(data_,std::move(state),reference);return view;
 }
+StartupFlow::World12DesktopView StartupFlow::prepare_world12_turn_result(DeskState state,const LeImage& reference,const DeskRequest& request)const {
+    if(!desktop_||!desktop_->pending()||*desktop_->pending()!=request||request.kind!=DeskRequestKind::advance_turn||in_preparation_menu()||in_readonly_view()||state.source!="world12"||state.revision<=request.revision)
+        throw FormatError("world12: calendar turn has no current desktop owner");
+    validate_desk_state(state);const auto& previous=desktop_->state();
+    if(state.options!=previous.options||state.managers!=previous.managers||state.day_counter<=previous.day_counter||state.season_index!=previous.season_index)
+        throw FormatError("world12: calendar turn changed roster/season or did not advance its date");
+    World12DesktopView view;view.reference=std::make_unique<LeImage>(reference);view.teams=state.manager_teams;view.desktop=std::make_unique<DesktopScreen>(data_,std::move(state),reference);return view;
+}
 void StartupFlow::finish_world12_desktop(World12DesktopView view) noexcept {
     static_assert(std::is_nothrow_move_constructible_v<World12DesktopView>&&std::is_nothrow_move_assignable_v<std::unique_ptr<LeImage>>);
     desktop_=std::move(view.desktop);world12_reference_=std::move(view.reference);confirmed_runtime_teams_=std::move(view.teams);

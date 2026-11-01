@@ -6,6 +6,8 @@
 #include "game/match.hpp"
 #include "game/lineup.hpp"
 #include "game/schedule.hpp"
+#include "game/month.hpp"
+#include "game/prediction.hpp"
 #include <algorithm>
 #include <stdexcept>
 namespace bmh::world12 {
@@ -50,7 +52,8 @@ std::vector<Candidate> candidates(const CareerSnapshot& state,const GameState& r
     }
     return result;
 }
-bool add_bid(CareerSnapshot& state,uint8_t row,const std::vector<Candidate>& clubs,bool high,WatcomRandom& random) {
+bool add_bid(CareerSnapshot& state,uint8_t row,const std::vector<Candidate>& clubs,bool high,WatcomRandom& random,
+    std::optional<uint8_t> forced_term={}) {
     auto& entry=state.world.transfer_market->rows.at(row);if(!entry)return false;
     auto& listing=*entry;size_t bid=0;while(bid<4&&listing.bids[bid].bidder.valid())++bid;if(bid==4)return false;
     const auto& person=state.world.players.at(listing.player);
@@ -88,9 +91,13 @@ bool add_bid(CareerSnapshot& state,uint8_t row,const std::vector<Candidate>& clu
     // Preserve the existing Core's chosen-absolute-index key approximation and
     // last-rated-club need, rather than substituting the winning score/need.
     const uint32_t key=chosen->ordinal<sorted.size()?sorted[chosen->ordinal]:4*0x50;
-    bool loan=random.range(0,6)==4;if(!listing.seller.valid())loan=false;
-    const int years=random.range(1,loan?1:4);uint8_t term=uint8_t(years*12|(loan?128:0));
-    if(loan&&random.range(0,10)>7)term=0x98;
+    uint8_t term;
+    if(forced_term)term=*forced_term;
+    else {
+        bool loan=random.range(0,6)==4;if(!listing.seller.valid())loan=false;
+        const int years=random.range(1,loan?1:4);term=uint8_t(years*12|(loan?128:0));
+        if(loan&&random.range(0,10)>7)term=0x98;
+    }
     const auto amounts=computer_bid_amounts(listing.fee,listing.salary,term,key,chosen->flags,last_need,high,random);
     listing.bids[bid]={chosen->id,amounts.fee,amounts.salary,term,{}};return true;
 }
@@ -108,6 +115,67 @@ MarketBidOutcome run(CareerSnapshot& state,const GameState& reference,MarketBidP
     candidate.watcom_seed=random.seed();candidate.validate();if(state!=before)throw std::invalid_argument("world12: market owner changed during bidding");
     outcome.watcom_draws=random.calls();state=std::move(candidate);return outcome;
 }
+}
+std::optional<UnsolicitedOffer> prepare_unsolicited_offer(CareerSnapshot& state,uint8_t seat,
+    const GameState& reference,WatcomRandom& random,MarketBidPolicy policy) {
+    state.validate();
+    if(!state.world.settings||!state.world.transfer_market||!state.prepared_event||!state.desktop||
+       !state.desktop->initial_event||state.desktop->initial_event->offer||state.desktop->active_seat||
+       state.desktop->initial_event->manager_order[state.desktop->initial_event->manager_position]!=seat)
+        throw FormatError("world12: scheduled unsolicited offer lacks its free decision owner");
+    const auto manager=std::find_if(state.world.managers.begin(),state.world.managers.end(),[&](const auto& m){return m.seat==seat;});
+    if(manager==state.world.managers.end()||!manager->match_state||!manager->tactics||!manager->tactics->backing)
+        throw FormatError("world12: scheduled unsolicited offer lacks its manager contracts");
+    if(state.world.settings->mode==1)return {};
+    const auto before=state;auto candidate=state;auto staged=random;
+    const auto seed=random.seed();const auto calls=random.calls();
+    const auto decide=[&]() -> std::optional<UnsolicitedOffer> {
+        if(staged.range(0,0x46-int16_t(manager->match_state->staff_ratings[0])/0x32)!=0)return {};
+        uint8_t entry=40;
+        for(;entry<44;++entry) {
+            const auto& quote=candidate.world.transfer_market->rows[entry];
+            if(!quote||std::none_of(quote->bids.begin(),quote->bids.end(),[](const auto& bid){return bid.bidder.valid();}))break;
+        }
+        if(entry==44)return {};
+        const auto& club=candidate.world.clubs.at(manager->club);
+        const auto eligible=[&](PlayerId player){return player.valid()&&!(candidate.world.players.at(player).attributes.w35c>>27)&&
+            std::none_of(candidate.world.loans.begin(),candidate.world.loans.end(),[&](const auto& loan){return loan.player==player;});};
+        if(std::none_of(club.roster.begin(),club.roster.end(),[&](const auto& row){return row.empty()||eligible(row.player);}))
+            throw FormatError("world12: no eligible unsolicited-offer player; Original selection would not terminate");
+        int row=0,empty=0;PlayerId player;
+        for(;;) {
+            row=staged.range(0,23);player=club.roster[size_t(row)].player;
+            if(!player.valid()){if(empty++<100)continue;return {};}
+            if(eligible(player))break;
+        }
+        const auto& settings=*candidate.world.settings;
+        auto projection=AiMatchProjection::create_for_humans(candidate,{manager->club},reference,
+            {settings.mode,settings.difficulty,settings.foreign_rule,policy.three_points});
+        MarketListing listing;listing.player=player;listing.seller=manager->club;listing.human_seller=true;
+        listing.asking_percent=uint8_t(staged.range(90,130));listing.demand_percent=100;
+        market_value(projection.state,row,0,listing.asking_percent,listing.fee,listing.salary,1,0,staged);
+        const bool lure=staged.range(0,1)!=0;
+        candidate.world.transfer_market->rows[entry]=listing;
+        const auto term=lure?std::optional<uint8_t>{uint8_t((projection.state.tactics.at(size_t(row)*0x58+0xc)/12+1)*12)}:std::nullopt;
+        if(!add_bid(candidate,entry,candidates(candidate,reference,policy),true,staged,term))return {};
+        const auto& bid=candidate.world.transfer_market->rows[entry]->bids[0];bool warned=false;
+        if(lure) {
+            const auto board=size_t(row)*0x58;uint32_t salary=0;
+            for(size_t b=0;b<4;++b)salary|=uint32_t(projection.state.tactics.at(board+0x50+b))<<(b*8);
+            const uint32_t earns=expected_bonus(projection.state,0,0xff,row,int(projection.local_player(player)),true)+salary;
+            warned=uint32_t(staged.range(98,120))*earns/100<bid.salary;
+        }
+        return UnsolicitedOffer{entry,lure,warned};
+    };
+    const auto notice=decide();
+    if(candidate.world.transfer_market->rows[40]) {
+        for(size_t n=0;n<4;++n)candidate.world.transfer_market->last_entry40_bidders[n]=candidate.world.transfer_market->rows[40]->bids[n].bidder;
+        candidate.world.transfer_market->entry40_history_known=true;
+    }
+    if(notice)candidate.desktop->initial_event->offer=PendingDeskOffer{seat,notice->row,notice->salary_only,notice->warned};
+    candidate.watcom_seed=staged.seed();candidate.validate();
+    if(state!=before||random.seed()!=seed||random.calls()!=calls)throw FormatError("world12: unsolicited offer changed its source owner");
+    state=std::move(candidate);random=staged;return notice;
 }
 ClubId place_unlisted_player(CareerSnapshot& state,PlayerId player,const GameState& reference,WatcomRandom& random,MarketBidPolicy policy){
     state.validate();const auto before=state;auto candidate=state;auto staged=random;

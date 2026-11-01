@@ -8,6 +8,15 @@ struct MarketBidOutcome {
     uint64_t game_draws=0,watcom_draws=0;
     size_t added=0;
 };
+struct UnsolicitedOffer {
+    uint8_t row=40;
+    bool salary_only=false,warned=false;
+    bool operator==(const UnsolicitedOffer&)const=default;
+};
+// Later-day offer using current standings, squad/loan counts and retained bid
+// history. The event owner stores the returned notice before entering the desk.
+std::optional<UnsolicitedOffer> prepare_unsolicited_offer(CareerSnapshot&,uint8_t seat,
+    const GameState& reference,WatcomRandom&,MarketBidPolicy);
 // Place a regenerated, unassigned player when the appropriate free pool is
 // full. Uses the Source no-list two-pass recruitment scoring and AI lineup.
 ClubId place_unlisted_player(CareerSnapshot&,PlayerId,const GameState&,WatcomRandom&,MarketBidPolicy);

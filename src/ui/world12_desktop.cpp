@@ -18,6 +18,7 @@ DeskState world12_initial_desktop(const std::filesystem::path& data,const bmh::w
             away=match.fixture.away==manager.club;opponent=away?match.fixture.home:match.fixture.away;upcoming=&group;
         }
     auto projection=project_manager_desktop(state,reference,opponent.valid()?std::vector<ClubId>{opponent}:std::vector<ClubId>{});auto& local=projection.state;
+    if(state.prepared_event)local.manager_records.at(size_t(local.memory.u8(layout::ActiveManager))*0xb0c+0x28a)=away?1:0;
     const auto texts=load_textd(asset_path(data,"TEXTD.BLK"));local.texts=&texts;
     std::vector<MatchGroup> groups;DeskMatchCallargs call;
     call.competition=state.prepared_event?34:33;

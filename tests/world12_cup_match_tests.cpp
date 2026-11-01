@@ -63,6 +63,33 @@ void finals() {
         check(invalid==stable&&g.calls()==0&&r.calls()==0,"rejected cup request consumed state/randomness");
     }
 }
+void opening_rounds() {
+    const auto base=rules();HumanRoundHooks hooks;hooks.decline_unpresented_events=true;
+    for(const auto country:{Country::germany,Country::england})for(bool human:{false,true}) {
+        auto state=fixture(country,human,base);const auto source=bmh::test::world12::country_rules(country==Country::england);
+        const size_t count=country==Country::germany?64:48;
+        std::vector<ClubId> clubs;
+        for(auto league:state.world.catalogue.table_leagues(country==Country::germany?TableGroup::germany:TableGroup::england))
+            if(country!=Country::england||league.value!=5)
+            for(auto club:state.world.membership[league.value].clubs)if(clubs.size()<count)clubs.push_back(club);
+        std::vector<bmh::world12::Fixture> fixtures;
+        for(size_t n=0;n<count;n+=2)fixtures.push_back({clubs[n],clubs[n+1]});
+        std::vector<ClubId> seeds;
+        if(country==Country::england)seeds=state.world.membership[5].clubs;
+        const auto cup=country==Country::germany?DomesticCup::german_cup:DomesticCup::fa_cup;
+        const auto stage=KnockoutStage::from_source(cup,source,0,fixtures,state.world,seeds);state.cups={stage};
+        GameRandom game(31);WatcomRandom random(713);
+        const auto result=simulate_and_settle_domestic_cup_round(state,base,stage,source,
+            std::vector<AiLeagueConditions>(fixtures.size(),conditions(17)),{3,6,false,true},game,random,hooks);
+        check(result.scores.size()==count/2&&result.end_minutes.size()==count/2,
+              "full domestic opening round lost its later fixtures");
+        for(auto minute:result.end_minutes)check(minute>=90&&minute<=124,"full opening round left an unfinished match");
+        auto completed=stage;const auto receipt=draw_after_cup_leg(state.world,stage,result.scores,source,random);
+        commit_cup_leg(completed,receipt,state.world);state.cups.front()=completed;state.watcom_seed=random.seed();
+        check(completed.rounds.front().first_leg==result.scores&&read_save(make_save(state))==state,
+              "full domestic opening round lost score or player identity on save");
+    }
+}
 void return_leg() {
     const auto base=rules();auto source=bmh::test::world12::country_rules(true);const auto at=cup_entry_address(26);
     const uint8_t teams=2,rounds=1,next=0,flags=29,previous=255;
@@ -123,6 +150,6 @@ void complete_country_day() {
 }
 }
 int main()try {
-    set_fixture_tables(bmh::test::authored_fixture_tables());finals();return_leg();complete_country_day();
+    set_fixture_tables(bmh::test::authored_fixture_tables());finals();opening_rounds();return_leg();complete_country_day();
     std::cout<<"Actual German/English cup phases, cross-division finals, human/AI state, replay, return-leg aggregate and rejected-owner rollback passed\n";
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}

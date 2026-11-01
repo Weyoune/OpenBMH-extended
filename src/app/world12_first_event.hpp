@@ -9,4 +9,6 @@ DesktopEntryOutcome prepare_first_desk_event(bmh::world12::CareerSnapshot&,
     ManagerActionOwner&,ManagerActionOwner expected,const GameState& reference);
 DesktopEntryOutcome advance_initial_manager(bmh::world12::CareerSnapshot&,
     ManagerActionOwner&,ManagerActionOwner expected,const GameState& reference);
+std::optional<bmh::world12::PendingDeskOffer> prepare_manager_desk_offer(bmh::world12::CareerSnapshot&,
+    uint8_t seat,const GameState&,WatcomRandom&);
 }

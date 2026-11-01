@@ -18,6 +18,7 @@
 #include "game/world12/desktop_projection.hpp"
 #include <fstream>
 #include "game/week.hpp"
+#include "game/matchday_setup.hpp"
 #include "fixture_tables.hpp"
 #include <algorithm>
 #include <chrono>
@@ -150,9 +151,19 @@ void scheduled_desk_tests(const CareerSnapshot& pending,const GameState& source)
     const auto de=bmh::test::world12::country_rules(false),en=bmh::test::world12::country_rules(true);
     session_app::ManagerActionOwner owner{87,3};
     session_app::prepare_event_weather(state,owner,owner,std::vector<uint8_t>(50,0x24),{de,en});
-    const auto previous=state;auto wrong_mode=state;wrong_mode.world.settings->mode=3;
-    rejects([&]{session_app::begin_scheduled_desks(wrong_mode,owner,owner,reference);},"scheduled mode-III bypassed its missing offer/coupon owner");
-    check(owner.revision==4&&wrong_mode.world.settings->mode==3,"unsupported scheduled mode changed its owner");
+    const auto previous=state;
+    for(uint8_t mode:{2,3}) {
+        auto offered=state;offered.world.settings->mode=mode;
+        for(auto& manager:offered.world.managers)manager.match_state->staff_ratings[0]=3500;
+        auto offered_owner=owner;
+        session_app::begin_scheduled_desks(offered,offered_owner,offered_owner,reference);
+        check(offered.desktop->initial_event->offer.has_value()&&offered.prepared_event->pools_matches&&
+              offered.prepared_event->pools_matches->size()<=11&&read_save(make_save(offered))==offered,
+              "later-mode scheduled entry lost its actual offer or pools selection");
+        const auto accepted=offered;
+        rejects([&]{session_app::finish_scheduled_desks(offered,offered_owner,offered_owner);},"later-mode scheduled desk discarded its offer");
+        check(offered==accepted,"pending scheduled offer changed after rejected completion");
+    }
     {
         auto interrupted=state;auto interrupted_owner=owner;
         interrupted_desktop_owner=&interrupted_owner;draw_hook=interrupt_desktop;
@@ -166,6 +177,28 @@ void scheduled_desk_tests(const CareerSnapshot& pending,const GameState& source)
           state.prepared_event->desk_phase==PreparedEvent::DeskPhase::desks,"scheduled desks lost date or prepared weather");
     const auto begin=state;rejects([&]{session_app::begin_scheduled_desks(state,owner,owner,reference);},"scheduled desks prepared twice");
     check(state==begin&&owner.revision==5,"duplicate scheduled desk changed state");
+    {
+        auto old=state;old.prepared_event->pools_matches.reset();const auto saved=make_save(old);
+        check(saved.stream[7]=='F'&&read_save(saved)==old,"old SF invented or lost its unknown pools state");
+        auto invalid=state;invalid.prepared_event->pools_matches->push_back({{0xfffffff0u},{0xfffffff1u}});
+        rejects([&]{make_save(invalid);},"pools accepted a fixture outside the scheduled programme");
+        const auto& first=state.prepared_event->groups.front();std::vector<ClubId> clubs;
+        for(const auto& match:first.matches)for(auto club:{match.fixture.home,match.fixture.away})clubs.push_back(club);
+        for(const auto& manager:state.world.managers)if(std::find(clubs.begin(),clubs.end(),manager.club)==clubs.end())clubs.push_back(manager.club);
+        auto oracle=AiMatchProjection::create_for_humans(state,clubs,reference,{1,state.world.settings->difficulty,state.world.settings->foreign_rule,true});
+        auto& local=oracle.state;local.results.assign(9*0x17c,0xcc);local.league_rounds.assign(9,0);
+        local.memory.add_block(layout::DeskActions_SubmitPoolsCoupon_RuntimeField,44);local.memory.add_block(layout::CareerSession_DispatchToto_RuntimeField,1);
+        MatchGroup group;group.desc.assign(0xd0,0);group.desc[2]=uint8_t(first.matches.size());
+        for(const auto& match:first.matches){group.fixtures.push_back(int(oracle.local_club(match.fixture.home)));group.fixtures.push_back(int(oracle.local_club(match.fixture.away)));}
+        WatcomRandom random(state.watcom_seed);build_pools_coupon(local,{group},&random);
+        const auto count=local.memory.u8(layout::CareerSession_DispatchToto_RuntimeField);
+        check(state.prepared_event->pools_matches->size()>=count&&random.calls()==0,"rostered pools prefix lost a selected fixture or drew synthetic strength");
+        for(size_t i=0;i<count;++i) {
+            const auto address=layout::DeskActions_SubmitPoolsCoupon_RuntimeField+uint32_t(i*4);
+            check(state.prepared_event->pools_matches->at(i)==bmh::world12::Fixture{oracle.global_club(local.memory.u16(address)),oracle.global_club(local.memory.u16(address+2))},
+                  "bounded pools selection differs from one complete native group scan");
+        }
+    }
     auto corrupt=state;corrupt.prepared_event->desk_phase=PreparedEvent::DeskPhase::complete;
     rejects([&]{make_save(corrupt);},"completed event retained an active manager");
     auto truncated=make_save(state);truncated.stream.pop_back();
@@ -173,17 +206,17 @@ void scheduled_desk_tests(const CareerSnapshot& pending,const GameState& source)
     std::set<uint8_t> seen;
     for(size_t i=0;i<state.world.managers.size();++i) {
         seen.insert(*state.desktop->active_seat);const auto saved=make_save(state);
-        check(saved.stream[7]=='F'&&read_save(saved)==state,"scheduled cursor failed SF roundtrip");
+        check(saved.stream[7]=='G'&&read_save(saved)==state,"scheduled cursor failed SG roundtrip");
         if(i+1<state.world.managers.size()) {
             const auto before=state;rejects([&]{session_app::finish_scheduled_desks(state,owner,owner);},"scheduled desks skipped another manager");
             check(state==before,"rejected early finish changed current desk");
             session_app::advance_initial_manager(state,owner,owner,reference);
         }
     }
-    const auto date=state.date;const auto g=state.game_seed;const auto w=state.watcom_seed;
+    const auto date=state.date;const auto g=state.game_seed;const auto w=state.watcom_seed;const auto last=*state.desktop->active_seat;
     session_app::finish_scheduled_desks(state,owner,owner);
     check(seen.size()==state.world.managers.size()&&!state.desktop->active_seat&&!state.desktop->initial_event&&
-          state.date==date&&state.game_seed==g&&state.watcom_seed==w&&
+          state.date==date&&state.game_seed==g&&state.watcom_seed==w&&state.progress->last_manager==last&&
           state.prepared_event->desk_phase==PreparedEvent::DeskPhase::complete&&read_save(make_save(state))==state,
           "scheduled desk completion lost cursor, RNG or resume boundary");
     const auto completed=state;rejects([&]{session_app::finish_scheduled_desks(state,owner,owner);},"scheduled desks finished twice");
@@ -386,12 +419,13 @@ void actual_mailbox(const std::filesystem::path& data,const CareerSnapshot& base
     std::cout<<"Actual Original mailbox shortcut, shared/private recipients, keep/refusal/delete, physical holes, actor-only close, RNG-neutral snapshots and stale rollback passed\n";
 }
 void actual_scheduled_desks(session_app::Session& session,const session_app::RuntimeResources& resources,
-    const std::filesystem::path& data,const std::filesystem::path& output,const std::string& label) {
+    const std::filesystem::path& data,const std::filesystem::path& output,const std::string& label,
+    const PendingOfferHooks* offers=nullptr) {
     const auto initial=session.snapshot();session.begin_scheduled_desks(session.revision());
     std::set<uint8_t> seats;
     for(size_t i=0;i<initial.world.managers.size();++i) {
         const auto current=session.snapshot();const auto saved=make_save(current);
-        check(saved.stream[7]=='F'&&current.date==initial.date&&current.calendar==initial.calendar&&
+        check(saved.stream[7]=='G'&&current.date==initial.date&&current.calendar==initial.calendar&&
               current.prepared_event->groups==initial.prepared_event->groups,"actual scheduled desk lost weather/date");
         seats.insert(*current.desktop->active_seat);
         session=session_app::Session::resume(resources,read_save(saved),96,session.revision());
@@ -408,6 +442,8 @@ void actual_scheduled_desks(session_app::Session& session,const session_app::Run
             check(desk.next_opponent_name==current.world.clubs.at(opponent).name&&desk.next_opponent_badge==crest.cell&&
                   desk.next_opponent_badge_atlas==crest.path&&!desk.next_opponent_badge_fallback&&desk.next_match_away==away,
                   "scheduled desktop lost its actual opponent, atlas or home/away side");
+            check(desk.paired_drawers_away_order==(away&&resources.reference.memory.u8(layout::DeskState_FormatError_RuntimeField2)==0),
+                  "scheduled paired widgets retained an unknown home/away record");
         }else check(desk.next_opponent==std::optional<int>{-1},"nonparticipating manager received an invented opponent");
         if(!output.empty()) {
             write_savegame(output/(label+"-manager-"+std::to_string(i)+".FBM"),saved);
@@ -418,12 +454,43 @@ void actual_scheduled_desks(session_app::Session& session,const session_app::Run
         }
         check(!session.snapshot().desktop->autosave_pending,"actual scheduled QA requires its pending autosave file owner");
         ui::DeskRequest next;next.kind=ui::DeskRequestKind::advance_turn;next.manager_slot=desk.manager_slot;next.revision=revision;
-        if(i+1<initial.world.managers.size())session.advance_manager(next);else session.finish_scheduled_desks(next);
+        if(session.snapshot().desktop->initial_event->offer) {
+            check(offers!=nullptr,"actual scheduled offer needs an explicit QA decision presenter");
+            const auto& notice=*session.snapshot().desktop->initial_event->offer;
+            const auto player=session.snapshot().world.transfer_market->rows[notice.row]->player;
+            check(std::none_of(session.snapshot().world.loans.begin(),session.snapshot().world.loans.end(),[&](const auto& loan){return loan.player==player;}),
+                  "scheduled unsolicited offer selected a loan-ledger player");
+            session.resolve_pending(data,next,*offers);next.revision=session.revision();
+        }
+        if(i+1<initial.world.managers.size())session.advance_manager(next);
+        else {
+            const auto stable=session.snapshot();bool human=false;
+            for(const auto& group:stable.prepared_event->groups)for(const auto& match:group.matches)
+                for(const auto& manager:stable.world.managers)human|=manager.club==match.fixture.home||manager.club==match.fixture.away;
+            if(human) {
+                bool missing=false;
+                try{session.advance_to_next_desktop(next,data,{},{});}
+                catch(const FormatError& error){missing=std::string(error.what()).find("requires live and intervention presenters")!=std::string::npos;}
+                check(missing&&session.snapshot()==stable&&session.revision()==next.revision,
+                      "complete human turn bypassed its visible presenters or changed state on rejection");
+            }
+            session.finish_scheduled_desks(next);
+        }
     }
     check(seats.size()==initial.world.managers.size()&&!session.snapshot().desktop->active_seat&&
           session.snapshot().prepared_event->desk_phase==PreparedEvent::DeskPhase::complete&&
           read_save(make_save(session.snapshot()))==session.snapshot(),"actual scheduled manager sequence did not close into its match owner");
-    std::cout<<"Actual scheduled desks: "<<label<<", four German/English managers, SF save/reload at each cursor, no skipped seats or early gates passed\n";
+    std::cout<<"Actual scheduled desks: "<<label<<", four German/English managers, SG save/reload at each cursor, no skipped seats or early gates passed\n";
+}
+session_app::ClockHooks qa_clock_hooks() {
+    session_app::ClockHooks hooks;hooks.services.incidents.answer=[](const GameState&,uint8_t,const WeeklyOfferQuestion&)->std::optional<bool>{return false;};hooks.services.auctions.allocator=TransferAllocatorContext::zero;hooks.services.auctions.select=[](const GameState&,const TransferOfferListView&,const AiMatchProjection&)->std::optional<int>{return -1;};hooks.services.auctions.notice=[](const GameState&,const TransferDecisionEvent&,const AiMatchProjection&){};
+    hooks.relations=[](const CareerSnapshot& current){WeeklyIncidentContext context{current.date,current.season,{}};const auto& fields=*current.world.initial_competitions;
+        for(const auto& manager:current.world.managers){WeeklyClubRelations relation;relation.club=manager.club;const auto country=current.world.manager_country(manager.seat);
+            for(const auto& [c,id]:fields.champions)if(c==country)relation.advertising.champion=id==manager.club;
+            for(const auto& [c,id]:fields.domestic_holders)if(c==country)relation.advertising.holders[0]=id==manager.club;
+            for(size_t cup=0;cup<3;++cup){relation.advertising.holders[cup+1]=fields.holders[cup]==manager.club;if(std::find(fields.fields[cup].begin(),fields.fields[cup].end(),manager.club)!=fields.fields[cup].end())relation.advertising.european_cup=uint8_t(cup+1);}
+            context.clubs.push_back(relation);}return context;};
+    return hooks;
 }
 void actual_four_managers(const std::filesystem::path& data,const std::filesystem::path& output) {
     const auto resources=session_app::load_runtime_resources(data);ui::StartupFlow flow(data,{},ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> session;
@@ -442,13 +509,31 @@ void actual_four_managers(const std::filesystem::path& data,const std::filesyste
     auto clocked=*session;ui::DeskRequest close;close.kind=ui::DeskRequestKind::advance_turn;close.manager_slot=flow.desktop()->state().manager_slot;close.revision=clocked.revision();clocked.finish_initial_day(close);
     check(clocked.snapshot().date==1&&clocked.snapshot().progress->phase==ProgressPhase::daily_services,"actual four-manager event did not close into saved daily services");
     auto resumed=session_app::Session::resume(resources,read_save(make_save(clocked.snapshot())),92,1);
-    session_app::ClockHooks hooks;hooks.services.incidents.answer=[](const GameState&,uint8_t,const WeeklyOfferQuestion&)->std::optional<bool>{return false;};hooks.services.auctions.allocator=TransferAllocatorContext::zero;hooks.services.auctions.select=[](const GameState&,const TransferOfferListView&,const AiMatchProjection&)->std::optional<int>{return -1;};hooks.services.auctions.notice=[](const GameState&,const TransferDecisionEvent&,const AiMatchProjection&){};
-    hooks.relations=[](const CareerSnapshot& current){WeeklyIncidentContext context{current.date,current.season,{}};const auto& fields=*current.world.initial_competitions;
-        for(const auto& manager:current.world.managers){WeeklyClubRelations relation;relation.club=manager.club;const auto country=current.world.manager_country(manager.seat);
-            for(const auto& [c,id]:fields.champions)if(c==country)relation.advertising.champion=id==manager.club;
-            for(const auto& [c,id]:fields.domestic_holders)if(c==country)relation.advertising.holders[0]=id==manager.club;
-            for(size_t cup=0;cup<3;++cup){relation.advertising.holders[cup+1]=fields.holders[cup]==manager.club;if(std::find(fields.fields[cup].begin(),fields.fields[cup].end(),manager.club)!=fields.fields[cup].end())relation.advertising.european_cup=uint8_t(cup+1);}
-            context.clubs.push_back(relation);}return context;};
+    const auto hooks=qa_clock_hooks();
+    auto integrated=*session;integrated.advance_to_next_desktop(close,data,hooks,{});
+    check(integrated.revision()==session->revision()+1&&integrated.snapshot().prepared_event&&
+          integrated.snapshot().prepared_event->desk_phase==PreparedEvent::DeskPhase::desks&&integrated.snapshot().date==17,
+          "complete initial turn did not publish exactly one owned next desktop");
+    session_app::StartupTurnHooks turn{hooks,{}};
+    const auto& items=flow.desktop()->state().items;
+    const auto kickoff=*std::find_if(items.begin(),items.end(),[](const auto& item){return item.kind==12;});
+    auto action=flow.click(kickoff.x+kickoff.width/2,kickoff.y+kickoff.height/2);
+    const auto intact=session->snapshot();const auto revision=session->revision();auto cancelled=turn;
+    cancelled.clock.relations=[](const CareerSnapshot&)->WeeklyIncidentContext{throw FormatError("QA presenter cancelled");};
+    const auto rejected=session_app::serve_startup(flow,action,session,data,91,74,{},&cancelled);
+    check(!rejected.error.empty()&&session->snapshot()==intact&&session->revision()==revision&&!flow.desktop()->pending(),
+          "cancelled complete GUI turn changed live state or retained its pending button");
+    action=flow.click(kickoff.x+kickoff.width/2,kickoff.y+kickoff.height/2);
+    const auto advanced=session_app::serve_startup(flow,action,session,data,91,74,{},&turn);
+    if(!advanced.error.empty())throw std::runtime_error("complete GUI turn: "+advanced.error);
+    check(flow.screen_name()=="desktop"&&session->snapshot()==integrated.snapshot()&&!flow.desktop()->pending(),
+          "Original GUI kickoff did not attach the exact next owned desktop");
+    if(!output.empty()) {
+        write_savegame(output/"gui-next-final-desktop.FBM",make_save(session->snapshot()));
+        const auto frame=flow.render();const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));
+        std::ofstream image(output/"gui-next-final-desktop.ppm",std::ios::binary);image<<"P6\n320 240\n255\n";
+        for(auto pixel:frame.pixels){const auto color=palette.argb[pixel];image.put(char(color>>16));image.put(char(color>>8));image.put(char(color));}
+    }
     uint16_t expected_day=1;const auto& calendar=resumed.snapshot().calendar->schedule;while(expected_day<calendar.days&&calendar.leagues_on(expected_day).empty()&&calendar.others_on(expected_day).empty())++expected_day;
     size_t phases=0;while(resumed.snapshot().progress->phase!=ProgressPhase::scheduled_event){const auto pending=resumed.snapshot();const auto owner=resumed.revision();resumed.advance_saved_clock(owner,data,hooks);auto snapshot=read_save(make_save(resumed.snapshot()));resumed=session_app::Session::resume(resources,std::move(snapshot),92,resumed.revision());if(++phases>30)throw std::runtime_error("actual resumed clock did not reach its first appointment");}
     check(resumed.snapshot().date==expected_day&&resumed.snapshot().calendar->next_day==expected_day,"actual event seeker skipped a country/national appointment");
@@ -490,12 +575,14 @@ void actual_four_managers(const std::filesystem::path& data,const std::filesyste
             check(weather_loaded.snapshot()==prepared_session.snapshot(),"actual stored conditions changed after resuming SD");
             rejects([&]{weather_loaded.prepare_scheduled_weather(weather_loaded.revision());},"actual loaded weather was generated again");
             if(!output.empty())write_savegame(output/"prepared-finals-weather.FBM",prepared_save);
+            auto explicit_steps=weather_loaded;explicit_steps.begin_scheduled_desks(explicit_steps.revision());
+            check(explicit_steps.snapshot()==integrated.snapshot(),"complete turn differs from explicit Source phase-by-phase continuation");
             actual_scheduled_desks(weather_loaded,resources,data,output,"finals");
             const auto gate=weather_loaded.book_scheduled_attendance(weather_loaded.revision(),data);
             check(gate.spectators.size()==2&&weather_loaded.snapshot().prepared_event->gates_booked,
                   "actual spectator/gate calculation did not publish its receipt");
             const auto booked=weather_loaded.snapshot();const auto booked_revision=weather_loaded.revision();
-            auto gate_save=make_save(booked);check(gate_save.stream[7]=='F',"actual completed desk/gate receipt missing SF owner");
+            auto gate_save=make_save(booked);check(gate_save.stream[7]=='G',"actual completed desk/gate receipt missing SG owner");
             auto gate_loaded=session_app::Session::resume(resources,read_save(gate_save),94,booked_revision);
             rejects([&]{gate_loaded.book_scheduled_attendance(gate_loaded.revision(),data);},"loaded gate receipt was charged twice");
             check(gate_loaded.snapshot()==booked,"duplicate actual gate request changed balances/streams");
@@ -705,6 +792,30 @@ void actual_pending_multiplayer(const std::filesystem::path& data,const std::fil
     }
     check(seen.size()==4,"pending loan handoff skipped/repeated a manager");
     std::cout<<"Four actual German/English Mode-III managers: accepted outgoing loan, atomic offer/handoff revisions and retained owner contract across every desk passed\n";
+    ui::DeskRequest close;close.kind=ui::DeskRequestKind::advance_turn;
+    close.manager_slot=project_manager_desktop(session->snapshot(),resources.reference).state.memory.u8(layout::ActiveManager);
+    close.revision=session->revision();session->finish_initial_day(close);const auto clock=qa_clock_hooks();
+    session->seek_saved_event(session->revision(),data,clock);session->prepare_national_day(session->revision());
+    session->finish_uncoached_national_day(session->revision());session->seek_saved_event(session->revision(),data,clock);
+    session->prepare_scheduled_weather(session->revision());
+    // Deliberate private QA injection: make each offer chance certain. Player,
+    // financial and loan data remain the actual career's data; no default is changed.
+    auto forced=session->snapshot();for(auto& manager:forced.world.managers)manager.match_state->staff_ratings[0]=3500;
+    *session=session_app::Session::resume(resources,std::move(forced),97,session->revision());
+    size_t questions=0,decisions=0;PendingOfferHooks decline;
+    decline.answer=[&](const GameState&,const PendingOfferQuestion&){++questions;return PendingOfferAnswer::yes;};
+    decline.select_transfer=[&](const GameState&,const TransferOfferListView&){++decisions;return PendingOfferTransferChoice{PendingOfferTransferChoiceKind::decline,-1};};
+    decline.notice=[](const GameState&,const PendingOfferNotice&){};
+    const auto loans=session->snapshot().world.loans;
+    actual_scheduled_desks(*session,resources,data,output,"mode3-forced-finals",&decline);
+    check(questions+decisions>=4&&session->snapshot().world.loans==loans,
+          "forced mode-III scheduled offers were skipped or changed an existing loan");
+    session->book_scheduled_attendance(session->revision(),data);HumanRoundHooks match_hooks;match_hooks.decline_unpresented_events=true;
+    const auto date=session->snapshot().date;session->play_prepared_matches(session->revision(),match_hooks);
+    check(session->snapshot().date==date+1&&read_save(make_save(session->snapshot()))==session->snapshot(),
+          "mode-III forced-offer sequence failed saved real-match continuation");
+    if(!output.empty())write_savegame(output/"mode3-forced-finals-computed.FBM",make_save(session->snapshot()));
+    std::cout<<"Actual mode-III later event: forced Source offer chance per manager, existing loan excluded/retained, explicit decline decisions, stored coupon and real final scoring passed\n";
 }
 void actual(const std::filesystem::path& data,const std::filesystem::path& output) {
     auto resources=session_app::load_runtime_resources(data);

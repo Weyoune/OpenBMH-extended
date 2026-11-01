@@ -22,6 +22,19 @@ void validate_prepared_event(const CareerSnapshot& state) {
        (event.desk_phase==PreparedEvent::DeskPhase::desks&&(!state.desktop->initial_event||event.gates_booked))||
        (event.desk_phase!=PreparedEvent::DeskPhase::desks&&(state.desktop->initial_event||state.desktop->active_seat||state.desktop->autosave_pending)))
         throw FormatError("world12: prepared match desk owner/phase mismatch");
+    if(event.pools_matches) {
+        if(event.desk_phase==PreparedEvent::DeskPhase::unstarted||event.pools_matches->size()>11)
+            throw FormatError("world12: invalid prepared pools phase/count");
+        size_t next=0;
+        for(const auto& fixture:*event.pools_matches) {
+            size_t position=0;bool found=false;
+            for(const auto& group:event.groups)for(const auto& match:group.matches) {
+                if(!found&&position>=next&&match.fixture==fixture){next=position+1;found=true;}
+                ++position;
+            }
+            if(!found)throw FormatError("world12: pools selection is outside its ordered appointment");
+        }
+    }
     const auto ticket=prepare_day(state);
     if(!ticket||ticket->leagues.size()+ticket->cups.size()!=event.groups.size()||event.groups.empty())
         throw FormatError("world12: prepared match groups do not cover the calendar ticket");

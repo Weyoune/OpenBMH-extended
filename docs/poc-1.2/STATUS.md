@@ -523,11 +523,13 @@ until the scheduled competition and desk owners are integrated.
 
 ## Scheduled manager desktops
 
-Mode-I league/domestic-cup preparation now opens a saved manager loop after its
+League/domestic-cup preparation now opens a saved manager loop in all modes after its
 stored weather. Core card preparation, lineups, option cycling, matchday number
 and the preceding manager order are retained; each manager can resume from SF
 without skipping another seat or charging gates early. The desktop displays the
 actual opponent, explicit crest atlas and home/away side. A completed loop can
 hand its receipt to gate calculation and real score publication. See
-[scheduled desks](SCHEDULED_DESKS.md) for evidence and the remaining modes II/III,
-coupon and live/frontend work. The public Beta is still unfinished.
+[scheduled desks](SCHEDULED_DESKS.md) for later-day offer and saved coupon selection
+evidence, plus the remaining Toto stakes and live/frontend work. Full German and
+English opening-cup fields now fit the bounded workspace and pass complete-round
+calculation and successor-draw tests. The public Beta is still unfinished.

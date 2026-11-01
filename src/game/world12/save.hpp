@@ -90,6 +90,8 @@ struct PreparedEvent {
     std::vector<PreparedGroup> groups;
     bool gates_booked=false;
     DeskPhase desk_phase=DeskPhase::unstarted;
+    // Unknown in old SF snapshots; an engaged empty vector is a known empty coupon.
+    std::optional<std::vector<Fixture>> pools_matches;
     bool operator==(const PreparedEvent&)const=default;
 };
 struct CareerSnapshot {

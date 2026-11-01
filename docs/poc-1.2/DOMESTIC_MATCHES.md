@@ -5,6 +5,12 @@ well as league rounds. It reuses Core team preparation, side ratings, minute
 phases, extra time, shootouts, morale, player development and manager records.
 League-only callers retain their old path and have regression coverage.
 
+The workspace admits up to 64 rostered clubs within the native big-squad and
+12-bit player limits. This covers all 32 German first-round fixtures and the
+24-match initial English FA Cup stage, including its later seeded transition.
+Complete AI/human opening-round probes calculate every match, draw the next
+field with the Source owner and retain player identities through save/load.
+
 The cup owner supplies the saved stage and corresponding country's rules. The
 adapter verifies participants, flags, round/leg cursor, source predecessor stages,
 date, weather, referee data and presentation policy. First legs cannot acquire a
