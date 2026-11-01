@@ -1225,6 +1225,15 @@ add_library(bmhworld12_app STATIC src/app/world12_cups.cpp src/app/world12_manag
 target_link_libraries(bmhworld12_app PUBLIC bmhworld12)
 add_library(bmhworld12_ui STATIC src/ui/world12_other_games.cpp src/ui/world12_manager_selection.cpp)
 target_link_libraries(bmhworld12_ui PUBLIC bmhui bmhworld12)
+add_library(bmhworld12_session STATIC src/app/world12_session.cpp src/app/world12_startup.cpp)
+target_link_libraries(bmhworld12_session PUBLIC bmhworld12_app bmhworld12_ui)
+if(TARGET openbmh_play)
+    target_link_libraries(openbmh_play PRIVATE bmhworld12_session)
+endif()
+
+add_executable(world12_session_tests tests/world12_session_tests.cpp)
+target_link_libraries(world12_session_tests PRIVATE bmhworld12_session)
+add_test(NAME world12_session_tests COMMAND world12_session_tests)
 add_executable(world12_tests tests/world12_tests.cpp)
 target_link_libraries(world12_tests PRIVATE bmhworld12)
 add_test(NAME world12_tests COMMAND world12_tests)
@@ -1303,3 +1312,6 @@ target_link_libraries(world12_other_games_demo PRIVATE bmhworld12_ui bmhworld12_
 
 add_executable(world12_initial_season_validate tools/world12/validate_initial_season.cpp)
 target_link_libraries(world12_initial_season_validate PRIVATE bmhworld12_app bmhlaunch)
+
+add_executable(world12_export_english_runtime tools/world12/export_english_runtime.cpp)
+target_link_libraries(world12_export_english_runtime PRIVATE bmhlaunch bmhcore)

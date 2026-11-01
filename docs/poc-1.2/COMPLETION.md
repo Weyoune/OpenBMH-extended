@@ -9,7 +9,7 @@ The active objective is a playable, verified 1.2, not another isolated format pr
 | Matchday | AI/human minute calculation, settled league days, account/statistics/RNG publication | Visible live ownership and full matchday services; cup/indoor/national simulation |
 | Competitions | Initial national/European/domestic fields and campaigns, Source calendars, fixtures and domestic stages | Complete competition results, qualification, promotions and season transitions |
 | Career services | Initial ticket/reset/advertising, fixture shuffle/market and bounded Original adapters | First-day and daily/weekly/monthly finance, training, transfers, bank, stadium and notification publication |
-| GUI | Four scope controls; other-games projection | Connect accepted setup/manager confirmations to the typed session and first season; desktop/menu actions, tables and persistence |
+| GUI | Original setup/manager UI connected to typed session via development entry; standalone data-only rules | First-day/preparation presentation, desktop/menu/live adoption, tables and persistence |
 | Delivery | Current source/data regression evidence | Three complete seasons, two/four-manager sessions, native build/UI checks, screenshots/saves and Beta package |
 
 No gate is complete merely because its data model or a bounded Core test passes. Missing backends remain explicit until integrated, rather than manufacturing outcomes or silently using the German legacy career. Progress and validation receipts are recorded in `STATUS.md` and the private QA repository.

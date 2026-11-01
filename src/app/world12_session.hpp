@@ -1,0 +1,36 @@
+// SPDX-License-Identifier: GPL-3.0-only
+#pragma once
+#include "app/world12_initial_season.hpp"
+#include "formats/le.hpp"
+#include "ui/manager.hpp"
+#include "ui/world12_manager_selection.hpp"
+namespace bmh::app::world12 {
+struct RuntimeResources {
+    bmh::world12::World master;
+    LeImage german,english;
+    GameState reference;
+    bmh::world12::SeasonCalendar calendar;
+};
+// Explicit reference layout is a Core workspace, never legacy admission of the
+// dual-world package. Actual club/player data comes exclusively from WORLD12.
+RuntimeResources load_runtime_resources(const std::filesystem::path& directory);
+class Session {
+public:
+    Session(RuntimeResources,ui::SetupOptions,uint32_t seed,uint64_t scope);
+    ui::SelectionContext selection_context()const;
+    void confirm_manager(const ui::ManagerChoice&,uint64_t expected_revision);
+    void prepare_start(uint64_t expected_revision);
+    const bmh::world12::CareerSnapshot& snapshot()const{return state_;}
+    uint64_t revision()const{return owner_.revision;}
+    uint64_t scope()const{return owner_.scope;}
+    const InitialCompetitionOutcome& initial_draws()const{return draws_;}
+    const InitialManagerServicesOutcome& initial_services()const{return services_;}
+    const GameState& reference()const{return resources_.reference;}
+    const LeImage& rules()const{return resources_.german;}
+    bool prepared()const{return state_.world.transfer_market.has_value();}
+private:
+    RuntimeResources resources_;ui::SetupOptions options_;
+    bmh::world12::CareerSnapshot state_;ManagerActionOwner owner_;
+    InitialCompetitionOutcome draws_;InitialManagerServicesOutcome services_;
+};
+}

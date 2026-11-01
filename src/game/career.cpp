@@ -175,6 +175,27 @@ GameState startup_state(const LeImage& exe, const Database& db, const Bytes& m3_
     return g;
 }
 
+GameState startup_reference_state(const LeImage& exe,const DbCounts& counts,const Bytes& menu,const Bytes& formations) {
+    if(menu.size()!=0x360||formations.size()<0x160)throw FormatError("career: incomplete reference menu/formation data");
+    Bytes stream;
+    for(const auto& block:save_layout(counts,true)) {
+        Bytes data(block.size,0);
+        if(!block.heap)for(size_t i=0;i<block.size;++i)if(exe.contains(block.address+uint32_t(i)))data[i]=exe.u8(block.address+uint32_t(i));
+        if(block.address==layout::ClubSeasonRecords&&!block.heap&&!data.empty())data[0]=1;
+        if(block.address==layout::ManagerAutomation)for(size_t i=0;i<4;++i)data.at(i*5)=1;
+        if(block.address==layout::ActiveManager)data.at(0)=4;
+        if(block.address==layout::NextDeskManager)for(size_t i=0;i<4;++i){data.at(i*2)=uint8_t(i);data.at(i*2+1)=0;}
+        if(block.address==layout::Desktops)for(size_t i=0;i<5;++i)std::copy(menu.begin(),menu.end(),data.begin()+i*menu.size());
+        if(block.address==layout::Formations)for(size_t i=0;i<4;++i)std::copy_n(formations.begin(),0x160,data.begin()+i*0x160);
+        if(block.address==layout::SquadSlots&&block.heap)for(size_t i=0;i+1<data.size();i+=2){data[i]=0xff;data[i+1]=0x0f;}
+        stream.insert(stream.end(),data.begin(),data.end());
+    }
+    for(int pool=0;pool<4;++pool){stream.push_back(1);stream.push_back(0);stream.push_back(0);}
+    auto result=GameState::from_save(SaveState(stream,counts),counts);competition_pointers(result.memory,exe);
+    // A reference workspace owns no actual clubs, people or roster identities.
+    result.manager_teams.clear();return result;
+}
+
 }  // namespace bmh
 
 #include "game/matchday.hpp"

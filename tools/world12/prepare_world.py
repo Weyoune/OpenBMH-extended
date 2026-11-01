@@ -33,13 +33,17 @@ def pool_string(pool,offset):return pool[offset:].split(b'\0',1)[0].decode('asci
 def names_from_table(folder):
     values=rows(folder,'playernames');return {int(x['nameid']):x['name'] for x in values}
 
-def prepare(base,tables,output,english):
+def prepare(base,tables,output,english,english_runtime=None):
     if output.exists():raise ValueError('Output must not exist')
     from prepare_setup_symbol import prepare as prepare_symbol
     setup_symbol,setup_report=prepare_symbol(base,english)
     with zipfile.ZipFile(base) as archive:
         raw=archive.read('M3D.MAN');db=read_master(raw,445,3334,194,4104)
         asset_entries={n:archive.read(n) for n in archive.namelist() if n.startswith(('W/','KB/','F/','S/')) or n in ('M3PC.COL','M3.DAT','M3.MEN','TEXTD.BLK','RUNTIME.DAT')}
+    if english_runtime is not None:
+        rules=english_runtime.read_bytes()
+        if not rules.startswith(b'OBMHDAT1'):raise ValueError('English runtime must be exported data-only rules')
+        asset_entries['RULES-EN.DAT']=rules
     club_names=[pool_string(db['pools'][0],n) for n in u16(db['clubs'])]
     player_names=[pool_string(db['pools'][1],n) for n in u16(db['names'])]
     w1=[x[0] for x in struct.iter_unpack('<I',db['form'])];w2=[x[0] for x in struct.iter_unpack('<I',db['skills'])];w3=[x[0] for x in struct.iter_unpack('<I',db['identity'])]
@@ -174,4 +178,4 @@ def prepare(base,tables,output,english):
     print(json.dumps({'league_clubs':sum(len(x['clubs']) for x in members),'clubs':len(clubs),'players':len(players),'max_player_id':next_player-1,'max_crest_cell':next_crest-1,'playable':False,'obd_bytes':(output/'COMMUNITY.OBD').stat().st_size}))
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--base',type=Path,required=True);p.add_argument('--ea-tables',type=Path,required=True);p.add_argument('--english-data',type=Path,required=True);p.add_argument('--out',type=Path,required=True);a=p.parse_args();prepare(a.base,a.ea_tables,a.out,a.english_data)
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--base',type=Path,required=True);p.add_argument('--ea-tables',type=Path,required=True);p.add_argument('--english-data',type=Path,required=True);p.add_argument('--out',type=Path,required=True);p.add_argument('--english-runtime',type=Path);a=p.parse_args();prepare(a.base,a.ea_tables,a.out,a.english_data,a.english_runtime)

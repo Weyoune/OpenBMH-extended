@@ -1,0 +1,13 @@
+// SPDX-License-Identifier: GPL-3.0-only
+#pragma once
+#include "app/world12_session.hpp"
+#include "ui/flow.hpp"
+namespace bmh::app::world12 {
+enum class StartupProgress { idle,selecting,prepared };
+struct StartupResult {StartupProgress progress=StartupProgress::idle;std::string error;};
+// Same request boundary used by the development SDL entry and input tests.
+// Prepared means the backend start is ready for first-day/presentation binding;
+// it does not silently attach a legacy desktop or advance unsupported events.
+StartupResult serve_startup(ui::StartupFlow&,const ui::FlowResult&,std::unique_ptr<Session>&,
+    const std::filesystem::path& data,uint32_t seed,uint64_t scope);
+}

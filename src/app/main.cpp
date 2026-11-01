@@ -29,6 +29,7 @@
 #include <vector>
 
 #include "app/controller.hpp"
+#include "app/world12_startup.hpp"
 #include "app/quit_confirmation.hpp"
 #include "launch/archive.hpp"
 #include "launch/file_dialog.hpp"
@@ -117,7 +118,7 @@ int main(int argc, char** argv) {
     const std::vector<std::string> args = launch::utf8_arguments(argc, argv);  // (file names beyond the code page)
     fs::path data, save_directory;
     uint32_t seed = uint32_t(std::chrono::system_clock::now().time_since_epoch().count());
-    bool muted = false, music_enabled = true;
+    bool muted = false, music_enabled = true, world12_development = false;
     int live_frame_ms = 0;
     bool live_frame_ms_explicit = false;
     if (const char* configured = std::getenv("BMH_LIVE_FRAME_MS")) {
@@ -128,7 +129,8 @@ int main(int argc, char** argv) {
     for (size_t i = 1; i < args.size(); ++i) {
         const auto is = [&](const char* name) { return args[i] == name; };
         const bool value = i + 1 < args.size();
-        if (is("--mute")) {
+        if(is("--world12-dev")){world12_development=true;
+        } else if (is("--mute")) {
             muted = true;
         } else if (is("--music")) {
             music_enabled = true;
@@ -150,7 +152,7 @@ int main(int argc, char** argv) {
             return 0;
         } else if (is("--help") || is("-h")) {
             std::printf("usage: OpenBMH [<game directory | BMH.EXE | game.zip | game.7z>] [--seed <Watcom seed>] "
-                        "[--save-directory <directory>] [--mute] [--volume <0..1>] [--no-music] [--live-frame-ms <0..1000>]\n");
+                        "[--save-directory <directory>] [--mute] [--volume <0..1>] [--no-music] [--live-frame-ms <0..1000>] [--world12-dev]\n");
             return 0;
         } else if (args[i].rfind("--", 0) != 0 && data.empty()) {
             data = launch::path_from_utf8(args[i]);
@@ -186,7 +188,7 @@ int main(int argc, char** argv) {
         }
     }
     bool english_game = false;  // (the window title marks the English version as experimental)
-    {
+    if(!world12_development){
         const launch::ResolvedGame game = launch::resolve_game(data, launch::default_cache_directory());
         if (!game.error.empty() || !game.check.playable) {
             show_start_error("The game cannot be started:\n" + launch::describe(game));
@@ -198,12 +200,14 @@ int main(int argc, char** argv) {
     }
     if (save_directory.empty()) save_directory = data;
     try {
-        install_runtime_profile(load_data_profile(data));
+        if(world12_development&&(!fs::is_directory(data)||!resource_exists(data/"WORLD12.JSON")||!resource_exists(data/"RULES-EN.DAT")||!resource_exists(data/"KB"/"SETUP12.VGA")))throw FormatError("world12 development requires a data directory with WORLD12.JSON, RULES-EN.DAT and the country setup assets");
+        if(!world12_development)install_runtime_profile(load_data_profile(data));
         const Palette palette = load_palette(ui::asset_path(data, "M3PC.COL"));
         const auto league_symbol=resource_exists(data/"KB"/"SETUP12.VGA")?
             ui::SetupLeagueSymbol::country_selection:ui::SetupLeagueSymbol::source;
         ui::StartupFlow flow(data,save_directory,league_symbol);
         std::unique_ptr<app::CareerSession> session;
+        std::unique_ptr<app::world12::Session> world_session;
         uint64_t revision = 0;
         openbmh::audio::Playback playback;
         std::string audio_error;
@@ -222,14 +226,14 @@ int main(int argc, char** argv) {
         SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 320, 240);
         if (!texture) throw FormatError(SDL_GetError());
         std::vector<uint32_t> pixels(320 * 240);
-        ui::LiveMatchdayScreen live_screen(data);
-        ui::RealityReporterPanel reality_reporter(data);
-        ui::SportschauIntro sportschau_intro(data);
-        ui::MatchdayIntro matchday_intro(data);
-        ui::SportschauEleven sportschau_eleven(data);
-        ui::SportschauTeamInfo sportschau_team_info(data);
-        ui::CompetitionWinnerScreen competition_winner(data);
-        const auto season_exe = load_le(ui::asset_path(data, "BMH.exe"));
+        std::unique_ptr<ui::LiveMatchdayScreen> live_screen;if(!world12_development)live_screen=std::make_unique<ui::LiveMatchdayScreen>(data);
+        std::unique_ptr<ui::RealityReporterPanel> reality_reporter;if(!world12_development)reality_reporter=std::make_unique<ui::RealityReporterPanel>(data);
+        std::unique_ptr<ui::SportschauIntro> sportschau_intro;if(!world12_development)sportschau_intro=std::make_unique<ui::SportschauIntro>(data);
+        std::unique_ptr<ui::MatchdayIntro> matchday_intro;if(!world12_development)matchday_intro=std::make_unique<ui::MatchdayIntro>(data);
+        std::unique_ptr<ui::SportschauEleven> sportschau_eleven;if(!world12_development)sportschau_eleven=std::make_unique<ui::SportschauEleven>(data);
+        std::unique_ptr<ui::SportschauTeamInfo> sportschau_team_info;if(!world12_development)sportschau_team_info=std::make_unique<ui::SportschauTeamInfo>(data);
+        std::unique_ptr<ui::CompetitionWinnerScreen> competition_winner;if(!world12_development)competition_winner=std::make_unique<ui::CompetitionWinnerScreen>(data);
+        const auto season_exe = world12_development?load_reference_le(ui::asset_path(data,"BMH.exe"),DataProfile{}):load_le(ui::asset_path(data,"BMH.exe"));
         english_game = english_game || season_exe.u8(layout::LeagueSizes) == 20;
         app::QuitConfirmation quit_confirmation(window, english_game);
         try {
@@ -525,12 +529,12 @@ int main(int argc, char** argv) {
             if (!running) return;
             // PaletteOverride installs KB132's embedded palette; SportschauIntro restores the
             // normal palette on return. Keep the override local to intro frames.
-            const auto& intro_palette = sportschau_intro.palette_override();
+            const auto& intro_palette = sportschau_intro->palette_override();
             const Palette* intro_colors = intro_palette ? &*intro_palette : nullptr;
             for (uint32_t frame = 0; running && frame < ui::SportschauIntro::frame_count; ++frame) {
                 if (frame != 0) wait_source_retraces(5);
                 if (!running) return;
-                present_season(sportschau_intro.render_frame(frame), "OpenBMH - sportschau_intro", intro_colors);
+                present_season(sportschau_intro->render_frame(frame), "OpenBMH - sportschau_intro", intro_colors);
                 if (frame == 0) {
                     source_tick_wait(70);
                     app::original_audio_command(playback, 2); // SportschauIntro, Original S/2002 fanfare.
@@ -541,7 +545,7 @@ int main(int argc, char** argv) {
             source_tick_wait(100);
             app::original_audio_command(playback, 1);
             if (!running) return;
-            present_season(sportschau_intro.render_frame(ui::SportschauIntro::frame_count - 1),
+            present_season(sportschau_intro->render_frame(ui::SportschauIntro::frame_count - 1),
                            "OpenBMH - sportschau_intro_ack", intro_colors);
             wait_sportschau_ack();
         };
@@ -554,8 +558,8 @@ int main(int argc, char** argv) {
         };
         sportschau_presenter.kickoff = [&](const GameState&, const MatchdayIntroView& view) {
             if (!running) return;
-            present_season(matchday_intro.render(view), "OpenBMH - matchday_intro",
-                matchday_intro.palette_override() ? &*matchday_intro.palette_override() : nullptr);
+            present_season(matchday_intro->render(view), "OpenBMH - matchday_intro",
+                matchday_intro->palette_override() ? &*matchday_intro->palette_override() : nullptr);
             // SDLGetTicks reads BIOS ticks at BDA46c (PIT1193182 /65536 Hz),
             // unlike the separate 20ms units of DecodeTaxAnimationScript2. Source waits36 ticks.
             constexpr Uint32 duration = (36ull * 65536 * 1000 + 1193181) / 1193182;
@@ -614,9 +618,9 @@ int main(int argc, char** argv) {
             event.group = 0; event.match = scene.shot.match; event.side = scene.shot.acting_side;
             event.minute = scene.shot.minute;
             const auto header = ui::live_chance_projection(event, scene.groups, state, season_exe);
-            const auto backdrop = live_screen.render_sportschau_header(header,
+            const auto backdrop = live_screen->render_sportschau_header(header,
                 scene.home_goals_before, scene.away_goals_before, frame.gradient_text);
-            const auto colors = live_screen.shot_palette(palette, scene.shot, scene.groups, state);
+            const auto colors = live_screen->shot_palette(palette, scene.shot, scene.groups, state);
             const std::string id = std::to_string(fixture.group) + "_" + std::to_string(fixture.fixture) +
                 "_" + std::to_string(scene.report_step.visible_log_entries);
             const auto delay = [&](int row) {
@@ -627,7 +631,7 @@ int main(int argc, char** argv) {
             present_season(backdrop, ("OpenBMH - sportschau_scene_header_" + id).c_str(), &colors);
             delay(12); // AdvanceStep(12), header preview in ShotAnimation
             if (scene.set_piece) {
-                const auto frames = live_screen.render_set_piece(frame, *scene.set_piece, &backdrop);
+                const auto frames = live_screen->render_set_piece(frame, *scene.set_piece, &backdrop);
                 for (size_t i = 0; running && i < frames.size(); ++i) {
                     present_season(frames[i], ("OpenBMH - sportschau_set_piece_" + id + "_" +
                         std::to_string(i)).c_str(), &colors);
@@ -636,7 +640,7 @@ int main(int argc, char** argv) {
                     SDL_Delay(Uint32(live_frame_ms_explicit?live_frame_ms:app::scene_frame_delay(int(retraces)*1000/70))); // FirstThen: first40, then F8
                 }
             }
-            const auto frames = live_screen.render_shot(frame, scene.shot, &backdrop);
+            const auto frames = live_screen->render_shot(frame, scene.shot, &backdrop);
             for (size_t i = 0; running && i < frames.size(); ++i) {
                 present_season(frames[i], ("OpenBMH - sportschau_shot_" + id + "_" +
                     std::to_string(i)).c_str(), &colors);
@@ -665,21 +669,21 @@ int main(int argc, char** argv) {
         };
         sportschau_presenter.winner = [&](const GameState& state, const CompetitionWinnerView& view) {
             if (!running) return;
-            const auto& colors = competition_winner.palette_override(view.title);
-            present_season(competition_winner.render(state, view),
+            const auto& colors = competition_winner->palette_override(view.title);
+            present_season(competition_winner->render(state, view),
                 ("OpenBMH - competition_winner_" + std::to_string(view.title) + "_" +
                  std::to_string(view.team)).c_str(), colors ? &*colors : nullptr);
             wait_sportschau_ack(); // SDLFlushEvents2 waits for a mouse press; ESC is ignored.
         };
         sportschau_presenter.awards = [&](const GameState& state, const SportschauAwardsView& view) {
             if (!running) return;
-            present_season(sportschau_eleven.render(view, sportschau_context(state).gradient_text),
+            present_season(sportschau_eleven->render(view, sportschau_context(state).gradient_text),
                 ("OpenBMH - sportschau_eleven_" + std::to_string(view.group)).c_str());
             wait_sportschau_ack();
         };
         sportschau_presenter.team_info = [&](const GameState& state, const SportschauTeamInfoView& view) {
             if (!running) return;
-            present_season(sportschau_team_info.render(view, sportschau_context(state).gradient_text),
+            present_season(sportschau_team_info->render(view, sportschau_context(state).gradient_text),
                 ("OpenBMH - sportschau_teaminfo_" + std::to_string(view.group)).c_str());
             wait_sportschau_ack();
         };
@@ -1708,6 +1712,13 @@ int main(int argc, char** argv) {
         std::optional<Uint64> timed_notice_presented_at;
         std::optional<Uint8> timed_notice_release;
         auto handle = [&](const ui::FlowResult& r) {
+            if(world12_development){
+                const auto result=app::world12::serve_startup(flow,r,world_session,data,seed,1);
+                if(!result.error.empty())std::fprintf(stderr,"world12: %s\n",result.error.c_str());
+                if(result.progress==app::world12::StartupProgress::prepared)SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION,"OpenBMH 1.2 Entwicklung","Karrierestart vorbereitet. Die Anbindung von erstem Spieltag und Desktop ist noch in Arbeit.",window);
+                dirty=true;return;
+            }
+
             if (r.request == ui::FlowRequest::end_session && !quit_confirmation.confirm()) {
                 flow.reject_desk_action(english_game ? "Quit cancelled." : "Beenden abgebrochen.");
                 dirty = true;
@@ -2174,7 +2185,7 @@ int main(int argc, char** argv) {
                         const auto frame = ui::live_matchday_frame(minute, groups, state);
                         if (!frame.matches.empty()) {
                             SDL_SetWindowTitle(window, "OpenBMH 1.1");
-                            const Image live_image = live_screen.render(frame);
+                            const Image live_image = live_screen->render(frame);
                             for (size_t i = 0; i < pixels.size(); ++i) pixels[i] = palette.argb[live_image.pixels[i]];
                             SDL_UpdateTexture(texture, nullptr, pixels.data(), 320 * 4);
                             SDL_RenderClear(renderer);
@@ -2521,7 +2532,7 @@ int main(int argc, char** argv) {
                     const auto pause_live_match = [&] {
                         if (!source_pause_is_p) return;
                         const auto frame = ui::live_matchday_frame(minute, groups, state);
-                        const Image image = live_screen.render(frame);
+                        const Image image = live_screen->render(frame);
                         for (size_t i = 0; i < pixels.size(); ++i)
                             pixels[i] = palette.argb[image.pixels[i]];
                         SDL_UpdateTexture(texture, nullptr, pixels.data(), 320 * 4);
@@ -2550,7 +2561,7 @@ int main(int argc, char** argv) {
                     };
                     const auto restore_live_frame = [&] {
                         if (!running) return;
-                        const Image image = live_screen.render(ui::live_matchday_frame(minute, groups, state));
+                        const Image image = live_screen->render(ui::live_matchday_frame(minute, groups, state));
                         SDL_SetWindowTitle(window, "OpenBMH 1.1");
                         for (size_t i = 0; i < pixels.size(); ++i)
                             pixels[i] = palette.argb[image.pixels[i]];
@@ -2570,7 +2581,7 @@ int main(int argc, char** argv) {
                             group_index < 0 || size_t(group_index) >= groups.size()) return;
                         const int team = state.manager_teams[size_t(manager)];
                         const auto frame = ui::live_matchday_frame(minute, groups, state);
-                        const Image underlay = live_screen.render(frame);
+                        const Image underlay = live_screen->render(frame);
                         app::CareerSession::LiveOverviewRequest request;
                         request.key_slot = key_slot;
                         request.minute = minute;
@@ -2943,7 +2954,7 @@ int main(int argc, char** argv) {
                             live_chance_context->minute == event.minute &&
                             live_chance_context->group == event.group &&
                             live_chance_context->match == event.match ? &*live_chance_context : nullptr;
-                        present(live_screen.render_ball(frame, event.displacement, index, chance));
+                        present(live_screen->render_ball(frame, event.displacement, index, chance));
                         SDL_PumpEvents();
                         SDL_Event quit_event;
                         if (quit_confirmation.peep(&quit_event, 1, SDL_GETEVENT, SDL_QUIT, SDL_QUIT) > 0) {
@@ -2960,7 +2971,7 @@ int main(int argc, char** argv) {
                         const int final_delay = live_frame_ms_explicit ? live_frame_ms : app::scene_frame_delay(source_delay(6));
                         if (final_delay > 0) SDL_Delay(Uint32(final_delay));
                         SDL_SetWindowTitle(window, "OpenBMH 1.1");
-                        present(live_screen.render(frame));
+                        present(live_screen->render(frame));
                     }
                 }, [&](const LiveChanceEvent& event, const std::vector<MatchGroup>& groups,
                        const GameState& state) {
@@ -2975,7 +2986,7 @@ int main(int argc, char** argv) {
                         std::to_string(event.match) + "_" + std::to_string(event.side) + "_" +
                         std::to_string(event.kind) + "_" + std::to_string(int(event.goal));
                     SDL_SetWindowTitle(window, "OpenBMH 1.1");
-                    const Image image = live_screen.render_chance(frame, chance);
+                    const Image image = live_screen->render_chance(frame, chance);
                     for (size_t i = 0; i < pixels.size(); ++i) pixels[i] = palette.argb[image.pixels[i]];
                     SDL_UpdateTexture(texture, nullptr, pixels.data(), 320 * 4);
                     SDL_RenderClear(renderer);
@@ -3000,8 +3011,8 @@ int main(int argc, char** argv) {
                     if (!running || live_skipped) return;
                     const auto frame = ui::live_matchday_frame(event.minute, groups, state);
                     if (frame.matches.empty()) return;
-                    const auto frames = live_screen.render_shot(frame, event);
-                    const auto shot_colors = live_screen.shot_palette(palette, event, groups, state);
+                    const auto frames = live_screen->render_shot(frame, event);
+                    const auto shot_colors = live_screen->shot_palette(palette, event, groups, state);
                     const std::string identity = std::to_string(event.minute) + "_" +
                         std::to_string(event.group) + "_" + std::to_string(event.match) + "_" +
                         std::to_string(event.acting_side) + "_" + std::to_string(int(event.miss));
@@ -3058,10 +3069,10 @@ int main(int argc, char** argv) {
                     if (!running || live_skipped) return;
                     const auto frame=ui::live_matchday_frame(event.minute,groups,state);
                     if (frame.matches.empty()) return;
-                    const auto images=live_screen.render_set_piece(frame,event);
+                    const auto images=live_screen->render_set_piece(frame,event);
                     LiveShotEvent palette_event;
                     palette_event.group=event.group;palette_event.match=event.match;
-                    const auto colors=live_screen.shot_palette(palette,palette_event,groups,state);
+                    const auto colors=live_screen->shot_palette(palette,palette_event,groups,state);
                     for (size_t index=0;index<images.size() && running;++index) {
                         const std::string title="OpenBMH - live_set_piece_"+std::to_string(event.minute)+"_"+
                             std::to_string(event.group)+"_"+std::to_string(event.match)+"_"+
@@ -3094,7 +3105,7 @@ int main(int argc, char** argv) {
                         SDL_UpdateTexture(texture,nullptr,pixels.data(),320*4);
                         SDL_RenderClear(renderer);SDL_RenderCopy(renderer,texture,nullptr,nullptr);SDL_RenderPresent(renderer);
                     };
-                    SDL_SetWindowTitle(window, "OpenBMH 1.1");present(live_screen.render_booking(frame,booking));
+                    SDL_SetWindowTitle(window, "OpenBMH 1.1");present(live_screen->render_booking(frame,booking));
                     if (event.kind != 2 && app::match_sound_enabled(state))
                         app::original_audio_command(playback, 17); // EventImpl/SDLPumpEvents, no injury whistle.
                     SDL_PumpEvents();SDL_Event input;
@@ -3105,7 +3116,7 @@ int main(int argc, char** argv) {
                     const int delay=live_frame_ms_explicit?live_frame_ms:app::scene_frame_delay((saved<6?saved/2:saved)*20);
                     if (delay>0) SDL_Delay(Uint32(delay));
                     // EventImpl clears the box after its pause; no Source click wait here.
-                    SDL_SetWindowTitle(window, "OpenBMH 1.1");present(live_screen.render(frame));
+                    SDL_SetWindowTitle(window, "OpenBMH 1.1");present(live_screen->render(frame));
                 }, [&](const LiveShootoutEvent& event, const std::vector<MatchGroup>& groups,
                        const GameState& state) {
                     if (!running || live_skipped) return;
@@ -3117,7 +3128,7 @@ int main(int argc, char** argv) {
                         std::to_string(event.side)+"_"+std::to_string(event.round)+"_"+
                         std::to_string(event.of)+"_"+std::to_string(event.player);
                     SDL_SetWindowTitle(window, "OpenBMH 1.1");
-                    const auto image=live_screen.render_shootout(frame,projection);
+                    const auto image=live_screen->render_shootout(frame,projection);
                     for (size_t i=0;i<pixels.size();++i) pixels[i]=palette.argb[image.pixels[i]];
                     SDL_UpdateTexture(texture,nullptr,pixels.data(),320*4);
                     SDL_RenderClear(renderer);SDL_RenderCopy(renderer,texture,nullptr,nullptr);SDL_RenderPresent(renderer);
@@ -3148,12 +3159,12 @@ int main(int argc, char** argv) {
                         LiveChanceEvent header_event;header_event.minute=event.minute;
                         header_event.group=event.group;header_event.match=event.match;header_event.side=event.side;
                         const auto header=ui::live_chance_projection(header_event,groups,state,season_exe);
-                        reality_pristine=live_screen.render_reality(frame,header);
+                        reality_pristine=live_screen->render_reality(frame,header);
                         reality_surface=reality_pristine;reality_layout={};
                         reality_field=std::make_unique<ui::RealityFieldScreen>(data,
                             state.memory.has(::bmh::layout::Main_FormatError_RuntimeField3)?state.memory.u8(::bmh::layout::Main_FormatError_RuntimeField3):0);
                         LiveShotEvent colors_event;colors_event.group=event.group;colors_event.match=event.match;
-                        reality_colors=live_screen.shot_palette(palette,colors_event,groups,state);
+                        reality_colors=live_screen->shot_palette(palette,colors_event,groups,state);
                         present(reality_surface,reality_colors,"OpenBMH - live_reality_begin_"+identity);
                         return false;
                     }
@@ -3164,12 +3175,12 @@ int main(int argc, char** argv) {
                         return false;
                     }
                     if (event.stage==LiveRealityStage::end) {
-                        present(live_screen.render(frame),palette,"OpenBMH - live_matchday");
+                        present(live_screen->render(frame),palette,"OpenBMH - live_matchday");
                         return false;
                     }
                     if (!reality_field) throw FormatError("Reality presentation: round without Source header");
                     for (const auto& report:event.tick.reports)
-                        reality_reporter.append(reality_surface,reality_layout,report.text,frame.gradient_text);
+                        reality_reporter->append(reality_surface,reality_layout,report.text,frame.gradient_text);
                     const std::string round_identity=identity+"_"+std::to_string(event.tick.round);
                     if (event.tick.motion) {
                         size_t index=0;
@@ -3203,7 +3214,7 @@ int main(int argc, char** argv) {
                     if (!running) throw FormatError("phase results: presentation stopped");
                     const auto frame = ui::live_matchday_frame(request.phase_end_minute, groups, state);
                     std::string error;
-                    auto projection = session->open_phase_results(revision, live_screen.render(frame), error);
+                    auto projection = session->open_phase_results(revision, live_screen->render(frame), error);
                     if (!projection) throw FormatError(error.empty() ? "phase results: Source viewer unavailable" : error);
                     const bool closed = present_running_overview(std::move(projection), state, revision,
                         [&](const app::CareerSession::LiveOverviewAction& action, std::string& dispatch_error,

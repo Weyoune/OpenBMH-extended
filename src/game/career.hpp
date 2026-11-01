@@ -72,6 +72,9 @@ class LeImage;
 // parts of the file are overwritten), the nationality of the last 32 players from
 // CareerRuntimeField7. The player values are those of the database; startup_players follows.
 GameState startup_state(const LeImage& exe, const Database& db, const Bytes& m3_men, const Bytes& m3_dat);
+// Numeric/rendering workspace only: no imported master identities or playable
+// legacy career. Typed sessions project their own bounded identities into it.
+GameState startup_reference_state(const LeImage&,const DbCounts&,const Bytes& m3_men,const Bytes& m3_dat);
 
 // CompetitionPointers (part of startup_state): the pointers of the competition table CupTable
 // (36 entries of 0x28 bytes: +0 the teams, +8 the rounds, +0xc the results) to the tables of
