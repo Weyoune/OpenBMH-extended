@@ -129,6 +129,11 @@ public:
     void attach_initialized_career(CareerInitializationResult result);
     void attach_world12_career(DeskState,const LeImage& reference);
     void show_world12_preparation(PreparationState,int menu_kind);
+    void open_world12_file_dialog(SaveLoadMode,const LeImage&,SaveLoadInfoReader);
+    struct World12FileView {std::unique_ptr<DesktopScreen> desktop;LeImage reference;std::vector<int> teams;};
+    World12FileView prepare_world12_file_result(DeskState,const LeImage&,const SaveLoadRequest&)const;
+    void finish_world12_file_result(World12FileView) noexcept;
+    const std::filesystem::path& save_directory()const{return save_directory_;}
     void acknowledge_desk(DeskState state);
     void reject_desk_action(std::string reason);
     void acknowledge_desk_notice(const DeskRequest& owner);

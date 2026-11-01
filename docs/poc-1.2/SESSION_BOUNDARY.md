@@ -37,3 +37,7 @@ Prepared sessions now include the [desktop runtime](DESKTOP_STATE.md). Layouts a
 ## Preparation ownership
 
 The same staged controller now opens and mutates the Original lineup/pitch, tactics and training menus through [preparation ownership](PREPARATION.md). Local player IDs stay stable across roster rearrangements; all pending requests, actor/revision metadata and global manager identities are checked before publication. Bank, stadium, transfer, remaining desktop commands and later days are still separate integration gates.
+
+## Save/load owner
+
+The Original file dialog now routes typed saves through [staged file transactions](SAVE_LOAD.md). `Session::resume` binds the retained snapshot without running career generation or desktop entry. A fresh rendered desktop and monotonically newer owner are validated before replacing the running Session.

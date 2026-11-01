@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "formats/executable_layout.hpp"
 #include "ui/save_load.hpp"
+#include "formats/badge_policy.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -73,14 +74,18 @@ std::string original_bytes(std::string_view value) {
 SaveLoadScreen::SaveLoadScreen(const std::filesystem::path& data, std::filesystem::path directory, SaveLoadMode mode,
                                int manager_slot, uint64_t revision, Image backdrop, bool gradient_text,
                                SaveLoadFileKind file_kind, int origin_item_id)
+    :SaveLoadScreen(data,std::move(directory),mode,manager_slot,revision,std::move(backdrop),gradient_text,file_kind,origin_item_id,load_le(asset_path(data,"BMH.exe"))) {install_original_badge_policy(exe_);}
+SaveLoadScreen::SaveLoadScreen(const std::filesystem::path& data,std::filesystem::path directory,SaveLoadMode mode,
+                               int manager_slot,uint64_t revision,Image backdrop,bool gradient_text,
+                               SaveLoadFileKind file_kind,int origin_item_id,const LeImage& reference,SaveLoadInfoReader reader)
     : directory_(std::filesystem::absolute(std::move(directory)).lexically_normal()), mode_(mode),
       file_kind_(file_kind), manager_slot_(manager_slot), origin_item_id_(origin_item_id),
       revision_(revision), backdrop_(std::move(backdrop)),
       font_(load_font(asset_path(data / "F", "BMH2.FNT"))),
-      exe_(load_le(asset_path(data, "BMH.exe"))),
+      exe_(reference),
       widgets_(load_vga(asset_path(data / "KB", "0.VGA"))),
-      texts_(load_textd(asset_path(data, "TEXTD.BLK"))), sprite_font_(data),
-      footer_font_(load_font(asset_path(data / "F", "BMH3.FNT"))), gradient_text_(gradient_text) {
+      texts_(load_textd(asset_path(data, "TEXTD.BLK"))), sprite_font_(data,reference),
+      footer_font_(load_font(asset_path(data / "F", "BMH3.FNT"))), gradient_text_(gradient_text),info_reader_(std::move(reader)) {
     if (backdrop_.width != 320 || backdrop_.height != 240 || manager_slot_ < -1 || manager_slot_ > 3)
         throw FormatError("save/load: unsupported state");
     if (widgets_.width != 77 || widgets_.height != 112 || font_.height != 8 || footer_font_.height != 6)
@@ -171,9 +176,9 @@ Image SaveLoadScreen::render() const {
         for (size_t i = 0; i < info_->rows.size(); ++i) {
             const auto& row = info_->rows[i];
             const int y = 99 + int(i) * 7;
-            text(out, 76, y, row.manager, 0x6b, -1, footer_font_, true);
-            text(out, 133, y, row.club, 0x6b, -1, footer_font_, true);
-            text(out, 212, y, row.league, 0x6b, -1, footer_font_, true);
+            text(out, 76, y, row.manager, 0x6b, 54, footer_font_, true);
+            text(out, 133, y, row.club, 0x6b, 76, footer_font_, true);
+            text(out, 212, y, row.league, 0x6b, 48, footer_font_, true);
         }
     }
     return out;
@@ -183,6 +188,7 @@ bool SaveLoadScreen::info_press(int x, int y) {
     if (file_kind_ != SaveLoadFileKind::game || pending_ || info_ || x <= 52 || x >= 200 || y <= 40 ||
         y >= 192 || !select_row(y)) return false;
     try {
+        if(info_reader_){info_=info_reader_(entries_.at(size_t(selected_)).path);return true;}
         const auto saved = load_savegame(entries_.at(size_t(selected_)).path);
         const auto& h = saved.plain_header;
         if (!saved.checksum_ok || (saved.version != "V2.24" && saved.version != "O1.1") || h.size() < 172 || h[0] < 1 || h[0] > 4)

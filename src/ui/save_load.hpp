@@ -7,6 +7,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <functional>
 
 #include "formats/font.hpp"
 #include "formats/le.hpp"
@@ -32,12 +33,18 @@ struct SaveLoadRequest {
 };
 
 struct SaveLoadEntry { std::filesystem::path path; };
+struct SaveLoadInfoRow {std::string manager,club,league;};
+struct SaveLoadInfo {std::string path,date;std::vector<SaveLoadInfoRow> rows;};
+using SaveLoadInfoReader=std::function<SaveLoadInfo(const std::filesystem::path&)>;
 
 class SaveLoadScreen {
 public:
     SaveLoadScreen(const std::filesystem::path& data, std::filesystem::path directory, SaveLoadMode mode,
                    int manager_slot, uint64_t revision, Image backdrop, bool gradient_text = true,
                    SaveLoadFileKind file_kind = SaveLoadFileKind::game, int origin_item_id = -1);
+    SaveLoadScreen(const std::filesystem::path& data,std::filesystem::path directory,SaveLoadMode mode,
+                   int manager_slot,uint64_t revision,Image backdrop,bool gradient_text,
+                   SaveLoadFileKind file_kind,int origin_item_id,const LeImage& reference,SaveLoadInfoReader reader={});
     Image render() const;
     // InfoPress opens5870f on right DOWN; its popup restores on mouse UP.
     bool info_press(int x, int y);
@@ -75,8 +82,9 @@ private:
     bool overwrite_armed_ = false, close_requested_ = false;
     int last_clicked_row_ = -1;
     std::optional<SaveLoadRequest> pending_;
-    struct InfoRow { std::string manager, club, league; };
-    struct FileInfo { std::string path, date; std::vector<InfoRow> rows; };
+    using InfoRow=SaveLoadInfoRow;
+    using FileInfo=SaveLoadInfo;
+    SaveLoadInfoReader info_reader_;
     std::optional<FileInfo> info_;
     void request_action();
     bool select_row(int y);

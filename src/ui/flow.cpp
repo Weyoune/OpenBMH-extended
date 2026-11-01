@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <sstream>
 #include <set>
+#include <type_traits>
 
 namespace bmh::ui {
 FlowResult StartupFlow::move_action(int x, int y) {
@@ -480,6 +481,7 @@ FlowResult StartupFlow::click(int x, int y, bool right, bool double_click) {
     if (!manager_) {
         auto r = setup_.click(x, y, right);
         if (r.request == SetupRequest::load_game) {
+            if(setup_symbol_==SetupLeagueSymbol::country_selection)return {true,FlowRequest::load_game};
             save_load_ = std::make_unique<SaveLoadScreen>(data_, save_directory_, SaveLoadMode::load, -1, 0, setup_.render());
             return {true, FlowRequest::submenu_opened};
         }
@@ -714,6 +716,31 @@ void StartupFlow::show_world12_preparation(PreparationState state,int menu_kind)
     else if(menu_kind==16&&state.training)training=std::make_unique<TrainingScreen>(data_,*state.training,*world12_reference_);
     else throw FormatError("world12: unsupported preparation menu");
     preparation_=std::make_unique<PreparationState>(std::move(state));desktop_=std::move(desktop);lineup_=std::move(lineup);pitch_=std::move(pitch);tactics_=std::move(tactics);training_=std::move(training);
+}
+
+void StartupFlow::open_world12_file_dialog(SaveLoadMode mode,const LeImage& reference,SaveLoadInfoReader reader) {
+    if(save_load_||in_preparation_menu()||in_readonly_view()||(!desktop_&&(manager_||pending_||awaiting_context_)))throw FormatError("world12: file dialog is unavailable");
+    int manager=-1;uint64_t revision=0;Image backdrop=setup_.render();bool gradient=true;
+    if(desktop_){const auto& action=desktop_->pending();const int kind=mode==SaveLoadMode::load?10:11;
+        if(desktop_->state().source!="world12"||!action||action->kind!=DeskRequestKind::open_menu||action->menu_kind!=kind)throw FormatError("world12: file dialog has no matching desktop owner");
+        manager=desktop_->state().manager_slot;revision=desktop_->state().revision;backdrop=desktop_->render();gradient=desktop_->state().gradient_text;
+    }else if(mode!=SaveLoadMode::load||setup_symbol_!=SetupLeagueSymbol::country_selection)throw FormatError("world12: setup can only load games");
+    auto next=std::make_unique<SaveLoadScreen>(data_,save_directory_,mode,manager,revision,std::move(backdrop),gradient,SaveLoadFileKind::game,-1,reference,std::move(reader));
+    auto owned_reference=reference;
+    if(desktop_)desktop_->resolve_local_menu();
+    world12_reference_=std::move(owned_reference);save_load_=std::move(next);
+}
+StartupFlow::World12FileView StartupFlow::prepare_world12_file_result(DeskState state,const LeImage& reference,const SaveLoadRequest& request)const {
+    if(!save_load_||!save_load_->pending()||*save_load_->pending()!=request||request.file_kind!=SaveLoadFileKind::game||state.source!="world12"||state.revision<=request.revision)
+        throw FormatError("world12: stale file result owner");
+    validate_desk_state(state);
+    if(request.action==SaveLoadAction::save&&(!desktop_||state.managers!=desktop_->state().managers||state.manager_slot!=desktop_->state().manager_slot||state.options!=desktop_->state().options||state.badge_atlas!=desktop_->state().badge_atlas))throw FormatError("world12: save changed current career identity");
+    World12FileView view;view.reference=reference;view.teams=state.manager_teams;view.desktop=std::make_unique<DesktopScreen>(data_,std::move(state),reference);return view;
+}
+void StartupFlow::finish_world12_file_result(World12FileView view) noexcept {
+    static_assert(std::is_nothrow_move_assignable_v<LeImage>&&std::is_nothrow_move_constructible_v<LeImage>);
+    desktop_=std::move(view.desktop);world12_reference_=std::move(view.reference);confirmed_runtime_teams_=std::move(view.teams);
+    save_load_.reset();preparation_.reset();manager_.reset();pending_.reset();confirmed_.clear();awaiting_context_=false;engine_attached_=true;
 }
 
 void StartupFlow::acknowledge_desk(DeskState state) {

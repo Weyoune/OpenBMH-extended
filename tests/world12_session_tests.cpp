@@ -2,6 +2,7 @@
 #include "world12_fixture.hpp"
 #include "app/world12_startup.hpp"
 #include "app/world12_desktop.hpp"
+#include "app/world12_save_load.hpp"
 #include "game/world12/match_projection.hpp"
 #include "game/world12/desktop_projection.hpp"
 #include "game/desk.hpp"
@@ -11,6 +12,7 @@
 #include "formats/palette.hpp"
 #include <fstream>
 #include <algorithm>
+#include <chrono>
 #include <iostream>
 namespace {
 using namespace bmh;using namespace bmh::world12;namespace session_app=bmh::app::world12;
@@ -27,6 +29,8 @@ session_app::RuntimeResources synthetic() {
     const uint8_t depths[]={0,5,5,5,5,10,10,10,10,17,17};for(size_t m=0;m<4;++m){r.reference.manager_options[m*5]=1;for(size_t mode=0;mode<2;++mode)for(size_t f=0;f<8;++f)for(size_t row=0;row<11;++row)r.reference.formations[m*0x160+mode*0xb0+f*22+row]=depths[row];}
     r.reference.memory.add_block(layout::EnvironmentYouthTeams,4*0x24);return r;
 }
+unsigned resume_draws=0;
+void count_resume_draw(int){++resume_draws;}
 session_app::ManagerActionOwner* interrupted_desktop_owner=nullptr;
 void interrupt_desktop(int){if(interrupted_desktop_owner){++interrupted_desktop_owner->revision;interrupted_desktop_owner=nullptr;}}
 void desktop_tests(CareerSnapshot prepared,const GameState& source,const std::filesystem::path& output={}) {
@@ -101,6 +105,16 @@ void first_event_tests(const CareerSnapshot& pending,const GameState& source) {
         check(owner.revision==5&&state.desktop->active_seat==order.front()&&state.desktop->initial_event->manager_order==order&&state.desktop->initial_event->offer.has_value()==offer,"initial event lost order/offer/owner");
         check(result.game_draws>=order.size()+100&&result.watcom_draws>1&&state.date==before.date&&state.calendar==before.calendar&&state.results==before.results,"initial event skipped random draws or advanced time");
         check(read_save(make_save(state))==state,"initial event/offer save roundtrip differs");
+        {auto resources=synthetic();resources.reference=reference;resume_draws=0;draw_hook=count_resume_draw;
+            auto resumed=session_app::Session::resume(resources,state,91,100);draw_hook=nullptr;
+            check(!resume_draws&&resumed.snapshot()==state&&resumed.revision()==100,"resume regenerated state or consumed RNG");
+            ui::SaveLoadRequest request;request.action=ui::SaveLoadAction::save;request.manager_slot=int(*state.desktop->active_seat);request.revision=100;
+            WatcomRandom expected(state.watcom_seed);const uint32_t hi=expected.range(0,0x8fff),lo=expected.range(0,0x8fff);const auto key=uint8_t(expected.range(0,255)+'n'),byte=uint8_t(expected.range(0,255));
+            const auto save=resumed.prepare_manual_save(request);check(resumed.revision()==101&&resumed.snapshot().watcom_seed==expected.seed()&&resumed.snapshot().game_seed==state.game_seed&&save.id2==lo+hi*0x10000u+1&&save.key==key&&save.random==byte,"manual save lost Original four-draw header/state");
+            check(read_save(save)==resumed.snapshot(),"manual save retained pre-save RNG seed");
+            const auto after=resumed.snapshot();rejects([&]{resumed.prepare_manual_save(request);},"save replay accepted");check(resumed.snapshot()==after,"replayed save changed state");
+            auto incomplete=state;incomplete.desktop->initial_event.reset();rejects([&]{session_app::Session::resume(resources,incomplete,91,100);},"resume invented an absent event cursor");}
+
         if(offer){const auto& listing=*state.world.transfer_market->rows[40];check(listing.player.valid()&&listing.seller==manager.club&&listing.human_seller&&listing.bids[0].bidder.valid(),"initial offer lost global actor IDs");}
         const auto accepted=state;rejects([&]{session_app::prepare_first_desk_event(state,owner,owner,reference);},"initial event replay accepted");check(state==accepted&&owner.revision==5,"replayed initial event leaked state");
     }
@@ -108,6 +122,18 @@ void first_event_tests(const CareerSnapshot& pending,const GameState& source) {
     rejects([&]{session_app::prepare_first_desk_event(interrupted,owner,{81,4},reference);},"initial event overwrote changed owner");draw_hook=nullptr;interrupted_desktop_owner=nullptr;check(interrupted==before&&owner.revision==5,"initial event rollback lost externally changed owner");
     auto occupied=before;occupied.calendar->schedule.others.push_back({0,CalendarDomain::shared,0x40});const auto busy=occupied;owner={81,4};
     rejects([&]{session_app::prepare_first_desk_event(occupied,owner,owner,reference);},"initial empty event skipped actual day-zero appointment");check(occupied==busy&&owner.revision==4,"busy day rejection changed state");
+}
+void file_io_tests() {
+    const auto directory=std::filesystem::temp_directory_path()/("openbmh-world12-file-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);
+    struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code ignored;std::filesystem::remove_all(path,ignored);}} cleanup{directory};
+    CareerSnapshot state;state.world=bmh::test::world12::complete_world();state.results=SeasonResults::empty(state.world.catalogue);const auto save=make_save(state);const auto path=directory/"Roundtrip.FBM";
+    ui::SaveLoadRequest request;request.action=ui::SaveLoadAction::save;request.path=path;
+    check(session_app::checked_game_path(directory,request)==path,"valid confined game path rejected");session_app::publish_game_save(path,save,false);check(read_save(load_savegame(path))==state,"published save roundtrip differs");
+    const auto bytes=read_file(path);rejects([&]{session_app::publish_game_save(path,save,false);},"unconfirmed target collision overwrote existing save");check(read_file(path)==bytes,"failed publish changed existing save");
+    request.path=directory.parent_path()/"Outside.FBM";rejects([&]{session_app::checked_game_path(directory,request);},"outside save directory accepted");
+    std::filesystem::create_directory(directory/"Blocked.FBM");request.path=directory/"Blocked.FBM";request.overwrite=true;rejects([&]{session_app::checked_game_path(directory,request);},"directory accepted as game file");rejects([&]{session_app::publish_game_save(request.path,save,true);},"failed replacement of directory accepted");
+    std::error_code error;std::filesystem::create_symlink(path,directory/"Alias.FBM",error);if(!error){request.path=directory/"Alias.FBM";rejects([&]{session_app::checked_game_path(directory,request);},"symlink game target accepted");}
+    for(const auto& entry:std::filesystem::directory_iterator(directory))check(entry.path().filename().string().find(".openbmh-save-")!=0,"failed save left a temporary behind");
 }
 void actual_management(ui::StartupFlow& flow,std::unique_ptr<session_app::Session>& session,const std::filesystem::path& data,const std::filesystem::path& output) {
     const auto game=session->snapshot().game_seed;const auto random=session->snapshot().watcom_seed;
@@ -150,11 +176,37 @@ void actual_management(ui::StartupFlow& flow,std::unique_ptr<session_app::Sessio
     if(!output.empty())write_savegame(output/"management.FBM",make_save(session->snapshot()));
     std::cout<<"Actual lineup swap/player card/pitch/tactics/training GUI commands, stable IDs, no RNG/time advance and saved display state passed\n";
 }
+void actual_save_load(ui::StartupFlow& flow,std::unique_ptr<session_app::Session>& session,const std::filesystem::path& data,const std::filesystem::path& output) {
+    const auto directory=flow.save_directory();const auto path=directory/"Resume.FBM";
+    const auto send=[&](ui::StartupFlow& ui,const ui::FlowResult& action,std::unique_ptr<session_app::Session>& owner){const auto result=session_app::serve_startup(ui,action,owner,data,91,owner?owner->scope():71);if(!result.error.empty())throw std::runtime_error("file input: "+result.error);};
+    const auto open=[&](int kind){const auto& items=flow.desktop()->state().items;const auto it=std::find_if(items.begin(),items.end(),[&](const auto& i){return i.kind==kind;});check(it!=items.end(),"file desktop icon missing");send(flow,flow.click(it->x+it->width/2,it->y+it->height/2),session);if(kind==10||kind==11)check(flow.screen_name()=="save_load","file dialog did not open");};
+    const auto capture=[&](const char* name,const ui::StartupFlow& ui){if(output.empty())return;const auto frame=ui.render();const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));std::ofstream f(output/(std::string(name)+".ppm"),std::ios::binary);f<<"P6\n320 240\n255\n";for(auto p:frame.pixels){const auto c=palette.argb[p];f.put(char(c>>16));f.put(char(c>>8));f.put(char(c));}};
+    auto original=session->snapshot();const auto old_revision=session->revision();open(11);check(flow.text("Resume"),"save filename input failed");capture("save-dialog",flow);
+    const auto save_request=flow.send_key("ENTER");check(save_request.request==ui::FlowRequest::file_action&&flow.pending_file(),"save dialog did not emit file action");send(flow,save_request,session);
+    check(flow.screen_name()=="desktop"&&session->revision()==old_revision+1,"successful save did not return to a newer desktop");const auto saved=session->snapshot();
+    check(read_save(load_savegame(path))==saved,"GUI save differs from accepted Session");WatcomRandom expected(original.watcom_seed);for(int n=0;n<4;++n)expected.rand();check(saved.watcom_seed==expected.seed()&&saved.game_seed==original.game_seed,"GUI save did not own exactly four W draws");
+    const auto first_bytes=read_file(path);open(11);flow.text("Resume");send(flow,flow.send_key("ENTER"),session);check(!flow.pending_file()&&read_file(path)==first_bytes,"overwrite happened without confirmation");send(flow,flow.send_key("ENTER"),session);
+    check(read_save(load_savegame(path))==session->snapshot(),"confirmed overwrite did not save accepted Session");const auto checkpoint=session->snapshot();
+    std::filesystem::create_directory(directory/"Blocked.FBM");open(11);flow.text("Blocked");send(flow,flow.send_key("ENTER"),session);const auto blocked=flow.send_key("ENTER");const auto before_failure=session->snapshot();const auto rev=session->revision();
+    check(!session_app::serve_startup(flow,blocked,session,data,91,session->scope()).error.empty()&&session->snapshot()==before_failure&&session->revision()==rev&&!flow.pending_file(),"failed file operation changed live state or left pending request");capture("save-failure",flow);send(flow,flow.send_key("ESC"),session);
+    open(18);const auto rules=session->rules();send(flow,flow.click(rules.u8(layout::Tactics_Click_RuntimeField)+1,rules.u8(layout::Tactics_Click_RuntimeField3)+1),session);send(flow,flow.click(0,0,true),session);check(session->snapshot()!=checkpoint,"load restoration test did not change current career");
+    open(10);const auto info_backdrop=flow.render();check(flow.file_info_press(80,45),"typed game info did not open");const auto info=flow.render();for(int y=71;y<130;++y)for(int x=265;x<320;++x)check(info.pixels[size_t(y)*320+x]==info_backdrop.pixels[size_t(y)*320+x],"save info text escaped Original popup bounds");capture("load-info",flow);send(flow,flow.click(80,45),session);send(flow,flow.send_key("ENTER"),session);
+    check(session->snapshot()==checkpoint&&flow.screen_name()=="desktop","desktop load regenerated or failed to restore saved state");capture("loaded-desktop",flow);
+    auto corrupted=read_file(path);corrupted.back()^=1;{std::ofstream f(directory/"Bad.FBM",std::ios::binary);f.write(reinterpret_cast<const char*>(corrupted.data()),std::streamsize(corrupted.size()));}
+    open(10);const auto bad=flow.send_key("ENTER");const auto intact=session->snapshot();const auto revision=session->revision();check(!session_app::serve_startup(flow,bad,session,data,91,session->scope()).error.empty()&&session->snapshot()==intact&&session->revision()==revision,"corrupt load replaced live state");capture("load-failure",flow);send(flow,flow.send_key("ESC"),session);
+    ui::StartupFlow fresh(data,directory,ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> loaded;fresh.click(60,215);send(fresh,fresh.click(240,215),loaded);check(fresh.screen_name()=="save_load","setup load did not open typed dialog");
+    fresh.click(80,55);const auto request=fresh.send_key("ENTER");resume_draws=0;draw_hook=count_resume_draw;send(fresh,request,loaded);draw_hook=nullptr;
+    check(!resume_draws&&loaded&&loaded->snapshot()==checkpoint&&fresh.desktop()->state().options==session->options(),"setup load regenerated data/RNG or kept setup options instead of saved options");
+    const auto& items=fresh.desktop()->state().items;const auto lineup=std::find_if(items.begin(),items.end(),[](const auto& i){return i.kind==3;});send(fresh,fresh.click(lineup->x+lineup->width/2,lineup->y+lineup->height/2),loaded);check(fresh.in_pitch(),"loaded saved pitch page did not reopen");capture("loaded-pitch",fresh);
+    if(!output.empty()){std::filesystem::copy_file(path,output/"manual-save.FBM",std::filesystem::copy_options::overwrite_existing);std::ofstream(output/"save-directory.txt")<<directory.string()<<'\n';}
+    std::cout<<"Actual Original file dialogs: save/confirmed overwrite/info/desktop load/setup load/corrupt rejection/reopened pitch, four save draws and zero resume draws passed\n";
+}
 void actual(const std::filesystem::path& data,const std::filesystem::path& output) {
     auto resources=session_app::load_runtime_resources(data);
     check(resources.reference.manager_teams.empty(),"reference retained invented manager ownership");
     for(auto slot:resources.reference.squad_slots)check((slot&0xfff)==0xfff,"data-only reference imported actual packed players");
-    ui::StartupFlow flow(data,{},ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> session;
+    const auto save_directory=(output.empty()?std::filesystem::temp_directory_path():output)/("save-dialog-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directories(save_directory);
+    ui::StartupFlow flow(data,save_directory,ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> session;
     const auto begin=flow.click(10,10,true);auto result=session_app::serve_startup(flow,begin,session,data,91,71);
     check(result.error.empty()&&result.progress==session_app::StartupProgress::selecting&&session&&flow.screen_name()=="manager_selection","actual setup did not create typed manager session");
     flow.click(200,95);flow.click(252,95);flow.click(239,154);flow.click(10,10,true);
@@ -174,6 +226,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     const auto declined=session_app::serve_startup(flow,unsupported,session,data,91,71);
     check(!declined.error.empty()&&session->snapshot()==untouched&&session->revision()==live_revision&&!flow.desktop()->pending(),"unsupported next day fell through to legacy or left a stuck command");
     actual_management(flow,session,data,output);
+    actual_save_load(flow,session,data,output);
     ui::StartupFlow mixed(data,{},ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> multi;
     mixed.click(resources.german.u16(layout::Setup_FormatError_RuntimeField3+6*2)+10,resources.german.u8(layout::Setup_FormatError_RuntimeField4+6)+10);
     check(mixed.options().managers==2,"actual setup failed to choose two managers");
@@ -202,6 +255,7 @@ int main(int argc,char** argv)try {
         desktop_tests(session.snapshot(),resources.reference);
         first_event_tests(session.snapshot(),resources.reference);
     }
+    file_io_tests();
     if(argc>1)actual(argv[1],argc>2?std::filesystem::path(argv[2]):std::filesystem::path{});
     std::cout<<"Six session scopes, owned chooser revisions, Original desktop entry/RNG/country policy, S4/S5/S6/S7 saves, first events/offers and rollback passed\n";
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}

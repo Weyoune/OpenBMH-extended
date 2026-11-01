@@ -6,7 +6,7 @@
 #include "ui/manager.hpp"
 #include "ui/world12_manager_selection.hpp"
 #include "ui/preparation.hpp"
-namespace bmh::ui {struct DeskRequest;}
+namespace bmh::ui {struct DeskRequest;struct SaveLoadRequest;}
 namespace bmh::app::world12 {
 struct RuntimeResources {
     bmh::world12::World master;
@@ -20,6 +20,11 @@ RuntimeResources load_runtime_resources(const std::filesystem::path& directory);
 class Session {
 public:
     Session(RuntimeResources,ui::SetupOptions,uint32_t seed,uint64_t scope);
+    static Session resume(RuntimeResources,bmh::world12::CareerSnapshot,uint64_t scope,uint64_t revision);
+    const ui::SetupOptions& options()const{return options_;}
+    Savegame prepare_manual_save(const ui::SaveLoadRequest&);
+    void validate_file_owner(int manager_slot,uint64_t revision)const;
+    bool preparation_open()const{return preparation_menu_.has_value();}
     ui::SelectionContext selection_context()const;
     void confirm_manager(const ui::ManagerChoice&,uint64_t expected_revision);
     void prepare_start(uint64_t expected_revision);
@@ -37,6 +42,8 @@ public:
     const LeImage& rules()const{return resources_.german;}
     bool prepared()const{return state_.world.transfer_market.has_value();}
 private:
+    struct ResumeTag {};
+    Session(RuntimeResources,bmh::world12::CareerSnapshot,uint64_t scope,uint64_t revision,ResumeTag);
     RuntimeResources resources_;ui::SetupOptions options_;
     bmh::world12::CareerSnapshot state_;ManagerActionOwner owner_;
     InitialCompetitionOutcome draws_;InitialManagerServicesOutcome services_;
