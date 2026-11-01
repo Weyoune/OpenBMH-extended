@@ -591,6 +591,21 @@ int transfer_club_score(const TransferClubScoreInput& input,WatcomRandom& rand) 
     return score;
 }
 
+ComputerBidAmounts computer_bid_amounts(uint32_t fee,uint32_t salary,uint8_t term,
+    uint32_t source_key,uint16_t club_flags,int bonus_need,bool high,WatcomRandom& rand) {
+    uint32_t fee_base = (fee / 10000) * 0x30d4;
+    if (term & 0x80) fee_base >>= 2;
+    const int years = ((term & 0x7F) - 1) / 0xc;
+    const uint32_t salary_base = ((uint32_t(years * 0x14 + 100) * salary) / 10000) * 100;
+    uint32_t k = source_key / 0x50;
+    int16_t level = int16_t(std::clamp(int(int16_t(k)), 0, 4));
+    level = int16_t(level + ((club_flags >> 14) & 3));
+    const uint32_t r = uint32_t(rand.range(0x5a, level * 5 + 0x5f));
+    uint32_t factor = (r * uint32_t(int16_t(bonus_need) + 100)) / 100;
+    if (high) factor = uint32_t(rand.range(0x78, 0x96));
+    return {((factor * fee_base) / 1000000) * 10000,((salary_base * r) / 10000) * 100};
+}
+
 void transfer_bid(GameState& g, int slot, uint32_t list, bool high, int months, GameRandom& game, WatcomRandom& rand,
                   MinuteReport& report) {
     StaticMemory& mem = g.memory;
@@ -732,18 +747,9 @@ void transfer_bid(GameState& g, int slot, uint32_t list, bool high, int months, 
         }
         // RateTransferBidSource: fee and salary bases of the offer
         const uint8_t term = mem.u8(list + 0x34 + uint32_t(free_bid));
-        uint32_t fee_base = (mem.u32(list + 0x2c) / 10000) * 0x30d4;
-        if (term & 0x80) fee_base >>= 2;
-        const int years = ((term & 0x7F) - 1) / 0xc;
-        const uint32_t salary_base = ((uint32_t(years * 0x14 + 100) * mem.u32(list + 0x30)) / 10000) * 100;
-        uint32_t k = keys[0] / 0x50;
-        int16_t level = int16_t(std::clamp(int(int16_t(k)), 0, 4));
-        level = int16_t(level + ((g.team_flags.at(size_t(chosen)) >> 14) & 3));
-        const uint32_t r = uint32_t(rand.range(0x5a, level * 5 + 0x5f));
-        uint32_t factor = (r * uint32_t(int16_t(bonus_need) + 100)) / 100;
-        if (high) factor = uint32_t(rand.range(0x78, 0x96));
-        mem.set32(list + 0x1c + uint32_t(free_bid) * 4, ((factor * fee_base) / 1000000) * 10000);
-        mem.set32(list + 0x0c + uint32_t(free_bid) * 4, ((salary_base * r) / 10000) * 100);
+        const auto amounts=computer_bid_amounts(mem.u32(list+0x2c),mem.u32(list+0x30),term,keys[0],g.team_flags.at(size_t(chosen)),bonus_need,high,rand);
+        mem.set32(list+0x1c+uint32_t(free_bid)*4,amounts.fee);
+        mem.set32(list+0x0c+uint32_t(free_bid)*4,amounts.salary);
         for (int i = 0; i < 7; i++) mem.set8(list + 0x38 + uint32_t(free_bid) * 7 + uint32_t(i), 0);
         return;
     }

@@ -8,7 +8,7 @@
 
 `startup_reference_state` allocates the documented Core workspace and copies numeric static data, menus and formation tables. Its roster slots are empty, string pools have no actual identities and it owns no managers. Typed adapters project bounded world identities into that workspace. The reference-layout profile is explicit and checked against runtime dimensions; the package is not admitted as a legacy career.
 
-Export English rules once with `world12_export_english_runtime <supplied FLTD.EXE> <RULES-EN.DAT>`. This writes data/policies, not DOS/LE headers or code. The private preparation script accepts `--english-runtime` to include that export. The private v8 package adds only this rule resource to v7; master data and graphics remain unchanged and its manifest still declares `playable: false`.
+Export English rules once with `world12_export_english_runtime <supplied FLTD.EXE> <RULES-EN.DAT>`. This writes data/policies, not DOS/LE headers or code. The private preparation script accepts `--english-runtime` to include that export. The private v9 package corrects the English strength-table resource added in v8; master data and graphics remain unchanged and its manifest still declares `playable: false`. Existing v8 rules must be re-exported.
 
 ## SDL development entry
 
@@ -20,7 +20,7 @@ OpenBMH --world12-dev --data <prepared-directory> --seed 91
 
 The directory must contain the typed master, English rules and country-setup assets, either loose or in COMMUNITY.OBD. This explicit development entry opens the Original setup/manager UI and calls the same typed startup controller as the input tests. Unused legacy match/post-match viewers are not constructed for this path. Normal legacy validation and startup remain separate.
 
-Final preparation currently stops with a development notice. The first-day owner, Source preparation-screen presentation and desktop/menu/live adoption still need integration. This flag is not a playable release or a substitute legacy desktop; do not remove the development boundary until those gates pass.
+Final preparation now stages the [first empty event and typed Original desktop](FIRST_EVENT.md). The first desk is displayed with actual session state. Initial entrants/draw/ticket presentation, management commands and later-day/live adoption still need integration. This development flag is not a playable release; keep the package non-playable until those gates pass.
 
 ## Evidence
 
@@ -32,4 +32,4 @@ Validation of this integration checkpoint: all 28 targeted Linux regressions and
 
 ## Desktop persistence
 
-Prepared sessions now include the [desktop runtime](DESKTOP_STATE.md). Layouts are copied during the same staged preparation commit. An initial DeskDate transaction is available for the future event owner, with checked revision, retained random streams, prestige and autosave state. It is deliberately not called by `serve_startup`: event preparation, pre-match offer/pools and presentation have to precede it.
+Prepared sessions now include the [desktop runtime](DESKTOP_STATE.md). Layouts are copied during the same staged preparation commit. An initial DeskDate transaction is available for the future event owner, with checked revision, retained random streams, prestige and autosave state. `serve_startup` now calls the first-event owner before the read-only desktop attachment; that owner prepares its order, initial offer and empty pools before DeskDate. Initial competition/receipt presentation remains pending.

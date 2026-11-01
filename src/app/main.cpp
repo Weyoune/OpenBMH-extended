@@ -1713,9 +1713,9 @@ int main(int argc, char** argv) {
         std::optional<Uint8> timed_notice_release;
         auto handle = [&](const ui::FlowResult& r) {
             if(world12_development){
+                if(r.request==ui::FlowRequest::end_session){if(quit_confirmation.confirm())running=false;else flow.reject_desk_action("Beenden abgebrochen.");dirty=true;return;}
                 const auto result=app::world12::serve_startup(flow,r,world_session,data,seed,1);
                 if(!result.error.empty())std::fprintf(stderr,"world12: %s\n",result.error.c_str());
-                if(result.progress==app::world12::StartupProgress::prepared)SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION,"OpenBMH 1.2 Entwicklung","Karrierestart vorbereitet. Die Anbindung von erstem Spieltag und Desktop ist noch in Arbeit.",window);
                 dirty=true;return;
             }
 

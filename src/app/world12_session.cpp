@@ -14,6 +14,7 @@ RuntimeResources load_runtime_resources(const std::filesystem::path& data) {
     RuntimeResources r;r.master=decode_world(read_file(ui::asset_path(data,"WORLD12.JSON")));
     r.german=load_reference_le(ui::asset_path(data,"BMH.exe"),DataProfile{});
     r.english=load_reference_le(ui::asset_path(data,"RULES-EN.DAT"),DataProfile{});
+    if(!r.english.u8(layout::LeagueStrengthRanges+1))throw FormatError("world12: English strength rules are incomplete; re-export RULES-EN.DAT");
     const auto layout_profile=DataProfile::international_11();
     if(r.german.u32(layout::CareerSession_DataDirectory_RuntimeField)!=layout_profile.counts.clubs||r.german.u32(layout::CareerSession_DataDirectory_RuntimeField3)!=layout_profile.counts.players||
         r.german.u16(layout::CareerSession_DispatchLineup_RuntimeField)!=layout_profile.counts.league_teams||!r.english.runtime_policy())throw FormatError("world12: unsupported numeric workspace or missing English runtime policy");
@@ -57,4 +58,8 @@ void Session::prepare_start(uint64_t revision) {
     if(state_!=before||owner_.scope!=before_owner.scope||owner_.revision!=before_owner.revision)throw FormatError("world12: session changed during preparation");
     state_=std::move(candidate);owner_=staged_owner;draws_=std::move(draws);services_=std::move(services);
 }
+DesktopEntryOutcome Session::begin_first_event(uint64_t revision) {
+    return prepare_first_desk_event(state_,owner_,{owner_.scope,revision},resources_.reference);
+}
+
 }

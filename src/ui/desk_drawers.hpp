@@ -18,6 +18,7 @@ std::optional<int> source_drawer_team(const DeskState&, int local_kind);
 class DeskDrawerRenderer {
 public:
     explicit DeskDrawerRenderer(const std::filesystem::path& data);
+    DeskDrawerRenderer(const std::filesystem::path& data,const LeImage& reference);
     bool handles(int native_kind) const;
     // Draws content only; the caller retains ownership of the native drawer frame.
     void draw(Image& target, const DeskState&, const DeskItem&,

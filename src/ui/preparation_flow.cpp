@@ -1572,6 +1572,7 @@ FlowResult StartupFlow::route_desk(DeskRequest action) {
     if (action.kind == DeskRequestKind::none) return {};
     if (action.kind == DeskRequestKind::end_session) return {true, FlowRequest::end_session, action};
     if (action.kind == DeskRequestKind::advance_turn) return {true, FlowRequest::kickoff, action};
+    if(desktop_&&desktop_->state().source=="world12")return {true,FlowRequest::desk_action,action};
     if (action.kind == DeskRequestKind::open_menu && action.menu_kind == 53 &&
         (action.value == 0 || action.value == 1)) {
         auto screen = std::make_unique<SaveLoadScreen>(data_, save_directory_,

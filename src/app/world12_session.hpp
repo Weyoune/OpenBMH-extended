@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 #include "app/world12_initial_season.hpp"
+#include "app/world12_first_event.hpp"
 #include "formats/le.hpp"
 #include "ui/manager.hpp"
 #include "ui/world12_manager_selection.hpp"
@@ -20,6 +21,7 @@ public:
     ui::SelectionContext selection_context()const;
     void confirm_manager(const ui::ManagerChoice&,uint64_t expected_revision);
     void prepare_start(uint64_t expected_revision);
+    DesktopEntryOutcome begin_first_event(uint64_t expected_revision);
     const bmh::world12::CareerSnapshot& snapshot()const{return state_;}
     uint64_t revision()const{return owner_.revision;}
     uint64_t scope()const{return owner_.scope;}

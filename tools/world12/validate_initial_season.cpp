@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "app/world12_initial_season.hpp"
+#include "app/world12_first_event.hpp"
+#include "game/turn.hpp"
+#include "game/matchday_setup.hpp"
+#include "game/weekly.hpp"
 #include "game/world12/codec.hpp"
 #include "game/world12/manager_match_state.hpp"
 #include "game/world12/manager_finance.hpp"
@@ -76,6 +80,29 @@ int main(int argc,char** argv)try {
     }
     if(read_save(make_save(state))!=state)throw std::runtime_error("initial market snapshot differs");
     std::cout<<initial_market.listings<<" initial market listings and shuffled fixtures, checkpoint/toggle/quotes/snapshot match Native; W="<<initial_market.watcom_draws<<'\n';
+    owner_app::initialize_desktops(state,reference);
+    size_t events=0,offers=0,loans=0,lures=0;
+    for(uint32_t seed=1;seed<30000&&(offers<16||!loans||!lures);++seed){
+        WatcomRandom probe(seed);probe.range(0,10000);const bool expected_offer=probe.range(0,70-int16_t(state.world.managers[0].match_state->staff_ratings[0])/50)==0;
+        if(!expected_offer&&events)continue;
+        auto classic=native;auto typed=state;typed.watcom_seed=seed;GameRandom source_game(typed.game_seed);WatcomRandom source_random(seed);MinuteReport observed;
+        std::vector<uint8_t> refs(50);MatchdayContext context;context.month=7;context.referees=&refs;
+        const auto groups=prepare_event(classic,0,context,source_game,source_random,observed);
+        if(!groups.empty()||observed.unsupported)throw std::runtime_error("initial Native empty event produced fixtures/error");
+        const bool found=enter_event_desk(classic,0,groups,source_game,source_random,observed,true,[](const GameState&,WatcomRandom&){});
+        if(observed.unsupported)throw std::runtime_error(observed.reason);
+        owner_app::ManagerActionOwner event_owner{90,0};const auto entered=owner_app::prepare_first_desk_event(typed,event_owner,event_owner,reference);
+        const auto& event=*typed.desktop->initial_event;
+        if(typed.game_seed!=source_game.seed()||typed.watcom_seed!=source_random.seed()||entered.game_draws!=source_game.calls()||entered.watcom_draws!=source_random.calls())throw std::runtime_error("initial event RNG differs at seed "+std::to_string(seed));
+        if(event.matchday_number!=classic.memory.u32(layout::CurrentMatchday)||event.manager_order!=std::vector<uint8_t>{0}||event.offer.has_value()!=found||typed.desktop->managers[0].prestige!=classic.manager_records[0x211])throw std::runtime_error("initial event order/offer/prestige differs");
+        const auto& row=typed.world.transfer_market->rows[40];const auto at=layout::EditorList+40*0x58;
+        if(row){if(row->player.value!=(classic.squad_slots.at(size_t(runtime_dimensions.pool_first)+40)&0xfff)||row->fee!=classic.memory.u32(at+0x2c)||row->salary!=classic.memory.u32(at+0x30)||row->asking_percent!=classic.memory.u8(at+0x54)||row->demand_percent!=classic.memory.u8(at+0x55))throw std::runtime_error("initial offer quote differs");
+            const auto& bid=row->bids[0];if(bid.bidder.valid()&&(bid.bidder!=identities.at(classic.club_ids.at(classic.memory.u16(at)))||bid.fee!=classic.memory.u32(at+0x1c)||bid.salary!=classic.memory.u32(at+0xc)||bid.months!=classic.memory.u8(at+0x34)))throw std::runtime_error("initial offer bidder/amount/term differs");}
+        if(found){++offers;loans+=bool(row->bids[0].months&128);lures+=event.offer->salary_only;if(event.offer->warned!=bool(classic.memory.u32(layout::OfferSlots)&0x80000000u))throw std::runtime_error("initial offer warning differs");}
+        if(read_save(make_save(typed))!=typed)throw std::runtime_error("initial event snapshot differs");++events;
+    }
+    if(offers<16||!loans||!lures)throw std::runtime_error("initial event oracle did not exercise all offer kinds");
+    std::cout<<events<<" Native first-event comparisons, "<<offers<<" offers including "<<loans<<" loan terms and "<<lures<<" salary-only approaches: quotes/bidders/terms/warnings/order/prestige/both RNGs/snapshots match\n";
     size_t scopes=0;
     for(int mask=1;mask<8;++mask){const GameScope scope{bool(mask&1),bool(mask&2),bool(mask&4)};if(!scope.club_play())continue;
         CareerSnapshot scoped;scoped.world=select_world_scope(master,scope);const auto limits=read_initial_strength_ranges(scoped.world.catalogue,german,english);const auto initial=make_player_initialization_plan(master,scope,limits);

@@ -140,15 +140,16 @@ struct Tables {
 };
 
 DeskState project(const StaticMemory& memory, const Tables& t, const LeImage& exe,
-                  int level, uint32_t date, int season_day, int season, uint64_t revision) {
+                  int level, uint32_t date, int season_day, int season, uint64_t revision,const SetupOptions* typed_options=nullptr) {
     DeskState d;
     d.revision = revision;
     d.options.duration = memory.u8(::bmh::layout::CareerDuration); d.options.mode = memory.u8(::bmh::layout::GameMode);
     d.options.managers = memory.u8(::bmh::layout::ManagerCount); d.options.difficulty = level;
     const auto competitions = memory.u32(::bmh::layout::CompetitionSelection);
     d.options.league = (competitions & 1) != 0; d.options.world = (competitions & 2) != 0;
+    if(typed_options){if(!typed_options->country_selection||typed_options->mode!=d.options.mode||typed_options->duration!=d.options.duration||typed_options->difficulty!=level||typed_options->managers!=d.options.managers||typed_options->league!=d.options.league||typed_options->world!=d.options.world)throw FormatError("desk: typed setup/reference mismatch");d.options=*typed_options;}
     if (d.options.managers < 1 || d.options.managers > 4 || level < 0 || level > 9 ||
-        d.options.duration < 1 || d.options.duration > 5 || d.options.mode < 1 || d.options.mode > 3 ||
+        (d.options.duration < 1&&!d.options.country_selection) || d.options.duration > 5 || d.options.mode < 1 || d.options.mode > 3 ||
         (!d.options.league && !d.options.world)) throw FormatError("desk: invalid saved setup");
     d.manager_slot = memory.u8(::bmh::layout::ActiveManager);
     if (d.manager_slot < 0 || d.manager_slot >= d.options.managers ||
@@ -400,13 +401,17 @@ std::vector<uint16_t> words(const Bytes& data) {
 
 void validate_desk_profile(const SetupOptions& o) {
     if (o.managers < 1 || o.managers > 4 || o.difficulty < 0 || o.difficulty > 9 ||
-        o.duration < 1 || o.duration > 5 || o.mode < 1 || o.mode > 3 ||
+        (o.duration < 1&&(!o.country_selection||o.duration!=0)) || o.duration > 5 || o.mode < 1 || o.mode > 3 ||
         (!o.league && !o.world) || (!o.league && o.managers != 1))
         throw FormatError("unsupported_desk_profile: invalid manager count or competition options");
 }
 
 void validate_desk_state(const DeskState& d) {
     validate_desk_profile(d.options);
+    if(d.source=="world12"){
+        if(!d.options.country_selection||d.badge_atlas.empty())throw FormatError("desk: typed resource/setup identity missing");
+        std::set<bmh::world12::ClubId> clubs;for(const auto& m:d.managers)if(!m.world_club.valid()||!clubs.insert(m.world_club).second)throw FormatError("desk: invalid typed manager club identity");
+    }
     if (d.mailbox_shortcut && (d.mailbox_shortcut->id != 44 ||
         d.mailbox_shortcut->kind != 63 || d.mailbox_shortcut->x != 178 || d.mailbox_shortcut->y != 215 ||
         d.mailbox_shortcut->width != 12 || d.mailbox_shortcut->height != 11))
@@ -530,10 +535,10 @@ DeskState desk_from_save(const SaveState& s, const LeImage& exe, uint64_t revisi
 DeskState desk_from_game(const GameState& g, const LeImage& exe, uint64_t revision,
                          const std::vector<MatchGroup>* current_groups,
                          std::optional<int> source_default_competition,
-                         const DeskMatchCallargs* source_callargs) {
+                         const DeskMatchCallargs* source_callargs,const SetupOptions* typed_options) {
     auto d = project(g.memory, {g.manager_records, g.tactics, g.manager_options, g.stocks, g.club_heap_78, g.club_names,
                      g.club_ids, g.squad_slots, g.players, g.team_morale, g.manager_teams, g.league_rounds},
-                     exe, g.level, g.date, g.season_day(), g.season, revision);
+                     exe, g.level, g.date, g.season_day(), g.season, revision,typed_options);
     project_automation_formation(d, g.formations, g.indoor);
     // DeskDate only auto-opens for an ordinary club manager; the national
     // runtime (0x165) suppresses this consumer while manual mailbox access remains valid.

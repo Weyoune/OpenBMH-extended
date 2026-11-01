@@ -20,6 +20,11 @@ struct TransferClubScoreInput {
     bool large_squad=false,domestic_capacity=false;
 };
 int transfer_club_score(const TransferClubScoreInput&,WatcomRandom&);
+struct ComputerBidAmounts {uint32_t fee=0,salary=0;};
+// Source unsigned arithmetic and random ordering, after contract-term choice.
+// source_key includes the caller's historical chosen-index quirk.
+ComputerBidAmounts computer_bid_amounts(uint32_t fee,uint32_t salary,uint8_t term,
+    uint32_t source_key,uint16_t club_flags,int bonus_need,bool high,WatcomRandom&);
 
 // ProjectTransferOfferList rates an existing bid. source_slot is the actual absolute SquadSlots
 // index supplied by its caller, not an inferred pool index or player ID.

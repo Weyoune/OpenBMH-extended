@@ -127,6 +127,7 @@ public:
     Image render() const;
     void load_reference(const std::filesystem::path& save, std::optional<bool> indoor = std::nullopt);
     void attach_initialized_career(CareerInitializationResult result);
+    void attach_world12_career(DeskState,const LeImage& reference);
     void acknowledge_desk(DeskState state);
     void reject_desk_action(std::string reason);
     void acknowledge_desk_notice(const DeskRequest& owner);

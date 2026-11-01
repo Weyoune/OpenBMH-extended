@@ -33,6 +33,7 @@ std::string_view desk_menu_name(int kind);
 class DesktopScreen {
 public:
     DesktopScreen(const std::filesystem::path& data, DeskState state);
+    DesktopScreen(const std::filesystem::path& data, DeskState state,const LeImage& reference);
     Image render() const;
     DeskRequest click(int x, int y, bool right = false);
     DeskRequest pointer_down(int x, int y, bool right = false);

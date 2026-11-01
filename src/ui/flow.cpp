@@ -691,6 +691,14 @@ void StartupFlow::attach_initialized_career(CareerInitializationResult result) {
     confirmed_runtime_teams_ = runtime_teams;
 }
 
+void StartupFlow::attach_world12_career(DeskState state,const LeImage& reference) {
+    if(!pending_||desktop_||!pending_->options.country_selection||state.source!="world12"||state.options!=pending_->options||state.managers.size()!=pending_->managers.size())throw FormatError("world12: invalid desktop attachment");
+    validate_desk_state(state);
+    for(size_t i=0;i<state.managers.size();++i){const auto& selected=pending_->managers[i];const auto& actual=state.managers[i];if(!selected.world_club.valid()||selected.world_club!=actual.world_club||selected.name!=actual.name||selected.portrait!=actual.portrait)throw FormatError("world12: confirmed desktop identity mismatch");}
+    const auto teams=state.manager_teams;auto desktop=std::make_unique<DesktopScreen>(data_,std::move(state),reference);
+    desktop_=std::move(desktop);pending_.reset();engine_attached_=true;confirmed_runtime_teams_=teams;
+}
+
 void StartupFlow::acknowledge_desk(DeskState state) {
     if (!desktop_ || !engine_attached_ || in_preparation_menu() || in_readonly_view() || state.source != "engine_projection")
         throw FormatError("desk acknowledgement requires an attached engine projection");

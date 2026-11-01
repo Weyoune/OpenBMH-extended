@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "ui/setup.hpp"
+#include "game/world12/identity.hpp"
 
 namespace bmh { struct GameState; class SaveState; }
 namespace bmh { struct MatchGroup; }
@@ -25,6 +26,7 @@ struct DeskManagerIdentity {
     int runtime_club = -1, club_identity_key = -1, league = -1, portrait = 0;
     uint16_t badge = 0;
     std::string name;
+    bmh::world12::ClubId world_club;
     bool operator==(const DeskManagerIdentity&) const = default;
 };
 struct DeskMatchCallargs {
@@ -68,6 +70,7 @@ struct DeskState {
     bool national_coach_takeover = false;
     std::string manager_name, club_name;
     uint16_t badge = 0;
+    std::string badge_atlas; // Explicit typed resource; empty retains the legacy W selector.
     uint32_t day_counter = 0;
     int season_index = 0, season_day = 0;
     std::optional<int> league_round, table_position, strength;
@@ -122,7 +125,8 @@ DeskState desk_from_save(const SaveState&, const LeImage&, uint64_t revision = 0
 DeskState desk_from_game(const GameState&, const LeImage&, uint64_t revision,
                          const std::vector<MatchGroup>* current_groups = nullptr,
                          std::optional<int> source_default_competition = std::nullopt,
-                         const DeskMatchCallargs* source_callargs = nullptr);
+                         const DeskMatchCallargs* source_callargs = nullptr,
+                         const SetupOptions* typed_options = nullptr);
 DeskState load_reference_desk(const std::filesystem::path& save, const LeImage& executable);
 std::string desk_json(const DeskState&);
 void validate_desk_profile(const SetupOptions&);

@@ -1205,6 +1205,7 @@ inline constexpr auto LeagueResults = 0xba3c4;
 inline constexpr auto LeagueRoundCounters = 0xbb4c1;
 inline constexpr auto LeagueSizes = 0xa2bcd;
 inline constexpr auto LeagueStrengthRanges = 0xa2c1c;
+inline constexpr auto EnglishLeagueStrengthRanges = 0x6f344;
 inline constexpr auto LeagueTableDisplayModes = 0xb602c;
 inline constexpr auto LeagueTableDisplayModesUnsigned = 0xb602cu;
 inline constexpr auto LeagueTableRangeDialog_Backdrop_ExecutableField = 0xaf240;

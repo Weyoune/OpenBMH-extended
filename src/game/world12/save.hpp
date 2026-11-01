@@ -12,11 +12,25 @@ struct ManagerDesktop {
     std::array<std::array<uint8_t,16>,54> layout{};
     bool operator==(const ManagerDesktop&)const=default;
 };
+struct PendingDeskOffer {
+    uint8_t seat=0,row=40;
+    bool salary_only=false,warned=false;
+    bool operator==(const PendingDeskOffer&)const=default;
+};
+struct InitialDeskEvent {
+    uint16_t matchday_number=0;
+    std::vector<uint8_t> manager_order;
+    // The initial event has no fixtures. Its Toto coupon is open and empty.
+    bool pools_open=true;
+    std::optional<PendingDeskOffer> offer;
+    bool operator==(const InitialDeskEvent&)const=default;
+};
 struct DesktopRuntime {
     std::vector<ManagerDesktop> managers;
     std::optional<uint8_t> active_seat;
     bool autosave_pending=false;
     uint16_t autosave_month=0,autosave_months=0;
+    std::optional<InitialDeskEvent> initial_event;
     bool operator==(const DesktopRuntime&)const=default;
 };
 struct CareerSnapshot {

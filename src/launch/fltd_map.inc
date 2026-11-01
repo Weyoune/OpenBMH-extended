@@ -160,6 +160,9 @@
     {::bmh::layout::LeaguePairings_SelectorEvent_RuntimeField, 4, Kind::copy, ::bmh::layout::EnglishLayoutTranslation266, {}},
     {::bmh::layout::CalendarFirstLeague, 1, Kind::copy, ::bmh::layout::EnglishLayoutTranslation267, {}},
     {::bmh::layout::CareerSession_FormatError_RuntimeField4, 1, Kind::copy, ::bmh::layout::EnglishLayoutTranslation268, {}},
+    // The strength table starts after English alignment padding; extending the
+    // preceding one-byte object maps its first ranges to zeros instead.
+    {::bmh::layout::LeagueStrengthRanges, 18, Kind::copy, ::bmh::layout::EnglishLeagueStrengthRanges, {}},
     {::bmh::layout::GermanLayoutTranslation2, 8, Kind::copy, ::bmh::layout::EnglishLayoutTranslation269, {}},
     {::bmh::layout::GermanLayoutTranslation3, 2, Kind::copy, ::bmh::layout::EnglishLayoutTranslation270, {}},
     {::bmh::layout::TeamsWithSquads, 2, Kind::copy, ::bmh::layout::EnglishLayoutTranslation271, {}},

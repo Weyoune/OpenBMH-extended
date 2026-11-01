@@ -70,7 +70,35 @@ void desktop_tests(CareerSnapshot prepared,const GameState& source,const std::fi
     auto invalid=before;invalid.desktop->managers.push_back(invalid.desktop->managers.front());rejects([&]{make_save(invalid);},"duplicate saved desktop accepted");
     invalid=before;invalid.desktop->active_seat=4;rejects([&]{make_save(invalid);},"unknown active desktop accepted");
     auto truncated=make_save(before);truncated.stream.pop_back();rejects([&]{read_save(truncated);},"truncated desktop snapshot accepted");
+    auto s5=make_save(before);s5.stream[7]='5';s5.stream.pop_back();s5.checksum=0;for(auto b:s5.stream)s5.checksum=uint8_t(s5.checksum+b);check(read_save(s5)==before,"previous S5 desktop snapshot ceased to load");
     auto old=before;old.desktop.reset();auto legacy=make_save(old);legacy.stream[7]='4';legacy.stream.pop_back();legacy.checksum=0;for(auto b:legacy.stream)legacy.checksum=uint8_t(legacy.checksum+b);check(read_save(legacy)==old,"previous S4 snapshot ceased to load");
+}
+CareerSnapshot first_event_fixture(CareerSnapshot state,const GameState& reference) {
+    InitialCompetitionFields fields;std::vector<ClubId> clubs;for(const auto& [id,club]:state.world.clubs)if(club.kind==ClubKind::club)clubs.push_back(id);
+    size_t at=0;const size_t sizes[]={64,24,32};for(size_t k=0;k<3;++k){for(size_t i=0;i<sizes[k];++i)fields.fields[k].push_back(clubs.at(at++));fields.holders[k]=fields.fields[k].front();}
+    if(state.world.catalogue.scope.international)for(uint32_t i=0;i<4;++i){ClubRecord nation;nation.id={3000000000u+i};nation.name="Nation "+std::to_string(i);nation.crest=state.world.clubs.begin()->second.crest;nation.kind=ClubKind::national_team;state.world.clubs[nation.id]=nation;fields.national_field.push_back(nation.id);}
+    for(auto& manager:state.world.managers)manager.career->season_services.emplace();fields.manager_services_complete=true;state.world.initial_competitions=fields;state.world.transfer_market.emplace();
+    SeasonCalendar dates;for(const auto& league:state.world.catalogue.leagues)for(int round=1;round<=league.rounds();++round)dates.leagues.push_back({uint16_t(10+round*7),league.id,uint8_t(round)});state.calendar=CalendarCursor{dates,0,0};
+    session_app::initialize_desktops(state,reference);state.validate();return state;
+}
+void first_event_tests(const CareerSnapshot& pending,const GameState& source) {
+    auto reference=source;reference.club_ids.resize(445);reference.team_flags.resize(445);reference.team_morale.resize(445);reference.memory.add_block(layout::Desktops,4*0x360);
+    const auto before=first_event_fixture(pending,reference);GameRandom g(before.game_seed);std::vector<uint8_t> order;for(const auto& m:before.world.managers)order.push_back(m.seat);
+    for(size_t i=0;i<order.size();++i)std::swap(order[i],order[size_t(g.range(0,int(order.size())-1))]);
+    const auto& manager=before.world.managers.at(order.front());
+    for(bool offer:{false,true}){
+        uint32_t seed=1;for(;;++seed){WatcomRandom probe(seed);probe.range(0,10000);if((probe.range(0,70-int16_t(manager.match_state->staff_ratings[0])/50)==0)==offer)break;}
+        auto state=before;state.watcom_seed=seed;session_app::ManagerActionOwner owner{81,4};const auto result=session_app::prepare_first_desk_event(state,owner,owner,reference);
+        check(owner.revision==5&&state.desktop->active_seat==order.front()&&state.desktop->initial_event->manager_order==order&&state.desktop->initial_event->offer.has_value()==offer,"initial event lost order/offer/owner");
+        check(result.game_draws>=order.size()+100&&result.watcom_draws>1&&state.date==before.date&&state.calendar==before.calendar&&state.results==before.results,"initial event skipped random draws or advanced time");
+        check(read_save(make_save(state))==state,"initial event/offer save roundtrip differs");
+        if(offer){const auto& listing=*state.world.transfer_market->rows[40];check(listing.player.valid()&&listing.seller==manager.club&&listing.human_seller&&listing.bids[0].bidder.valid(),"initial offer lost global actor IDs");}
+        const auto accepted=state;rejects([&]{session_app::prepare_first_desk_event(state,owner,owner,reference);},"initial event replay accepted");check(state==accepted&&owner.revision==5,"replayed initial event leaked state");
+    }
+    auto interrupted=before;session_app::ManagerActionOwner owner{81,4};interrupted_desktop_owner=&owner;draw_hook=interrupt_desktop;
+    rejects([&]{session_app::prepare_first_desk_event(interrupted,owner,{81,4},reference);},"initial event overwrote changed owner");draw_hook=nullptr;interrupted_desktop_owner=nullptr;check(interrupted==before&&owner.revision==5,"initial event rollback lost externally changed owner");
+    auto occupied=before;occupied.calendar->schedule.others.push_back({0,CalendarDomain::shared,0x40});const auto busy=occupied;owner={81,4};
+    rejects([&]{session_app::prepare_first_desk_event(occupied,owner,owner,reference);},"initial empty event skipped actual day-zero appointment");check(occupied==busy&&owner.revision==4,"busy day rejection changed state");
 }
 void actual(const std::filesystem::path& data,const std::filesystem::path& output) {
     auto resources=session_app::load_runtime_resources(data);
@@ -86,7 +114,15 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     check(session->snapshot().world.manager_country(0)==Country::england&&session->snapshot().world.transfer_market,"actual country/club choice lost during complete start");
     check(read_save(make_save(session->snapshot()))==session->snapshot(),"actual session snapshot lost data");
     if(!output.empty()){write_savegame(output/"prepared-start.FBM",make_save(session->snapshot()));check(read_save(load_savegame(output/"prepared-start.FBM"))==session->snapshot(),"actual on-disk typed snapshot differs");const auto world=encode_world(session->snapshot().world);std::ofstream f(output/"prepared-world.json",std::ios::binary);f.write(reinterpret_cast<const char*>(world.data()),std::streamsize(world.size()));}
-    desktop_tests(session->snapshot(),resources.reference,output.empty()?output:output/"single");
+    check(flow.desktop()&&flow.screen_name()=="desktop"&&flow.desktop()->state().managers[0].world_club==session->snapshot().world.managers[0].club,"typed startup did not attach actual global-ID desktop");
+    if(!output.empty()){const auto frame=flow.render();const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));std::ofstream f(output/"first-desktop.ppm",std::ios::binary);f<<"P6\n320 240\n255\n";for(auto p:frame.pixels){const auto c=palette.argb[p];f.put(char(c>>16));f.put(char(c>>8));f.put(char(c));}}
+    check(flow.desktop()->state().strength&&*flow.desktop()->state().strength>30,"English desktop still uses missing/zero strength rules");
+    const auto untouched=session->snapshot();const auto live_revision=session->revision();
+    const auto advance=*std::find_if(flow.desktop()->state().items.begin(),flow.desktop()->state().items.end(),[](const auto& item){return item.kind==12;});
+    const auto unsupported=flow.click(advance.x+advance.width/2,advance.y+advance.height/2);
+    check(unsupported.request==ui::FlowRequest::kickoff,"actual desktop did not route kickoff to its owner");
+    const auto declined=session_app::serve_startup(flow,unsupported,session,data,91,71);
+    check(!declined.error.empty()&&session->snapshot()==untouched&&session->revision()==live_revision&&!flow.desktop()->pending(),"unsupported next day fell through to legacy or left a stuck command");
     ui::StartupFlow mixed(data,{},ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> multi;
     mixed.click(resources.german.u16(layout::Setup_FormatError_RuntimeField3+6*2)+10,resources.german.u8(layout::Setup_FormatError_RuntimeField4+6)+10);
     check(mixed.options().managers==2,"actual setup failed to choose two managers");
@@ -95,8 +131,11 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     check(selected.error.empty()&&selected.progress==session_app::StartupProgress::selecting&&multi->snapshot().world.managers.size()==1,"actual first manager confirmation did not resume newer chooser context");
     mixed.click(10,10,true);selected=session_app::serve_startup(mixed,mixed.click(100,171),multi,data,91,72);
     check(selected.error.empty()&&selected.progress==session_app::StartupProgress::prepared&&multi->snapshot().world.manager_country(0)==Country::england&&multi->snapshot().world.manager_country(1)==Country::germany,"actual mixed manager country ownership lost across GUI confirmations");
-    desktop_tests(multi->snapshot(),resources.reference,output.empty()?output:output/"mixed");
-    std::cout<<"Actual standalone data-only package: original setup/England picker -> typed confirmation -> all start services/market/snapshot passed; desktop/day owner still pending\n";
+    check(mixed.desktop()&&mixed.screen_name()=="desktop"&&multi->snapshot().desktop->initial_event&&multi->snapshot().date==0,"mixed session did not attach first desktop");
+    const auto event_revision=multi->revision();const auto entered=multi->snapshot();rejects([&]{multi->begin_first_event(event_revision);},"mixed session repeated initial event");check(multi->snapshot()==entered&&multi->revision()==event_revision,"mixed session replay changed state");
+    check(read_save(make_save(multi->snapshot()))==multi->snapshot(),"mixed initial event did not survive save");
+    if(!output.empty())write_savegame(output/"first-event.FBM",make_save(multi->snapshot()));
+    std::cout<<"Actual standalone data-only package: original setup/England picker -> typed confirmation -> all start services/market/snapshot passed; first empty event/desktop attached; management and subsequent day owners still pending\n";
 }
 }
 int main(int argc,char** argv)try {
@@ -109,7 +148,8 @@ int main(int argc,char** argv)try {
             session.confirm_manager(choice,context.revision);check(session.snapshot().world.managers.back().club==choice.world_club&&session.revision()==context.revision+1,"session chooser lost stable identity/revision");const auto accepted=session.snapshot();rejects([&]{session.confirm_manager(choice,context.revision);},"session replayed accepted chooser result");check(session.snapshot()==accepted,"replayed manager changed session");}
         check(read_save(make_save(session.snapshot()))==session.snapshot(),"pending session snapshot lost state");
         desktop_tests(session.snapshot(),resources.reference);
+        first_event_tests(session.snapshot(),resources.reference);
     }
     if(argc>1)actual(argv[1],argc>2?std::filesystem::path(argv[2]):std::filesystem::path{});
-    std::cout<<"Six session scopes, owned chooser revisions, Original desktop entry/RNG/country policy, S4/S5 saves and rollback passed\n";
+    std::cout<<"Six session scopes, owned chooser revisions, Original desktop entry/RNG/country policy, S4/S5/S6 saves, first events/offers and rollback passed\n";
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}

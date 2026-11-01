@@ -788,9 +788,11 @@ int main(int argc, char** argv) {
               folder_drop.take_sound_ids()==std::vector<uint8_t>{12},
               "Source fully enclosed drop unlinks the dragged child exactly once");
         DesktopScreen unchanged_handle(data,child_desk);
-        unchanged_handle.pointer_down(41,41);
-        check(!unchanged_handle.pending() && unchanged_handle.take_sound_ids().empty(),
-              "existing LMB handle gesture has no invented RMB sound mapping");
+        const auto closed_handle=unchanged_handle.pointer_down(41,41);
+        check(unchanged_handle.pending()==closed_handle&&closed_handle.kind==DeskRequestKind::change_layout&&
+              closed_handle.layout_operation==DeskLayoutOperation::toggle_quickbar_drawer&&
+              unchanged_handle.take_sound_ids()==std::vector<uint8_t>{12},
+              "LMB corner closes the drawer immediately with its single unlink sound");
         unchanged_handle.pointer_up(41,41);
         check(unchanged_handle.take_sound_ids().empty(),"handle release remains silent at this Source boundary");
         auto covered_child=child_desk;

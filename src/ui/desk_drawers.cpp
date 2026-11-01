@@ -66,7 +66,9 @@ std::optional<int> source_drawer_team(const DeskState& state, int local_kind) {
 }
 
 DeskDrawerRenderer::DeskDrawerRenderer(const std::filesystem::path& data)
-    : exe_(load_le(asset_path(data, "BMH.exe"))),
+    : DeskDrawerRenderer(data,load_le(asset_path(data,"BMH.exe"))) {}
+DeskDrawerRenderer::DeskDrawerRenderer(const std::filesystem::path& data,const LeImage& reference)
+    : exe_(reference),
       icons_(load_vga(asset_path(data / "KB", "3.VGA"))),
       small_(load_font(asset_path(data / "F", "BMH3.FNT"))),
       texts_(load_textd(asset_path(data, "TEXTD.BLK"))) {}

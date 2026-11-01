@@ -106,15 +106,17 @@ std::string desk_request_json(const DeskRequest& r) {
 }
 
 DesktopScreen::DesktopScreen(const std::filesystem::path& data, DeskState state)
-    : data_(data), state_(std::move(state)), exe_(load_le(asset_path(data, "BMH.exe"))),
+    : DesktopScreen(data,std::move(state),load_le(asset_path(data,"BMH.exe"))) {}
+DesktopScreen::DesktopScreen(const std::filesystem::path& data,DeskState state,const LeImage& reference)
+    : data_(data), state_(std::move(state)), exe_(reference),
       background_(load_vga(asset_path(data / "KB", "129.VGA"))),
       icons_(load_vga(asset_path(data / "KB", "3.VGA"))), widgets_(load_vga(asset_path(data / "KB", "0.VGA"))),
       portraits_(load_vga(asset_path(data / "KB", "26.VGA"))), letters_(load_vga(asset_path(data / "KB", "54.VGA"))),
-      small_(load_font(asset_path(data / "F", "BMH3.FNT"))), texts_(load_textd(asset_path(data, "TEXTD.BLK"))), drawers_(data) {
+      small_(load_font(asset_path(data / "F", "BMH3.FNT"))), texts_(load_textd(asset_path(data, "TEXTD.BLK"))), drawers_(data,exe_) {
     validate_desk_state(state_);
     if (background_.width != 320 || background_.height != 240 || state_.portrait < 0 || state_.portrait > 11)
         throw FormatError("desktop: unsupported assets/state");
-    badge_ = load_vga(asset_path(data / "W", std::to_string(state_.badge >> 3) + ".VGA"));
+    badge_ = load_vga(state_.badge_atlas.empty()?asset_path(data/"W",std::to_string(state_.badge>>3)+".VGA"):asset_path(data,state_.badge_atlas));
     if (state_.next_opponent && *state_.next_opponent >= 0 && state_.next_opponent_badge &&
         !state_.next_opponent_badge_fallback) {
         const int selector = *state_.next_opponent_badge & 0x1ff;
@@ -695,7 +697,7 @@ void DesktopScreen::acknowledge(DeskState updated) {
     if (updated.manager_teams != state_.manager_teams && !turn_handoff)
         throw FormatError("desktop: manager runtime mapping changed unexpectedly");
     const auto same_identity = [](const DeskManagerIdentity& a, const DeskManagerIdentity& b) {
-        return a.club_identity_key == b.club_identity_key && a.name == b.name && a.portrait == b.portrait;
+        return a.club_identity_key == b.club_identity_key && a.name == b.name && a.portrait == b.portrait && a.world_club==b.world_club;
     };
     if (!turn_handoff && state_.national_coach_takeover &&
         (updated.national_return_roster.size() != state_.national_return_roster.size() ||
@@ -727,12 +729,12 @@ void DesktopScreen::acknowledge(DeskState updated) {
         for (size_t slot=0;slot<updated.managers.size();++slot)
             if (updated.managers[slot].club_identity_key != state_.managers[slot].club_identity_key ||
                 updated.managers[slot].name != state_.managers[slot].name ||
-                updated.managers[slot].portrait != state_.managers[slot].portrait)
+                updated.managers[slot].portrait != state_.managers[slot].portrait || updated.managers[slot].world_club!=state_.managers[slot].world_club)
                 throw FormatError("desktop: manager identity changed unexpectedly");
     }
     Image next_badge = badge_;
-    if ((updated.badge >> 3) != (state_.badge >> 3))
-        next_badge = load_vga(asset_path(data_ / "W", std::to_string(updated.badge >> 3) + ".VGA"));
+    if ((updated.badge >> 3) != (state_.badge >> 3)||updated.badge_atlas!=state_.badge_atlas)
+        next_badge = load_vga(updated.badge_atlas.empty()?asset_path(data_/"W",std::to_string(updated.badge>>3)+".VGA"):asset_path(data_,updated.badge_atlas));
     shortcut_bar_visible_ = updated.shortcut_bar_always || shortcut_bar_edge_toggle_;
     state_ = std::move(updated); badge_ = std::move(next_badge);
     pending_.reset(); last_rejection_.clear();
