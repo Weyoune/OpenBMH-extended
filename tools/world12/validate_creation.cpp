@@ -14,6 +14,7 @@
 #include "formats/le.hpp"
 #include "launch/fltd.hpp"
 #include <iostream>
+#include <algorithm>
 int main(int argc,char** argv)try {
     using namespace bmh;using namespace bmh::world12;
     if(argc!=4)throw std::runtime_error("usage: world12_creation_validate <WORLD12.JSON> <German reference rules directory> <supplied FLTD.EXE>");
@@ -36,6 +37,13 @@ int main(int argc,char** argv)try {
         if(p.attributes.w35c!=original.w35c||p.attributes.w368!=original.w368||p.attributes.w364!=original.w364)
             throw std::runtime_error("typed startup attributes differ from Original source player");}
     if(decode_world(encode_world(world))!=world)throw std::runtime_error("initialized source data failed roundtrip");
+    new_career_markets_and_moods(expected,a,ar);
+    initialize_career_markets_and_moods(world,initial_rules,b,br);
+    if(a.seed()!=b.seed()||a.calls()!=b.calls()||ar.seed()!=br.seed()||ar.calls()!=br.calls())throw std::runtime_error("typed market/mood RNG differs from direct Original initialization");
+    if(!std::equal(expected.stocks.begin(),expected.stocks.end(),world.markets->stocks.begin()))throw std::runtime_error("source stock history/trends differ");
+    for(size_t i=0;i<world.markets->funds.size();++i)if(world.markets->funds[i]!=expected.memory.u8(layout::FundBlock+uint32_t(i)))throw std::runtime_error("source initial fund state differs");
+    for(const auto& [id,club]:world.clubs)if(club.morale!=expected.team_morale.at(id.value)||club.match_flags!=expected.team_flags.at(id.value))throw std::runtime_error("source initial club mood/balance differs");
+    if(decode_world(encode_world(world))!=world)throw std::runtime_error("source market/mood state failed roundtrip");
     world.managers={{0,"Manager",world.membership[0].clubs[0],{0},0}};
     expected.manager_teams={0};initialize_career_manager_team_settings(expected,0);expected.manager_records[0x288]=0x16;expected.manager_records[0x218]=expected.manager_records[0x219]=15;
     expected.level=3;expected.projected_foreign_rule=german.u8(layout::ForeignPlayerLimitEnabled)!=0;
@@ -64,6 +72,7 @@ int main(int argc,char** argv)try {
     int goals=0;for(const auto& match:round.matches){if(!match.settled||match.end_minute<90)throw std::runtime_error("source human match did not complete");goals+=match.score.home+match.score.away;}
     std::cout<<round.matches.size()<<" source-data human/AI league matches, goals="<<goals<<", human events="<<presented<<"; actual scoring/settlement/snapshot passed (isolated probe)\n";
     std::cout<<"Source manager board/contracts/account phase and ages match direct Core calls; this excludes earlier club/stadium selection\n";
+    std::cout<<"Thirty stock days, six funds, every initial club mood/balance and both RNG streams match direct Core initialization\n";
     std::cout<<world.players.size()<<" real-data player records and both RNG streams match direct Original startup_players; initialized world roundtrip passed\n";
     return 0;
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}

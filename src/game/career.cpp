@@ -183,7 +183,7 @@ GameState startup_state(const LeImage& exe, const Database& db, const Bytes& m3_
 
 namespace bmh {
 
-void new_career_markets_and_moods(GameState& g, GameRandom& game, WatcomRandom& rand) {
+int initialize_career_market_bases(GameState& g, GameRandom& game, WatcomRandom& rand) {
     StaticMemory& mem = g.memory;
     for (uint32_t k = 0; k < 12; k++) {
         if (k < 6) mem.set32(::bmh::layout::FundBlock + k * 0x1c, (1u << k) * 100000);
@@ -193,7 +193,12 @@ void new_career_markets_and_moods(GameState& g, GameRandom& game, WatcomRandom& 
         g.stocks.at(s + 0x4e) = uint8_t(k * 20 + 100), g.stocks.at(s + 0x4f) = uint8_t((k * 20 + 100) >> 8);
     }
     stir_random(game, rand);
-    const int first = game.range(0, 1);
+    return game.range(0, 1);
+}
+
+void new_career_markets_and_moods(GameState& g, GameRandom& game, WatcomRandom& rand) {
+    const int first = initialize_career_market_bases(g, game, rand);
+    StaticMemory& mem = g.memory;
     if (g.texts) {
         auto name = [&](int record, uint32_t pointer) {
             const std::string& t = (*g.texts)[(pointer - ::bmh::layout::TextPointerTable) / 4];

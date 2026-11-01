@@ -111,6 +111,9 @@ namespace bmh {
 // Returns false if a step is not supported (report).
 bool new_career_before_dialog(GameState& g, GameRandom& game, WatcomRandom& rand, MinuteReport& report);
 // Its two parts: up to the club moods, and the ages, skills and extra players.
+// Initializes fund bases/share prices and stirs both generators; returns the
+// first default-manager-name slot. The thirty market days follow this prefix.
+int initialize_career_market_bases(GameState&, GameRandom&, WatcomRandom&);
 void new_career_markets_and_moods(GameState& g, GameRandom& game, WatcomRandom& rand);
 bool new_career_players(GameState& g, GameRandom& game, WatcomRandom& rand, MinuteReport& report);
 

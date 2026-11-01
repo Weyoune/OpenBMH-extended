@@ -136,12 +136,14 @@ void reset_club_moods(GameState& g, GameRandom& game, WatcomRandom& rand, bool n
     const uint16_t holders[4] = {mem.u16(::bmh::layout::Season_CareerSeasonSetup_RuntimeField4), mem.u16(::bmh::layout::Season_CareerSeasonSetup_RuntimeField), mem.u16(::bmh::layout::Season_CareerSeasonSetup_RuntimeField6), mem.u16(::bmh::layout::Season_CareerSeasonSetup_RuntimeField5)};
     rand.range(0, 2);  // local_18, a counter that is not used
     for (size_t team = 0; team < g.team_flags.size(); team++) {
+        if (new_career) {
+            initialize_career_club_mood(g, int(team), game, rand);
+            continue;
+        }
         g.team_morale.at(team) = uint8_t((g.team_morale.at(team) & 0xc0) | rand.range(0x14, 0x1e));
         g.team_flags.at(team) = uint16_t(game.range(0, 2) * 2);
         int high = 3, low = 0;  // iVar7 (bits 14-15), iVar8 (bits 12-13)
-        if (new_career) {
-            high = 1, low = 1;  // their initial values, never changed in this mode
-        } else if (std::find(std::begin(holders), std::end(holders), uint16_t(team)) == std::end(holders)) {
+        if (std::find(std::begin(holders), std::end(holders), uint16_t(team)) == std::end(holders)) {
             const int pos = int16_t(table_position(g, int(team)));  // TablePosition
             high = std::max(3 - pos / 6, 0);
             if (rand.range(0, 4) == 0) high = rand.range(0, 3);
@@ -151,6 +153,12 @@ void reset_club_moods(GameState& g, GameRandom& game, WatcomRandom& rand, bool n
         g.team_flags.at(team) = uint16_t(g.team_flags.at(team) | low << 12 | high << 14);
         club_balance(g, int(team), rand);  // CareerSeasonSetup4
     }
+}
+
+void initialize_career_club_mood(GameState& g, int team, GameRandom& game, WatcomRandom& rand) {
+    g.team_morale.at(size_t(team)) = uint8_t((g.team_morale.at(size_t(team)) & 0xc0) | rand.range(20, 30));
+    g.team_flags.at(size_t(team)) = uint16_t(game.range(0, 2) * 2 | 1 << 12 | 1 << 14);
+    club_balance(g, team, rand);
 }
 
 void club_balance(GameState& g, int team, WatcomRandom& rand) {

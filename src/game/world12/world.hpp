@@ -84,8 +84,16 @@ struct Manager {
     bool operator==(const Manager&)const=default;
 };
 struct CrestResource {std::string path;uint8_t cell=0;bool operator==(const CrestResource&)const=default;};
+struct CareerMarkets {
+    std::array<uint8_t,12*0x5c> stocks{};
+    std::array<uint8_t,6*0x1c> funds{};
+    uint8_t first_default_name=0;
+    bool operator==(const CareerMarkets&)const=default;
+};
 struct World {
     bool players_initialized=false;
+    // Present after the market/mood phase; old saves do not invent these values.
+    std::optional<CareerMarkets> markets={};
     int32_t development_balance=0;
     uint8_t trend_rotation=0;
     Catalogue catalogue=Catalogue::dual_classic();
