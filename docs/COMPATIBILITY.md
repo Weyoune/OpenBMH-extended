@@ -163,3 +163,11 @@ Extended typed careers retain the same per-manager guard in their canonical
 economy and schema22 world codec. Schema21 and earlier histories load as unknown
 and receive the same grace policy. Local engine projections map the guard by
 global manager seat, so managers in different countries do not share a limit.
+
+OpenBMH deviates from the original: monthly fund/property dividends multiply
+unit price by the dividend factor in 64 bits before the existing integer division.
+The monthly and annual previews and weekly offers use the same widened product.
+Per-unit rounding and the selected legacy/typed recipient policy are unchanged.
+This corrects intermediate overflow for representable dividends; account,
+deposit, property book value and monthly totals still use their native 32-bit
+storage and can overflow. It is not a complete large-balance finance fix.
