@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "formats/native_save_version.hpp"
 #include "formats/executable_layout.hpp"
 #include "ui/save_load.hpp"
 #include "formats/badge_policy.hpp"
@@ -191,7 +192,8 @@ bool SaveLoadScreen::info_press(int x, int y) {
         if(info_reader_){info_=info_reader_(entries_.at(size_t(selected_)).path);return true;}
         const auto saved = load_savegame(entries_.at(size_t(selected_)).path);
         const auto& h = saved.plain_header;
-        if (!saved.checksum_ok || (saved.version != "V2.24" && saved.version != "O1.1") || h.size() < 172 || h[0] < 1 || h[0] > 4)
+        require_native_savegame(saved, saved.version == "O1.1");
+        if (h.size() < 172 || h[0] < 1 || h[0] > 4)
             throw FormatError("save/load: invalid native information header");
         const auto field = [&](size_t at, size_t count) {
             const auto end = h.begin() + at + count;

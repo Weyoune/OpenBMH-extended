@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "formats/native_save_version.hpp"
 #include "game/state.hpp"
 #include "formats/badge_policy.hpp"
 #include "formats/executable_layout.hpp"
@@ -696,8 +697,7 @@ DeskState desk_from_game(const GameState& g, const LeImage& exe, uint64_t revisi
 
 DeskState load_reference_desk(const std::filesystem::path& path, const LeImage& exe) {
     auto fbm = load_savegame(path);
-    if (!fbm.checksum_ok) throw FormatError("desk: FBM checksum mismatch");
-    if (fbm.version != (exe.expanded_profile() ? "O1.1" : "V2.24")) throw FormatError("desk: unsupported FBM version");
+    require_native_savegame(fbm, exe.expanded_profile());
     DbCounts counts{exe.u32(::bmh::layout::CareerSession_DataDirectory_RuntimeField), exe.u32(::bmh::layout::CareerSession_DataDirectory_RuntimeField3), exe.u32(::bmh::layout::CareerSession_DataDirectory_RuntimeField2), exe.u32(::bmh::layout::CareerSession_DataDirectory_RuntimeField4), uint32_t(exe.u16(layout::CareerSession_DispatchLineup_RuntimeField)), 30};
     SaveState save(fbm.stream, counts);
     auto d = desk_from_save(save, exe);
