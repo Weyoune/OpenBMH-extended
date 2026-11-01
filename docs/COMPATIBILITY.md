@@ -171,3 +171,10 @@ Per-unit rounding and the selected legacy/typed recipient policy are unchanged.
 This corrects intermediate overflow for representable dividends; account,
 deposit, property book value and monthly totals still use their native 32-bit
 storage and can overflow. It is not a complete large-balance finance fix.
+Extended typed careers preserve the same wide club/player statistics with full
+global IDs in World schema 23. Human match updates, desktop sorting, shared
+line-up projection and typed snapshot save/load use the canonical counters.
+Older schemas start with the surviving native tactical values when first
+observed; lost high bits remain unknown. Typed title-history archival remains
+unavailable, and the reference game's title list is not presented as typed career
+history. See [long-career save format](formats/LONG_CAREER.md).

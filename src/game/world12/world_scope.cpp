@@ -7,6 +7,7 @@ World select_world_scope(const World& source,GameScope scope) {
     source.validate();scope.validate();
     if(source.players_initialized || source.markets || source.catalogue.scope!=GameScope{} || !source.managers.empty() || !source.loans.empty())
         throw std::invalid_argument("world12: scope selection requires an untouched complete master world");
+    if(!source.player_statistics.empty())throw std::invalid_argument("world12: observed player statistics cannot be re-scoped");
     if(source.development_balance!=0 || source.trend_rotation!=0)throw std::invalid_argument("world12: developed careers cannot be re-scoped");
     for(const auto& [id,club]:source.clubs)if(club.season_stats!=ClubSeasonStats{})throw std::invalid_argument("world12: played club records cannot be re-scoped");
     World selected=source;selected.catalogue=Catalogue::dual_classic(scope);

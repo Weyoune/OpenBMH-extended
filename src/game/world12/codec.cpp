@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <type_traits>
 #include <limits>
+#include <charconv>
 namespace bmh::world12 {
 namespace {
 using J=cli::Json;using A=J::Array;using O=J::Object;
@@ -15,6 +16,36 @@ std::string text(const J& j){if(!j.string()||j.string()->size()>4096)throw Forma
 J id(uint32_t value){return J(int64_t(value));}
 int32_t signed_number(const J& j){if(!j.integer()||*j.integer()<-2147483648LL||*j.integer()>2147483647LL)throw FormatError("world12: signed 32-bit value out of range");return int32_t(*j.integer());}
 bool boolean(const J& j){if(!j.boolean())throw FormatError("world12: boolean game scope expected");return *j.boolean();}
+uint64_t statistics_number(const J& input) {
+    if(!input.string() || input.string()->empty() || input.string()->size()>20)
+        throw FormatError("world12: statistics require exact unsigned decimal strings");
+    uint64_t result=0;const auto& value=*input.string();
+    const auto parsed=std::from_chars(value.data(),value.data()+value.size(),result);
+    if(parsed.ec!=std::errc{} || parsed.ptr!=value.data()+value.size())
+        throw FormatError("world12: statistics value out of range");
+    return result;
+}
+J encode_statistics(const GlobalPlayerStatistics& records) {
+    A rows;
+    for(const auto& [identity,s]:records) {
+        A counters;for(auto n:s.appearances)counters.emplace_back(std::to_string(n));
+        for(auto n:{s.total,s.goals,s.assists})counters.emplace_back(std::to_string(n));
+        rows.emplace_back(O{{"club",id(identity.first.value)},{"player",id(identity.second.value)},{"counters",std::move(counters)}});
+    }
+    return rows;
+}
+GlobalPlayerStatistics decode_statistics(const J& input) {
+    GlobalPlayerStatistics records;
+    for(const auto& row:array(input)) {
+        const auto identity=std::pair{ClubId{number(field(row,"club"))},PlayerId{number(field(row,"player"))}};
+        const auto& values=array(field(row,"counters"));
+        if(values.size()!=6)throw FormatError("world12: statistics dimensions must be six");
+        PlayerClubStatistics s;for(size_t n=0;n<3;++n)s.appearances[n]=statistics_number(values[n]);
+        s.total=statistics_number(values[3]);s.goals=statistics_number(values[4]);s.assists=statistics_number(values[5]);
+        if(!records.emplace(identity,s).second)throw FormatError("world12: duplicate global statistics identity");
+    }
+    return records;
+}
 J encode_tactical_backing(const std::optional<ManagerTacticalBacking>& value) {
     if(!value)return nullptr;
     A rows,marks,marked_by,formations,tail,enabled,automation;
@@ -216,11 +247,15 @@ Bytes encode_world(const World& world){
     for(const auto&[key,crest]:world.crests)crests.emplace_back(O{{"id",id(key.value)},{"resource",crest.path},{"cell",int(crest.cell)}});
     for(const auto&l:world.loans)loans.emplace_back(O{{"player",id(l.player.value)},{"owner",id(l.owner.value)},{"borrower",id(l.borrower.value)},{"months",int(l.months)},{"source_slot",l.source_slot?J(int(*l.source_slot)):J(nullptr)}});
     for(const auto&m:world.managers){J finance=nullptr;if(m.finance){const auto& f=*m.finance;finance=O{{"balance",J(int64_t(f.balance))},{"credit",id(f.credit)},{"income",id(f.income)},{"expenses",id(f.expenses)},{"bonus_paid",id(f.bonus_paid)},{"baseline",f.baseline?J(O{{"starting_balance",id(f.baseline->starting_balance)},{"account_flags",id(f.baseline->account_flags)}}):J(nullptr)}};}J tactics=nullptr;if(m.tactics){A rows;for(const auto& row:m.tactics->rows){A orders;for(auto value:row.orders)orders.emplace_back(int(value));rows.emplace_back(O{{"orders",std::move(orders)},{"partner",int(row.partner)},{"depth",int(row.depth)},{"lane",int(row.lane)}});}tactics=O{{"rows",std::move(rows)},{"automatic_weights",int(m.tactics->automatic_weights)},{"automatic_formation",int(m.tactics->automatic_formation)},{"backing",encode_tactical_backing(m.tactics->backing)}};}managers.emplace_back(O{{"seat",int(m.seat)},{"name",m.name},{"club",id(m.club.value)},{"start_league",id(m.start_league.value)},{"portrait",int(m.portrait)},{"finance",std::move(finance)},{"tactics",std::move(tactics)},{"match_state",encode_manager_match(m.match_state)},{"career",encode_manager_career(m.career)}});}
-    auto raw=cli::dump_json(O{{"format","openbmh-world-12"},{"version",22},{"profile",kProfile},{"scope",O{{"germany",world.catalogue.scope.germany},{"england",world.catalogue.scope.england},{"international",world.catalogue.scope.international}}},{"players_initialized",world.players_initialized},{"economy",encode_economy(world.economy)},{"markets",encode_markets(world.markets)},{"free_players",encode_free_players(world.free_players)},{"settings",encode_settings(world.settings)},{"initial_competitions",encode_initial_competitions(world.initial_competitions)},{"transfer_market",encode_market(world.transfer_market)},{"development_balance",J(int64_t(world.development_balance))},{"trend_rotation",int(world.trend_rotation)},{"players",std::move(players)},{"clubs",std::move(clubs)},{"leagues",std::move(members)},{"crests",std::move(crests)},{"loans",std::move(loans)},{"managers",std::move(managers)}});return Bytes(raw.begin(),raw.end());
+    auto raw=cli::dump_json(O{{"format","openbmh-world-12"},{"version",int(kWorldSchemaVersion)},{"profile",kProfile},{"scope",O{{"germany",world.catalogue.scope.germany},{"england",world.catalogue.scope.england},{"international",world.catalogue.scope.international}}},{"player_statistics",encode_statistics(world.player_statistics)},{"players_initialized",world.players_initialized},{"economy",encode_economy(world.economy)},{"markets",encode_markets(world.markets)},{"free_players",encode_free_players(world.free_players)},{"settings",encode_settings(world.settings)},{"initial_competitions",encode_initial_competitions(world.initial_competitions)},{"transfer_market",encode_market(world.transfer_market)},{"development_balance",J(int64_t(world.development_balance))},{"trend_rotation",int(world.trend_rotation)},{"players",std::move(players)},{"clubs",std::move(clubs)},{"leagues",std::move(members)},{"crests",std::move(crests)},{"loans",std::move(loans)},{"managers",std::move(managers)}});return Bytes(raw.begin(),raw.end());
 }
 World decode_world(const Bytes& bytes){
-    if(bytes.size()>32*1024*1024)throw FormatError("world12: database too large");auto root=cli::parse_json(std::string(bytes.begin(),bytes.end()));const auto version=number(field(root,"version"));if(text(field(root,"format"))!="openbmh-world-12"||(version<1||version>22)||text(field(root,"profile"))!=kProfile)throw FormatError("world12: unsupported database profile/version");
-    World w;if(version>=16)w.economy=decode_economy(field(root,"economy"),version);if(version>=15)w.transfer_market=decode_market(field(root,"transfer_market"),version);if(version>=13)w.initial_competitions=decode_initial_competitions(field(root,"initial_competitions"),version);if(version>=12)w.settings=decode_settings(field(root,"settings"));if(version>=11)w.free_players=decode_free_players(field(root,"free_players"));if(version>=10)w.markets=decode_markets(field(root,"markets"));if(version>=8)w.players_initialized=boolean(field(root,"players_initialized"));if(version>=4){w.development_balance=signed_number(field(root,"development_balance"));w.trend_rotation=uint8_t(number(field(root,"trend_rotation"),2));}if(version>=2){const auto& scope=field(root,"scope");w.catalogue=Catalogue::dual_classic({boolean(field(scope,"germany")),boolean(field(scope,"england")),boolean(field(scope,"international"))});}for(const auto& j:array(field(root,"players"))){PlayerRecord p;p.id={number(field(j,"id"))};p.attributes={text(field(j,"name")),number(field(j,"form_word"),4294967295u),number(field(j,"skill_word"),4294967295u),number(field(j,"identity_word"),4294967295u)};p.bonus=uint8_t(number(field(j,"bonus"),255));if(version>=3)p.cards=uint16_t(number(field(j,"cards"),65535));if(!w.players.emplace(p.id,p).second)throw FormatError("world12: duplicate player ID");}
+    if(bytes.size()>32*1024*1024)throw FormatError("world12: database too large");auto root=cli::parse_json(std::string(bytes.begin(),bytes.end()));const auto version=number(field(root,"version"));if(text(field(root,"format"))!="openbmh-world-12"||(version<1||version>kWorldSchemaVersion)||text(field(root,"profile"))!=kProfile)throw FormatError("world12: unsupported database profile/version");
+    World w;
+    if(version>=23)w.player_statistics=decode_statistics(field(root,"player_statistics"));
+    else if(const auto found=root.object()->find("player_statistics");found!=root.object()->end()&&!array(found->second).empty())
+        throw FormatError("world12: older schema cannot restore wide player statistics");
+    if(version>=16)w.economy=decode_economy(field(root,"economy"),version);if(version>=15)w.transfer_market=decode_market(field(root,"transfer_market"),version);if(version>=13)w.initial_competitions=decode_initial_competitions(field(root,"initial_competitions"),version);if(version>=12)w.settings=decode_settings(field(root,"settings"));if(version>=11)w.free_players=decode_free_players(field(root,"free_players"));if(version>=10)w.markets=decode_markets(field(root,"markets"));if(version>=8)w.players_initialized=boolean(field(root,"players_initialized"));if(version>=4){w.development_balance=signed_number(field(root,"development_balance"));w.trend_rotation=uint8_t(number(field(root,"trend_rotation"),2));}if(version>=2){const auto& scope=field(root,"scope");w.catalogue=Catalogue::dual_classic({boolean(field(scope,"germany")),boolean(field(scope,"england")),boolean(field(scope,"international"))});}for(const auto& j:array(field(root,"players"))){PlayerRecord p;p.id={number(field(j,"id"))};p.attributes={text(field(j,"name")),number(field(j,"form_word"),4294967295u),number(field(j,"skill_word"),4294967295u),number(field(j,"identity_word"),4294967295u)};p.bonus=uint8_t(number(field(j,"bonus"),255));if(version>=3)p.cards=uint16_t(number(field(j,"cards"),65535));if(!w.players.emplace(p.id,p).second)throw FormatError("world12: duplicate player ID");}
     for(const auto&j:array(field(root,"clubs"))){ClubRecord c;c.id={number(field(j,"id"))};c.name=text(field(j,"name"));c.country=Country(number(field(j,"country"),61));c.kind=ClubKind(number(field(j,"kind"),1));const auto& l=field(j,"league");if(l.integer())c.league={number(l,uint32_t(kLeagueSlots-1))};else if(!std::holds_alternative<std::nullptr_t>(l.value))throw FormatError("world12: invalid optional league");c.crest={number(field(j,"crest"))};c.kit=uint8_t(number(field(j,"kit"),255));c.rating=uint8_t(number(field(j,"rating"),255));c.short_span=uint8_t(number(field(j,"short_span"),255));if(version>=3){c.match_flags=uint16_t(number(field(j,"match_flags"),65535));c.morale=uint8_t(number(field(j,"morale"),63));}if(version>=9)c.fairplay_points=uint16_t(number(field(j,"fairplay_points"),65535));if(version>=7)c.lineup_indoor=boolean(field(j,"lineup_indoor"));if(version>=4){const auto& stats=field(j,"season_stats");const auto& counters=array(field(stats,"counters"));const auto& opponents=array(field(stats,"opponents"));const auto& dates=array(field(stats,"dates"));if(counters.size()!=42||opponents.size()!=8||dates.size()!=8)throw FormatError("world12: invalid club statistics dimensions");for(size_t i=0;i<42;++i)c.season_stats.counters[i]=uint8_t(number(counters[i],255));for(size_t i=0;i<8;++i){if(opponents[i].integer())c.season_stats.opponents[i]={number(opponents[i])};else if(!std::holds_alternative<std::nullptr_t>(opponents[i].value))throw FormatError("world12: invalid statistics opponent");c.season_stats.dates[i]=uint16_t(number(dates[i],65535));}}
 const auto& roster=array(field(j,"roster"));if(roster.size()!=24)throw FormatError("world12: roster must have 24 positions");for(size_t i=0;i<24;++i){const auto&p=field(roster[i],"player");if(p.integer())c.roster[i].player={number(p)};else if(!std::holds_alternative<std::nullptr_t>(p.value))throw FormatError("world12: invalid optional player");c.roster[i].flags=uint16_t(number(field(roster[i],"flags"),15));}if(!w.clubs.emplace(c.id,c).second)throw FormatError("world12: duplicate club ID");}
     const auto& leagues=array(field(root,"leagues"));if(leagues.size()!=kLeagueSlots)throw FormatError("world12: exactly thirteen leagues required");bool seen[kLeagueSlots]{};for(const auto&j:leagues){LeagueId id{number(field(j,"league"),uint32_t(kLeagueSlots-1))};if(seen[id.value])throw FormatError("world12: duplicate league");seen[id.value]=true;auto&m=w.membership[id.value];m.league=id;for(const auto& c:array(field(j,"clubs")))m.clubs.push_back({number(c)});}

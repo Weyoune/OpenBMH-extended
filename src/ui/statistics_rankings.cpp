@@ -58,6 +58,7 @@ uint8_t original_name_color(const GameState& game, int runtime_team) {
 StatisticsRankingState statistics_rankings_from_game(const GameState& game, const LeImage& exe,
                                                        int manager_slot, int category, int first_season,
                                                        const Image& underlay) {
+    if (!game.projected_match_clubs.empty()) throw FormatError("world12: typed title history is not integrated");
     if (category < 0 || category >= int(kTitleCount)) throw FormatError("statistics rankings: category outside 0..8");
     if (first_season < 0 || (first_season % 4) != 0)
         throw FormatError("statistics rankings: Source page must start at a four-season boundary");

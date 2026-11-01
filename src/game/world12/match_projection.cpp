@@ -21,6 +21,8 @@ AiMatchProjection AiMatchProjection::create(const World& world,const std::vector
     if(runtime_dimensions.big_squad_teams<32)throw std::invalid_argument("world12: legacy match workspace is unavailable");
     AiMatchProjection projection;projection.original_managers_=world.managers;projection.original_development_balance_=world.development_balance;projection.original_trend_rotation_=world.trend_rotation;projection.state=base;auto& state=projection.state;state.manager_teams.clear();state.players.clear();state.player_name_offsets.clear();state.player_names.clear();state.player_cards.clear();state.player_bonus.clear();state.live_matches.clear();state.live_scene=false;state.last_shooter=0xfff;state.projected_match_clubs.clear();state.development_balance=world.development_balance;state.trend_rotation=world.trend_rotation;
     projection.original_settings_=world.settings;
+    projection.original_player_statistics_=world.player_statistics;
+    state.player_statistics.clear();state.title_history.clear();
     if(world.settings){state.level=world.settings->difficulty;state.projected_foreign_rule=world.settings->foreign_rule;
         const auto put=[&](uint32_t at,uint8_t value){state.memory.add_block(at,1);state.memory.set8(at,value);};
         put(layout::GameMode,world.settings->mode);put(layout::Difficulty,world.settings->difficulty);put(layout::CareerDuration,world.settings->duration);}
@@ -56,6 +58,7 @@ AiMatchProjection AiMatchProjection::create(const World& world,const std::vector
         }
         for(size_t row=0;row<24;++row){const auto& slot=it->second.roster[row];if(slot.empty())continue;const auto found=world.players.find(slot.player);if(found==world.players.end()||!players.insert(slot.player).second||projection.players_.size()>=4095)throw std::invalid_argument("world12: invalid local player mapping");auto local=uint16_t(projection.players_.size());projection.players_.push_back(slot.player);projection.originals_.push_back(found->second);state.players.push_back(found->second.attributes);state.player_name_offsets.push_back(append(state.player_names,found->second.attributes.name));state.player_cards.push_back(found->second.cards);state.player_bonus.push_back(found->second.bonus);state.squad_slots[team*24+row]=uint16_t(local|flags(slot.flags));}
     }
+    projection.install_player_statistics(world,true);
     state.counts.players=uint32_t(state.players.size());return projection;
 }
 AiMatchProjection AiMatchProjection::create_for_humans(const CareerSnapshot& snapshot,const std::vector<ClubId>& requested,const GameState& base,HumanProjectionPolicy policy) {
@@ -128,6 +131,7 @@ AiMatchProjection AiMatchProjection::create_for_humans(const CareerSnapshot& sna
         install_manager_match_state(local,int(m),*manager.match_state,result.manager_reference_clubs_,result.players_);
         if(manager.career)install_manager_career_state(local,uint8_t(m),*manager.career,result.players_);
     }
+    result.install_player_statistics(world,true);
     local.counts.players=uint32_t(local.players.size());return result;
 }
 AiMatchProjection AiMatchProjection::create_for_desktop(const CareerSnapshot& snapshot,const std::vector<ClubId>& clubs,const GameState& reference,HumanProjectionPolicy policy) {
@@ -145,6 +149,7 @@ AiMatchProjection AiMatchProjection::create_for_desktop(const CareerSnapshot& sn
         install_manager_match_state(local,int(i),*manager.match_state,result.manager_reference_clubs_,result.players_);
         if(manager.career)install_manager_career_state(local,uint8_t(i),*manager.career,result.players_);
     }
+    result.install_player_statistics(snapshot.world,true);
     return result;
 }
 void AiMatchProjection::include_players(const World& world,const std::vector<PlayerId>& requested) {
@@ -154,6 +159,7 @@ void AiMatchProjection::include_players(const World& world,const std::vector<Pla
         players_.push_back(id);originals_.push_back(p);state.players.push_back(p.attributes);state.player_cards.push_back(p.cards);state.player_bonus.push_back(p.bonus);
         state.player_name_offsets.push_back(uint16_t(state.player_names.size()));state.player_names.insert(state.player_names.end(),p.attributes.name.begin(),p.attributes.name.end());state.player_names.push_back(0);
     }
+    install_player_statistics(world,false);
     state.counts.players=uint32_t(players_.size());
 }
 void AiMatchProjection::include_club_references(const World& world,const std::vector<ClubId>& requested) {
@@ -179,6 +185,9 @@ uint32_t AiMatchProjection::local_club(ClubId id)const{auto it=std::find(clubs_.
 uint32_t AiMatchProjection::local_player(PlayerId id)const{auto it=std::find(players_.begin(),players_.end(),id);if(it==players_.end())throw std::out_of_range("world12: player is not projected");return uint32_t(it-players_.begin());}
 void AiMatchProjection::commit_player_attributes(World& world)const {
     if(!manager_seats_.empty())throw std::invalid_argument("world12: human projection requires complete match-state commit");
+    PlayerStatisticsArchive expected;
+    for(const auto& [local,global]:statistics_bindings_)expected.emplace(local,original_player_statistics_.at(global));
+    if(state.player_statistics!=expected)throw std::invalid_argument("world12: player statistics require complete match-state commit");
     if(world.managers!=original_managers_||world.settings!=original_settings_)throw std::invalid_argument("world12: manager ownership/settings changed during projection");
     if(state.players.size()!=players_.size()||state.player_bonus.size()!=players_.size())throw std::invalid_argument("world12: local player storage resized");
     for(size_t i=0;i<players_.size();++i)if(!world.players.contains(players_[i])||world.players.at(players_[i])!=originals_.at(i))throw std::invalid_argument("world12: projected player was removed or changed externally");
@@ -197,7 +206,48 @@ void AiMatchProjection::commit_released_players(World& world,const std::vector<s
     for(const auto& [player,seller]:released){local_player(player);local_club(seller);if(!seen.insert(player).second)throw std::invalid_argument("world12: player released twice");moves.push_back({player,seller,{}});}
     commit_state(world,true,moves);
 }
+void AiMatchProjection::install_player_statistics(const World& world,bool reset) {
+    if(reset){state.player_statistics.clear();statistics_bindings_.clear();}
+    for(const auto& [identity,counters]:world.player_statistics) {
+        const auto club=std::find(clubs_.begin(),clubs_.end(),identity.first);
+        const auto player=std::find(players_.begin(),players_.end(),identity.second);
+        if(club==clubs_.end()||player==players_.end())continue;
+        const auto key=uint32_t(club-clubs_.begin())<<12|uint32_t(player-players_.begin());
+        statistics_bindings_[key]=identity;
+        state.player_statistics.try_emplace(key,counters);
+    }
+}
+void AiMatchProjection::capture_player_statistics(World& candidate,const std::vector<TransferMove>& movements)const {
+    const auto reset_owned=[&](const auto& identity) {
+        return std::any_of(movements.begin(),movements.end(),[&](const auto& move){return move.buyer==identity.first&&move.player==identity.second;});
+    };
+    for(const auto& [local,global]:statistics_bindings_)
+        if(!state.player_statistics.contains(local)) {
+            if(!reset_owned(global))throw std::invalid_argument("world12: projected player statistics disappeared");
+            candidate.player_statistics.erase(global);
+        }
+    for(const auto& [local,counters]:state.player_statistics) {
+        const auto club=local>>12,player=local&0xfff;
+        if(club>=clubs_.size()||player>=players_.size())throw std::invalid_argument("world12: unknown local statistics identity");
+        const auto identity=std::pair{clubs_[club],players_[player]};
+        const auto previous=original_player_statistics_.find(identity);
+        if(previous==original_player_statistics_.end()) {
+            const bool managed=std::find(state.manager_teams.begin(),state.manager_teams.end(),int(club))!=state.manager_teams.end();
+            const auto& roster=original_clubs_[club].roster;
+            const bool occupied=std::any_of(roster.begin(),roster.end(),[&](const auto& row){return row.player==identity.second;});
+            if(!managed||(!occupied&&!reset_owned(identity)))throw std::invalid_argument("world12: unowned statistics addition");
+        } else if(!reset_owned(identity)) {
+            const auto& old=previous->second;
+            if(counters.total<old.total||counters.goals<old.goals||counters.assists<old.assists||
+                !std::equal(counters.appearances.begin(),counters.appearances.end(),old.appearances.begin(),[](auto next,auto before){return next>=before;}))
+                throw std::invalid_argument("world12: cumulative statistics decreased without an owned arrival");
+        }
+        candidate.player_statistics[identity]=counters;
+    }
+}
 void AiMatchProjection::commit_state(World& world,bool capture_season_services,const std::vector<TransferMove>& movements)const {
+    if(world.player_statistics!=original_player_statistics_)
+        throw std::invalid_argument("world12: global player statistics changed during projection");
     if(!manager_seats_.empty()&&(state.manager_teams.size()!=manager_seats_.size()||state.manager_records.size()!=manager_seats_.size()*0xb0c||
         state.manager_options.size()!=manager_seats_.size()*5||state.manager_ratings.size()!=manager_seats_.size()*60||
         state.manager_results.size()!=manager_seats_.size()*size_t(runtime_dimensions.record_teams)*10))
@@ -255,6 +305,7 @@ void AiMatchProjection::commit_state(World& world,bool capture_season_services,c
         if(found->career)found->career=manager_career_state_from_legacy(state,uint8_t(local),players_,capture_season_services||found->career->season_services.has_value());
         const auto team=local_club(found->club);candidate.clubs.at(found->club).lineup_indoor=(state.club_heap_78.at(team*2+1)&2)!=0;
     }
+    capture_player_statistics(candidate,movements);
     candidate.development_balance=state.development_balance;
     if(state.trend_rotation<0 || state.trend_rotation>2)throw std::invalid_argument("world12: invalid local development rotation");
     candidate.trend_rotation=uint8_t(state.trend_rotation);candidate.validate();world=std::move(candidate);

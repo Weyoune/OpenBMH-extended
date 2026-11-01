@@ -2,6 +2,7 @@
 #pragma once
 #include "game/world12/catalogue.hpp"
 #include "formats/m3d.hpp"
+#include "game/long_career.hpp"
 #include <map>
 #include <optional>
 namespace bmh::world12 {
@@ -210,7 +211,9 @@ struct TransferMarket {
     uint8_t list_toggle=0;int32_t checkpoint_game_seed=0;
     bool operator==(const TransferMarket&)const=default;
 };
+using GlobalPlayerStatistics = std::map<std::pair<ClubId,PlayerId>,PlayerClubStatistics>;
 struct World {
+    GlobalPlayerStatistics player_statistics;
     std::optional<CareerEconomy> economy;
     bool players_initialized=false;
     // Present after the market/mood phase; old saves do not invent these values.

@@ -9,6 +9,9 @@
 #include "app/world12_ai_day.hpp"
 #include "game/match.hpp"
 #include "game/matchday.hpp"
+#include "ui/lineup.hpp"
+#include "ui/statistics_rankings.hpp"
+#include "cli/json.hpp"
 #include <algorithm>
 #include <iostream>
 #include <stdexcept>
@@ -39,9 +42,80 @@ CareerSnapshot snapshot(const bmh::GameState& base) {
     for(auto league:{LeagueId{4},LeagueId{9}}){snapshot.league_rounds[league.value]=2;for(int r=1;r<=2;++r)for(int m=0;m<w.catalogue.league(league).clubs/2;++m)snapshot.results.result(w.catalogue,league,r,m)={true,0,0};}
     snapshot.validate();return snapshot;
 }
+void statistics_bridge(const bmh::GameState& base) {
+    auto source=snapshot(base);
+    const auto de=source.world.managers[0].club,en=source.world.managers[1].club;
+    const auto player=source.world.clubs.at(de).roster[0].player;
+    const auto other=source.world.clubs.at(en).roster[0].player;
+    check(de.value>4095&&player.value>4095,"global identity fixture must exceed legacy packed range");
+    source.world.player_statistics[{de,player}]={{255,4,7},65535,9,2};
+    source.world.player_statistics[{en,other}]={{700,8,9},200000,20,3};
+    auto& row=source.world.managers[0].tactics->backing->scalar_rows[0];row[7]=255;row[0x48]=255;row[0x49]=255;
+    auto reference=base;reference.player_statistics[0]={{9,9,9},999,1,1};reference.title_history[0][0]="Unrelated reference history";
+    auto projection=AiMatchProjection::create_for_humans(source,{en,de},reference,{3,6,false,true});
+    const auto local_club=projection.local_club(de),local_player=projection.local_player(player);
+    const auto local_key=local_club<<12|local_player;
+    check(projection.state.player_statistics.size()==2&&projection.state.player_statistics.at(local_key).total==65535&&
+          projection.state.title_history.empty(),"typed projection leaked legacy reference counters/title history");
+    bmh::player_statistic(projection.state,0,int(local_player),0,0,0,0);
+    auto committed=source.world;projection.commit_match_state(committed);
+    check(committed.player_statistics.at({de,player}).appearances[0]==256&&committed.player_statistics.at({de,player}).total==65536&&
+          committed.player_statistics.at({en,other}).total==200000,"human match update lost or mixed global club/player counts");
+    auto saved=source;saved.world=committed;
+    check(read_save(make_save(saved))==saved,"wide statistics lost in typed CareerSnapshot save/load");
+    auto desktop=AiMatchProjection::create_for_desktop(saved,{en,de},reference,{3,6,false,true});
+    const auto sorted_key=desktop.local_club(de)<<12|desktop.local_player(player);
+    check(desktop.state.player_statistics.at(sorted_key).total==65536,"desktop player sorting lost canonical statistics mapping");
+    auto image=bmh::LeImage::from_bytes(0xa0000,bmh::Bytes(0x20000));
+    const auto put=[&](uint32_t at,uint16_t value){const uint8_t bytes[]={uint8_t(value),uint8_t(value>>8)};image.patch(at,bytes,2);};
+    put(bmh::layout::TeamsWithSquads,32);put(bmh::layout::CareerSession_DispatchLineup_RuntimeField,445);
+    desktop.state.memory.add_block(bmh::layout::CareerSession_AnyOf_ExecutableField,8);
+    desktop.state.memory.add_block(bmh::layout::TextGradientDisabled,1);desktop.state.memory.set8(bmh::layout::TextGradientDisabled,1);
+    desktop.state.memory.add_block(bmh::layout::PlainBackground,1);
+    const auto lineup=bmh::ui::lineup_from_game(desktop.state,image,1);
+    const auto found=std::find_if(lineup.players.begin(),lineup.players.end(),[&](const auto& p){return p.player_id==int(desktop.local_player(player));});
+    check(found!=lineup.players.end()&&found->statistics&&found->statistics->total==65536,
+          "shared lineup projection did not receive the canonical wide counter after desktop sorting");
+    bool unavailable=false;
+    try { (void)bmh::ui::statistics_rankings_from_game(desktop.state,image,0,0,0,bmh::Image(320,240)); }
+    catch(const bmh::FormatError& error) { unavailable=std::string(error.what()).find("typed title history")!=std::string::npos; }
+    check(unavailable,"typed title history did not report its explicit unsupported boundary");
+    auto stale=source.world;auto pending=AiMatchProjection::create_for_humans(source,{en,de},reference,{3,6,false,true});
+    ++stale.player_statistics.at({en,other}).total;const auto external=stale;
+    rejects([&]{pending.commit_match_state(stale);},"concurrent global statistics change was overwritten");
+    check(stale==external,"stale statistics rejection was not atomic");
+    auto lost=AiMatchProjection::create_for_humans(source,{en,de},reference,{3,6,false,true});lost.state.player_statistics.clear();
+    auto intact=source.world;rejects([&]{lost.commit_match_state(intact);},"missing projection counters were silently dropped");check(intact==source.world,"counter-loss rejection published partial state");
+    auto decreasing=AiMatchProjection::create_for_humans(source,{en,de},reference,{3,6,false,true});decreasing.state.player_statistics.at(local_key).total=0;
+    rejects([&]{decreasing.commit_match_state(intact);},"unowned counter reset was accepted");
+    auto forged=AiMatchProjection::create_for_humans(source,{en,de},reference,{3,6,false,true});forged.state.player_statistics[4094u<<12]={{},1,0,0};
+    rejects([&]{forged.commit_match_state(intact);},"global ID was admitted as a local packed club key");check(intact==source.world,"invalid local identity partially committed");
+    auto exact=source.world;exact.player_statistics.at({en,other}).total=UINT64_MAX;
+    auto unknown=exact;unknown.player_statistics[{{4294967294u},player}]={{},1,0,0};
+    rejects([&]{encode_world(unknown);},"statistics archive accepted a nonexistent global club");
+    const auto bytes=encode_world(exact);check(decode_world(bytes)==exact,"codec rounded unsigned 64-bit statistics");
+    const auto raw=std::string(bytes.begin(),bytes.end());
+    check(raw.find("18446744073709551615")!=std::string::npos,"codec did not store exact decimal uint64");
+    auto json=bmh::cli::parse_json(raw);auto& records=std::get<bmh::cli::Json::Array>(json.object()->at("player_statistics").value);
+    auto& values=std::get<bmh::cli::Json::Array>(records[0].object()->at("counters").value);values[0]="18446744073709551616";
+    const auto bad=bmh::cli::dump_json(json);rejects([&]{decode_world(bmh::Bytes(bad.begin(),bad.end()));},"overflowing decimal statistics accepted");
+    json=bmh::cli::parse_json(raw);json.object()->at("version")=22;const auto downgraded=bmh::cli::dump_json(json);
+    rejects([&]{decode_world(bmh::Bytes(downgraded.begin(),downgraded.end()));},"schema22 silently discarded nonempty statistics");
+    auto old=source.world;old.player_statistics.clear();const auto old_encoded=encode_world(old);json=bmh::cli::parse_json(std::string(old_encoded.begin(),old_encoded.end()));
+    json.object()->at("version")=22;json.object()->erase("player_statistics");const auto legacy=bmh::cli::dump_json(json);
+    check(decode_world(bmh::Bytes(legacy.begin(),legacy.end()))==old,"schema22 without known wide counters failed migration");
+    auto migrated=source;migrated.world=decode_world(bmh::Bytes(legacy.begin(),legacy.end()));
+    auto first_observation=AiMatchProjection::create_for_humans(migrated,{en,de},reference,{3,6,false,true});
+    bmh::player_statistic(first_observation.state,0,int(first_observation.local_player(player)),0,0,0,0);
+    first_observation.commit_match_state(migrated.world);
+    check(migrated.world.player_statistics.at({de,player}).appearances[0]==256&&
+          migrated.world.player_statistics.at({de,player}).total==65536,
+          "first schema22 observation lost its surviving tactical byte/word baseline");
+    std::cout<<"Global >4095 club/player statistics, Source 256/65536, desktop lineup mapping, exact schema23 snapshot, old-schema and atomic guards passed\n";
+}
 }
 int main()try {
-    bmh::set_fixture_tables(bmh::test::authored_fixture_tables());const auto base=rules();const auto source=snapshot(base);auto world=source.world;
+    bmh::set_fixture_tables(bmh::test::authored_fixture_tables());const auto base=rules();statistics_bridge(base);const auto source=snapshot(base);auto world=source.world;
     const auto de=world.membership[4].clubs[0],en=world.membership[9].clubs[0],de_other=world.membership[4].clubs[1],en_other=world.membership[9].clubs[1];
     const std::vector<ClubId> requested{de,de_other,en,en_other};
     rejects([&]{AiMatchProjection::create(world,requested,base);},"AI-only guard allowed a human participant");

@@ -32,3 +32,27 @@ identities and seasons, duplicate blocks and trailing bytes before publishing
 archive state. Season records remain within the native signed 16-bit calendar
 range. The surrounding FBM checksum covers the extension. Older writers may
 discard extensions; Original-game roundtrip preservation is not promised.
+
+## Extended typed careers
+
+World schema 23 stores `player_statistics` as rows containing separate global
+`club` and `player` IDs and a six-element `counters` array in the order above.
+Each counter is an unsigned decimal string, preserving all 64 bits without a
+JSON signed-integer or floating-point conversion. These keys are full 32-bit
+identities; they are never combined into a legacy twelve-bit roster key.
+Schemas 1–22 load without invented wide counters. A nonempty statistics field
+with an older declared schema is rejected rather than silently discarded.
+Schema 22's per-manager robbery guard remains independent and preserved.
+
+Human match and desktop projections import only explicitly mapped club/player
+pairs into their bounded local workspace. Desktop player sorting rebuilds that
+mapping. Complete match-state publication maps the resulting counters back to
+global IDs and checks stale, missing, forged and decreasing counter records
+before publishing the candidate World. Owned transfer arrivals can reset their
+new club record; other implicit resets are rejected. Attribute-only AI commits
+preserve canonical counters and reject unowned local counter edits.
+
+The shared roster/line-up projection therefore sees the same wide counters after
+match publication, snapshot save/load and desktop reordering. Typed title-history
+archival is not integrated: reference-game title archives are excluded from typed
+projections, and the typed title-list screen reports that boundary explicitly.

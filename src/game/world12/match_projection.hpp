@@ -34,6 +34,10 @@ public:
 private:
     struct TransferMove {PlayerId player;ClubId seller,buyer;};
     void commit_state(World&,bool,const std::vector<TransferMove>&)const;
+    void install_player_statistics(const World&,bool reset);
+    void capture_player_statistics(World&,const std::vector<TransferMove>&)const;
+    GlobalPlayerStatistics original_player_statistics_;
+    std::map<uint32_t,std::pair<ClubId,PlayerId>> statistics_bindings_;
     std::vector<ClubId> clubs_;
     std::vector<PlayerId> players_;
     std::vector<PlayerRecord> originals_;

@@ -92,10 +92,10 @@ void capture_title_history(GameState& g) { g.title_history = title_history_rows(
 void record_title_holder(GameState& g, int category, uint16_t winner) {
     if (category < 0 || category >= 9 || g.season < 0 || winner >= g.club_ids.size())
         throw FormatError("long career: invalid title award");
-    capture_title_history(g);
+    if (g.projected_match_clubs.empty()) capture_title_history(g);
     const auto name = g.club_name(winner);
     g.memory.set16(layout::Titles + uint32_t(category) * 100 + uint32_t(std::min(g.season, 49)) * 2, winner);
-    g.title_history[uint32_t(g.season)][size_t(category)] = name;
+    if (g.projected_match_clubs.empty()) g.title_history[uint32_t(g.season)][size_t(category)] = name;
 }
 void shift_legacy_title_history(GameState& g) {
     if (g.season <= 49) return;
