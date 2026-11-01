@@ -1234,7 +1234,8 @@ add_library(bmhworld12 STATIC
     src/cli/json.cpp)
 target_include_directories(bmhworld12 PUBLIC src)
 target_link_libraries(bmhworld12 PUBLIC bmhcore)
-add_library(bmhworld12_app STATIC src/app/world12_cups.cpp src/app/world12_manager.cpp src/app/world12_ai_day.cpp src/app/world12_initial_season.cpp src/app/world12_initial_market.cpp src/app/world12_desktop.cpp src/app/world12_first_event.cpp src/app/world12_pending.cpp)
+add_library(bmhworld12_app STATIC src/app/world12_cups.cpp src/app/world12_manager.cpp src/app/world12_ai_day.cpp src/app/world12_initial_season.cpp src/app/world12_initial_market.cpp src/app/world12_desktop.cpp src/app/world12_first_event.cpp
+    src/app/world12_clock.cpp src/app/world12_pending.cpp)
 target_link_libraries(bmhworld12_app PUBLIC bmhworld12)
 add_library(bmhworld12_ui STATIC src/ui/world12_other_games.cpp src/ui/world12_manager_selection.cpp src/ui/world12_desktop.cpp src/ui/world12_preparation.cpp)
 target_link_libraries(bmhworld12_ui PUBLIC bmhui bmhworld12)
@@ -1244,6 +1245,10 @@ target_link_libraries(bmhworld12_session PUBLIC bmhworld12_app bmhworld12_ui)
 if(TARGET openbmh_play)
     target_link_libraries(openbmh_play PRIVATE bmhworld12_session)
 endif()
+
+add_executable(world12_clock_tests tests/world12_clock_tests.cpp)
+target_link_libraries(world12_clock_tests PRIVATE bmhworld12_app)
+add_test(NAME world12_clock_tests COMMAND world12_clock_tests)
 
 add_executable(mailbox_actions_unit_tests tests/mailbox_actions_unit_tests.cpp)
 target_link_libraries(mailbox_actions_unit_tests PRIVATE bmhcore)

@@ -74,6 +74,19 @@ DesktopEntryOutcome Session::advance_manager(const ui::DeskRequest& request) {
     return advance_initial_manager(state_,owner_,{owner_.scope,request.revision},resources_.reference);
 }
 
+void Session::finish_initial_day(const ui::DeskRequest& request){
+    if(request.kind!=ui::DeskRequestKind::advance_turn)throw FormatError("world12: not a day-completion request");
+    validate_file_owner(request.manager_slot,request.revision);
+    finish_initial_event(state_,owner_,{owner_.scope,request.revision},resources_.reference,calendar_epoch_from_executable(resources_.german));
+}
+ClockStepOutcome Session::advance_saved_clock(uint64_t revision,const std::filesystem::path& data,const ClockHooks& hooks){
+    if(preparation_menu_)throw FormatError("world12: an open menu owns the current career");
+    const auto texts=load_textd(ui::asset_path(data,"TEXTD.BLK"));return advance_clock_step(state_,owner_,{owner_.scope,revision},resources_.reference,texts,hooks);
+}
+ClockStepOutcome Session::seek_saved_event(uint64_t revision,const std::filesystem::path& data,const ClockHooks& hooks){
+    if(preparation_menu_)throw FormatError("world12: an open menu owns the current career");
+    const auto texts=load_textd(ui::asset_path(data,"TEXTD.BLK"));return seek_next_event(state_,owner_,{owner_.scope,revision},resources_.reference,texts,hooks);
+}
 PendingOfferResult Session::resolve_pending(const std::filesystem::path& data,const ui::DeskRequest& request,const PendingOfferHooks& hooks) {
     if(request.kind!=ui::DeskRequestKind::advance_turn)throw FormatError("world12: pending offer is not a desk-exit request");validate_file_owner(request.manager_slot,request.revision);
     const auto texts=load_textd(ui::asset_path(data,"TEXTD.BLK"));

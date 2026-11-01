@@ -458,3 +458,12 @@ without RNG/date/revision advancement. Schema21 retains deleted physical holes
 and raw text so following messages and first-hole insertion survive save/load.
 Actual GUI captures and a saved fixture accompany the QA receipt. Automatic
 notification presentation will be attached with the general event owner.
+
+## Saved progression clock
+
+The first empty event now has an owned completion and resumable service/stock/
+calendar phases. SB saves retain the exact phase and clock; old desk snapshots
+remain SA. Atomic search never crosses an unprocessed competition. Core and
+four-manager session comparisons reach the actual national nomination on day4.
+See [saved clock boundaries](CLOCK_PROGRESS.md). The GUI last-desk guard remains
+until the scheduled competition and desk owners are integrated.

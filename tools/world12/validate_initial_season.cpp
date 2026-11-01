@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "app/world12_initial_season.hpp"
 #include "app/world12_first_event.hpp"
+#include "app/world12_clock.hpp"
+#include "game/driver.hpp"
 #include "app/world12_pending.hpp"
 #include "game/turn.hpp"
 #include "game/matchday_setup.hpp"
@@ -455,6 +457,36 @@ int main(int argc,char** argv)try {
         }
         if(!injuries||!recoveries||!retirements)throw std::runtime_error("weekly oracle did not exercise injury, recovery and retirement");
         std::cout<<passes<<" full-Core weekly-player/training comparisons: "<<injuries<<" injuries, "<<recoveries<<" recoveries, "<<retirements<<" retirements; full boards/rosters/news/RNG/snapshots match\n";
+    }
+    {
+        auto typed=state;auto core=native;core.mailbox.assign(kMailboxEntries*kMailboxEntry,0);core.memory.add_block(layout::CompetitionSelection,4);core.memory.set32(layout::CompetitionSelection,3);core.offer_answer=false;
+        typed.world.economy.reset();initialize_career_economy(typed,core);owner_app::initialize_desktops(typed,reference);
+        uint32_t seed=1;for(;;++seed){WatcomRandom probe(seed);probe.range(0,10000);if(probe.range(0,70-int16_t(typed.world.managers[0].match_state->staff_ratings[0])/50)!=0)break;}
+        typed.watcom_seed=seed;GameRandom cg(typed.game_seed);WatcomRandom cw(seed);MinuteReport report;std::vector<uint8_t> referees(50);MatchdayContext ctx;ctx.month=7;ctx.referees=&referees;
+        auto groups=prepare_event(core,0,ctx,cg,cw,report);if(enter_event_desk(core,0,groups,cg,cw,report,true,[](const GameState&,WatcomRandom&){}))throw std::runtime_error("clock oracle unexpectedly opened a pending offer");
+        owner_app::ManagerActionOwner event_owner{101,0};owner_app::prepare_first_desk_event(typed,event_owner,event_owner,reference);
+        const auto saved_records=core.manager_records,saved_options=core.manager_options;kick_off(core,groups,ctx,cw,cg,report);MatchEngine engine{core,groups,cg,cw,referees};play_matchday(engine,core,groups,{},cg,cw,report);finish_event(core,groups,0,{},saved_records,saved_options,cg,cw,report);if(report.unsupported)throw std::runtime_error(report.reason);
+        owner_app::finish_initial_event(typed,event_owner,event_owner,reference,calendar_epoch());
+        owner_app::ClockHooks hooks;hooks.services.incidents.answer=[](const GameState&,uint8_t,const WeeklyOfferQuestion&)->std::optional<bool>{return false;};hooks.services.auctions.allocator=TransferAllocatorContext::zero;hooks.services.auctions.select=[](const GameState&,const TransferOfferListView&,const AiMatchProjection&)->std::optional<int>{return -1;};hooks.services.auctions.notice=[](const GameState&,const TransferDecisionEvent&,const AiMatchProjection&){};
+        core.transfer_offer_selector=[](const GameState&,const TransferOfferListView&){return -1;};core.transfer_decision_observer=[](const TransferDecisionEvent&){};
+        hooks.relations=[&](const CareerSnapshot& current){WeeklyIncidentContext context{current.date,current.season,{}};WeeklyClubRelations relation;relation.club=current.world.managers[0].club;const auto team=core.manager_teams[0];for(size_t cup=0;cup<3&&!relation.advertising.european_cup;++cup)for(size_t n=0;n<core.memory.u8(counts[cup]);++n)if(core.memory.u16(lists[cup]+uint32_t(n*2))==team){relation.advertising.european_cup=uint8_t(cup+1);break;}relation.advertising.champion=core.memory.u16(layout::Cup_AdvanceCup_RuntimeField6)==team;const uint32_t entries[]={0,15,19,21};for(size_t k=0;k<4;++k)relation.advertising.holders[k]=core.memory.u16(layout::Season_CareerSeasonSetup_RuntimeField+entries[k]*0x28)==team;context.clubs.push_back(relation);return context;};
+        const auto compare=[&]{
+            if(typed.game_seed!=cg.seed()||typed.watcom_seed!=cw.seed())throw std::runtime_error("saved clock RNG differs from full Core");
+            for(const auto& [id,p]:typed.world.players)if(p.attributes.w35c!=core.players.at(id.value).w35c||p.attributes.w364!=core.players.at(id.value).w364||p.attributes.w368!=core.players.at(id.value).w368||p.cards!=core.player_cards.at(id.value)||p.bonus!=core.player_bonus.at(id.value))throw std::runtime_error("saved clock player/kickoff cleanup differs");
+            if(typed.world.managers[0].finance!=manager_initial_finance_from_legacy(core,0)||typed.world.managers[0].tactics!=manager_full_tactics_from_legacy(core,0,players)||typed.world.managers[0].career!=manager_career_state_from_legacy(core,0,players,true))throw std::runtime_error("saved clock complete human state differs");
+            auto projection=AiMatchProjection::create_for_humans(typed,{typed.world.managers[0].club},reference,{3,3,false,true});install_career_economy(projection,typed.world);if(compare_mailbox(projection.state.mailbox,core.mailbox)||projection.state.stocks!=core.stocks)throw std::runtime_error("saved clock mailbox/stocks differ");
+            if(read_save(make_save(typed))!=typed)throw std::runtime_error("saved clock SB snapshot differs");
+        };
+        compare();size_t steps=0;
+        while(typed.progress->phase!=ProgressPhase::scheduled_event){const auto phase=typed.progress->phase;
+            if(phase==ProgressPhase::daily_services){if(typed.progress->entry==DayEntry::after_event){++core.date;daily_interest(core,cw);}else plain_day(core,cg,cw);if(!day_step_rest(core,cg,cw,report,uint16_t(core.date-(typed.progress->entry==DayEntry::after_event?1:0)),TransferAllocatorContext::zero))throw std::runtime_error(report.reason);}
+            else if(phase==ProgressPhase::post_event_market)day_stock_market(core,cg);
+            const auto result=owner_app::advance_clock_step(typed,event_owner,event_owner,reference,texts,hooks);if(!result.date_advanced)compare();
+            typed=read_save(make_save(typed));if(++steps>40)throw std::runtime_error("actual clock failed to stop at first appointment");
+        }
+        if(typed.date!=core.date||typed.calendar->schedule.others_on(typed.calendar->next_day).empty())throw std::runtime_error("saved clock skipped the first national appointment");
+        if(!proof.empty())write_savegame(proof/"first-scheduled-event.FBM",make_save(typed));
+        std::cout<<steps<<" actual saved-clock phases: initial empty kickoff/finish, dated finance/training/weekly steps, event/plain stock order, full human/player/mail/RNG state and SB continuation match Core; stopped at day "<<typed.date<<" before national preparation\n";
     }
     owner_app::initialize_desktops(state,reference);
     size_t events=0,offers=0,loans=0,lures=0,settlements=0,moved_sales=0,moved_loans=0;

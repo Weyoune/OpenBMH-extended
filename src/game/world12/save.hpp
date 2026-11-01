@@ -52,6 +52,16 @@ struct TransferRuntime {
     std::vector<LoanContract> loans;
     bool operator==(const TransferRuntime&)const=default;
 };
+enum class ProgressPhase:uint8_t { daily_services,post_event_market,inspect_calendar,scheduled_event,season_end };
+enum class DayEntry:uint8_t { after_event,plain_day };
+struct CareerProgress {
+    ProgressPhase phase=ProgressPhase::daily_services;
+    DayEntry entry=DayEntry::after_event;
+    uint32_t previous_date=0,season_start=0;
+    uint16_t epoch_year=0;
+    uint8_t epoch_weekday=0,last_manager=0;
+    bool operator==(const CareerProgress&)const=default;
+};
 struct CareerSnapshot {
     World world;
     SeasonResults results;
@@ -62,6 +72,7 @@ struct CareerSnapshot {
     std::vector<KnockoutStage> cups;
     std::optional<DesktopRuntime> desktop;
     std::optional<TransferRuntime> transfers;
+    std::optional<CareerProgress> progress;
     // Typed active career snapshots will extend this record as their owning
     // progression transactions are integrated. No legacy FBM stream is guessed.
     void validate()const;

@@ -2,6 +2,7 @@
 #pragma once
 #include "app/world12_initial_season.hpp"
 #include "app/world12_first_event.hpp"
+#include "app/world12_clock.hpp"
 #include "formats/le.hpp"
 #include "ui/manager.hpp"
 #include "ui/world12_manager_selection.hpp"
@@ -31,6 +32,10 @@ public:
     void prepare_start(uint64_t expected_revision);
     DesktopEntryOutcome begin_first_event(uint64_t expected_revision);
     DesktopEntryOutcome advance_manager(const ui::DeskRequest&);
+    void finish_initial_day(const ui::DeskRequest&);
+    ClockStepOutcome advance_saved_clock(uint64_t expected_revision,const std::filesystem::path&,const ClockHooks&);
+    ClockStepOutcome seek_saved_event(uint64_t expected_revision,const std::filesystem::path&,const ClockHooks&);
+
     PendingOfferResult resolve_pending(const std::filesystem::path&,const ui::DeskRequest&,const PendingOfferHooks&);
     void open_mailbox(const ui::DeskRequest&);
     ui::MailboxState mailbox_view()const;
