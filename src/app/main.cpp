@@ -37,6 +37,7 @@
 #include "version.hpp"
 #include "app/video_session.hpp"
 #include "app/live_matchday_events.hpp"
+#include "app/pitch_pointer.hpp"
 #include "audio/playback.hpp"
 #include "app/audio.hpp"
 #include "formats/palette.hpp"
@@ -225,6 +226,7 @@ int main(int argc, char** argv) {
         SDL_RenderSetLogicalSize(renderer, 320, 240);
         SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 320, 240);
         if (!texture) throw FormatError(SDL_GetError());
+        app::PitchPointer pitch_pointer;
         std::vector<uint32_t> pixels(320 * 240);
         std::unique_ptr<ui::LiveMatchdayScreen> live_screen;if(!world12_development)live_screen=std::make_unique<ui::LiveMatchdayScreen>(data);
         std::unique_ptr<ui::RealityReporterPanel> reality_reporter;if(!world12_development)reality_reporter=std::make_unique<ui::RealityReporterPanel>(data);
@@ -1734,6 +1736,7 @@ int main(int argc, char** argv) {
         std::optional<Uint64> timed_notice_presented_at;
         std::optional<Uint8> timed_notice_release;
         auto handle = [&](const ui::FlowResult& r) {
+            pitch_pointer.show({}, renderer);
             if(world12_development){
                 if(r.request==ui::FlowRequest::end_session){if(quit_confirmation.confirm())running=false;else flow.reject_desk_action("Beenden abgebrochen.");dirty=true;return;}
                 const auto result=app::world12::serve_startup(flow,r,world_session,data,seed,1,r.request==ui::FlowRequest::kickoff?make_pending_offer_hooks(flow.render()):PendingOfferHooks{});
@@ -1820,6 +1823,7 @@ int main(int argc, char** argv) {
                         bool closed = false;
                         const auto apply_live_pitch = [&](const ui::PitchRequest& action) {
                             if (action.kind == ui::PitchRequestKind::none) return;
+                            pitch_pointer.show({}, renderer);
                             if (action.kind == ui::PitchRequestKind::open_player_info) {
                                 try {
                                     if (action.row < 0 || size_t(action.row) >= screen.state().players.size() ||
@@ -1859,6 +1863,7 @@ int main(int argc, char** argv) {
                         };
                         bool left_held = false, left_release_consumed = false, right_held = false;
                         while (running && !closed) {
+                            pitch_pointer.show(screen.pointer_cursor(palette), renderer);
                             const Image image = screen.render();
                             for (size_t i = 0; i < pixels.size(); ++i)
                                 pixels[i] = palette.argb[image.pixels[i]];
@@ -1919,8 +1924,10 @@ int main(int argc, char** argv) {
                             scope_finished = true;
                             completed = true;
                         }
+                        pitch_pointer.show({}, renderer);
                         SDL_SetWindowTitle(window, window_title.c_str());
                     } catch (const std::exception& e) {
+                        pitch_pointer.show({}, renderer);
                         if (scope_started && !scope_finished)
                             dispatch_scope(app::LiveInterventionBoundary::abort, 2,
                                 selected_manager, selected_team, scope_error);
@@ -2135,11 +2142,16 @@ int main(int argc, char** argv) {
                     }
                 };
                 SDL_FlushEvent(SDL_KEYUP);
-                while (running && !closed) {
+                while (running && (!closed || down)) {
                     SDL_Event input;
                     bool redrawn = false;
                     while (quit_confirmation.poll(&input)) {
                         if (input.type == SDL_QUIT) { running = false; break; }
+                        if (closed) {
+                            if (input.type == SDL_MOUSEBUTTONUP && down &&
+                                input.button.button == down->button) { down.reset(); break; }
+                            continue;
+                        }
                         if (input.type == SDL_MOUSEMOTION) {
                             const bool changed = table_screen ? table_screen->move(input.motion.x, input.motion.y)
                                 : pairings_screen ? pairings_screen->move(input.motion.x, input.motion.y)
@@ -2158,8 +2170,7 @@ int main(int argc, char** argv) {
                             else cup_screen->pointer_down(input.button.x, input.button.y,
                                 input.button.button == SDL_BUTTON_RIGHT);
                         } else if (input.type == SDL_MOUSEBUTTONUP && down &&
-                            input.button.button == down->button && input.button.x == down->x &&
-                            input.button.y == down->y) {
+                            input.button.button == down->button) {
                             down.reset();
                             if (table_screen) table_screen->click(input.button.x, input.button.y,
                                 input.button.button == SDL_BUTTON_RIGHT);
@@ -2180,19 +2191,21 @@ int main(int argc, char** argv) {
                         else if (cup_screen && cup_screen->pending())
                             action = *cup_screen->pending();
                         if (action) { dispatch_action(*action); redrawn = true; }
-                        if (closed || !running) break;
+                        if ((closed && !down) || !running) break;
                     }
-                    if (!running || closed) break;
+                    if (!running || (closed && !down)) break;
+                    if (closed) { SDL_Delay(8); continue; }
                     if (pairings_screen && pairings_screen->tick_source_seconds(overview_source_seconds())) {
                         if (pairings_screen->pending())
                             dispatch_action(app::CareerSession::LiveOverviewAction{*pairings_screen->pending()});
                         redrawn = true;
                     }
-                    if (closed || !running) break;
+                    if ((closed && !down) || !running) break;
                     if (!redrawn) SDL_Delay(8);
                 }
                 return running && closed;
             };
+            ui::LiveScoreReveal live_score_reveal;
             std::optional<ui::LiveChanceProjection> live_chance_context;
             std::unique_ptr<ui::RealityFieldScreen> reality_field;
             ui::RealityReporterLayoutState reality_layout;
@@ -2952,7 +2965,7 @@ int main(int argc, char** argv) {
                 }, [&](const LiveBallEvent& event, const std::vector<MatchGroup>& groups,
                        const GameState& state) {
                     if (!running || live_skipped) return;
-                    const auto frame = ui::live_matchday_frame(event.minute, groups, state);
+                    const auto frame = live_score_reveal.project(ui::live_matchday_frame(event.minute, groups, state));
                     if (frame.matches.empty()) return;
                     const auto present = [&](const Image& image) {
                         for (size_t i = 0; i < pixels.size(); ++i) pixels[i] = palette.argb[image.pixels[i]];
@@ -2999,6 +3012,7 @@ int main(int argc, char** argv) {
                        const GameState& state) {
                     if (!running || live_skipped) return;
                     const auto frame = ui::live_matchday_frame(event.minute, groups, state);
+                    live_score_reveal.observe(event.stage, frame);
                     if (frame.matches.empty()) return;
                     const auto chance = ui::live_chance_projection(event, groups, state, season_exe);
                     if (event.stage == LiveChanceStage::preview) live_chance_context = chance;
@@ -3031,7 +3045,7 @@ int main(int argc, char** argv) {
                 }, [&](const LiveShotEvent& event, const std::vector<MatchGroup>& groups,
                        const GameState& state) {
                     if (!running || live_skipped) return;
-                    const auto frame = ui::live_matchday_frame(event.minute, groups, state);
+                    const auto frame = live_score_reveal.project(ui::live_matchday_frame(event.minute, groups, state));
                     if (frame.matches.empty()) return;
                     const auto frames = live_screen->render_shot(frame, event);
                     const auto shot_colors = live_screen->shot_palette(palette, event, groups, state);
@@ -3089,7 +3103,7 @@ int main(int argc, char** argv) {
                 }, [&](const LiveSetPieceEvent& event, const std::vector<MatchGroup>& groups,
                        const GameState& state) {
                     if (!running || live_skipped) return;
-                    const auto frame=ui::live_matchday_frame(event.minute,groups,state);
+                    const auto frame=live_score_reveal.project(ui::live_matchday_frame(event.minute,groups,state));
                     if (frame.matches.empty()) return;
                     const auto images=live_screen->render_set_piece(frame,event);
                     LiveShotEvent palette_event;
@@ -3956,6 +3970,7 @@ int main(int argc, char** argv) {
                         throw std::runtime_error(std::string("Source modal texture: ") + SDL_GetError());
                     dirty = false;
                 }
+                pitch_pointer.show(flow.pitch_pointer_cursor(palette), renderer);
                 const int cleared = SDL_RenderClear(renderer);
                 const int copied = SDL_RenderCopy(renderer, texture, nullptr, nullptr);
                 if (source_modal_redraw && (cleared != 0 || copied != 0))
@@ -3980,6 +3995,7 @@ int main(int argc, char** argv) {
             SDL_Delay(10);
         }
         SDL_StopTextInput();
+        pitch_pointer.clear();
         SDL_DestroyTexture(texture);
         SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);

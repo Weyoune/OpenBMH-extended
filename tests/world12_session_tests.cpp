@@ -237,6 +237,19 @@ void actual_management(ui::StartupFlow& flow,std::unique_ptr<session_app::Sessio
     check(!session_app::serve_startup(flow,forged,session,data,91,71).error.empty()&&session->snapshot()==accepted,"forged menu command mutated session");
     send(flow.click(100,41));check(flow.screen_name()=="player_card","player information did not open");capture("player-card");send(flow.click(0,0,true));
     send(flow.click(80,219));check(flow.in_pitch(),"pitch did not open through Source page request");capture("pitch");
+    {
+        const auto before_feedback=session->snapshot();const auto feedback_revision=session->revision();
+        send(flow.click(20,41));flow.move(100,170);
+        const auto cursor=flow.pitch_pointer_cursor(load_palette(ui::asset_path(data,"M3PC.COL")));
+        check(cursor&&std::any_of(cursor->begin(),cursor->end(),[](uint32_t p){return p!=0;}),
+              "typed pitch uses the visible native pointer bitmap and position feedback");
+        check(session->snapshot()==before_feedback&&session->revision()==feedback_revision,
+              "typed pitch pointer feedback changes no snapshot, revision or RNG state");
+        send(flow.click(0,0,true));flow.move(300,220);
+        check(!flow.pitch_pointer_cursor(load_palette(ui::asset_path(data,"M3PC.COL"))),
+              "typed pitch cancellation restores the ordinary pointer");
+    }
+
     send(flow.click(205,140));send(flow.click(245,214));
     auto view=session->preparation_view(data);const auto mask=view.pitch->formation_mask;int formation=0;while(formation<8&&(!(mask&(1<<formation))||formation+1==view.lineup.automatic_formation))++formation;
     if(formation==8){formation=0;while(formation<8&&!(mask&(1<<formation)))++formation;}check(formation<8,"no enabled formation in Original data");send(flow.click(formation%2?285:245,114+24*(formation/2)));capture("pitch-formation");
