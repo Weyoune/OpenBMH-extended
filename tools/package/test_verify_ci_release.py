@@ -17,7 +17,7 @@ class ReleaseVerificationTests(unittest.TestCase):
         self.reports = self.root / 'reports'; self.reports.mkdir()
         self.sha = 'a' * 40
         for platform in (*PLATFORMS, 'source'):
-            with zipfile.ZipFile(self.dist / f'OpenBMH-1.0.0-{platform}.zip', 'w') as z:
+            with zipfile.ZipFile(self.dist / f'OpenBMH-Extended-1.0.0-{platform}.zip', 'w') as z:
                 if platform == 'source':
                     z.writestr('source/SOURCE_MANIFEST.json', json.dumps({'version': '1.0.0', 'project_commit': self.sha}))
                 else:
@@ -40,7 +40,7 @@ class ReleaseVerificationTests(unittest.TestCase):
             self.run_verify('b' * 40)
 
     def test_missing_platform_archive_rejected(self):
-        (self.dist / 'OpenBMH-1.0.0-windows-x64.zip').unlink()
+        (self.dist / 'OpenBMH-Extended-1.0.0-windows-x64.zip').unlink()
         with self.assertRaisesRegex(ValueError, 'archive set'):
             self.run_verify()
 

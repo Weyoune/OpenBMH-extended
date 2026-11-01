@@ -1,6 +1,6 @@
-# OpenBMH 1.2 implementation contract
+# OpenBMH-Extended 1.0 Beta implementation contract
 
-Branch `1.2`, based on c051dd6 (1.1 Beta/editor). Stable main and 1.1 remain independent.
+Development continues on `main` in OpenBMH-Extended. This contract originated on the former OpenBMH `1.2` branch, based on c051dd6 (1.1 Beta/editor). Classic1.0.2 remains independent in Weyoune/openbmh. Internal data/save names retain their previous identifiers.
 
 Accepted scope: one shared 1–4-manager world, including mixed German/English careers. Germany retains five 18-club leagues; England uses five FLTD-sized leagues 20/20/20/20/10. Europe contains Spain/France/Italy at 18 clubs each, AI-only. When England is disabled during club play, its 20-team Premier League remains AI-only in the international group; its lower divisions and domestic cups are removed. There is no Portuguese league. German menus and the existing Diamond currency apply everywhere. Both original national cup structures run together, with shared European competitions. A national-coach appointment selects Germany or England according to the manager's club country, retaining the other existing eligibility rules.
 

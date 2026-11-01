@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 cmake_minimum_required(VERSION 3.24)
-project(OpenBMH VERSION 1.1.0 LANGUAGES CXX C)
+project(OpenBMHExtended VERSION 1.0.0 LANGUAGES CXX C)
 if(APPLE)
     # Enable native languages before dependencies/subdirectories inherit rules.
     enable_language(OBJC OBJCXX)

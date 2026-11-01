@@ -80,7 +80,7 @@ using namespace bmh;
 // Why the game cannot start: a message box, and the same text on stderr.
 static void show_start_error(const std::string& text) {
     std::fprintf(stderr, "%s\n", text.c_str());
-    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "OpenBMH", text.c_str(), nullptr);
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, bmh::kOpenBmhProductName, text.c_str(), nullptr);
 }
 
 // Reattach the native editor when an in-game filename field takes focus. Cocoa
@@ -129,7 +129,7 @@ int main(int argc, char** argv) {
     for (size_t i = 1; i < args.size(); ++i) {
         const auto is = [&](const char* name) { return args[i] == name; };
         const bool value = i + 1 < args.size();
-        if(is("--world12-dev")){world12_development=true;
+        if(is("--extended-dev")||is("--world12-dev")){world12_development=true;
         } else if (is("--mute")) {
             muted = true;
         } else if (is("--music")) {
@@ -148,11 +148,11 @@ int main(int argc, char** argv) {
         } else if (is("--volume") && value) {
             volume = std::strtof(args[++i].c_str(), nullptr);
         } else if (is("--version")) {
-            std::printf("OpenBMH %s\n", bmh::kOpenBmhVersion);
+            std::printf("%s %s\n", bmh::kOpenBmhProductName, bmh::kOpenBmhVersion);
             return 0;
         } else if (is("--help") || is("-h")) {
             std::printf("usage: OpenBMH [<game directory | BMH.EXE | game.zip | game.7z>] [--seed <Watcom seed>] "
-                        "[--save-directory <directory>] [--mute] [--volume <0..1>] [--no-music] [--live-frame-ms <0..1000>] [--world12-dev]\n");
+                        "[--save-directory <directory>] [--mute] [--volume <0..1>] [--no-music] [--live-frame-ms <0..1000>] [--extended-dev]\n");
             return 0;
         } else if (args[i].rfind("--", 0) != 0 && data.empty()) {
             data = launch::path_from_utf8(args[i]);
@@ -178,7 +178,7 @@ int main(int argc, char** argv) {
     }
     if (data.empty()) {
         try {
-            const auto chosen = launch::choose_game_file("OpenBMH");
+            const auto chosen = launch::choose_game_file(bmh::kOpenBmhProductName);
             if (!chosen) return 0;  // cancelled
             data = *chosen;
         } catch (const std::exception& e) {
@@ -216,7 +216,7 @@ int main(int argc, char** argv) {
         playback.set_volume(volume);
         std::optional<uint64_t> audio_session;
         SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
-        const std::string window_title = world12_development?"OpenBMH 1.2 (development)":"OpenBMH 1.1";
+        const std::string window_title = world12_development?"OpenBMH-Extended 1.0 Beta (development)":"OpenBMH-Extended 1.0 Beta";
         SDL_Window* window = SDL_CreateWindow(window_title.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 960, 720, SDL_WINDOW_RESIZABLE);
         if (!window) throw FormatError(SDL_GetError());
         SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_PRESENTVSYNC);

@@ -58,7 +58,7 @@ def main():
         version = subprocess.check_output([str(cli.resolve()), '--version'], text=True).strip().split()[-1]
         if not re.fullmatch(r'\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?', version):
             raise RuntimeError('Invalid product version')
-        name = 'OpenBMH-' + version + '-' + args.platform
+        name = 'OpenBMH-Extended-' + version + '-' + args.platform
         destination = args.out / (name + '.zip')
         with zipfile.ZipFile(destination, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
             for file in sorted(stage.rglob('*')):

@@ -17,10 +17,10 @@ def verify(dist, reports, tag, source_sha, ci_run, repository):
     if not match or not re.fullmatch(r'[0-9a-f]{40}', source_sha) or ci_run <= 0:
         raise ValueError('Invalid release identity')
     version = match.group(1)
-    expected = {f'OpenBMH-{version}-{p}.zip' for p in (*PLATFORMS, 'source')}
+    expected = {f'OpenBMH-Extended-{version}-{p}.zip' for p in (*PLATFORMS, 'source')}
     if {p.name for p in dist.glob('*.zip')} != expected:
         raise ValueError('Release archive set does not match the tag/platforms')
-    with zipfile.ZipFile(dist / f'OpenBMH-{version}-source.zip') as source:
+    with zipfile.ZipFile(dist / f'OpenBMH-Extended-{version}-source.zip') as source:
         manifests = [n for n in source.namelist() if n.endswith('/SOURCE_MANIFEST.json')]
         if len(manifests) != 1:
             raise ValueError('Missing or ambiguous corresponding-source manifest')

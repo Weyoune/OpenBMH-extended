@@ -39,8 +39,8 @@ def create(program, data, destination, version):
     files['COMMUNITY.OBD']=bundle.read_bytes()
     report=data/'IMPORT-REPORT.json'
     if report.exists():files[report.name]=report.read_bytes()
-    source_url=f'https://github.com/Weyoune/openbmh/releases/download/v{version}/OpenBMH-{version}-source.zip'
-    files['COMMUNITY_README.txt']=('OpenBMH '+version+' Community Edition\n\n'
+    source_url=f'https://github.com/Weyoune/OpenBMH-extended/releases/download/v{version}/OpenBMH-Extended-{version}-source.zip'
+    files['COMMUNITY_README.txt']=('OpenBMH-Extended '+version+' Community Edition\n\n'
         'ZIP vollstaendig in einen eigenen Ordner entpacken und OpenBMH.exe starten.\n'
         'Alle benoetigten Spieldaten, Grafiken und Sounds liegen in COMMUNITY.OBD.\n'
         'Keine Original-DOS-Installation und kein Startskript erforderlich.\n'

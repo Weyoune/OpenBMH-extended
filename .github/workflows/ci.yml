@@ -3,7 +3,7 @@ name: Build without game data
 
 on:
   push:
-    branches: [main, release/1.0, poc/1.1-international, "1.2"]
+    branches: [main]
   pull_request:
   workflow_dispatch:
   workflow_call:
@@ -80,7 +80,7 @@ jobs:
           version = (build / 'product-version.txt').read_text().strip()
           suffix = '.exe' if sys.platform == 'win32' else ''
           cli = subprocess.run([str(build / ('openbmh_cli' + suffix)), '--version'], check=True, capture_output=True, text=True)
-          assert cli.stdout.strip() == 'OpenBMH console ' + version
+          assert cli.stdout.strip() == 'OpenBMH-Extended console ' + version
           subprocess.run([str(build / ('OpenBMH' + suffix)), '--version'], check=True)
       - name: Package products and licenses
         run: python3 tools/package/make_package.py --build build --out dist --platform ${{ matrix.platform }}

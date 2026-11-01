@@ -202,7 +202,7 @@ def main():
             'cmake --build build --config Release --parallel 2\nctest --test-dir build -C Release --output-on-failure\n```\n\n'
             'Modify the library/application sources and rebuild with these scripts to produce a relinked program. '
             'The source package does not supply the compiler, operating-system SDK or system libraries.\n')
-        destination = args.out / ('OpenBMH-' + version + '-source.zip')
+        destination = args.out / ('OpenBMH-Extended-' + version + '-source.zip')
         with zipfile.ZipFile(destination, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
             for file in sorted(stage.rglob('*')):
                 if file.is_file():

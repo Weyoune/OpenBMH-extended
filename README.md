@@ -1,49 +1,60 @@
-# OpenBMH
+# OpenBMH-Extended
 
-**1.2 development branch:** the shared German/English world is under construction. The explicit development entry reaches the first Original desktop through an owned typed startup/event; management, later days and complete competition integration remain unfinished. Do not treat a successful build as a playable 1.2 release. See [implementation gates](docs/poc-1.2/IMPLEMENTATION.md).
+**1.0 Beta — in development.** This is the extended branch of the original-game
+reconstruction. The current shared German/English career implementation is still
+being integrated; a successful build is not a playable Beta release.
 
-This is the **1.1 community development branch**. A prepared community package starts directly from `COMMUNITY.OBD`, without BMH.exe or a DOS installation. Original loose Classic installations remain supported. The stable 1.0 line stays on main. See [standalone community data](docs/poc-1.1/STANDALONE.md).
+The faithful Classic line remains **[OpenBMH 1.0.2](https://github.com/Weyoune/openbmh)**.
+Use that repository for the original league structures and original-game community
+maintenance. Extended development, its native data editor and future Beta releases
+live here. See [the project split](docs/PROJECT_SPLIT.md).
 
-A faithful, standalone community reconstruction of *Bundesliga Manager Hattrick*, using the player's original installation and SDL2 interface.
+## Scope and current state
 
-OpenBMH 1.0 builds on v0.1.2 with reviewed bug fixes and starts directly with the original game data. Original game files, graphics, audio and manuals are not distributed. German CD-compatible BMH and verified Diamond editions are the primary release targets. Football Limited remains experimental; the older floppy executable is not supported.
+OpenBMH-Extended retains the Classic SDL2 interface and shared match calculations,
+while extending the database, squad sizes, foreign club crests and country support.
+The first Beta targets one world for1–4 managers with German and English clubs,
+shared European competitions and separate national domestic cups. Its accepted
+scope and remaining release gates are in [the implementation contract](docs/poc-1.2/IMPLEMENTATION.md)
+and [status](docs/poc-1.2/STATUS.md).
 
-This is an independent community project, with no affiliation with or endorsement by the original rights holders, the DFL or the Bundesliga. It is an engine implementation, not an official source release or a remaster.
+The earlier OpenBMH1.1 Betas are available as clearly marked historical releases.
+They predate the shared-career implementation and are not the new1.0 Beta.
+The formerly named1.2 development work continues on this repository's `main`.
+Internal `world12` names and the existing typed save/data identifiers remain for
+compatibility; the project split does not rewrite saved data.
 
-## Get started
+No original executables, databases, artwork, music or saved games are distributed
+in this public repository. Use your own supported data. Code is GPL-3.0-only;
+third-party notices and asset rights remain applicable. This independent project
+is not affiliated with the original rights holders or football organizations.
 
-Check the [releases page](https://github.com/Weyoune/openbmh/releases) for available packages and their platform notes. A Windows package uses the name `OpenBMH-<version>-windows-x64.zip`. Availability and native validation are stated for each release; source build instructions do not establish platform support on their own.
+## Running development builds
 
-1. Have your own supported game installation available.
-2. Extract the OpenBMH package into a separate directory, or alongside the game files.
-3. Start `OpenBMH` (`OpenBMH.exe` on Windows). Select the game directory or executable when prompted. A ZIP or 7z containing one game installation can also be selected.
+The executable remains `OpenBMH.exe` on Windows and `OpenBMH` elsewhere. The CLI
+remains `openbmh_cli`; the native Windows data editor is `obdeddi.exe`.
 
-From a terminal in the extracted package on Linux or macOS:
+The shared-career development path requires an explicitly prepared Extended data
+directory. Its temporary entry is `--extended-dev` (`--world12-dev` remains an
+internal compatibility alias):
 
 ```sh
-./OpenBMH --data "path/to/game" --save-directory "path/to/saves"
-./openbmh_cli --console --data "path/to/game" --saves "path/to/saves"
+./OpenBMH --extended-dev --data "path/to/extended-data" --save-directory "path/to/saves"
 ```
 
-In Windows PowerShell, use `.\OpenBMH.exe` and `.\openbmh_cli.exe` instead.
-
-Use a writable save directory and keep backups of existing games. German editions are the primary compatibility target. **Football Limited / English data support is experimental**; original V2.20 save import and some edition-specific behaviour remain limited. See the [release notes](docs/release/1.0/RELEASE_NOTES.md).
-
-## Features and direction
-
-The graphical client and console share career management, matches, transfers, contracts, finances, training, stadium management and save handling. The console supports command batches, structured views and multiple manager clients. Audio is decoded from the user's installation where supported.
-
-OpenBMH focuses on original-game compatibility, stability and community contributions. See the [contribution guide](CONTRIBUTING.md) and [maintenance roadmap](docs/ROADMAP.md).
+The existing data-only community path and loose Classic reference installations
+are retained during development. Original1.1 or Classic saved games are not
+converted into shared-career snapshots. Keep saves and data backups separate.
 
 ## Build from source
 
-The following recipes build OpenBMH 1.0. They require Git, CMake 3.24 or newer and a C++20 compiler. The first configure fetches pinned open-source dependencies. Native build and package results are documented for each release; these instructions do not claim an untested platform result.
+The following recipes build OpenBMH-Extended. They require Git, CMake 3.24 or newer and a C++20 compiler. The first configure fetches pinned open-source dependencies. Native build and package results are documented for each release; these instructions do not claim an untested platform result.
 
 Clone the public repository, then run the commands for your system:
 
 ```sh
-git clone https://github.com/Weyoune/openbmh.git
-cd openbmh
+git clone https://github.com/Weyoune/OpenBMH-extended.git
+cd OpenBMH-extended
 ```
 
 ### Windows
@@ -88,25 +99,14 @@ On Intel Macs omit the arm64 setting or select `x86_64`. These commands build te
 
 Game-data tests are optional: add `-DBMH_DATA="path/to/game"` when configuring to supply your own installation. The repository includes no original test data. See [BUILDING](docs/BUILDING.md) for test skips, system SDL2 and packaging details.
 
-## Documentation
+## Documentation and downloads
 
-- [Build from source](docs/BUILDING.md) and [platform notes](docs/BUILD_PLATFORMS.md)
-- [Architecture](docs/architecture.md), [file formats](docs/formats/README.md) and [random generators](docs/RNG.md)
-- [Console reference](docs/CLI_CONCEPT/README.md), [structured protocol](docs/protocol.md) and [client/agent introduction](docs/CONSOLE_CLIENTS.md)
-- [Compatibility decisions](docs/COMPATIBILITY.md)
+- [Extended development status](docs/poc-1.2/STATUS.md)
+- [Project split and historical version names](docs/PROJECT_SPLIT.md)
+- [Build details](docs/BUILDING.md), [architecture](docs/architecture.md)
+- [Contributing](CONTRIBUTING.md), [compatibility decisions](docs/COMPATIBILITY.md)
+- [Extended releases](https://github.com/Weyoune/OpenBMH-extended/releases)
+- [Classic OpenBMH](https://github.com/Weyoune/openbmh)
 
-## Contribute
-
-Reports with reproducible steps, documentation corrections and focused patches are welcome. Discuss larger design changes in an issue before implementing them. [CONTRIBUTING.md](CONTRIBUTING.md) explains the review and testing conventions. Do not upload original game files, screenshots, recordings, copied text databases or saved games to public issues or pull requests.
-
-## How the project was developed
-
-The implementation grew from study of file formats and behaviour of a legally obtained game installation. The public repository contains independently written implementation and format documentation. It does not contain the proprietary implementation or its extracted resources.
-
-## License and thanks
-
-OpenBMH's own code and documentation are licensed under **GNU GPL version 3 only**, SPDX **GPL-3.0-only**. [LICENSE](LICENSE) contains the unchanged GPLv3 text; the example wording in its appendix does not change this project's version choice. Game content has separate ownership and is not covered by this license.
-
-Every published binary release identifies its matching source tag and provides a corresponding source archive. Binary releases must accompany or offer the corresponding source and build/relinking materials required by the applicable licenses. The tag identifies application source; it does not replace required materials for linked third-party components.
-
-Bundled components retain their own licenses, including Nuked OPL3 under LGPL-2.1-or-later. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md).
+Report Extended issues in this repository. Never attach original game files or
+unredacted saved games to a public issue.

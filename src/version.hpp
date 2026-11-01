@@ -11,5 +11,6 @@
 #endif
 
 namespace bmh {
+inline constexpr const char* kOpenBmhProductName = "OpenBMH-Extended";
 inline constexpr const char* kOpenBmhVersion = OPENBMH_VERSION;
 }  // namespace bmh

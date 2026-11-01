@@ -79,7 +79,7 @@ Arguments parse_args(int argc, char** argv) {
             return argv8[++i];
         };
         if (arg == "--version") {
-            std::printf("OpenBMH console %s\n", bmh::kOpenBmhVersion);
+            std::printf("%s console %s\n", bmh::kOpenBmhProductName, bmh::kOpenBmhVersion);
             std::exit(0);
         }
         if (arg == "--help" || arg == "-h") args.help = true;
