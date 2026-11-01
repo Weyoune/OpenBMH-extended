@@ -27,8 +27,9 @@ recovery, permanent career endings and the Original assistant lineup updates.
 It returns all generated notices in order, preserving their 150 raw text bytes,
 date and globally qualified manager recipient mask. A small fresh mailbox captures
 each player's insurance/injury notices, so workspace batches cannot drop earlier
-messages. The application must retain these notices in its persistent mailbox;
-this returned list does not itself implement the mailbox UI or its storage policy.
+messages. When the career economy is installed, these notices are also appended to its
+persistent mailbox within the staged transaction. The returned list remains
+available to the caller; mailbox navigation/display is separate.
 
 `world12::train_manager_squads` runs the shared familiarity decay once, then trains
 the human managers in saved order with their actual coaching and tactical state.

@@ -25,35 +25,37 @@ void wr32(std::vector<uint8_t>& v, size_t o, int32_t x) {
 
 }  // namespace
 
-void daily_interest(GameState& g, WatcomRandom& rand) {
-    // (DailyInterest before the day step: the training camp visits of today are over)
-    for (size_t m = 0; m < g.manager_teams.size(); m++) g.manager_records.at(m * kManagerRecord + 0x21f) &= 0x7f;
-    for (int k = 0; k < 4; k++) {
-        const size_t rec = size_t(k) * kManagerRecord;
-        const int32_t balance = rd32(g.manager_records, rec + 0x314);
-        const int32_t deposit = rd32(g.manager_records, rec + 0x318);
-        const int32_t credit = rd32(g.manager_records, rec + 0x31c);
-        int32_t amount = 0;  // positive = cost
-        if (balance < 0) {
-            if (balance + credit < 0) amount = ((balance + credit) * 18) / -36500;
-            int32_t used = -credit < balance ? balance : -credit;
-            amount += (used * 12) / -36500;
-            wr32(g.manager_records, rec + 0x89c, rd32(g.manager_records, rec + 0x89c) + amount);
-            book_money(g, k, amount, true);
-            amount = 0;
-        } else {
-            amount = balance / -36500;
-        }
-        amount += ((deposit / 10000) * 20000) / -36500;
-        wr32(g.manager_records, rec + 0x870, rd32(g.manager_records, rec + 0x870) - amount);
+void manager_daily_interest(GameState& g,int manager,WatcomRandom& rand) {
+    if(manager<0||manager>3)throw std::invalid_argument("daily interest: invalid manager");
+    const int k=manager;
+    const size_t rec = size_t(k) * kManagerRecord;
+    const int32_t balance = rd32(g.manager_records, rec + 0x314);
+    const int32_t deposit = rd32(g.manager_records, rec + 0x318);
+    const int32_t credit = rd32(g.manager_records, rec + 0x31c);
+    int32_t amount = 0;  // positive = cost
+    if (balance < 0) {
+        if (balance + credit < 0) amount = ((balance + credit) * 18) / -36500;
+        int32_t used = -credit < balance ? balance : -credit;
+        amount += (used * 12) / -36500;
+        wr32(g.manager_records, rec + 0x89c, rd32(g.manager_records, rec + 0x89c) + amount);
         book_money(g, k, amount, true);
-        if (rd32(g.manager_records, rec + 0x314) > 100000000) {  // read again after the bookings
-            int32_t extra = int32_t(rand.range(10000, 20000)) * 1000;
-            // BookMoney2 with the statistics flag set: counts as an expense (+0x8a0)
-            wr32(g.manager_records, rec + 0x8a0, rd32(g.manager_records, rec + 0x8a0) + extra);
-            book_money(g, k, extra, true);
-        }
+        amount = 0;
+    } else {
+        amount = balance / -36500;
     }
+    amount += ((deposit / 10000) * 20000) / -36500;
+    wr32(g.manager_records, rec + 0x870, rd32(g.manager_records, rec + 0x870) - amount);
+    book_money(g, k, amount, true);
+    if (rd32(g.manager_records, rec + 0x314) > 100000000) {  // read again after the bookings
+        int32_t extra = int32_t(rand.range(10000, 20000)) * 1000;
+        // BookMoney2 with the statistics flag set: counts as an expense (+0x8a0)
+        wr32(g.manager_records, rec + 0x8a0, rd32(g.manager_records, rec + 0x8a0) + extra);
+        book_money(g, k, extra, true);
+    }
+}
+void daily_interest(GameState& g,WatcomRandom& rand) {
+    for(size_t m=0;m<g.manager_teams.size();++m)g.manager_records.at(m*kManagerRecord+0x21f)&=0x7f;
+    for(int manager=0;manager<4;++manager)manager_daily_interest(g,manager,rand);
 }
 
 }  // namespace bmh

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "app/world12_pending.hpp"
 #include "game/world12/desktop_projection.hpp"
+#include "game/world12/economy.hpp"
 #include "game/schedule.hpp"
 #include <algorithm>
 #include <bit>
@@ -69,6 +70,7 @@ PendingOfferResult resolve_initial_offer(CareerSnapshot& state,ManagerActionOwne
             for(size_t b=0;b<0x58;++b)contract.board[b]=local.memory.u8(owner_boards+uint32_t(size_t(slot)*0x58+b));const auto mark=local.memory.u16(owner_boards+uint32_t(slot*0x58+0x44)),marked=local.memory.u16(owner_boards+uint32_t(slot*0x58+0x46));contract.mark=mark==0xfff?PlayerId{}:projection.global_player(mark);contract.marked_by=marked==0xfff?PlayerId{}:projection.global_player(marked);for(size_t b=0x44;b<0x48;++b)contract.board[b]=0;transfers.loans.push_back(contract);
         }
     }
+    if(candidate.world.economy)capture_career_economy(candidate.world,projection);
     candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();candidate.validate();
     if(state!=before||owner.scope!=expected.scope||owner.revision!=expected.revision)throw FormatError("world12: pending-offer owner changed during decision");state=std::move(candidate);++owner.revision;return result;
 }

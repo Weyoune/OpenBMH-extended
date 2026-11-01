@@ -27,6 +27,8 @@ constexpr size_t kMailboxText = 0x96;
 
 // PostMessage. recipients: a manager index, -1 = all managers, or a mask with bit 31 set.
 void post_message(GameState& g, int64_t recipients, const std::vector<uint8_t>& text);
+// Same insertion/eviction kernel with an already-qualified recipient mask.
+void post_message_mask(GameState&,uint32_t mask,const std::vector<uint8_t>& text);
 // A text of TEXTD.BLK as the original posts it (0x96 bytes from its start).
 void post_text(GameState& g, int64_t recipients, size_t text_id);
 // A composed message (only the text itself is known; the rest of the entry is zero).

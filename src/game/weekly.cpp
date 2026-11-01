@@ -2818,6 +2818,61 @@ void weekly_player_updates(GameState& g, GameRandom& game, WatcomRandom& rand, M
         weekly_player_update(g,slot,slot>=0x870,game,rand,report);
 }
 
+void weekly_manager_settlement(GameState& g,int m,WatcomRandom& rand) {
+    const bool quiet=g.memory.u8(::bmh::layout::GameMode)==1;
+    Record rec = record(g, m);
+    const int debt = rec.b(0x174);
+    if (debt != 0) book_money(g, m, -debt * 1000, true);
+    const SquadRange range = squad_range(int16_t(rec.u16(0x290)));
+    if (rec.b(0x287) != 0 && --rec.b(0x287) == 0) {
+        // the bill of the training camp
+        int16_t mood = 0;
+        for (int i = 0; i < 10; i++) mood = int16_t(mood + (g.manager_ratings.at(size_t(m) * 0x3c + size_t(i)) - 100));
+        mood = int16_t(mood / 10 + 0x46);
+        const int a = rand.range(0, 8);
+        const int b = rand.range(0, 8);
+        mood = int16_t(std::clamp(int(int16_t(mood + a - b)), 0x14, 0xb4));
+        int32_t tmp = mood;
+        for (int i = 10; i < 0xe; i++)
+            if (rec.b(size_t(i)) != 0) tmp += rand.range(5, 0xc);
+        const uint32_t bill = uint32_t(int16_t(tmp) * rec.i32(0x850)) / 100;
+        book_money(g, m, -int32_t(bill), true);
+        rec.set32(0x850, 0);
+    }
+    for (int s = 0; s < 24; s++) {
+        const size_t at = size_t(m) * kBoard + size_t(s) * kBoardSlot;
+        if (g.squad_slots.at(range.first + size_t(s)) == 0x0FFF) continue;
+        if ((g.tactics.at(at + 0x4f) & 0x80) && rand.range(0, 6) == 0) g.tactics.at(at + 0x4f) &= 0x7F;
+        if (g.tactics.at(at + 0xc) == 2) g.tactics.at(at + 0xb) &= 0x3F;
+        // SalaryInjuredPlayerOnBoardPaidOn: the salary of an injured player on the board is paid on
+        const int player = g.squad_slots.at(range.first + size_t(s)) & 0x0FFF;
+        if ((g.players.at(size_t(player)).w35c >> 27) != 0 && g.tactics.at(at + 0x43) != 0) {
+            const int32_t base = int32_t(g.tactics.at(at + 0x50) | g.tactics.at(at + 0x51) << 8 |
+                                         g.tactics.at(at + 0x52) << 16 | uint32_t(g.tactics.at(at + 0x53)) << 24);
+            const uint32_t pay = uint32_t(base * int32_t(((int8_t(g.tactics.at(at + 0x43)) >> 6) & 3) * 0x32 + 0x32)) / 100;
+            book_money(g, m, -int32_t(pay), true);
+        }
+        const uint8_t mood = g.tactics.at(at + 0xc);
+        if (mood % 0xc <= 7 && !(g.tactics.at(at + 0xb) & 0x20) && mood % 0xc != 0 && mood <= 0xf &&
+            !(g.tactics.at(at + 0x4f) & 0x80) && !quiet) {
+            const int16_t rating = int16_t(rec.i16(0x8aa) + (rec.i16(0x8ac) >> 2));
+            if (rand.range(0, 500 - (rating - 0x2a8) / 2) == 0) {
+                // InstallDefaultHooks(slot | 0x40): the player asks to talk about his contract.
+                // Before the contracts screen opens he names the term he wants,
+                // WatcomRandom(years left, 4), one more if that is no change (below 4),
+                // and the request is shown (SystemIdentity). The negotiation itself is UI:
+                // ported is a manager who leaves the screen without an offer, which
+                // changes nothing else.
+                const int years = mood / 0xc;
+                int wanted = rand.range(years, 4);
+                if (wanted == years && wanted < 4) wanted++;
+                (void)wanted;
+            }
+        }
+    }
+    weekly_statistics(g, m);
+}
+
 void weekly_processing(GameState& g, GameRandom& game, WatcomRandom& rand, MinuteReport& report,
                        TransferAllocatorContext allocator) {
     const int managers = int(g.manager_teams.size());
@@ -2856,61 +2911,8 @@ void weekly_processing(GameState& g, GameRandom& game, WatcomRandom& rand, Minut
     weekly_player_updates(g,game,rand,report);
     if(report.unsupported)return;
     tr("injuries and line-ups");
-    const bool quiet = g.memory.u8(::bmh::layout::GameMode) == 1;
-    // per human manager
-    for (int m = 0; m < managers; m++) {
-        Record rec = record(g, m);
-        const int debt = rec.b(0x174);
-        if (debt != 0) book_money(g, m, -debt * 1000, true);
-        const SquadRange range = squad_range(int16_t(rec.u16(0x290)));
-        if (rec.b(0x287) != 0 && --rec.b(0x287) == 0) {
-            // the bill of the training camp
-            int16_t mood = 0;
-            for (int i = 0; i < 10; i++) mood = int16_t(mood + (g.manager_ratings.at(size_t(m) * 0x3c + size_t(i)) - 100));
-            mood = int16_t(mood / 10 + 0x46);
-            const int a = rand.range(0, 8);
-            const int b = rand.range(0, 8);
-            mood = int16_t(std::clamp(int(int16_t(mood + a - b)), 0x14, 0xb4));
-            int32_t tmp = mood;
-            for (int i = 10; i < 0xe; i++)
-                if (rec.b(size_t(i)) != 0) tmp += rand.range(5, 0xc);
-            const uint32_t bill = uint32_t(int16_t(tmp) * rec.i32(0x850)) / 100;
-            book_money(g, m, -int32_t(bill), true);
-            rec.set32(0x850, 0);
-        }
-        for (int s = 0; s < 24; s++) {
-            const size_t at = size_t(m) * kBoard + size_t(s) * kBoardSlot;
-            if (g.squad_slots.at(range.first + size_t(s)) == 0x0FFF) continue;
-            if ((g.tactics.at(at + 0x4f) & 0x80) && rand.range(0, 6) == 0) g.tactics.at(at + 0x4f) &= 0x7F;
-            if (g.tactics.at(at + 0xc) == 2) g.tactics.at(at + 0xb) &= 0x3F;
-            // SalaryInjuredPlayerOnBoardPaidOn: the salary of an injured player on the board is paid on
-            const int player = g.squad_slots.at(range.first + size_t(s)) & 0x0FFF;
-            if ((g.players.at(size_t(player)).w35c >> 27) != 0 && g.tactics.at(at + 0x43) != 0) {
-                const int32_t base = int32_t(g.tactics.at(at + 0x50) | g.tactics.at(at + 0x51) << 8 |
-                                             g.tactics.at(at + 0x52) << 16 | uint32_t(g.tactics.at(at + 0x53)) << 24);
-                const uint32_t pay = uint32_t(base * int32_t(((int8_t(g.tactics.at(at + 0x43)) >> 6) & 3) * 0x32 + 0x32)) / 100;
-                book_money(g, m, -int32_t(pay), true);
-            }
-            const uint8_t mood = g.tactics.at(at + 0xc);
-            if (mood % 0xc <= 7 && !(g.tactics.at(at + 0xb) & 0x20) && mood % 0xc != 0 && mood <= 0xf &&
-                !(g.tactics.at(at + 0x4f) & 0x80) && !quiet) {
-                const int16_t rating = int16_t(rec.i16(0x8aa) + (rec.i16(0x8ac) >> 2));
-                if (rand.range(0, 500 - (rating - 0x2a8) / 2) == 0) {
-                    // InstallDefaultHooks(slot | 0x40): the player asks to talk about his contract.
-                    // Before the contracts screen opens he names the term he wants,
-                    // WatcomRandom(years left, 4), one more if that is no change (below 4),
-                    // and the request is shown (SystemIdentity). The negotiation itself is UI:
-                    // ported is a manager who leaves the screen without an offer, which
-                    // changes nothing else.
-                    const int years = mood / 0xc;
-                    int wanted = rand.range(years, 4);
-                    if (wanted == years && wanted < 4) wanted++;
-                    (void)wanted;
-                }
-            }
-        }
-        weekly_statistics(g, m);
-    }
+    for(int m=0;m<managers;++m)weekly_manager_settlement(g,m,rand);
+
 }
 
 }  // namespace bmh

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "game/world12/desktop_projection.hpp"
+#include "game/world12/economy.hpp"
 #include <algorithm>
 namespace bmh::world12 {
 AiMatchProjection project_manager_desktop(const CareerSnapshot& state,const GameState& reference,const std::vector<ClubId>& extra_clubs) {
@@ -25,6 +26,7 @@ AiMatchProjection project_manager_desktop(const CareerSnapshot& state,const Game
         local.memory.set32(layout::OfferSlots+uint32_t(notice.row-40)*4,projection.local_player(row.player)*0x400+manager|(notice.warned?0x80000000u:0));
     }
     if(state.world.markets)local.stocks.assign(state.world.markets->stocks.begin(),state.world.markets->stocks.end());
+    if(state.world.economy)install_career_economy(projection,state.world);
     return projection;
 }
 }

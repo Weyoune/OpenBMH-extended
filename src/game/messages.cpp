@@ -19,7 +19,7 @@ void wr32(std::vector<uint8_t>& v, size_t o, uint32_t x) {
 
 }  // namespace
 
-void post_message(GameState& g, int64_t recipients, const std::vector<uint8_t>& text) {
+void post_message_mask(GameState& g,uint32_t mask,const std::vector<uint8_t>& text) {
     std::vector<uint8_t>& box = g.mailbox;
     if (box.size() < kMailboxEntries * kMailboxEntry) return;  // no mailbox loaded
     size_t index = 0;
@@ -42,10 +42,6 @@ void post_message(GameState& g, int64_t recipients, const std::vector<uint8_t>& 
     } else {
         at = index * kMailboxEntry;
     }
-    uint32_t mask;
-    if (recipients == -1) mask = (0xFFFFFFFFu >> (32 - g.manager_teams.size())) | 0x80000000u;
-    else if (recipients & 0x80000000) mask = uint32_t(recipients);
-    else mask = 1u << uint32_t(recipients);
     // PostMessage ORs the recipient mask into MailboxRecipientMask. It is a runtime
     // global absent from normal FBMs; add_block deliberately keeps it out of
     // save serialization while preserving the Source address and bit layout.
@@ -57,6 +53,15 @@ void post_message(GameState& g, int64_t recipients, const std::vector<uint8_t>& 
     box[at + 8] = uint8_t(date >> 8);
     box[at + 9] = uint8_t(date);
     for (size_t i = 0; i < kMailboxText; i++) box[at + 10 + i] = i < text.size() ? text[i] : 0;
+}
+
+void post_message(GameState& g,int64_t recipients,const std::vector<uint8_t>& text) {
+    if(g.mailbox.size()<kMailboxEntries*kMailboxEntry)return;
+    uint32_t mask;
+    if (recipients == -1) mask = (0xFFFFFFFFu >> (32 - g.manager_teams.size())) | 0x80000000u;
+    else if (recipients & 0x80000000) mask = uint32_t(recipients);
+    else mask = 1u << uint32_t(recipients);
+    post_message_mask(g,mask,text);
 }
 
 void post_text(GameState& g, int64_t recipients, size_t text_id) {

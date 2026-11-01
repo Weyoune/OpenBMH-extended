@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "game/world12/weekly_players.hpp"
 #include "game/world12/match_projection.hpp"
+#include "game/world12/economy.hpp"
 #include "game/weekly.hpp"
 #include "game/week.hpp"
 #include <algorithm>
@@ -75,7 +76,9 @@ WeeklyPlayerOutcome update_weekly_players(CareerSnapshot& state,const GameState&
                 // One player's insurance and injury messages cannot overflow a
                 // native mailbox. Retain their exact order, raw text and global
                 // recipients for the application-owned persistent mailbox.
+                const auto first_notice=result.notices.size();
                 capture_notices(projection,result.notices);
+                if(candidate.world.economy)for(size_t n=first_notice;n<result.notices.size();++n){const auto& m=result.notices[n];append_economy_message(*candidate.world.economy,{m.recipients,0,m.date,m.text});}
                 std::fill(local.mailbox.begin(),local.mailbox.end(),0);
             }
         }

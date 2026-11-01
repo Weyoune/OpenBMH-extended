@@ -271,3 +271,33 @@ Milestone validation: the application builds and all 29 targeted Linux regressio
 checks pass. Representative typed weekly/training phase snapshots and the
 pre-change/current Core comparison receipts remain private. These phase fixtures
 precede desktop ownership and are not claimed as GUI-resumable played careers.
+
+
+## Persisted economy, messages and account/weekly settlement
+
+[World schema 16 economic state](ECONOMY.md) now retains deposits, interest totals,
+loan contracts by global borrower/lender seat, weekly camp/offer/construction data,
+financial/facility histories and the persistent Source mailbox. Fresh GUI careers
+initialize these verified fields explicitly. Pending transfer news and weekly
+injury notices survive saves; old schema 1–15 inputs still load without invented
+missing economic state. The S9 outer save framing is unchanged.
+
+Daily account processing distinguishes post-event interest from a plain day's
+stock movement. Weekly manager settlement reuses the Core calculation, retains
+rolling histories and maps holdings/loans correctly for sparse managers. Late
+state changes discard staged processing. Eight actual-data economy comparisons
+and 24 byteidentical frozen/current full Core economic runs pass; the application
+builds and all 30 targeted Linux regressions pass. The earlier actual GUI startup,
+save/load, pending-decision and four-manager cases also pass with the new state.
+
+Remaining: weekly incidents and interactive choices, market evolution, monthly
+services, mailbox display and earlier setup-message delivery, general daily/event
+ownership and the larger match/career/release gates. No calendar increment or
+playable release is enabled by these individual phases.
+
+Actual Linux SDL mouse checks additionally retain the new economy/mailbox state
+through a German decline and English sale, manual save and fresh-process load.
+Both saved careers exactly match the controller after-state plus the four manual
+save draws. Actual-data GUI tests explicitly verify that accepted sale/loan news
+is persisted. Screenshots, corresponding saves and comparison receipts stay in
+the private QA repository.

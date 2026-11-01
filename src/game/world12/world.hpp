@@ -131,6 +131,32 @@ struct Manager {
     bool operator==(const Manager&)const=default;
 };
 struct CrestResource {std::string path;uint8_t cell=0;bool operator==(const CrestResource&)const=default;};
+struct EconomyMessage {
+    uint32_t recipients=0,read_by=0;uint16_t date=0;
+    std::array<uint8_t,150> text{};
+    bool operator==(const EconomyMessage&)const=default;
+};
+struct ManagerEconomy {
+    uint32_t deposit=0,interest_income=0,overdraft_interest=0;
+    // bank, then four global human lender seats; principal,total,payment,term,
+    // elapsed months,payments made (bank_credit.hpp).
+    std::array<std::array<uint32_t,6>,5> loans{};
+    std::array<uint8_t,30> construction_weeks{};
+    // Source170,171,174..179; 172/173 belong to ManagerMatchState.
+    std::array<uint8_t,8> offers{};
+    uint8_t camp_weeks=0,camp_flags=0,weekly_count=0;
+    uint32_t camp_bill=0;
+    std::array<uint8_t,52> facility_history{};
+    std::array<std::array<uint32_t,52>,4> financial_history{};
+    bool operator==(const ManagerEconomy&)const=default;
+};
+struct CareerEconomy {
+    uint8_t week=0;
+    std::array<ManagerEconomy,4> managers{};
+    std::vector<EconomyMessage> messages;
+    uint32_t recipient_mask=0;
+    bool operator==(const CareerEconomy&)const=default;
+};
 struct CareerMarkets {
     std::array<uint8_t,12*0x5c> stocks{};
     std::array<uint8_t,6*0x1c> funds{};
@@ -168,6 +194,7 @@ struct TransferMarket {
     bool operator==(const TransferMarket&)const=default;
 };
 struct World {
+    std::optional<CareerEconomy> economy;
     bool players_initialized=false;
     // Present after the market/mood phase; old saves do not invent these values.
     std::optional<CareerMarkets> markets={};

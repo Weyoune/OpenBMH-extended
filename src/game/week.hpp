@@ -27,6 +27,8 @@ namespace bmh {
 // step: bit 7 of record +0x21f (a training camp visit booked today, BookTrainingCamp) is
 // cleared for every manager.
 void daily_interest(GameState& g, WatcomRandom& rand);
+// One verified account; the normal legacy wrapper still processes all four.
+void manager_daily_interest(GameState&,int manager,WatcomRandom&);
 
 }  // namespace bmh
 

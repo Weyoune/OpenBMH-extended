@@ -8,6 +8,7 @@
 #include "game/week.hpp"
 #include "game/save.hpp"
 #include "game/world12/weekly_players.hpp"
+#include "game/world12/economy.hpp"
 #include "game/pending_offer.hpp"
 #include <algorithm>
 #include "game/world12/codec.hpp"
@@ -88,6 +89,44 @@ int main(int argc,char** argv)try {
     }
     if(read_save(make_save(state))!=state)throw std::runtime_error("initial market snapshot differs");
     std::cout<<initial_market.listings<<" initial market listings and shuffled fixtures, checkpoint/toggle/quotes/snapshot match Native; W="<<initial_market.watcom_draws<<'\n';
+    {
+        auto startup=state,source_start=state;auto initial_template=native;
+        // Season setup has already posted its own messages. Compare the numeric
+        // fresh-career template independently of that earlier presentation queue.
+        initial_template.mailbox.assign(kMailboxEntries*kMailboxEntry,0);
+        initialize_career_economy(startup,reference);initialize_career_economy(source_start,initial_template);
+        if(startup.world.economy!=source_start.world.economy)throw std::runtime_error("initial economy template differs from initialized full Core");
+        size_t passes=0;
+        for(int scenario=0;scenario<4;++scenario)for(auto kind:{DailyEconomyKind::after_event,DailyEconomyKind::plain_day}) {
+            auto core=native;auto typed=state;
+            const auto put32=[&](size_t at,uint32_t value){for(size_t b=0;b<4;++b)core.manager_records.at(at+b)=uint8_t(value>>(b*8));};
+            put32(0x314,scenario==0?5000000u:scenario==1?uint32_t(-2000000):140000000u);put32(0x318,2000000);put32(0x870,123);put32(0x89c,456);
+            core.manager_records[0x21f]=0x80;core.manager_records[0x285]=scenario==3?52:0;
+            core.manager_records[0x287]=1;put32(0x850,100000);core.manager_records[0x174]=3;
+            for(size_t loan=0;loan<5;++loan)for(size_t n=0;n<6;++n)core.memory.set32(layout::Loans+uint32_t(loan*0x18+n*4),uint32_t((loan+1)*100+n));
+            core.mailbox.assign(kMailboxEntries*kMailboxEntry,0);typed.world.managers[0].finance=manager_initial_finance_from_legacy(core,0);
+            initialize_career_economy(typed,core);GameRandom cg(17);WatcomRandom cw(91);typed.game_seed=17;typed.watcom_seed=91;
+            if(kind==DailyEconomyKind::plain_day)stock_market(core,cg);daily_interest(core,cw);
+            daily_finance(typed,reference,kind);
+            const auto check_economy=[&]{
+                if(typed.game_seed!=cg.seed()||typed.watcom_seed!=cw.seed())throw std::runtime_error("daily/weekly economy RNG differs from full Core");
+                if(typed.world.managers[0].finance!=manager_initial_finance_from_legacy(core,0))throw std::runtime_error("daily/weekly money differs from full Core");
+                std::vector<ClubId> clubs{typed.world.managers[0].club};const auto s=*typed.world.settings;
+                auto projected=AiMatchProjection::create_for_humans(typed,clubs,reference,{s.mode,s.difficulty,s.foreign_rule,true});install_career_economy(projected,typed.world);
+                const auto& actual=projected.state;const size_t offsets[]={0x318,0x870,0x89c,0x850};
+                for(auto at:offsets)for(size_t b=0;b<4;++b)if(actual.manager_records[at+b]!=core.manager_records[at+b])throw std::runtime_error("daily/weekly financial scalar differs");
+                for(size_t n=0;n<52;++n){if(actual.manager_records[0x17a+n]!=core.manager_records[0x17a+n])throw std::runtime_error("weekly facility history differs");for(size_t at:{0x3d8u,0x4a8u,0x578u,0x648u})for(size_t b=0;b<4;++b)if(actual.manager_records[at+n*4+b]!=core.manager_records[at+n*4+b])throw std::runtime_error("weekly financial history differs");}
+                for(auto at:{0x285u,0x287u,0x21fu})if(actual.manager_records[at]!=core.manager_records[at])throw std::runtime_error("weekly camp/history cursor differs");
+                if(actual.stocks!=core.stocks)throw std::runtime_error("daily stocks/holdings differ");
+                if(typed.world.managers[0].tactics!=manager_full_tactics_from_legacy(core,0,players))throw std::runtime_error("weekly contract/insurance board differs");
+                if(read_save(make_save(typed))!=typed)throw std::runtime_error("economy snapshot differs");
+            };
+            check_economy();weekly_manager_settlement(core,0,cw);settle_weekly_managers(typed,reference);check_economy();
+            if(!proof.empty()&&scenario==3&&kind==DailyEconomyKind::plain_day){const auto file=proof/"weekly-economy.FBM";write_savegame(file,make_save(typed));if(read_save(load_savegame(file))!=typed)throw std::runtime_error("weekly economy disk roundtrip differs");}
+            ++passes;
+        }
+        std::cout<<passes<<" full-Core economy comparisons: deposits/overdraft/large balance, event-vs-plain-day shares, camp bills, loans and rolling weekly histories match\n";
+    }
     {
         size_t passes=0;size_t injuries=0,recoveries=0,retirements=0;
         std::vector<uint32_t> weekly_seeds{1u,91u,703u,1777u};

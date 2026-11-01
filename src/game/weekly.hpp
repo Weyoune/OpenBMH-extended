@@ -98,6 +98,9 @@ void weekly_player_update(GameState&,size_t slot,bool foreign_squad,
     GameRandom&,WatcomRandom&,MinuteReport&);
 void weekly_player_updates(GameState&,GameRandom&,WatcomRandom&,MinuteReport&);
 
+// Source per-manager debts, camp bill, insurance, contracts and weekly statistics.
+void weekly_manager_settlement(GameState&,int manager,WatcomRandom&);
+
 void weekly_processing(GameState& g, GameRandom& game, WatcomRandom& rand, MinuteReport& report,
                        TransferAllocatorContext allocator = TransferAllocatorContext::unsupported);
 

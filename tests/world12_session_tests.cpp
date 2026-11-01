@@ -369,6 +369,7 @@ void actual_pending(const std::filesystem::path& data,const std::filesystem::pat
             const bool moved=std::any_of(roster.begin(),roster.end(),[&](const auto& slot){return slot.player==player;});
             if(kind==0||kind==3)check(!moved,"decline/salary GUI moved player");
             if(kind==1||kind==2)check(moved,"accepted actual GUI offer did not move player");
+            if(kind==1||kind==2)check(after.world.economy&&fixture.world.economy&&after.world.economy->messages.size()>fixture.world.economy->messages.size(),"accepted GUI transfer did not persist its Source news");
             if(kind==2)check(after.world.loans.size()==1&&after.transfers&&after.transfers->loans.size()==1,"actual GUI loan lost owner contract");
             check(read_save(make_save(after))==after,"actual GUI pending settlement failed save roundtrip");
             capture("after",flow.render());

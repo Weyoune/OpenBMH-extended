@@ -3,6 +3,7 @@
 #include "app/world12_desktop.hpp"
 #include "ui/desktop.hpp"
 #include "app/world12_pending.hpp"
+#include "game/world12/economy.hpp"
 #include "game/world12/codec.hpp"
 #include "game/career.hpp"
 #include "game/calendar.hpp"
@@ -56,6 +57,7 @@ void Session::prepare_start(uint64_t revision) {
     auto draws=prepare_initial_competitions(candidate,staged_owner,staged_owner,calendar,{resources_.german,resources_.english},resources_.reference);
     auto services=initialize_first_season_manager_services(candidate,staged_owner,staged_owner,resources_.reference);
     initialize_first_season_market(candidate,staged_owner,staged_owner);
+    initialize_career_economy(candidate,resources_.reference);
     initialize_desktops(candidate,resources_.reference);
     if(state_!=before||owner_.scope!=before_owner.scope||owner_.revision!=before_owner.revision)throw FormatError("world12: session changed during preparation");
     state_=std::move(candidate);owner_=staged_owner;draws_=std::move(draws);services_=std::move(services);
