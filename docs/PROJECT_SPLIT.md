@@ -2,18 +2,18 @@
 
 | Project | Repository | Version line |
 | --- | --- | --- |
-| OpenBMH Classic | [Weyoune/openbmh](https://github.com/Weyoune/openbmh) |1.0.2, original-game reconstruction |
-| OpenBMH-Extended | [Weyoune/OpenBMH-extended](https://github.com/Weyoune/OpenBMH-extended) |1.0 Beta, extended country/database development |
+| OpenBMH Classic | [Weyoune/openbmh](https://github.com/Weyoune/openbmh) | 1.0.2, original-game reconstruction |
+| OpenBMH-Extended | [Weyoune/OpenBMH-extended](https://github.com/Weyoune/OpenBMH-extended) | 1.0 Beta, extended country/database development |
 
-The prior OpenBMH1.1 Beta releases and native `obdeddi` editor belong to Extended.
+The prior OpenBMH 1.1 Beta releases and native `obdeddi` editor belong to Extended.
 They are preserved as historical archives with their original tags, binary names,
 checksums, corresponding source and original release notes. Archived build metadata
-retains its original provenance. A historical1.1 package is not the new1.0 Beta.
+retains its original provenance. A historical1.1 package is not the new 1.0 Beta.
 The former1.2 branch is now Extended `main`; its previous version number remains
 in internal `world12` source paths, data profiles and save magic. These identifiers
 are not the product's new release number and are intentionally not rewritten.
 
-Development builds identify as1.0.0-beta.1. This is a development version, not a
+Development builds identify as 1.0.0-beta.1. This is a development version, not a
 claim that the first playable Beta is finished. The shared-career release still
 requires its documented integration, played-season and native GUI checks.
 The executable remains `OpenBMH.exe`; new packages use the `OpenBMH-Extended-`

@@ -13,14 +13,14 @@ live here. See [the project split](docs/PROJECT_SPLIT.md).
 
 OpenBMH-Extended retains the Classic SDL2 interface and shared match calculations,
 while extending the database, squad sizes, foreign club crests and country support.
-The first Beta targets one world for1–4 managers with German and English clubs,
+The first Beta targets one world for 1–4 managers with German and English clubs,
 shared European competitions and separate national domestic cups. Its accepted
 scope and remaining release gates are in [the implementation contract](docs/poc-1.2/IMPLEMENTATION.md)
 and [status](docs/poc-1.2/STATUS.md).
 
-The earlier OpenBMH1.1 Betas are available as clearly marked historical releases.
-They predate the shared-career implementation and are not the new1.0 Beta.
-The formerly named1.2 development work continues on this repository's `main`.
+The earlier OpenBMH 1.1 Betas are available as clearly marked historical releases.
+They predate the shared-career implementation and are not the new 1.0 Beta.
+The formerly named 1.2 development work continues on this repository's `main`.
 Internal `world12` names and the existing typed save/data identifiers remain for
 compatibility; the project split does not rewrite saved data.
 
