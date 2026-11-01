@@ -183,7 +183,7 @@ std::optional<InitialCompetitionFields> decode_initial_competitions(const J& inp
     if(fields.size()!=3||qualified.size()!=3||holders.size()!=3)throw FormatError("world12: invalid initial competition dimensions");
     for(size_t k=0;k<3;++k){for(const auto& value:array(fields[k]))result.fields[k].push_back({number(value)});for(const auto& value:array(qualified[k]))result.qualified[k].push_back({number(value)});result.holders[k]={number(holders[k])};}
     for(const auto& value:array(field(input,"national_field")))result.national_field.push_back({number(value)});
-    if(version>=14){result.manager_services_complete=boolean(field(input,"manager_services_complete"));const auto refs=[&](const char* name,auto& output){for(const auto& j:array(field(input,name)))if(!output.emplace(Country(number(field(j,"country"),61)),ClubId{number(field(j,"club"))}).second)throw FormatError("world12: repeated domestic title country");};refs("champions",result.champions);refs("domestic_holders",result.domestic_holders);}return result;
+    if(version>=14){result.manager_services_complete=boolean(field(input,"manager_services_complete"));const auto refs=[&](const char* name,auto& output){for(const auto& j:array(field(input,name))){const auto country=Country(number(field(j,"country"),61));if(std::any_of(output.begin(),output.end(),[&](const auto& row){return row.first==country;}))throw FormatError("world12: repeated domestic title country");output.push_back({country,ClubId{number(field(j,"club"))}});}std::sort(output.begin(),output.end(),[](const auto& a,const auto& b){return a.first<b.first;});};refs("champions",result.champions);refs("domestic_holders",result.domestic_holders);}return result;
 }
 
 J encode_market(const std::optional<TransferMarket>& market) {

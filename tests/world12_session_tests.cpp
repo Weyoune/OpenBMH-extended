@@ -204,11 +204,14 @@ void file_io_tests() {
     struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code ignored;std::filesystem::remove_all(path,ignored);}} cleanup{directory};
     CareerSnapshot state;state.world=bmh::test::world12::complete_world();state.results=SeasonResults::empty(state.world.catalogue);const auto save=make_save(state);const auto path=directory/"Roundtrip.FBM";
     ui::SaveLoadRequest request;request.action=ui::SaveLoadAction::save;request.path=path;
-    check(session_app::checked_game_path(directory,request)==path,"valid confined game path rejected");session_app::publish_game_save(path,save,false);check(read_save(load_savegame(path))==state,"published save roundtrip differs");
+    check(session_app::checked_game_path(directory,request)==std::filesystem::canonical(directory)/path.filename(),"valid confined game path rejected");session_app::publish_game_save(path,save,false);check(read_save(load_savegame(path))==state,"published save roundtrip differs");
     const auto bytes=read_file(path);rejects([&]{session_app::publish_game_save(path,save,false);},"unconfirmed target collision overwrote existing save");check(read_file(path)==bytes,"failed publish changed existing save");
     request.path=directory.parent_path()/"Outside.FBM";rejects([&]{session_app::checked_game_path(directory,request);},"outside save directory accepted");
     std::filesystem::create_directory(directory/"Blocked.FBM");request.path=directory/"Blocked.FBM";request.overwrite=true;rejects([&]{session_app::checked_game_path(directory,request);},"directory accepted as game file");rejects([&]{session_app::publish_game_save(request.path,save,true);},"failed replacement of directory accepted");
     std::error_code error;std::filesystem::create_symlink(path,directory/"Alias.FBM",error);if(!error){request.path=directory/"Alias.FBM";rejects([&]{session_app::checked_game_path(directory,request);},"symlink game target accepted");}
+    error.clear();std::filesystem::create_directory_symlink(directory,directory/"FolderAlias",error);
+    if(!error){request.path=directory/"FolderAlias"/path.filename();request.overwrite=true;
+        check(session_app::checked_game_path(directory,request)==std::filesystem::canonical(directory)/path.filename(),"save-root directory alias did not resolve to canonical target");}
     for(const auto& entry:std::filesystem::directory_iterator(directory))check(entry.path().filename().string().find(".openbmh-save-")!=0,"failed save left a temporary behind");
 }
 void actual_management(ui::StartupFlow& flow,std::unique_ptr<session_app::Session>& session,const std::filesystem::path& data,const std::filesystem::path& output) {

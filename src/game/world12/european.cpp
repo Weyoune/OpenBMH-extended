@@ -15,7 +15,7 @@ InitialCompetitionFields draw_initial_shared_fields(const World& world,GameRando
     for(uint32_t l:{10u,5u,11u,12u})if(world.catalogue.league({l}).active && std::find(leagues.begin(),leagues.end(),LeagueId{l})==leagues.end())leagues.push_back({l});
     if(leagues.size()<4)throw std::invalid_argument("world12: missing European top leagues");
     result.holders={world.membership[leagues[2].value].clubs.at(7),world.membership[leagues[3].value].clubs.at(7),world.membership[leagues[1].value].clubs.at(7)};
-    for(auto country:{Country::germany,Country::england})if(world.catalogue.selectable(country)){const auto& ranked=world.membership[world.catalogue.starting_league(country,0).value].clubs;result.champions[country]=ranked[0];result.domestic_holders[country]=ranked.at(7);}
+    for(auto country:{Country::germany,Country::england})if(world.catalogue.selectable(country)){const auto& ranked=world.membership[world.catalogue.starting_league(country,0).value].clubs;result.champions.push_back({country,ranked[0]});result.domestic_holders.push_back({country,ranked.at(7)});}
     const auto find=[&](ClubId id){for(size_t k=0;k<3;++k)if(std::find(result.qualified[k].begin(),result.qualified[k].end(),id)!=result.qualified[k].end())return int(k)+1;return 0;};
     const auto add=[&](int kind,ClubId id){result.qualified[size_t(kind)].push_back(id);};
     // Preserve nineteen regular league UEFA places. If Germany is disabled,

@@ -185,7 +185,9 @@ struct InitialCompetitionFields {
     std::array<std::vector<ClubId>,3> qualified,fields;
     std::array<ClubId,3> holders;
     std::vector<ClubId> national_field;
-    std::map<Country,ClubId> champions,domestic_holders;
+    // Sorted country rows keep optional construction movable without allocating
+    // a tree sentinel (notably with the MSVC standard library).
+    std::vector<std::pair<Country,ClubId>> champions,domestic_holders;
     bool manager_services_complete=false;
     bool operator==(const InitialCompetitionFields&)const=default;
 };

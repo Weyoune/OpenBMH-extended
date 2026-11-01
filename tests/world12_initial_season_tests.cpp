@@ -6,6 +6,10 @@
 #include "cli/json.hpp"
 #include <set>
 #include <iostream>
+#include <type_traits>
+#include <algorithm>
+static_assert(std::is_nothrow_move_constructible_v<bmh::world12::InitialCompetitionFields>);
+static_assert(std::is_nothrow_move_assignable_v<bmh::world12::CareerSnapshot>);
 namespace {
 using namespace bmh;using namespace bmh::world12;namespace owner_app=bmh::app::world12;
 void check(bool value,const char* message){if(!value)throw std::runtime_error(message);}
@@ -52,6 +56,10 @@ int main()try {
         check(state==repeat&&owner.revision==1&&outcome.game_draws>0&&outcome.watcom_draws>0,"initial competition setup changed across repeat or lost revision/RNG");
         check(state.world.initial_competitions&&state.calendar&&state.calendar->schedule==schedule&&state.calendar->next_day==0,"initial competitions lost fields/calendar boundary");
         const auto& fields=*state.world.initial_competitions;std::set<ClubId> entrants;
+        {auto duplicate=state.world;duplicate.initial_competitions->champions.push_back(fields.champions.front());rejects([&]{duplicate.validate();},"duplicate title country accepted");}
+        if(fields.champions.size()==2){auto reversed=state.world;std::reverse(reversed.initial_competitions->champions.begin(),reversed.initial_competitions->champions.end());rejects([&]{reversed.validate();},"noncanonical title country order accepted");
+            auto bytes=encode_world(state.world);auto json=bmh::cli::parse_json(std::string(bytes.begin(),bytes.end()));auto& titles=std::get<bmh::cli::Json::Array>(json.object()->at("initial_competitions").object()->at("champions").value);std::reverse(titles.begin(),titles.end());const auto text=bmh::cli::dump_json(json);check(decode_world(Bytes(text.begin(),text.end()))==state.world,"title country decoder lost previous map ordering");}
+
         for(size_t k=0;k<3;++k)for(auto id:fields.fields[k])check(entrants.insert(id).second&&state.world.clubs.at(id).kind==ClubKind::club,"duplicate/non-club in European field");
         check(entrants.size()==120&&fields.national_field.size()==(scope.international?4u:0u),"European/national field dimensions differ");
         if(!scope.germany)for(auto id:entrants)check(state.world.clubs.at(id).country!=Country::germany,"disabled German clubs leaked into Europe");

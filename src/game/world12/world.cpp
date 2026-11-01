@@ -45,7 +45,7 @@ void World::validate(bool complete)const {
     if(initial_competitions){
         if(!settings)throw std::invalid_argument("world12: initial competitions lack career settings");
         for(const auto& manager:managers)if(!manager.career||!manager.career->season_records||!manager.tactics||!manager.finance||!manager.match_state)throw std::invalid_argument("world12: prepared competitions lack complete manager state");
-        for(const auto* titles:{&initial_competitions->champions,&initial_competitions->domestic_holders})for(const auto& [country,id]:*titles)if(!catalogue.selectable(country)||!clubs.contains(id)||clubs.at(id).country!=country||clubs.at(id).kind!=ClubKind::club)throw std::invalid_argument("world12: invalid domestic title identity");
+        for(const auto* titles:{&initial_competitions->champions,&initial_competitions->domestic_holders}){std::optional<Country> previous;for(const auto& [country,id]:*titles){if((previous&&country<=*previous)||!catalogue.selectable(country)||!clubs.contains(id)||clubs.at(id).country!=country||clubs.at(id).kind!=ClubKind::club)throw std::invalid_argument("world12: invalid domestic title identity/order");previous=country;}}
         if(initial_competitions->manager_services_complete)for(const auto& manager:managers)if(!manager.career->season_services)throw std::invalid_argument("world12: completed initial services lack manager records");
         const size_t sizes[]={64,24,32};std::set<ClubId> participants;
         for(size_t k=0;k<3;++k){const auto& field=initial_competitions->fields[k];if(field.size()!=sizes[k])throw std::invalid_argument("world12: incomplete European field");

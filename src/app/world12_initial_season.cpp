@@ -59,7 +59,8 @@ namespace {
 // unrequested club is manufactured or persisted in the bounded workspace.
 void install_season_relations(bmh::GameState& local,const bmh::world12::World& world,bmh::world12::ClubId id) {
     using namespace bmh;using namespace bmh::world12;const auto& fields=*world.initial_competitions;const auto country=world.clubs.at(id).country;
-    const auto champion=fields.champions.find(country),cup=fields.domestic_holders.find(country);
+    const auto find=[&](const auto& rows){return std::find_if(rows.begin(),rows.end(),[&](const auto& row){return row.first==country;});};
+    const auto champion=find(fields.champions),cup=find(fields.domestic_holders);
     if(champion==fields.champions.end()||cup==fields.domestic_holders.end())throw std::invalid_argument("world12: initial title relations are unavailable");
     const auto word=[&](uint32_t at,uint16_t value){local.memory.add_block(at,2);local.memory.set16(at,value);};
     const auto byte=[&](uint32_t at,uint8_t value){local.memory.add_block(at,1);local.memory.set8(at,value);};
