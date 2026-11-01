@@ -6,6 +6,7 @@
 #include "app/world12_national.hpp"
 #include "app/world12_ai_day.hpp"
 #include "app/world12_weather.hpp"
+#include "app/world12_attendance.hpp"
 #include "formats/le.hpp"
 #include "ui/manager.hpp"
 #include "ui/world12_manager_selection.hpp"
@@ -47,6 +48,8 @@ public:
     AiDayOutcome play_scheduled_leagues(uint64_t expected_revision,
         const std::vector<AiDayLeagueConditions>&,const bmh::world12::HumanRoundHooks&);
     WeatherPreparation prepare_scheduled_weather(uint64_t expected_revision);
+    AttendanceOutcome book_scheduled_attendance(uint64_t expected_revision,const std::filesystem::path& data);
+    void play_prepared_matches(uint64_t expected_revision,const bmh::world12::HumanRoundHooks&);
 
     PendingOfferResult resolve_pending(const std::filesystem::path&,const ui::DeskRequest&,const PendingOfferHooks&);
     void open_mailbox(const ui::DeskRequest&);

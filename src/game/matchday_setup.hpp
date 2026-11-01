@@ -42,6 +42,9 @@ struct MatchdayContext {
     // the national team day (DayCompetitions -> national-only flag): AdvanceTurn skips the Bundestrainer
     // check of the other days (no take-over, no hand-back)
     bool national_team_day = false;
+    // Explicit calendar metadata of a bounded typed-world league. Native
+    // callers retain their installed fixture tables when these are absent.
+    int projected_matchdays=-1,projected_completed_rounds=-1;
 };
 struct MatchWeatherOutcome {
     uint8_t temperature=0,rain=0,referee=0;

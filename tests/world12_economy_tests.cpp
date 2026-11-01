@@ -106,7 +106,7 @@ int main()try {
               "typed charged-month save/load consumes another robbery draw");
         const auto current=encode_world(charged.world);
         auto previous=cli::parse_json(std::string(current.begin(),current.end()));
-        auto& object=*previous.object();object["version"]=21;
+        auto& object=*previous.object();object["version"]=21;bmh::test::world12::omit_attendance_records(previous);
         auto& managers=std::get<cli::Json::Array>(object.at("economy").object()->at("managers").value);
         for(auto& manager:managers)manager.object()->erase("bank_robbery_month");
         const auto text=cli::dump_json(previous);auto old_world=decode_world(Bytes(text.begin(),text.end()));
@@ -139,8 +139,8 @@ int main()try {
     rejects([&]{daily_finance(missing,rules,DailyEconomyKind::plain_day);},"missing economy was silently initialized");check(missing==untouched,"invalid phase changed state");
     auto invalid=state;invalid.world.economy->messages[0].recipients=1u<<8;rejects([&]{make_save(invalid);},"unknown mailbox manager accepted");
     invalid=state;invalid.world.economy->managers[1].weekly_count=53;rejects([&]{make_save(invalid);},"oversized weekly history accepted");
-    auto raw=encode_world(initial.world);std::string legacy(raw.begin(),raw.end());const auto version=legacy.find("\"version\":"+std::to_string(kWorldSchemaVersion));check(version!=std::string::npos,"new economy schema version missing");legacy.replace(version,std::string("\"version\":"+std::to_string(kWorldSchemaVersion)).size(),"\"version\":15");
-    auto legacy_world=initial.world;legacy_world.economy.reset();check(decode_world(Bytes(legacy.begin(),legacy.end()))==legacy_world,"previous world schema15 ceased to load");
+    auto legacy_input=initial.world;bmh::test::world12::omit_attendance_records(legacy_input);auto raw=encode_world(legacy_input);std::string legacy(raw.begin(),raw.end());const auto version=legacy.find("\"version\":"+std::to_string(kWorldSchemaVersion));check(version!=std::string::npos,"new economy schema version missing");legacy.replace(version,std::string("\"version\":"+std::to_string(kWorldSchemaVersion)).size(),"\"version\":15");
+    auto legacy_world=legacy_input;legacy_world.economy.reset();check(decode_world(Bytes(legacy.begin(),legacy.end()))==legacy_world,"previous world schema15 ceased to load");
     {
         auto sparse=initial;auto& economy=*sparse.world.economy;economy.messages.clear();economy.recipient_mask=0;
         for(uint8_t n=0;n<3;++n){EconomyMessage message;message.recipients=2;message.date=uint16_t(10+n);message.text[0]=uint8_t('A'+n);append_economy_message(economy,message);}
@@ -148,7 +148,7 @@ int main()try {
         check(edit_career_message(economy,1,0,first,MailboxEditKind::delete_for_manager)==MailboxEditFailure::none,"canonical mailbox deletion refused");
         check(economy.messages.size()==3&&economy.messages[0].recipients==0&&economy.messages[0].text[0]=='A'&&economy.messages[2].text[0]=='C',"canonical mailbox lost physical hole or following message");
         check(read_save(make_save(sparse))==sparse,"sparse mailbox snapshot failed");
-        const auto encoded=encode_world(sparse.world);std::string old(encoded.begin(),encoded.end());const auto version=old.find("\"version\":"+std::to_string(kWorldSchemaVersion));check(version!=std::string::npos,"sparse mailbox schema version missing");old.replace(version,std::string("\"version\":"+std::to_string(kWorldSchemaVersion)).size(),"\"version\":20");rejects([&]{decode_world(Bytes(old.begin(),old.end()));},"older schema admitted unrepresentable physical mail holes");
+        auto sparse_legacy=sparse.world;bmh::test::world12::omit_attendance_records(sparse_legacy);const auto encoded=encode_world(sparse_legacy);std::string old(encoded.begin(),encoded.end());const auto version=old.find("\"version\":"+std::to_string(kWorldSchemaVersion));check(version!=std::string::npos,"sparse mailbox schema version missing");old.replace(version,std::string("\"version\":"+std::to_string(kWorldSchemaVersion)).size(),"\"version\":20");rejects([&]{decode_world(Bytes(old.begin(),old.end()));},"older schema admitted unrepresentable physical mail holes");
 
         EconomyMessage next;next.recipients=2;next.date=20;next.text[0]='D';append_economy_message(economy,next);check(economy.messages.size()==3&&economy.messages[0].text[0]=='D'&&economy.messages[1].text[0]=='B',"new mail did not refill first Original hole");
     }

@@ -610,7 +610,10 @@ int match_mode_bits(const GameState& g, const MatchGroup& grp, const MatchdayCon
     uint8_t bits = kTypeInterest[type];
     if (type == 0) {
         const int league = int(le32(grp.desc, 0xcc));
-        const int matchdays = league_matchdays(league), rounds = g.league_rounds.at(size_t(league));
+        if((ctx.projected_matchdays<0)!=(ctx.projected_completed_rounds<0))throw FormatError("match interest: incomplete projected calendar metadata");
+        const int matchdays=ctx.projected_matchdays>=0?ctx.projected_matchdays:league_matchdays(league);
+        const int rounds=ctx.projected_completed_rounds>=0?ctx.projected_completed_rounds:g.league_rounds.at(size_t(league));
+        if(ctx.projected_matchdays>=0&&(matchdays<1||rounds<0||rounds>=matchdays))throw FormatError("match interest: invalid round cursor");
         // the last four rounds draw more spectators
         if (rounds > matchdays - 4) bits = uint8_t(bits + uint8_t(0xF - uint8_t((matchdays - rounds) * 3)));
     } else if (type != 9 && type != 0xb) {
@@ -640,7 +643,9 @@ int attendance(GameState& g, int home, int away, int bits, int temperature, int 
         best_half_sum = avg.best_half_sum;
         position[i] = table_position(g, team[i]);
         if (position[i] < 0) position[i] = rand.range(2, 5);
-        if (uint16_t(team[i]) >= 0x5a) {
+        if(!g.projected_match_clubs.empty()) {
+            const auto cls=match_team_league(g,team[i]);league[i]=cls<5?(cls>2?cls-1:cls):0;
+        } else if (uint16_t(team[i]) >= 0x5a) {
             league[i] = 0;
         } else {
             league[i] = league_of(team[i]);

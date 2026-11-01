@@ -90,6 +90,7 @@ void validate_national_squads(const World& world) {
         }
         if(occupied!=20)throw std::invalid_argument("world12: national nomination requires twenty players");
         validate_manager_tactics(squad.tactics);
+        validate_manager_attendance(world,squad.match_state);
         for(const auto* refs:{&squad.tactics.backing->marks,&squad.tactics.backing->marked_by})
             for(auto player:*refs)if(player.valid()&&!world.players.contains(player))
                 throw std::invalid_argument("world12: missing national tactical reference");

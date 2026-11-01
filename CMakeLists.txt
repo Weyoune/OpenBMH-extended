@@ -1246,7 +1246,7 @@ add_library(bmhworld12 STATIC
     src/cli/json.cpp)
 target_include_directories(bmhworld12 PUBLIC src)
 target_link_libraries(bmhworld12 PUBLIC bmhcore)
-add_library(bmhworld12_app STATIC src/app/world12_weather.cpp src/app/world12_national.cpp src/app/world12_cups.cpp src/app/world12_manager.cpp src/app/world12_ai_day.cpp src/app/world12_initial_season.cpp src/app/world12_initial_market.cpp src/app/world12_desktop.cpp src/app/world12_first_event.cpp
+add_library(bmhworld12_app STATIC src/app/world12_attendance.cpp src/app/world12_weather.cpp src/app/world12_national.cpp src/app/world12_cups.cpp src/app/world12_manager.cpp src/app/world12_ai_day.cpp src/app/world12_initial_season.cpp src/app/world12_initial_market.cpp src/app/world12_desktop.cpp src/app/world12_first_event.cpp
     src/app/world12_clock.cpp src/app/world12_pending.cpp)
 target_link_libraries(bmhworld12_app PUBLIC bmhworld12)
 add_library(bmhworld12_ui STATIC src/ui/world12_other_games.cpp src/ui/world12_manager_selection.cpp src/ui/world12_desktop.cpp src/ui/world12_preparation.cpp)
@@ -1263,6 +1263,9 @@ add_executable(world12_national_tests tests/world12_national_tests.cpp)
 add_executable(world12_cup_match_tests tests/world12_cup_match_tests.cpp)
 add_executable(match_weather_tests tests/match_weather_tests.cpp)
 add_executable(world12_weather_tests tests/world12_weather_tests.cpp)
+add_executable(world12_attendance_records_tests tests/world12_attendance_records_tests.cpp)
+target_link_libraries(world12_attendance_records_tests PRIVATE bmhworld12)
+add_test(NAME world12_attendance_records_tests COMMAND world12_attendance_records_tests)
 target_link_libraries(world12_weather_tests PRIVATE bmhworld12_app)
 add_test(NAME world12_weather_tests COMMAND world12_weather_tests)
 target_link_libraries(match_weather_tests PRIVATE bmhcore)

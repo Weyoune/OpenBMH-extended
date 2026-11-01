@@ -71,6 +71,7 @@ struct PreparedFixture {
     int8_t temperature=0;
     uint8_t rain=0,referee=0;
     Country referee_country=Country::germany;
+    std::optional<uint32_t> spectators;
     bool operator==(const PreparedFixture&)const=default;
 };
 struct PreparedGroup {
@@ -86,6 +87,7 @@ struct PreparedEvent {
     uint64_t calendar_revision=0;
     std::array<uint8_t,50> referee_properties{};
     std::vector<PreparedGroup> groups;
+    bool gates_booked=false;
     bool operator==(const PreparedEvent&)const=default;
 };
 struct CareerSnapshot {

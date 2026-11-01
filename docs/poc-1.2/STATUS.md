@@ -5,6 +5,13 @@ The application is **not yet a playable shared-career Beta**. Development is on 
 
 ## Latest integrated career work
 
+[Gate receipts and attendance](ATTENDANCE.md) now retain the Source histories and
+global record opponents under schema 25. Actual source weather/referees, crowd,
+gate/catering booking and stored receipt consumption run through both initial
+finals and the twelve first league rounds. SE prevents duplicate gate booking
+after resume; unknown older history stays unknown. General visible event/live
+ownership and full-season play are still separate release gates.
+
 The preparation layer now exposes [Core weather/referee calculation](MATCH_WEATHER.md)
 for typed fixture identities. Country-scoped availability supports all 117
 simultaneous fixtures with the supplied source catalogue. Standalone exports add

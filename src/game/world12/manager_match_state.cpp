@@ -18,6 +18,42 @@ template<class Id> uint16_t local_of(const std::vector<Id>& map,Id id) {
     if(found==map.end()||size_t(found-map.begin())>=4095)throw std::invalid_argument("world12: manager reference is outside match workspace");
     return uint16_t(found-map.begin());
 }
+ClubId record_club(const GameState& state,const std::vector<ClubId>& clubs,uint16_t name) {
+    if(!name)return {};
+    for(size_t i=0;i<clubs.size()&&i<state.club_ids.size();++i)
+        if(clubs[i].valid()&&state.club_ids[i]==name)return clubs[i];
+    throw std::invalid_argument("world12: attendance record has an unmapped club name");
+}
+uint16_t record_name(const GameState& state,const std::vector<ClubId>& clubs,ClubId club) {
+    return club.valid()?state.club_ids.at(local_of(clubs,club)):0;
+}
+ManagerAttendanceState attendance_from_legacy(const GameState& state,size_t at,const std::vector<ClubId>& clubs) {
+    ManagerAttendanceState result;result.league_home_count=state.manager_records.at(at+0x283);
+    std::copy_n(state.manager_records.begin()+at+0x270,19,result.ticket_prices.begin());
+    for(size_t i=0;i<19;++i){result.spectators[i]=uint32_t(word(state.manager_records,at+0x340+i*4))|uint32_t(word(state.manager_records,at+0x342+i*4))<<16;
+        result.catering[i]=uint32_t(word(state.manager_records,at+0x38c+i*4))|uint32_t(word(state.manager_records,at+0x38e + i*4))<<16;}
+    const auto dword=[&](size_t offset){return uint32_t(word(state.manager_records,at+offset))|uint32_t(word(state.manager_records,at+offset+2))<<16;};
+    for(size_t i=0;i<3;++i){result.match_counts[i]=state.manager_records.at(at+0x28c+i);result.spectator_totals[i]=dword(0x748+i*4);
+        result.record_spectators[i]=dword(0x718+i*8);result.record_spectator_dates[i]=dword(0x71c+i*8);
+        result.record_income[i]=dword(0x730+i*8);result.record_income_dates[i]=dword(0x734+i*8);
+        result.spectator_opponents[i]=record_club(state,clubs,word(state.manager_records,at+0x8c0+i*2));
+        result.income_opponents[i]=record_club(state,clubs,word(state.manager_records,at+0x8c6+i*2));}
+    for(size_t i=0;i<2;++i)result.cup_income[i]=dword(0x758+i*4);
+    return result;
+}
+void install_attendance(GameState& state,size_t at,const ManagerAttendanceState& input,const std::vector<ClubId>& clubs) {
+    std::array<uint16_t,3> spectators{},income{};
+    for(size_t i=0;i<3;++i){spectators[i]=record_name(state,clubs,input.spectator_opponents[i]);income[i]=record_name(state,clubs,input.income_opponents[i]);}
+    const auto put=[&](size_t offset,uint32_t value){put_word(state.manager_records,at+offset,uint16_t(value));put_word(state.manager_records,at+offset+2,uint16_t(value>>16));};
+    state.manager_records.at(at+0x283)=input.league_home_count;
+    std::copy(input.ticket_prices.begin(),input.ticket_prices.end(),state.manager_records.begin()+at+0x270);
+    for(size_t i=0;i<19;++i){put(0x340+i*4,input.spectators[i]);put(0x38c+i*4,input.catering[i]);}
+    for(size_t i=0;i<3;++i){state.manager_records.at(at+0x28c+i)=input.match_counts[i];put(0x748+i*4,input.spectator_totals[i]);
+        put(0x718+i*8,input.record_spectators[i]);put(0x71c+i*8,input.record_spectator_dates[i]);
+        put(0x730+i*8,input.record_income[i]);put(0x734+i*8,input.record_income_dates[i]);
+        put_word(state.manager_records,at+0x8c0+i*2,spectators[i]);put_word(state.manager_records,at+0x8c6+i*2,income[i]);}
+    for(size_t i=0;i<2;++i)put(0x758+i*4,input.cup_income[i]);
+}
 }
 ManagerMatchState manager_match_state_from_legacy(const GameState& state,int manager,const std::vector<ClubId>& clubs,
     const std::vector<PlayerId>& players,const ManagerMatchState* previous) {
@@ -49,6 +85,7 @@ ManagerMatchState manager_match_state_from_legacy(const GameState& state,int man
         if(id>4095||size_t(id-1)>=players.size()||!players[id-1].valid())throw std::invalid_argument("world12: unknown designated match player");
         result.takers[i]=players[id-1];
     }
+    if(!previous||previous->attendance)result.attendance=attendance_from_legacy(state,at,clubs);
     return result;
 }
 void install_manager_match_state(GameState& state,int manager,const ManagerMatchState& input,const std::vector<ClubId>& clubs,const std::vector<PlayerId>& players) {
@@ -80,5 +117,14 @@ void install_manager_match_state(GameState& state,int manager,const ManagerMatch
         std::copy(found->second.begin(),found->second.end(),state.manager_results.begin()+size_t(manager)*stride+i*10);
     put_word(state.manager_records,at+0xb0a,input.designated_takers?0x3253:0);
     for(size_t i=0;i<3;++i)put_word(state.manager_records,at+taker_offsets[i],takers[i]);
+    if(input.attendance)install_attendance(state,at,*input.attendance,clubs);
 }
+void validate_manager_attendance(const World& world,const ManagerMatchState& match) {
+    if(!match.attendance)return;
+    const auto& a=*match.attendance;
+    if(a.league_home_count>19)throw std::invalid_argument("world12: invalid league attendance history cursor");
+    for(const auto* refs:{&a.spectator_opponents,&a.income_opponents})for(auto id:*refs)
+        if(id.valid()&&!world.clubs.contains(id))throw std::invalid_argument("world12: missing attendance record opponent");
+}
+
 }

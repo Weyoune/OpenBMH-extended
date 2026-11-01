@@ -92,6 +92,12 @@ AiMatchProjection AiMatchProjection::create_for_humans(const CareerSnapshot& sna
         local.player_name_offsets.push_back(uint16_t(local.player_names.size()));local.player_names.insert(local.player_names.end(),player.attributes.name.begin(),player.attributes.name.end());local.player_names.push_back(0);
     };
     for(const auto* manager:managers) {
+        if(manager->match_state->attendance) {
+            const auto& attendance=*manager->match_state->attendance;
+            for(const auto* refs:{&attendance.spectator_opponents,&attendance.income_opponents})for(auto id:*refs)
+                if(id.valid()&&std::find(result.manager_reference_clubs_.begin(),result.manager_reference_clubs_.end(),id)==result.manager_reference_clubs_.end())
+                    result.manager_reference_clubs_.push_back(id);
+        }
         for(auto id:manager->match_state->recent_fixtures)if(id.valid()&&std::find(result.manager_reference_clubs_.begin(),result.manager_reference_clubs_.end(),id)==result.manager_reference_clubs_.end())result.manager_reference_clubs_.push_back(id);
         for(const auto* refs:{&manager->tactics->backing->marks,&manager->tactics->backing->marked_by})for(auto id:*refs)add_player(id);
         for(auto id:manager->match_state->takers)add_player(id);

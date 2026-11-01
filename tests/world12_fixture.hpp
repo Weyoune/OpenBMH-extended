@@ -4,8 +4,20 @@
 #include "game/world12/cup_draw.hpp"
 #include "game/cup.hpp"
 #include "formats/le.hpp"
+#include "cli/json.hpp"
 
 namespace bmh::test::world12 {
+// Older-schema fixtures must actually omit fields their writer did not know.
+inline void omit_attendance_records(bmh::cli::Json& root) {
+    auto& managers=std::get<bmh::cli::Json::Array>(root.object()->at("managers").value);
+    for(auto& manager:managers) {
+        auto& match=manager.object()->at("match_state");
+        if(match.object())match.object()->erase("attendance");
+    }
+}
+inline void omit_attendance_records(bmh::world12::World& world) {
+    for(auto& manager:world.managers)if(manager.match_state)manager.match_state->attendance.reset();
+}
 inline bmh::world12::World complete_world() {
     using namespace bmh::world12;
     World world;uint32_t club_id=100000,player_id=200000;

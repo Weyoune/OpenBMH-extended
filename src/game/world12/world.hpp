@@ -64,7 +64,19 @@ struct ManagerTactics {
     bool operator==(const ManagerTactics&)const=default;
 };
 void validate_manager_tactics(const ManagerTactics&);
+struct ManagerAttendanceState {
+    uint8_t league_home_count=0;
+    std::array<uint8_t,19> ticket_prices{};
+    std::array<uint32_t,19> spectators{},catering{};
+    std::array<uint8_t,3> match_counts{};
+    std::array<uint32_t,3> spectator_totals{},record_spectators{},record_spectator_dates{},record_income{},record_income_dates{};
+    // League income is owned by ManagerSeasonServices::ticket_income.
+    std::array<uint32_t,2> cup_income{};
+    std::array<ClubId,3> spectator_opponents,income_opponents;
+    bool operator==(const ManagerAttendanceState&)const=default;
+};
 struct ManagerMatchState {
+    std::optional<ManagerAttendanceState> attendance;
     std::array<uint8_t,21> preferences{}; // Source c5..d9, including attitude/fitness.
     uint8_t tax_policy=0,sponsor_win_bonus=0,crowd_pressure=0,goal_notices=0,point_deduction=0;
     std::array<uint8_t,21> best_streaks{};
@@ -250,6 +262,7 @@ struct World {
     Country national_coach_country(uint8_t seat)const;
     bool operator==(const World&)const=default;
 };
+void validate_manager_attendance(const World&,const ManagerMatchState&);
 // Filter an immutable imported master world before manager selection. Countries
 // are removed as entities, never demoted into an AI/foreign fallback league.
 World select_world_scope(const World& source,GameScope);

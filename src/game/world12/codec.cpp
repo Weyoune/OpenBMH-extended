@@ -97,6 +97,30 @@ ManagerTactics decode_tactics(const J& input,uint32_t version) {
     if(version>=7)tactics.backing=decode_tactical_backing(field(input,"backing"));
     return tactics;
 }
+J encode_attendance(const std::optional<ManagerAttendanceState>& input) {
+    if(!input)return nullptr;
+    const auto values=[](const auto& row){A out;for(auto value:row)out.push_back(id(value));return J(std::move(out));};
+    const auto refs=[](const auto& row){A out;for(auto value:row)out.push_back(value.valid()?id(value.value):J(nullptr));return J(std::move(out));};
+    const auto& a=*input;
+    return O{{"league_home_count",int(a.league_home_count)},{"ticket_prices",values(a.ticket_prices)},
+        {"spectators",values(a.spectators)},{"catering",values(a.catering)},{"match_counts",values(a.match_counts)},
+        {"spectator_totals",values(a.spectator_totals)},{"cup_income",values(a.cup_income)},
+        {"record_spectators",values(a.record_spectators)},{"record_spectator_dates",values(a.record_spectator_dates)},
+        {"record_income",values(a.record_income)},{"record_income_dates",values(a.record_income_dates)},
+        {"spectator_opponents",refs(a.spectator_opponents)},{"income_opponents",refs(a.income_opponents)}};
+}
+std::optional<ManagerAttendanceState> decode_attendance(const J& input) {
+    if(std::holds_alternative<std::nullptr_t>(input.value))return {};
+    ManagerAttendanceState a;
+    const auto values=[&](const char* name,auto& output,uint32_t maximum=4294967295u){const auto& row=array(field(input,name));if(row.size()!=output.size())throw FormatError("world12: invalid attendance dimensions");for(size_t i=0;i<row.size();++i)output[i]=number(row[i],maximum);};
+    const auto refs=[&](const char* name,auto& output){const auto& row=array(field(input,name));if(row.size()!=output.size())throw FormatError("world12: invalid attendance reference dimensions");for(size_t i=0;i<row.size();++i){if(row[i].integer())output[i]={number(row[i])};else if(!std::holds_alternative<std::nullptr_t>(row[i].value))throw FormatError("world12: invalid attendance opponent");}};
+    a.league_home_count=uint8_t(number(field(input,"league_home_count"),19));values("ticket_prices",a.ticket_prices,255);
+    values("spectators",a.spectators);values("catering",a.catering);values("match_counts",a.match_counts,255);
+    values("spectator_totals",a.spectator_totals);values("cup_income",a.cup_income);
+    values("record_spectators",a.record_spectators);values("record_spectator_dates",a.record_spectator_dates);
+    values("record_income",a.record_income);values("record_income_dates",a.record_income_dates);
+    refs("spectator_opponents",a.spectator_opponents);refs("income_opponents",a.income_opponents);return a;
+}
 J encode_manager_match(const std::optional<ManagerMatchState>& input) {
     if(!input)return nullptr;const auto& m=*input;
     const auto bytes=[](const auto& values){A a;for(auto value:values)a.emplace_back(int(value));return J(std::move(a));};
@@ -104,15 +128,18 @@ J encode_manager_match(const std::optional<ManagerMatchState>& input) {
     for(auto value:m.recent_fixtures)fixtures.push_back(value.valid()?id(value.value):J(nullptr));
     for(auto value:m.takers)takers.push_back(value.valid()?id(value.value):J(nullptr));
     for(const auto& [club,scores]:m.head_to_head)history.emplace_back(O{{"club",id(club.value)},{"scores",bytes(scores)}});
-    return O{{"preferences",bytes(m.preferences)},{"tax_policy",int(m.tax_policy)},{"sponsor_win_bonus",int(m.sponsor_win_bonus)},
+    return O{{"attendance",encode_attendance(m.attendance)},{"preferences",bytes(m.preferences)},{"tax_policy",int(m.tax_policy)},{"sponsor_win_bonus",int(m.sponsor_win_bonus)},
         {"crowd_pressure",int(m.crowd_pressure)},{"goal_notices",int(m.goal_notices)},{"point_deduction",int(m.point_deduction)},
         {"best_streaks",bytes(m.best_streaks)},{"timing_stats",bytes(m.timing_stats)},{"staff_ratings",bytes(m.staff_ratings)},
         {"rating_history",bytes(m.rating_history)},{"recent_scores",bytes(m.recent_scores)},{"recent_fixtures",std::move(fixtures)},
         {"head_to_head",std::move(history)},{"designated_takers",m.designated_takers},{"takers",std::move(takers)}};
 }
-std::optional<ManagerMatchState> decode_manager_match(const J& input) {
+std::optional<ManagerMatchState> decode_manager_match(const J& input,uint32_t version) {
     if(std::holds_alternative<std::nullptr_t>(input.value))return {};
     ManagerMatchState result;
+    if(version>=25)result.attendance=decode_attendance(field(input,"attendance"));
+    else if(const auto found=input.object()->find("attendance");found!=input.object()->end()&&!std::holds_alternative<std::nullptr_t>(found->second.value))
+        throw FormatError("world12: older schema cannot restore attendance records");
     const auto numbers=[&](const char* key,auto& values,uint32_t maximum){const auto& a=array(field(input,key));if(a.size()!=values.size())throw FormatError("world12: invalid manager match dimensions");for(size_t i=0;i<a.size();++i)values[i]=number(a[i],maximum);};
     const auto refs=[&](const char* key,auto& values){const auto& a=array(field(input,key));if(a.size()!=values.size())throw FormatError("world12: invalid manager reference dimensions");for(size_t i=0;i<a.size();++i){if(a[i].integer())values[i]={number(a[i])};else if(!std::holds_alternative<std::nullptr_t>(a[i].value))throw FormatError("world12: invalid manager optional reference");}};
     numbers("preferences",result.preferences,255);numbers("best_streaks",result.best_streaks,255);numbers("timing_stats",result.timing_stats,255);
@@ -305,7 +332,7 @@ World decode_world(const Bytes& bytes){
                 squad.roster[i].flags=uint16_t(number(field(roster[i],"flags"),15));
             }
             squad.tactics=decode_tactics(field(input,"tactics"),version);
-            const auto match=decode_manager_match(field(input,"match_state"));
+            const auto match=decode_manager_match(field(input,"match_state"),version);
             if(!match)throw FormatError("world12: missing national match state");
             squad.match_state=*match;w.national_squads.push_back(std::move(squad));
         }
@@ -322,7 +349,7 @@ const auto& roster=array(field(j,"roster"));if(roster.size()!=24)throw FormatErr
     for(const auto&j:array(field(root,"loans"))){Loan loan{{number(field(j,"player"))},{number(field(j,"owner"))},{number(field(j,"borrower"))},uint8_t(number(field(j,"months"),255))};if(version>=19){const auto& slot=field(j,"source_slot");if(slot.integer())loan.source_slot=uint16_t(number(slot,199));else if(!std::holds_alternative<std::nullptr_t>(slot.value))throw FormatError("world12: invalid optional loan slot");}w.loans.push_back(loan);}
     for(const auto&j:array(field(root,"managers"))){Manager manager{uint8_t(number(field(j,"seat"),3)),text(field(j,"name")),{number(field(j,"club"))},{number(field(j,"start_league"),uint32_t(kLeagueSlots-1))},uint8_t(number(field(j,"portrait"),11))};if(version>=5){const auto& f=field(j,"finance");if(f.object())manager.finance=ManagerFinance{signed_number(field(f,"balance")),number(field(f,"credit"),4294967295u),number(field(f,"income"),4294967295u),number(field(f,"expenses"),4294967295u),number(field(f,"bonus_paid"),4294967295u)};else if(!std::holds_alternative<std::nullptr_t>(f.value))throw FormatError("world12: invalid optional manager finances");}if(version>=6){const auto& t=field(j,"tactics");if(t.object()){
 manager.tactics=decode_tactics(t,version);
-}else if(!std::holds_alternative<std::nullptr_t>(t.value))throw FormatError("world12: invalid optional manager tactics");}if(version>=8&&manager.finance){const auto& baseline=field(field(j,"finance"),"baseline");if(baseline.object())manager.finance->baseline=ManagerFinanceBaseline{number(field(baseline,"starting_balance"),4294967295u),number(field(baseline,"account_flags"),4294967295u)};else if(!std::holds_alternative<std::nullptr_t>(baseline.value))throw FormatError("world12: invalid initial account baseline");}if(version>=9)manager.match_state=decode_manager_match(field(j,"match_state"));if(version>=12)manager.career=decode_manager_career(field(j,"career"),version);if(version<17&&manager.match_state&&manager.match_state->designated_takers&&manager.career&&manager.career->season_services)std::fill(manager.career->season_services->advertising_contracts[16].begin()+8,manager.career->season_services->advertising_contracts[16].end(),uint8_t(0));w.managers.push_back(std::move(manager));}
+}else if(!std::holds_alternative<std::nullptr_t>(t.value))throw FormatError("world12: invalid optional manager tactics");}if(version>=8&&manager.finance){const auto& baseline=field(field(j,"finance"),"baseline");if(baseline.object())manager.finance->baseline=ManagerFinanceBaseline{number(field(baseline,"starting_balance"),4294967295u),number(field(baseline,"account_flags"),4294967295u)};else if(!std::holds_alternative<std::nullptr_t>(baseline.value))throw FormatError("world12: invalid initial account baseline");}if(version>=9)manager.match_state=decode_manager_match(field(j,"match_state"),version);if(version>=12)manager.career=decode_manager_career(field(j,"career"),version);if(version<17&&manager.match_state&&manager.match_state->designated_takers&&manager.career&&manager.career->season_services)std::fill(manager.career->season_services->advertising_contracts[16].begin()+8,manager.career->season_services->advertising_contracts[16].end(),uint8_t(0));w.managers.push_back(std::move(manager));}
     try{w.validate();}catch(const std::exception&e){throw FormatError(e.what());}return w;
 }
 }

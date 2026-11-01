@@ -105,7 +105,7 @@ int main()try {
         auto no_candidates=service;for(auto& [id,club]:no_candidates.world.clubs)if(club.league.valid())for(size_t row=11;row<24;++row)club.roster[row]={};const auto no_candidates_before=no_candidates;owner={78,0};
         rejects([&]{owner_app::initialize_first_season_market(no_candidates,owner,{78,0});},"market invented a club listing candidate");check(no_candidates==no_candidates_before&&owner.revision==0,"failed market rolled back listings but leaked fixture shuffle or seed");
         auto malformed=service;malformed.world.managers[0].career->season_services->advertising_contracts[0][0]=1;rejects([&]{malformed.validate();},"duplicate sponsor encoding accepted");
-        auto bytes=encode_world(before.world);auto old=bmh::cli::parse_json(std::string(bytes.begin(),bytes.end()));old.object()->at("version")=12;const auto text=bmh::cli::dump_json(old);const auto previous=decode_world(Bytes(text.begin(),text.end()));
+        auto bytes=encode_world(before.world);auto old=bmh::cli::parse_json(std::string(bytes.begin(),bytes.end()));old.object()->at("version")=12;bmh::test::world12::omit_attendance_records(old);const auto text=bmh::cli::dump_json(old);const auto previous=decode_world(Bytes(text.begin(),text.end()));
         check(!previous.initial_competitions&&!previous.managers[0].career->season_records,"older world invented initial fields/history");++scopes;
         CareerSnapshot old_snapshot;old_snapshot.world=previous;old_snapshot.results=SeasonResults::empty(previous.catalogue);
         rejects([&]{AiMatchProjection::create_for_humans(old_snapshot,{previous.managers[0].club},ref,{3,3,false,true});},"missing historical state was silently regenerated for scoring");

@@ -395,6 +395,23 @@ void actual_four_managers(const std::filesystem::path& data,const std::filesyste
             check(weather_loaded.snapshot()==prepared_session.snapshot(),"actual stored conditions changed after resuming SD");
             rejects([&]{weather_loaded.prepare_scheduled_weather(weather_loaded.revision());},"actual loaded weather was generated again");
             if(!output.empty())write_savegame(output/"prepared-finals-weather.FBM",prepared_save);
+            const auto gate=weather_loaded.book_scheduled_attendance(weather_loaded.revision(),data);
+            check(gate.spectators.size()==2&&weather_loaded.snapshot().prepared_event->gates_booked,
+                  "actual spectator/gate calculation did not publish its receipt");
+            const auto booked=weather_loaded.snapshot();const auto booked_revision=weather_loaded.revision();
+            auto gate_save=make_save(booked);check(gate_save.stream[7]=='E',"actual gate receipt missing SE owner");
+            auto gate_loaded=session_app::Session::resume(resources,read_save(gate_save),94,booked_revision);
+            rejects([&]{gate_loaded.book_scheduled_attendance(gate_loaded.revision(),data);},"loaded gate receipt was charged twice");
+            check(gate_loaded.snapshot()==booked,"duplicate actual gate request changed balances/streams");
+            if(!output.empty())write_savegame(output/"booked-finals-gates.FBM",gate_save);
+            HumanRoundHooks receipt_hooks;receipt_hooks.decline_unpresented_events=true;
+            gate_loaded.play_prepared_matches(gate_loaded.revision(),receipt_hooks);
+            check(gate_loaded.snapshot().date==before_weather.date+1&&!gate_loaded.snapshot().prepared_event&&
+                  gate_loaded.snapshot().progress->phase==ProgressPhase::daily_services,
+                  "actual saved weather/gates were not consumed by the scoring owner");
+            check(read_save(make_save(gate_loaded.snapshot()))==gate_loaded.snapshot(),"actual source attendance/scoring failed save roundtrip");
+            if(!output.empty())write_savegame(output/"source-prepared-finals-computed.FBM",make_save(gate_loaded.snapshot()));
+            std::cout<<"Actual source-prepared finals: saved weather/referees, Core spectators/gate/catering, SE duplicate guard and score consumption passed\n";
             std::cout<<"Actual stored Super-Cup/Charity Shield weather: source catalogue, countries, both streams, SD save/resume and no redraw passed\n";
         }
         std::vector<session_app::CupDayConditions> cup_inputs;
@@ -422,6 +439,20 @@ void actual_four_managers(const std::filesystem::path& data,const std::filesyste
             AiLeagueConditions match;match.date=resumed.snapshot().date;match.month=month_code(match.date);
             match.temperature=20;match.rain=0;match.spectators=20000;match.referee_properties={24};match.presentation_buttons.assign(0xb4,1);
             league_inputs.push_back({round.appointment,std::vector<AiLeagueConditions>(round.matches.size(),match)});
+        }
+        {
+            auto source_ready=resumed;source_ready.prepare_scheduled_weather(source_ready.revision());
+            const auto crowd=source_ready.book_scheduled_attendance(source_ready.revision(),data);
+            check(!crowd.spectators.empty()&&source_ready.snapshot().prepared_event->gates_booked,
+                  "actual league attendance was not calculated from source inputs");
+            const auto source_gate=make_save(source_ready.snapshot());
+            auto source_loaded=session_app::Session::resume(resources,read_save(source_gate),95,source_ready.revision());
+            source_loaded.play_prepared_matches(source_loaded.revision(),match_hooks);
+            check(source_loaded.snapshot().date==resumed.snapshot().date+1&&!source_loaded.snapshot().prepared_event,
+                  "actual source-prepared league receipt did not publish its matches");
+            check(read_save(make_save(source_loaded.snapshot()))==source_loaded.snapshot(),"actual booked league histories failed save roundtrip");
+            if(!output.empty())write_savegame(output/"source-prepared-leagues-computed.FBM",make_save(source_loaded.snapshot()));
+            std::cout<<"Actual source-prepared leagues: original weather/referee catalogue, calculated crowds and gates, persistent attendance records and real scoring passed\n";
         }
         const auto league_date=resumed.snapshot().date;
         const auto league_result=resumed.play_scheduled_leagues(resumed.revision(),league_inputs,match_hooks);

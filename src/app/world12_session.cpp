@@ -8,6 +8,7 @@
 #include "game/career.hpp"
 #include "game/bank_credit.hpp"
 #include "game/calendar.hpp"
+#include "game/week.hpp"
 #include "game/schedule.hpp"
 #include "formats/data_profile.hpp"
 #include "ui/setup.hpp"
@@ -134,6 +135,39 @@ WeatherPreparation Session::prepare_scheduled_weather(uint64_t revision) {
     if(preparation_menu_)throw FormatError("world12: an open menu owns the current career");
     return prepare_event_weather(state_,owner_,{owner_.scope,revision},resources_.referee_properties,
         {resources_.german,resources_.english});
+}
+AttendanceOutcome Session::book_scheduled_attendance(uint64_t revision,const std::filesystem::path& data) {
+    if(preparation_menu_)throw FormatError("world12: an open menu owns the current career");
+    const auto texts=load_textd(ui::asset_path(data,"TEXTD.BLK"));
+    return book_event_attendance(state_,owner_,{owner_.scope,revision},resources_.reference,texts,
+        {resources_.german,resources_.english});
+}
+void Session::play_prepared_matches(uint64_t revision,const HumanRoundHooks& hooks) {
+    if(preparation_menu_||revision!=owner_.revision||!state_.prepared_event||!state_.prepared_event->gates_booked||
+       !state_.progress||state_.progress->phase!=ProgressPhase::scheduled_event)
+        throw FormatError("world12: prepared match receipt is not ready");
+    const auto before=state_;auto candidate=state_;const auto event=*candidate.prepared_event;
+    const auto ticket=*prepare_day(candidate);const auto settings=*candidate.world.settings;
+    std::vector<CupDayConditions> cups;std::vector<AiDayLeagueConditions> leagues;
+    for(const auto& group:event.groups) {
+        std::vector<AiLeagueConditions> conditions;
+        for(const auto& match:group.matches){AiLeagueConditions c;c.date=candidate.date;c.month=month_code(candidate.date);
+            c.temperature=match.temperature;c.rain=match.rain;c.referee=match.referee;c.spectators=*match.spectators;
+            c.referee_properties.assign(event.referee_properties.begin(),event.referee_properties.end());
+            c.presentation_buttons.assign(0xb4,1);conditions.push_back(std::move(c));}
+        if(group.league)leagues.push_back({{event.day,*group.league,group.round},std::move(conditions)});
+        else cups.push_back({*group.cup,group.source_entry,group.revision,std::move(conditions)});
+    }
+    if(!cups.empty()&&!leagues.empty())throw FormatError("world12: mixed cup/league match receipt requires its combined owner");
+    candidate.prepared_event.reset();
+    const HumanProjectionPolicy policy{settings.mode,settings.difficulty,settings.foreign_rule,true};
+    auto staged_owner=owner_;
+    if(!cups.empty())play_domestic_cup_day(candidate,staged_owner,{owner_.scope,revision},ticket,resources_.reference,
+        {resources_.german,resources_.english},cups,policy,hooks);
+    else {AiDayOwner league_owner{owner_.scope,revision};play_league_day(candidate,league_owner,{owner_.scope,revision},ticket,
+        resources_.reference,leagues,policy,hooks);staged_owner.revision=league_owner.revision;}
+    if(state_!=before||owner_.revision!=revision)throw FormatError("world12: prepared match owner changed during calculation");
+    state_=std::move(candidate);owner_=staged_owner;
 }
 
 }
