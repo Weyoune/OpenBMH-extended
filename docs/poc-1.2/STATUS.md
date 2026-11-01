@@ -176,3 +176,10 @@ Validation: all six club scopes pass with actual supplied German/English rules/c
 The first-season owner now follows competition preparation with all ticket sales, then the Original seasonal manager reset and advertising generation. Scalar advertising/ticket/history data persists in schema 14; regular contract backing excludes the designated-player extension and canonicalizes explicit sponsor fields. Global domestic title IDs remain stable under future shuffling. Local league/round context is used for both countries. Sixteen independently compiled pre-refactor comparisons match retained records, accounts/tactics and random draws; actual-data checks cover six club scopes, and synthetic checks also cover twelve alternate mode/duration/difficulty cases. The next start gates are fixture shuffling, initial transfer market, first-day services and visible desktop/session ownership.
 
 Manager-service milestone checks: all 27 targeted Linux tests and the application build pass; actual six-scope service/snapshot validation, the initial-offer regression and two Original-save byte-identical roundtrips pass. No new GUI screen or release readiness is claimed.
+
+
+## Initial fixture-position shuffle and market
+
+The [first-step owner](INITIAL_MARKET.md) now publishes Original membership shuffling, initial listing selection/quotes, explicit player/seller/bidder identities, parity/checkpoint and both retained seeds under one revision. Shared control kernels preserve the Native alternating scan, positional ranking, 35-try behavior and small-request fallback. Snapshot schema 15 contains no packed Native listing references. The next integration gates are daily/calendar progression and the visible typed career/desktop.
+
+Initial-market validation: 27 targeted Linux checks and the application build pass. Six actual-data scopes, sixteen independent pre-refactor startup/shuffle/list comparisons, the initial-offer regression and two Original-save byte-identical roundtrips pass. This milestone does not certify daily progression, visible gameplay or release readiness.

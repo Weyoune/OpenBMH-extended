@@ -52,6 +52,15 @@ void World::validate(bool complete)const {
         if(initial_competitions->national_field.size()!=(catalogue.scope.international?4u:0u))throw std::invalid_argument("world12: invalid initial national field size");
         std::set<ClubId> nations;for(auto id:initial_competitions->national_field)if(!clubs.contains(id)||clubs.at(id).kind!=ClubKind::national_team||!nations.insert(id).second)throw std::invalid_argument("world12: invalid initial national identity");
     }
+    if(transfer_market){
+        if(!initial_competitions||!initial_competitions->manager_services_complete||transfer_market->list_toggle>1)throw std::invalid_argument("world12: invalid initial market state");
+        std::set<PlayerId> listed;
+        for(const auto& row:transfer_market->rows)if(row){if(!players.contains(row->player)||!listed.insert(row->player).second)throw std::invalid_argument("world12: missing or duplicate market player");
+            if(row->seller.valid()){if(!clubs.contains(row->seller)||clubs.at(row->seller).kind!=ClubKind::club)throw std::invalid_argument("world12: missing market seller");bool found=false;for(const auto& slot:clubs.at(row->seller).roster)found|=slot.player==row->player;if(!found)throw std::invalid_argument("world12: market player is not at seller");}
+            else {bool free=false;for(auto id:free_players->domestic)free|=id==row->player;for(auto id:free_players->foreign)free|=id==row->player;if(!free||row->human_seller)throw std::invalid_argument("world12: market free agent is unavailable");}
+            for(const auto& bid:row->bids)if(bid.bidder.valid()&&(!clubs.contains(bid.bidder)||clubs.at(bid.bidder).kind!=ClubKind::club))throw std::invalid_argument("world12: missing market bidder");
+        }
+    }
     std::set<PlayerId> loaned;for(const auto& loan:loans){if(!players.contains(loan.player)||!clubs.contains(loan.owner)||!clubs.contains(loan.borrower)||loan.owner==loan.borrower||!loan.months||!loaned.insert(loan.player).second)throw std::invalid_argument("world12: invalid loan");bool at_borrower=false;for(const auto& slot:clubs.at(loan.borrower).roster)at_borrower|=slot.player==loan.player;if(!at_borrower)throw std::invalid_argument("world12: loan player is not at borrower");}
     if(managers.size()>4)throw std::invalid_argument("world12: too many managers");std::set<uint8_t> seats,portraits;std::set<ClubId> owned;
     for(const auto& manager:managers){if(manager.match_state){const auto& m=*manager.match_state;bool ended=false;

@@ -63,6 +63,19 @@ int main(int argc,char** argv)try {
     if(state.world.managers[0].tactics!=manager_full_tactics_from_legacy(native,0,players))throw std::runtime_error("initial tactical familiarity/reset differs");
     if(read_save(make_save(state))!=state)throw std::runtime_error("initial manager services snapshot differs");
     std::cout<<"Native initial ticket/reset boundary: sales, all advertising offers/contracts, finance/tactics/history and W="<<services.watcom_draws<<" match\n";
+    const auto market_before=native_random.calls();std::map<uint16_t,ClubId> identities;for(size_t i=0;i<164;++i)if(!identities.emplace(native.club_ids[i],mapping[i]).second)throw std::runtime_error("ambiguous Native club name identity");
+    if(!career_first_steps(native,native_game,native_random,report))throw std::runtime_error(report.reason);
+    const auto initial_market=owner_app::initialize_first_season_market(state,owner,owner);
+    if(state.game_seed!=native_game.seed()||state.watcom_seed!=native_random.seed()||initial_market.watcom_draws!=native_random.calls()-market_before)throw std::runtime_error("initial shuffle/market RNG differs from Native");
+    size_t ordinal=0;for(auto table:{TableGroup::germany,TableGroup::europe})for(auto league:state.world.catalogue.table_leagues(table))for(auto id:state.world.membership[league.value].clubs)if(id!=identities.at(native.club_ids[ordinal++]))throw std::runtime_error("initial shuffled membership differs from Native");
+    const auto& market=*state.world.transfer_market;
+    if(market.list_toggle!=native.list_toggle||uint32_t(market.checkpoint_game_seed)!=native.memory.u32(layout::CareerSession_Invalid_RuntimeField2))throw std::runtime_error("initial market toggle/checkpoint differs");
+    for(size_t row=0;row<44;++row){const auto raw=native.squad_slots.at(size_t(runtime_dimensions.pool_first)+row);const auto& entry=market.rows[row];if((raw&0xfff)==0xfff){if(entry)throw std::runtime_error("initial market empty row differs");continue;}
+        const auto at=layout::EditorList+uint32_t(row)*0x58;const auto seller=native.memory.u16(at+8);const auto source_seller=(seller&0x7fff)==0xfff?ClubId{}:identities.at(native.club_ids.at(seller&0x7fff));
+        if(!entry||entry->player.value!=(raw&0xfff)||entry->seller!=source_seller||entry->fee!=native.memory.u32(at+0x2c)||entry->salary!=native.memory.u32(at+0x30)||entry->asking_percent!=native.memory.u8(at+0x54)||entry->demand_percent!=native.memory.u8(at+0x55)||entry->weeks!=native.memory.u8(at+0x56))throw std::runtime_error("initial market listing/quote differs from Native");
+    }
+    if(read_save(make_save(state))!=state)throw std::runtime_error("initial market snapshot differs");
+    std::cout<<initial_market.listings<<" initial market listings and shuffled fixtures, checkpoint/toggle/quotes/snapshot match Native; W="<<initial_market.watcom_draws<<'\n';
     size_t scopes=0;
     for(int mask=1;mask<8;++mask){const GameScope scope{bool(mask&1),bool(mask&2),bool(mask&4)};if(!scope.club_play())continue;
         CareerSnapshot scoped;scoped.world=select_world_scope(master,scope);const auto limits=read_initial_strength_ranges(scoped.world.catalogue,german,english);const auto initial=make_player_initialization_plan(master,scope,limits);
@@ -75,6 +88,7 @@ int main(int argc,char** argv)try {
         const auto dates=SeasonCalendar::from_sources(scoped.world.catalogue,de,aligned.entries);
         owner_app::prepare_initial_competitions(scoped,session,session,dates,{german,english},reference);
         owner_app::initialize_first_season_manager_services(scoped,session,session,reference);
+        owner_app::initialize_first_season_market(scoped,session,session);
         if(!scope.germany)for(const auto& field:scoped.world.initial_competitions->fields)for(auto id:field)if(scoped.world.clubs.at(id).country==Country::germany)throw std::runtime_error("disabled German club leaked into actual English-only European field");
         if(read_save(make_save(scoped))!=scoped)throw std::runtime_error("actual scoped initial competition snapshot differs");++scopes;
     }

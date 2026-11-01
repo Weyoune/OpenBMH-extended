@@ -76,6 +76,17 @@ int main()try {
         auto interrupted=prepared;owner={75,0};changed_owner=&owner;draw_hook=interrupt;
         rejects([&]{owner_app::initialize_first_season_manager_services(interrupted,owner,{75,0},ref);},"changed ticket/reset owner overwritten");draw_hook=nullptr;
         check(interrupted==prepared&&owner.revision==1,"interrupted ticket/reset stage leaked candidate");
+        auto market_state=service,market_repeat=service;owner={76,0};owner_app::ManagerActionOwner market_other=owner;
+        const auto initial_market=owner_app::initialize_first_season_market(market_state,owner,{76,0});owner_app::initialize_first_season_market(market_repeat,market_other,{76,0});
+        check(market_state==market_repeat&&owner.revision==1&&initial_market.listings>0&&initial_market.listings<=37,"initial market shuffle/selection changed across repeat or exceeded capacity");
+        check(market_state.world.players==service.world.players&&market_state.cups==service.cups&&market_state.world.initial_competitions==service.world.initial_competitions,"fixture shuffle changed player identity or allocated cup/title participants");
+        check(market_state.game_seed==service.game_seed&&market_state.world.transfer_market->checkpoint_game_seed==service.game_seed,"initial market changed G or lost negotiation checkpoint");
+        for(size_t row=0;row<44;++row)if(const auto& listing=market_state.world.transfer_market->rows[row]){check(row<40&&listing->weeks>=5&&listing->weeks<=8,"initial market used reserved row or invalid duration");for(const auto& manager:market_state.world.managers)check(listing->seller!=manager.club,"automatic initial market listed a human player");}
+        check(read_save(make_save(market_state))==market_state,"initial market global references/snapshot lost data");
+        const auto market_done=market_state;rejects([&]{owner_app::initialize_first_season_market(market_state,owner,{76,1});},"initial market replay accepted");check(market_state==market_done&&owner.revision==1,"market replay mutated state");
+        auto market_interrupted=service;owner={77,0};changed_owner=&owner;draw_hook=interrupt;rejects([&]{owner_app::initialize_first_season_market(market_interrupted,owner,{77,0});},"changed initial market owner overwritten");draw_hook=nullptr;check(market_interrupted==service&&owner.revision==1,"initial market owner interruption leaked shuffle/listings");
+        auto no_candidates=service;for(auto& [id,club]:no_candidates.world.clubs)if(club.league.valid())for(size_t row=11;row<24;++row)club.roster[row]={};const auto no_candidates_before=no_candidates;owner={78,0};
+        rejects([&]{owner_app::initialize_first_season_market(no_candidates,owner,{78,0});},"market invented a club listing candidate");check(no_candidates==no_candidates_before&&owner.revision==0,"failed market rolled back listings but leaked fixture shuffle or seed");
         auto malformed=service;malformed.world.managers[0].career->season_services->advertising_contracts[0][0]=1;rejects([&]{malformed.validate();},"duplicate sponsor encoding accepted");
         auto bytes=encode_world(before.world);auto old=bmh::cli::parse_json(std::string(bytes.begin(),bytes.end()));old.object()->at("version")=12;const auto text=bmh::cli::dump_json(old);const auto previous=decode_world(Bytes(text.begin(),text.end()));
         check(!previous.initial_competitions&&!previous.managers[0].career->season_records,"older world invented initial fields/history");++scopes;

@@ -36,3 +36,8 @@ Schema 14 retains ticket counts/income, all thirty twelve-byte scalar advertisin
 Initial services, markers, finance/tactics/match/career fields, notices, seeds and one revision publish together. Replay and changed owners leave the accepted state intact. Synthetic coverage includes all six club scopes plus twelve combinations of mode 1/2/3, duration 1/5 and difficulty 0/9 in the lowest English league. The actual-data validator covers the six source-data scopes and directly compares the German ticket/reset boundary with Native Core. Sixteen independent pre-refactor ticket/popularity/advertising/reset comparisons match the complete retained seasonal state, finance/tactics and random stream. The reference 17/91 reset boundary consumes W=108 after competition preparation.
 
 Validation of the schema-14 manager-service milestone: all 27 targeted Linux regressions and the graphical application build pass. The six actual-data scope probes include the new service boundary and snapshot roundtrip. Two Original saves remain byte-identical, and the initial-offer predecessor check remains G364823/3131 W840250195/12390. No native Windows/macOS or playable-release claim is implied.
+
+
+## First-step shuffle and market (schema 15)
+
+The [initial market owner](INITIAL_MARKET.md) now follows ticket/reset services. It preserves global identities while shuffling fixture positions and prepares explicit transfer listings through shared Original selection/pricing rules. The negotiation checkpoint and W state persist atomically. First-day and visible desktop/session ownership remain pending.

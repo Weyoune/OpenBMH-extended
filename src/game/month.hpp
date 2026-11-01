@@ -40,6 +40,9 @@ void new_transfer_list_entries(GameState& g, WatcomRandom& rand, MinuteReport& r
 void market_value(const GameState& g, int slot, int loan, int percent, uint32_t& fee, uint32_t& salary, int years,
                   int extra, WatcomRandom& rand);
 
+struct MarketListingQuote {uint8_t asking_percent=0,demand_percent=0,weeks=0;uint32_t fee=0,salary=0;};
+MarketListingQuote quote_market_listing(const GameState&,int slot,bool club_player,bool small_club,WatcomRandom&);
+
 // ContractBonuses, the salary page of the contract talks (contracts screen InstallDefaultHooks): the
 // four demands for 1-4 years when the talks open, AddToSquad with the level + 100 percent
 // and the salary rise for the years beyond the current contract, times the player's mood

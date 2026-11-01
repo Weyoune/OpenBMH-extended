@@ -12,6 +12,7 @@
 #include "game/career.hpp"
 #include "game/cup_draw_rules.hpp"
 #include "game/european_rules.hpp"
+#include "game/market_rules.hpp"
 #include "game/matchday.hpp"
 #include "game/match.hpp"
 #include "game/month.hpp"
@@ -906,11 +907,7 @@ void shuffle_leagues(GameState& g, WatcomRandom& rand) {
     int first = 0;
     for (int l = 0; l < kLeagueCount; l++) {
         const int end = first + kLeagueSizes[l];
-        for (int t = first; t < end; t++) {
-            int r;
-            do r = rand.range(first, end - 1); while (uint8_t(r) == uint8_t(t));
-            change_places(g, t, r);
-        }
+        shuffle_initial_positions(first,kLeagueSizes[l],rand,[&](int a,int b){change_places(g,first+a,first+b);});
         first = end;
     }
 }

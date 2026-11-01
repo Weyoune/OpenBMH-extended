@@ -151,6 +151,22 @@ struct InitialCompetitionFields {
     bool manager_services_complete=false;
     bool operator==(const InitialCompetitionFields&)const=default;
 };
+struct MarketBid {
+    ClubId bidder;uint32_t fee=0,salary=0;uint8_t months=0;
+    std::array<uint8_t,7> bonuses{};
+    bool operator==(const MarketBid&)const=default;
+};
+struct MarketListing {
+    PlayerId player;ClubId seller;bool human_seller=false,loan=false;
+    uint32_t fee=0,salary=0;uint8_t asking_percent=0,demand_percent=0,weeks=0;
+    std::array<MarketBid,4> bids;
+    bool operator==(const MarketListing&)const=default;
+};
+struct TransferMarket {
+    std::array<std::optional<MarketListing>,44> rows;
+    uint8_t list_toggle=0;int32_t checkpoint_game_seed=0;
+    bool operator==(const TransferMarket&)const=default;
+};
 struct World {
     bool players_initialized=false;
     // Present after the market/mood phase; old saves do not invent these values.
@@ -158,6 +174,7 @@ struct World {
     std::optional<CareerPlayerPools> free_players={};
     std::optional<CareerSettings> settings={};
     std::optional<InitialCompetitionFields> initial_competitions={};
+    std::optional<TransferMarket> transfer_market={};
     int32_t development_balance=0;
     uint8_t trend_rotation=0;
     Catalogue catalogue=Catalogue::dual_classic();

@@ -3,6 +3,7 @@
 #include "game/environment.hpp"
 #include "game/month.hpp"
 #include "game/trace.hpp"
+#include "game/market_rules.hpp"
 
 #include <algorithm>
 #include <array>
@@ -45,11 +46,6 @@ constexpr uint16_t kFacilityValue[22] = {2000, 3000, 3000, 8000, 4000, 3000, 250
                                          2600, 2600, 2600, 13000, 9000, 9000, 8000, 1000, 1500, 1500, 2000};
 // BalancePlanRuntimeField6: monthly income of facilities 0-5 per level.
 constexpr uint16_t kFacilityIncome[6] = {0, 5000, 5000, 4800, 2400, 8000};
-// MonthRuntimeField3: share of the new list entries per kind (free agents, big clubs, foreign
-// agents, small clubs), percent.
-constexpr int16_t kListShare[4] = {47, 35, 10, 8};
-// MonthRuntimeField4 / MonthRuntimeField5: players a club wants per position (big / small squads).
-constexpr int8_t kWantedBig[4] = {2, 6, 7, 5}, kWantedSmall[4] = {2, 4, 5, 4};
 
 uint32_t rd32(const std::vector<uint8_t>& v, size_t o) {
     return uint32_t(v.at(o) | v.at(o + 1) << 8 | v.at(o + 2) << 16) | uint32_t(v.at(o + 3)) << 24;
@@ -113,19 +109,10 @@ bool list_player(GameState& g, int slot, WatcomRandom& rand, MinuteReport& repor
         uint16_t field = uint16_t(seller);
         mem.set16(e + 8, field);
         if (g.manager_of(seller) >= 0) mem.set8(e + 9, uint8_t(mem.u8(e + 9) | 0x80));
-        mem.set8(e + 0x54, uint8_t(rand.range(0x4b, 0x7a)));
-        mem.set8(e + 0x55, uint8_t(rand.range(0x5c, 100)));
-        if (seller >= kBigSquadClubs) mem.set8(e + 0x54, uint8_t(mem.u8(e + 0x54) + rand.range(5, 0xf)));
-    } else {
-        mem.set16(e + 8, 0xFFF);
-        mem.set8(e + 0x54, uint8_t(rand.range(0x46, 0x69)));
-        mem.set8(e + 0x55, uint8_t(rand.range(0x3c, 0x60)));
-    }
-    mem.set8(e + 0x56, uint8_t(rand.range(5, 8)));
-    uint32_t fee = 0, salary = 0;
-    market_value(g, slot, 0, mem.u8(e + 0x54), fee, salary, 1, 0, rand);
-    mem.set32(e + 0x2c, fee);
-    mem.set32(e + 0x30, salary);
+    } else mem.set16(e+8,0xfff);
+    const auto quote=quote_market_listing(g,slot,slot<kPoolFirst,slot<kPoolFirst&&slot_team(slot)>=kBigSquadClubs,rand);
+    mem.set8(e+0x54,quote.asking_percent);mem.set8(e+0x55,quote.demand_percent);mem.set8(e+0x56,quote.weeks);
+    mem.set32(e+0x2c,quote.fee);mem.set32(e+0x30,quote.salary);
     for (int b = 0; b < 4; b++) mem.set16(e + uint32_t(b) * 2, 0xFFFF);
     for (size_t m = 0; m < g.manager_teams.size(); m++) search_profile_news(g, int(m), e, g.squad_slots[size_t(free)]);
     return true;
@@ -160,86 +147,13 @@ bool in_pseudo_squad(const GameState& g, int slot) {
 // puts one of them on the list. With no club found in first..last the search is repeated
 // over the big clubs.
 void list_club_player(GameState& g, int first, int last, WatcomRandom& rand, MinuteReport& report) {
-    const int8_t* wanted = first < kBigSquadClubs ? kWantedBig : kWantedSmall;  // Attempt
-    for (;;) {
-        std::vector<int16_t> teams(size_t(kLeagueClubs), 0);
-        std::vector<uint32_t> keys(size_t(kLeagueClubs), 0);
-        int n = 0;  // local_14
-        g.list_toggle = g.list_toggle + 1 == 2 ? 0 : g.list_toggle + 1;
-        int best_line = 0;  // local_1c, keeps its value between the clubs
-        for (int team = first + g.list_toggle; team < last; team += 2) {
-            if (g.manager_of(team) >= 0) continue;
-            const SquadRange range = squad_range(team);
-            int8_t count[4] = {0, 0, 0, 0};  // local_50
-            const int players = int16_t(squad_count(g, team, 3));
-            for (int s = 0; s < players; s++) {
-                const int p = g.squad_slots.at(range.first + size_t(s)) & 0xFFF;
-                if (p != 0xFFF) count[g.players.at(size_t(p)).w364 & 3]++;
-            }
-            int key_base = 0, line = 0;
-            bool add = false;
-            if (rand.range(0, 1) + 2 < count[0]) {
-                // three or four goalkeepers
-                line = 0;
-                key_base = count[0] + 100;
-                add = true;
-            } else if (players > 0xd) {
-                const int flags = (g.team_flags.at(size_t(team)) >> 0xc) & 3;
-                if (rand.range(0, flags * 2 + 2) != 0) {
-                    int8_t most = 0;  // local_28
-                    for (int k = 1; k < 4; k++) {
-                        const int8_t over = int8_t(count[k] - wanted[k]);
-                        if (most < over) most = over, best_line = k;
-                    }
-                    int chosen = best_line;
-                    if (most == 0) chosen = rand.range(1, 3);
-                    key_base = most * 8;
-                    const int8_t room = int8_t(range.count - ((team < kBigSquadClubs ? 1 : 0) + 2));
-                    if (room < players) key_base += (players - room) * 4;
-                    line = chosen;
-                    add = true;
-                }
-            }
-            if (add) {
-                const int a = rand.range(0, 5), b = rand.range(0, 5);
-                keys[n] = uint32_t((key_base + a - b) * 4 + int8_t(line));
-                teams[n] = int16_t(team);
-                n++;
-            }
-        }
-        int pick = runtime_dimensions.league_teams;  // sVar11
-        int slot = -1;    // unaff_EDI: the slot tried last
-        if (n != 0) {
-            quicksort_by_key(teams.data(), keys.data(), n);
-            for (pick = 0; pick < n; pick++) {
-                const int team = teams[pick];
-                const SquadRange range = squad_range(team);
-                const int players = int16_t(squad_count(g, team, 2));
-                const int line = int(keys[pick] & 3);
-                int tries = 0;
-                bool again;
-                do {
-                    slot = int(range.first) + rand.range(0, players - 1);
-                    const int p = g.squad_slots.at(size_t(slot)) & 0xFFF;
-                    const bool taken = bought_entry(g, p) != 0 || list_index(g, slot) != 0;
-                    tries++;
-                    again = int(g.players.at(size_t(p)).w364 & 3) != line || in_pseudo_squad(g, slot) || taken;
-                } while (tries < 0x23 && again);
-                if (tries < 0x23) break;
-            }
-            // (when no club had a fitting player the slot tried last is listed all the same)
-        }
-        if (pick < runtime_dimensions.league_teams) {
-            list_player(g, slot, rand, report);
-            return;
-        }
-        if (first == 0) {
-            report.fail("transfer list: no club to take a player from (internal error 0x28)");
-            return;
-        }
-        first = 0;
-        last = kBigSquadClubs;
-    }
+    const auto selected=select_market_club_player(first,last,kBigSquadClubs,kLeagueClubs,g.list_toggle,rand,
+        [&](int team){return g.manager_of(team)>=0;},
+        [&](int team){MarketClubShape result;const auto range=squad_range(team);result.players=int16_t(squad_count(g,team,3));result.capacity=int(range.count);result.flags=g.team_flags.at(size_t(team));
+            for(int row=0;row<result.players;++row){const auto id=g.squad_slots.at(range.first+size_t(row))&0xfff;if(id!=0xfff)++result.positions[g.players.at(id).w364&3];}return result;},
+        [&](int team,int row){const auto slot=int(squad_range(team).first)+row;const auto id=g.squad_slots.at(size_t(slot))&0xfff;return MarketPlayerChoice{int(g.players.at(id).w364&3),bought_entry(g,id)!=0||list_index(g,slot)!=0,in_pseudo_squad(g,slot)};});
+    if(!selected){report.fail("transfer list: no club to take a player from (internal error 0x28)");return;}
+    list_player(g,int(squad_range(selected->club).first)+selected->row,rand,report);
 }
 
 // CareerFirstSteps: new players on the transfer list. The number depends on how full the list
@@ -253,30 +167,7 @@ void new_list_entries(GameState& g, WatcomRandom& rand, MinuteReport& report) {
         count[cls]++;
         if (cls != 0 && list_index(g, s) != 0) count[cls + 2]++;
     }
-    uint8_t add[4] = {0, 0, 0, 0};  // local_10
-    const int r = rand.range(2, 0x16);
-    uint8_t n = uint8_t(r);
-    if (count[0] + int8_t(r) >= 0x26) {
-        n = uint8_t(0x25 - count[0]);
-        if (int8_t(n) <= 0) return;
-    }
-    count[1] = uint8_t(count[1] - count[3]);
-    count[2] = uint8_t(count[2] - count[4]);
-    for (int16_t u = count[1]; n != 0 && u > 0x36; u--) n--, add[0]++;
-    for (int16_t u = count[2]; n != 0 && u > 0xe; u--) n--, add[2]++;
-    for (int k = 0; k < 4; k++) add[k] = uint8_t(add[k] + int8_t(kListShare[k] * int8_t(n) / 100));
-    if (count[1] < add[0]) {
-        add[1] = uint8_t(add[1] + ((add[0] - count[1]) >> 1));
-        add[0] = count[1];
-    }
-    if (count[2] < add[2]) {
-        add[3] = uint8_t(add[3] + ((add[2] - count[2]) >> 1));
-        add[2] = count[2];
-    }
-    int8_t total = 0;
-    for (int k = 0; k < 4; k++) total = int8_t(total + add[k]);
-    if (total < 4) add[1] = uint8_t(add[1] + rand.range(2, 4));
-    if (add[3] == 0 && add[1] != 0 && rand.range(0, 10) == 5) add[3]++, add[1]--;
+    std::array<uint8_t,5> counts;std::copy_n(count,5,counts.begin());const auto add=allocate_market_entries(counts,rand);
     // (MonthRuntimeField8, a debug switch for club players only, is 0)
     for (int k = 0; k < 4 && !report.unsupported; k++) {
         uint8_t left = add[k];
@@ -699,6 +590,13 @@ bool list_transfer_player(GameState& g, int slot, WatcomRandom& rand, MinuteRepo
 }
 
 void new_transfer_list_entries(GameState& g, WatcomRandom& rand, MinuteReport& report) { new_list_entries(g, rand, report); }
+
+MarketListingQuote quote_market_listing(const GameState& g,int slot,bool club,bool small,WatcomRandom& random) {
+    MarketListingQuote result;
+    result.asking_percent=uint8_t(random.range(club?75:70,club?122:105));result.demand_percent=uint8_t(random.range(club?92:60,club?100:96));
+    if(club&&small)result.asking_percent=uint8_t(result.asking_percent+random.range(5,15));
+    result.weeks=uint8_t(random.range(5,8));market_value(g,slot,0,result.asking_percent,result.fee,result.salary,1,0,random);return result;
+}
 
 void market_value(const GameState& g, int slot, int loan, int percent, uint32_t& fee, uint32_t& salary, int years,
                   int extra, WatcomRandom& rand) {

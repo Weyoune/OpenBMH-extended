@@ -22,4 +22,8 @@ struct InitialManagerServicesOutcome {
 // Fixture shuffling, market creation and daily progression follow afterwards.
 InitialManagerServicesOutcome initialize_first_season_manager_services(bmh::world12::CareerSnapshot&,
     ManagerActionOwner&,ManagerActionOwner expected,const bmh::GameState& reference);
+struct InitialMarketOutcome {uint64_t watcom_draws=0;size_t listings=0;};
+// Source first-step membership shuffle and initial transfer list, atomically.
+InitialMarketOutcome initialize_first_season_market(bmh::world12::CareerSnapshot&,
+    ManagerActionOwner&,ManagerActionOwner expected);
 }
