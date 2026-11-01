@@ -494,7 +494,7 @@ int club_attraction(const GameState& g, int team) {
     const int strength = uint16_t(team_average(g, team, 0xff).value);
     int position = int8_t(table_position(g, team));
     if (position == -1) position = 10;
-    int league = int8_t(league_of(team));
+    int league = int8_t(match_team_league(g,team));
     if (league > 2) league--;
     const int place = uint16_t((4 - league) * 0x16 + (0x14 - position));
     int v = int16_t(place * 40 / 108 + strength * 2 / 10 + bonus * 4 / 5);
@@ -514,7 +514,7 @@ void advertising_offers(GameState& g, int manager, WatcomRandom& rand, MinuteRep
         if (mask != 0x80000000u) post_text(g, int64_t(mask), text_id(::bmh::layout::Weekly_AdvertisingOffers_TextPointer));
     }
     int score = int16_t(int8_t(club_attraction(g, int16_t(rec.u16(0x290)))));
-    if (g.memory.u8(::bmh::layout::GameMode) == 3 && g.league_rounds.at(size_t(league_of(int16_t(rec.u16(0x290))))) > 0x11) {
+    if (g.memory.u8(::bmh::layout::GameMode) == 3 && (g.projected_match_clubs.empty()?g.league_rounds.at(size_t(league_of(int16_t(rec.u16(0x290))))):g.projected_match_clubs.at(rec.u16(0x290)).round_cursor) > 0x11) {
         int t = rec.i32(0x320) / 100000;
         t = std::clamp(t, -10, 10);
         score = std::clamp(int(int16_t(score + t)), 0, 100);

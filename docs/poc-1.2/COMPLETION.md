@@ -8,7 +8,7 @@ The active objective is a playable, verified 1.2, not another isolated format pr
 | Human management | Full initial player/manager confirmation, facilities/environment/sponsors, finance/tactics and human match state | Remaining live manager records/policy and other management actions |
 | Matchday | AI/human minute calculation, settled league days, account/statistics/RNG publication | Visible live ownership and full matchday services; cup/indoor/national simulation |
 | Competitions | Initial national/European/domestic fields and campaigns, Source calendars, fixtures and domestic stages | Complete competition results, qualification, promotions and season transitions |
-| Career services | Bounded Original adapters | Daily/weekly/monthly finance, training, transfers, bank, stadium and notification publication |
+| Career services | Initial ticket/reset/advertising services and bounded Original adapters | First-step shuffle/market; daily/weekly/monthly finance, training, transfers, bank, stadium and notification publication |
 | GUI | Four scope controls; other-games projection | Connect accepted setup/manager confirmations to the typed session and first season; desktop/menu actions, tables and persistence |
 | Delivery | Current source/data regression evidence | Three complete seasons, two/four-manager sessions, native build/UI checks, screenshots/saves and Beta package |
 

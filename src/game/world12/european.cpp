@@ -15,6 +15,7 @@ InitialCompetitionFields draw_initial_shared_fields(const World& world,GameRando
     for(uint32_t l:{10u,5u,11u,12u})if(world.catalogue.league({l}).active && std::find(leagues.begin(),leagues.end(),LeagueId{l})==leagues.end())leagues.push_back({l});
     if(leagues.size()<4)throw std::invalid_argument("world12: missing European top leagues");
     result.holders={world.membership[leagues[2].value].clubs.at(7),world.membership[leagues[3].value].clubs.at(7),world.membership[leagues[1].value].clubs.at(7)};
+    for(auto country:{Country::germany,Country::england})if(world.catalogue.selectable(country)){const auto& ranked=world.membership[world.catalogue.starting_league(country,0).value].clubs;result.champions[country]=ranked[0];result.domestic_holders[country]=ranked.at(7);}
     const auto find=[&](ClubId id){for(size_t k=0;k<3;++k)if(std::find(result.qualified[k].begin(),result.qualified[k].end(),id)!=result.qualified[k].end())return int(k)+1;return 0;};
     const auto add=[&](int kind,ClubId id){result.qualified[size_t(kind)].push_back(id);};
     // Preserve nineteen regular league UEFA places. If Germany is disabled,
@@ -22,7 +23,7 @@ InitialCompetitionFields draw_initial_shared_fields(const World& world,GameRando
     const int extra=world.catalogue.scope.germany?0:1;
     for(size_t i=0;i<leagues.size();++i){const auto league=leagues[i];const auto& ranks=world.membership[league.value].clubs;
         ClubId winner,finalist;
-        if(i==0){winner=ranks.at(7);finalist=ranks[0];}
+        if(world.catalogue.league(league).playable){winner=ranks.at(7);finalist=ranks[0];}
         else{const auto a=size_t(staged_random.range(0,int(ranks.size())-1));size_t b;do b=size_t(staged_random.range(0,int(ranks.size())-1));while(b==a);winner=ranks.at(a);finalist=ranks.at(b);}
         std::array<bool,3> in{};for(size_t h=0;h<3;++h)in[h]=world.clubs.at(result.holders[h]).league==league;
         const int quota=(world.catalogue.league(league).country==Country::italy?3:4)+extra;

@@ -22,7 +22,7 @@ public:
     uint8_t global_manager(uint8_t local)const{return manager_seats_.at(local);}
     size_t human_managers()const{return manager_seats_.size();}
     void commit_player_attributes(World&)const;
-    void commit_match_state(World&)const;
+    void commit_match_state(World&,bool capture_season_services=false)const;
 private:
     std::vector<ClubId> clubs_;
     std::vector<PlayerId> players_;

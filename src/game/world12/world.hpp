@@ -100,6 +100,17 @@ struct ManagerSponsorContract {
     uint32_t amount=0;uint8_t months=0;
     bool operator==(const ManagerSponsorContract&)const=default;
 };
+struct ManagerSeasonServices {
+    uint16_t tickets_sold=0;
+    uint32_t ticket_income=0,total_ticket_income=0;
+    std::array<std::array<uint8_t,12>,30> advertising_offers{};
+    // Seventeen regular contracts exclude the designated-player extension.
+    // Amount/month bytes of the three separately named sponsors are zero here.
+    std::array<std::array<uint8_t,12>,17> advertising_contracts{};
+    uint8_t strength_history_count=0;
+    std::array<uint8_t,38> strength_history{},position_history{};
+    bool operator==(const ManagerSeasonServices&)const=default;
+};
 struct ManagerCareerState {
     ManagerStadium stadium;
     ManagerEnvironment environment;
@@ -108,6 +119,7 @@ struct ManagerCareerState {
     std::array<uint8_t,18> transfer_filters{};
     std::array<PlayerId,5> poach_attempts;
     std::optional<std::array<uint8_t,150>> season_records={};
+    std::optional<ManagerSeasonServices> season_services={};
     bool operator==(const ManagerCareerState&)const=default;
 };
 struct Manager {
@@ -135,6 +147,8 @@ struct InitialCompetitionFields {
     std::array<std::vector<ClubId>,3> qualified,fields;
     std::array<ClubId,3> holders;
     std::vector<ClubId> national_field;
+    std::map<Country,ClubId> champions,domestic_holders;
+    bool manager_services_complete=false;
     bool operator==(const InitialCompetitionFields&)const=default;
 };
 struct World {

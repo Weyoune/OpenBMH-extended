@@ -130,6 +130,9 @@ void clubs_change_places(GameState& g, int a, int b);
 void reset_club_moods(GameState& g, GameRandom& game, WatcomRandom& rand, bool new_career = false);
 // One new-career club, after the caller's initial W(0,2) draw.
 void initialize_career_club_mood(GameState&, int team, GameRandom&, WatcomRandom&);
+// Shared per-manager season services, also used by the typed fresh-career owner.
+void initialize_season_tickets(GameState&,int manager,WatcomRandom&);
+void reset_manager_season(GameState&,int manager,WatcomRandom&,MinuteReport&);
 // Regenerate the released player's numeric state, before pool/club placement.
 void regenerate_released_player(GameState&,int player,GameRandom&,WatcomRandom&);
 

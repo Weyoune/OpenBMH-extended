@@ -143,7 +143,7 @@ void AiMatchProjection::commit_player_attributes(World& world)const {
     for(size_t i=0;i<players_.size();++i){auto& target=candidate.players.at(players_[i]);target.attributes=state.players[i];target.bonus=state.player_bonus[i];}
     candidate.validate();world=std::move(candidate);
 }
-void AiMatchProjection::commit_match_state(World& world)const {
+void AiMatchProjection::commit_match_state(World& world,bool capture_season_services)const {
     if(!manager_seats_.empty()&&(state.manager_teams.size()!=manager_seats_.size()||state.manager_records.size()!=manager_seats_.size()*0xb0c||
         state.manager_options.size()!=manager_seats_.size()*5||state.manager_ratings.size()!=manager_seats_.size()*60||
         state.manager_results.size()!=manager_seats_.size()*size_t(runtime_dimensions.record_teams)*10))
@@ -191,7 +191,7 @@ void AiMatchProjection::commit_match_state(World& world)const {
         found->tactics=manager_full_tactics_from_legacy(state,int(local),players_);
         const auto previous=found->match_state;
         found->match_state=manager_match_state_from_legacy(state,int(local),manager_reference_clubs_,players_,previous?&*previous:nullptr);
-        if(found->career)found->career=manager_career_state_from_legacy(state,uint8_t(local),players_);
+        if(found->career)found->career=manager_career_state_from_legacy(state,uint8_t(local),players_,capture_season_services||found->career->season_services.has_value());
         const auto team=local_club(found->club);candidate.clubs.at(found->club).lineup_indoor=(state.club_heap_78.at(team*2+1)&2)!=0;
     }
     candidate.development_balance=state.development_balance;

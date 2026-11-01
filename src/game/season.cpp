@@ -13,6 +13,7 @@
 #include "game/cup_draw_rules.hpp"
 #include "game/european_rules.hpp"
 #include "game/matchday.hpp"
+#include "game/match.hpp"
 #include "game/month.hpp"
 #include "game/national.hpp"
 #include "game/cup.hpp"
@@ -475,7 +476,7 @@ int club_popularity(GameState& g, int m, int team, bool pay) {
     const int avg = team_average(g, team, 0xff).value;
     int pos = int8_t(table_position(g, team));
     if (pos == -1) pos = 10;
-    int league = club_league(team);
+    int league = match_team_league(g,team);
     if (int8_t(league) > 2) league--;
     int v = int16_t((int(p) << 2) / 5) + int16_t(uint32_t(uint16_t((4 - int8_t(league)) * 0x16 + (0x14 - int8_t(pos)))) * 0x28 / 0x6c) +
             int16_t(uint32_t(uint16_t(avg)) * 2 / 10);
@@ -490,7 +491,7 @@ void season_tickets(GameState& g, int m, WatcomRandom& rand) {
     static const uint16_t kTickets[5] = {5000, 2000, 1000, 1000, 300};     // SeasonRuntimeField15
     static const uint16_t kPrice[5] = {330, 270, 240, 240, 225};           // SeasonRuntimeField16
     const int team = g.manager_teams.at(size_t(m));
-    const int league = std::min(club_league(team), 4);
+    const int league = std::min(match_team_league(g,team), 4);
     const int pop = club_popularity(g, m, team, true);
     const int low = std::max(pop - kBase[league], 0);
     const int r = rand.range(low, low + 10);
@@ -1088,6 +1089,37 @@ bool release_player(GameState& g, int slot, GameRandom& game, WatcomRandom& rand
 // retires (unless the squad is small: then he is replaced by a young one) - the first old
 // one of every club always goes (a quirk: the counter starts at 0xFF). Last the rounds,
 // cards, position histories and results of the old season are cleared.
+void initialize_season_tickets(GameState& g,int manager,WatcomRandom& random) {season_tickets(g,manager,random);}
+
+void reset_manager_season(GameState& g,int m,WatcomRandom& rand,MinuteReport& report) {
+    StaticMemory& mem=g.memory;
+    // CareerSeasonSetup3 invokes StartingSponsors for each manager before resetting
+    // seasonal records and constructing new advertising offers.
+    starting_sponsors(g, m);
+    rec8(g, m, 0x284) = 0, rec8(g, m, 0x21e) = 0, rec8(g, m, 0x283) = 0;
+    set_rec32(g, m, 0x330, 0);
+    rec8(g, m, 0x28b) = 0;
+    for (size_t i = 0; i < 3; i++) rec8(g, m, 0x28c + i) = 0;
+    for (size_t i = 0; i < 10; i++) rec8(g, m, 0x170 + i) = 0;
+    for (size_t i = 0; i < 0x48; i++) rec8(g, m, 0x1ae + i) = 0;
+    for (size_t i = 0; i < 0x30; i++) rec8(g, m, 0x718 + i) = 0;
+    for (size_t i = 0; i < 0xc; i++) rec8(g, m, 0x8c0 + i) = 0, rec8(g, m, 0x748 + i) = 0;
+    advertising_offers(g, m, rand, report);  // TransferListCountdown2
+    if (report.unsupported) return;
+    set_rec32(g, m, 0x33c, 0), set_rec32(g, m, 0x338, 0), set_rec32(g, m, 0x334, 0);
+    for (size_t s = 0; s < 24; s++) {
+        const size_t at = size_t(m) * 0x840 + s * 0x58;
+        g.tactics.at(at + 6) = 0;
+        g.tactics.at(at + 0xf) = uint8_t(rand.range(0x14, 0x32));
+    }
+    for (uint32_t i = 0; i < 12; i++)
+        if (mem.u16(::bmh::layout::Career_CareerManagersEnd_RuntimeField + i * 2) != 0xfff && int8_t(mem.u8(::bmh::layout::ClubInfo_FormatError_RuntimeField2 + i)) == m) {
+            mem.set8(::bmh::layout::Season_SeasonPlayers_RuntimeField + i * 0x58, 0);
+            mem.set8(::bmh::layout::Season_SeasonPlayers_RuntimeField2 + i * 0x58, uint8_t(rand.range(0x14, 0x32)));
+        }
+    for(size_t i=0;i<10;++i)rec8(g,m,0x8b6+i)=0xff;
+}
+
 void season_players(GameState& g, GameRandom& game, WatcomRandom& rand, MinuteReport& report) {
     StaticMemory& mem = g.memory;
     auto fill8 = [&](uint32_t at, uint32_t n, uint8_t v) {
@@ -1106,33 +1138,7 @@ void season_players(GameState& g, GameRandom& game, WatcomRandom& rand, MinuteRe
         for (size_t i = 0; i < 10; i++) rec8(g, int(m), 0x8b6 + i) = 0xff;
     end_competition(mem, 0xd);  // EndCompetition
     fill8(::bmh::layout::Season_SeasonPlayers_ExecutableField, 1, 0);
-    for (size_t mi = 0; mi < g.manager_teams.size() && !report.unsupported; mi++) {
-        const int m = int(mi);
-        // CareerSeasonSetup3 invokes StartingSponsors for each manager before resetting
-        // seasonal records and constructing new advertising offers.
-        starting_sponsors(g, m);
-        rec8(g, m, 0x284) = 0, rec8(g, m, 0x21e) = 0, rec8(g, m, 0x283) = 0;
-        set_rec32(g, m, 0x330, 0);
-        rec8(g, m, 0x28b) = 0;
-        for (size_t i = 0; i < 3; i++) rec8(g, m, 0x28c + i) = 0;
-        for (size_t i = 0; i < 10; i++) rec8(g, m, 0x170 + i) = 0;
-        for (size_t i = 0; i < 0x48; i++) rec8(g, m, 0x1ae + i) = 0;
-        for (size_t i = 0; i < 0x30; i++) rec8(g, m, 0x718 + i) = 0;
-        for (size_t i = 0; i < 0xc; i++) rec8(g, m, 0x8c0 + i) = 0, rec8(g, m, 0x748 + i) = 0;
-        advertising_offers(g, m, rand, report);  // TransferListCountdown2
-        if (report.unsupported) return;
-        set_rec32(g, m, 0x33c, 0), set_rec32(g, m, 0x338, 0), set_rec32(g, m, 0x334, 0);
-        for (size_t s = 0; s < 24; s++) {
-            const size_t at = mi * 0x840 + s * 0x58;
-            g.tactics.at(at + 6) = 0;
-            g.tactics.at(at + 0xf) = uint8_t(rand.range(0x14, 0x32));
-        }
-        for (uint32_t i = 0; i < 12; i++)
-            if (mem.u16(::bmh::layout::Career_CareerManagersEnd_RuntimeField + i * 2) != 0xfff && int8_t(mem.u8(::bmh::layout::ClubInfo_FormatError_RuntimeField2 + i)) == m) {
-                mem.set8(::bmh::layout::Season_SeasonPlayers_RuntimeField + i * 0x58, 0);
-                mem.set8(::bmh::layout::Season_SeasonPlayers_RuntimeField2 + i * 0x58, uint8_t(rand.range(0x14, 0x32)));
-            }
-    }
+    for(size_t m=0;m<g.manager_teams.size()&&!report.unsupported;++m){reset_manager_season(g,int(m),rand,report);if(report.unsupported)return;}
     if (g.date > 0) {
         g.lineups_frozen = true;  // LineupRuntimeField
         uint8_t loans[0x1d3] = {};

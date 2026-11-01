@@ -13,4 +13,13 @@ struct InitialCompetitionOutcome {
 InitialCompetitionOutcome prepare_initial_competitions(bmh::world12::CareerSnapshot&,
     ManagerActionOwner&,ManagerActionOwner expected,const bmh::world12::SeasonCalendar&,
     const CupSources&,const bmh::GameState& reference);
+struct SeasonTicketReceipt {uint8_t seat=0;uint16_t sold=0;uint32_t income=0;};
+struct InitialManagerServicesOutcome {
+    std::vector<SeasonTicketReceipt> tickets;
+    uint64_t watcom_draws=0;
+};
+// Through initial ticket sales and the date-zero manager/player reset boundary.
+// Fixture shuffling, market creation and daily progression follow afterwards.
+InitialManagerServicesOutcome initialize_first_season_manager_services(bmh::world12::CareerSnapshot&,
+    ManagerActionOwner&,ManagerActionOwner expected,const bmh::GameState& reference);
 }

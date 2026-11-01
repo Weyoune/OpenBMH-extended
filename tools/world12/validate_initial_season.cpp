@@ -2,6 +2,8 @@
 #include "app/world12_initial_season.hpp"
 #include "game/world12/codec.hpp"
 #include "game/world12/manager_match_state.hpp"
+#include "game/world12/manager_finance.hpp"
+#include "game/world12/manager_tactics.hpp"
 #include "game/career.hpp"
 #include "game/season.hpp"
 #include "game/calendar.hpp"
@@ -26,6 +28,7 @@ int main(int argc,char** argv)try {
     for(size_t row=0;row<24;++row)for(size_t at:{0x44u,0x46u}){native.tactics[row*0x58+at]=255;native.tactics[row*0x58+at+1]=15;}
     if(!career_add_manager(native,german,0,{"Initial manager",0,0,1,0},false,native_game,native_random,report))throw std::runtime_error(report.reason);
     add_initial_manager(state.world,{0,{0},{0},"Initial manager",0,1},{3,3,5,1,false},ranges,reference,german,game,random);
+    career_managers_end(native,false);
     state.game_seed=game.seed();state.watcom_seed=random.seed();
     std::vector<ClubId> mapping;
     for(auto table:{TableGroup::germany,TableGroup::europe})for(auto league:state.world.catalogue.table_leagues(table))for(auto id:state.world.membership[league.value].clubs)mapping.push_back(id);
@@ -50,6 +53,16 @@ int main(int argc,char** argv)try {
     for(const auto& [id,p]:state.world.players)if(p.cards!=native.player_cards.at(id.value))throw std::runtime_error("initial competition lineup card rows differ");
     if(state.world.managers[0].career!=manager_career_state_from_legacy(native,0,{}))throw std::runtime_error("initial campaign record differs from Native");
     if(read_save(make_save(state))!=state)throw std::runtime_error("initial competitions snapshot roundtrip failed");
+    const auto reset_before=native_random.calls();initialize_season_tickets(native,0,native_random);season_players(native,native_game,native_random,report);
+    if(report.unsupported)throw std::runtime_error(report.reason);
+    const auto services=owner_app::initialize_first_season_manager_services(state,owner,owner,reference);
+    if(state.game_seed!=native_game.seed()||state.watcom_seed!=native_random.seed()||services.watcom_draws!=native_random.calls()-reset_before)throw std::runtime_error("initial manager services RNG mismatch");
+    std::vector<PlayerId> players;for(size_t i=0;i<native.players.size();++i)players.push_back({uint32_t(i)});
+    if(state.world.managers[0].career!=manager_career_state_from_legacy(native,0,players,true))throw std::runtime_error("initial ticket/advertising/history state differs from Native");
+    if(state.world.managers[0].finance!=manager_initial_finance_from_legacy(native,0)||state.world.managers[0].match_state!=manager_match_state_from_legacy(native,0,{},{}))throw std::runtime_error("initial ticket/reset finance or match settings differ");
+    if(state.world.managers[0].tactics!=manager_full_tactics_from_legacy(native,0,players))throw std::runtime_error("initial tactical familiarity/reset differs");
+    if(read_save(make_save(state))!=state)throw std::runtime_error("initial manager services snapshot differs");
+    std::cout<<"Native initial ticket/reset boundary: sales, all advertising offers/contracts, finance/tactics/history and W="<<services.watcom_draws<<" match\n";
     size_t scopes=0;
     for(int mask=1;mask<8;++mask){const GameScope scope{bool(mask&1),bool(mask&2),bool(mask&4)};if(!scope.club_play())continue;
         CareerSnapshot scoped;scoped.world=select_world_scope(master,scope);const auto limits=read_initial_strength_ranges(scoped.world.catalogue,german,english);const auto initial=make_player_initialization_plan(master,scope,limits);
@@ -61,6 +74,7 @@ int main(int argc,char** argv)try {
         scoped.game_seed=scoped_game.seed();scoped.watcom_seed=scoped_random.seed();scoped.results=SeasonResults::empty(scoped.world.catalogue);
         const auto dates=SeasonCalendar::from_sources(scoped.world.catalogue,de,aligned.entries);
         owner_app::prepare_initial_competitions(scoped,session,session,dates,{german,english},reference);
+        owner_app::initialize_first_season_manager_services(scoped,session,session,reference);
         if(!scope.germany)for(const auto& field:scoped.world.initial_competitions->fields)for(auto id:field)if(scoped.world.clubs.at(id).country==Country::germany)throw std::runtime_error("disabled German club leaked into actual English-only European field");
         if(read_save(make_save(scoped))!=scoped)throw std::runtime_error("actual scoped initial competition snapshot differs");++scopes;
     }

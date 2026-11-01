@@ -16,7 +16,7 @@ size_t record(const GameState& state,uint8_t seat) {
 uint32_t word32(const Bytes& data,size_t at){uint32_t n=0;for(size_t i=0;i<4;++i)n|=uint32_t(data.at(at+i))<<(i*8);return n;}
 void put32(Bytes& data,size_t at,uint32_t n){for(size_t i=0;i<4;++i)data.at(at+i)=uint8_t(n>>(i*8));}
 }
-ManagerCareerState manager_career_state_from_legacy(const GameState& state,uint8_t seat,const std::vector<PlayerId>& players) {
+ManagerCareerState manager_career_state_from_legacy(const GameState& state,uint8_t seat,const std::vector<PlayerId>& players,bool season_services) {
     const auto at=record(state,seat);ManagerCareerState result;
     const auto copy=[&](size_t offset,auto& output){std::copy_n(state.manager_records.begin()+at+offset,output.size(),output.begin());};
     copy(0,result.stadium.facility_values);copy(0x16,result.stadium.stand_condition);copy(0x3c,result.stadium.facility_levels);copy(0x4c,result.stadium.stand_capacity);
@@ -29,6 +29,13 @@ ManagerCareerState manager_career_state_from_legacy(const GameState& state,uint8
     const auto youth=layout::EnvironmentYouthTeams+uint32_t(seat)*0x24;
     for(size_t i=0;i<3;++i)result.environment.youth[i]={state.memory.u8(youth+uint32_t(i)),state.memory.u8(youth+3+uint32_t(i)),state.memory.u8(youth+6+uint32_t(i))};
     for(size_t i=0;i<6;++i)result.environment.monthly[i]=std::bit_cast<int32_t>(state.memory.u32(layout::Spending+uint32_t(seat)*0x24+uint32_t(i)*4));
+    if(season_services){auto& services=result.season_services.emplace();services.tickets_sold=uint16_t(state.manager_records.at(at+0x2ac)|uint16_t(state.manager_records.at(at+0x2ad))<<8);
+        services.ticket_income=word32(state.manager_records,at+0x754);services.total_ticket_income=word32(state.manager_records,at+0x868);
+        for(size_t i=0;i<30;++i)copy(0x8cc+i*12,services.advertising_offers[i]);
+        for(size_t i=0;i<17;++i)copy(0xa34+i*12,services.advertising_contracts[i]);
+        for(size_t i:{0u,14u,15u}){std::fill_n(services.advertising_contracts[i].begin(),4,uint8_t(0));services.advertising_contracts[i][5]=0;}
+        services.strength_history_count=state.manager_records.at(at+0x284);copy(0x222,services.strength_history);copy(0x248,services.position_history);
+    }
     const size_t sponsors[]={0xae8,0xadc,0xa34};
     for(size_t i=0;i<3;++i)result.sponsors[i]={word32(state.manager_records,at+sponsors[i]),state.manager_records.at(at+sponsors[i]+5)};
     return result;
@@ -47,6 +54,12 @@ void install_manager_career_state(GameState& state,uint8_t seat,const ManagerCar
     if(!state.memory.has(youth+0x23))throw std::invalid_argument("world12: incomplete manager environment storage");
     for(size_t i=0;i<3;++i){const auto& value=input.environment.youth[i];state.memory.set8(youth+uint32_t(i),value.strength);state.memory.set8(youth+3+uint32_t(i),value.position);state.memory.set8(youth+6+uint32_t(i),value.league);}
     for(size_t i=0;i<6;++i)state.memory.set32(layout::Spending+uint32_t(seat)*0x24+uint32_t(i)*4,uint32_t(input.environment.monthly[i]));
+    if(input.season_services){const auto& services=*input.season_services;state.manager_records.at(at+0x2ac)=uint8_t(services.tickets_sold);state.manager_records.at(at+0x2ad)=uint8_t(services.tickets_sold>>8);
+        put32(state.manager_records,at+0x754,services.ticket_income);put32(state.manager_records,at+0x868,services.total_ticket_income);
+        for(size_t i=0;i<30;++i)copy(0x8cc+i*12,services.advertising_offers[i]);
+        for(size_t i=0;i<17;++i)copy(0xa34+i*12,services.advertising_contracts[i]);
+        state.manager_records.at(at+0x284)=services.strength_history_count;copy(0x222,services.strength_history);copy(0x248,services.position_history);
+    }
     const size_t sponsors[]={0xae8,0xadc,0xa34};
     for(size_t i=0;i<3;++i){put32(state.manager_records,at+sponsors[i],input.sponsors[i].amount);state.manager_records.at(at+sponsors[i]+5)=input.sponsors[i].months;}
 }

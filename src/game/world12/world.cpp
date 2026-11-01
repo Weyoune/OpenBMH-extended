@@ -21,6 +21,8 @@ void World::validate(bool complete)const {
     if(settings && (!free_players || settings->mode<1 || settings->mode>3 || settings->difficulty>9 || settings->duration>5 || settings->planned_managers<1 || settings->planned_managers>4 || managers.size()>settings->planned_managers))throw std::invalid_argument("world12: invalid career settings");
     for(const auto& manager:managers)if(manager.career) {
         if(!settings)throw std::invalid_argument("world12: initial manager state requires career settings");
+        if(manager.career->season_services){const auto& season=*manager.career->season_services;if(season.strength_history_count>38)throw std::invalid_argument("world12: invalid seasonal history cursor");
+            for(size_t i:{0u,14u,15u})for(size_t b:{0u,1u,2u,3u,5u})if(season.advertising_contracts[i][b])throw std::invalid_argument("world12: duplicate initial sponsor scalar encoding");}
         std::set<PlayerId> attempts;for(auto player:manager.career->poach_attempts)if(player.valid()&&(!players.contains(player)||!attempts.insert(player).second))throw std::invalid_argument("world12: invalid poaching history identity");
         for(const auto& youth:manager.career->environment.youth)if(youth.position>11||youth.league>2)throw std::invalid_argument("world12: invalid youth team state");
         for(auto value:manager.career->environment.monthly)if(value<0)throw std::invalid_argument("world12: invalid negative environment budget");
@@ -40,6 +42,8 @@ void World::validate(bool complete)const {
     if(initial_competitions){
         if(!settings)throw std::invalid_argument("world12: initial competitions lack career settings");
         for(const auto& manager:managers)if(!manager.career||!manager.career->season_records||!manager.tactics||!manager.finance||!manager.match_state)throw std::invalid_argument("world12: prepared competitions lack complete manager state");
+        for(const auto* titles:{&initial_competitions->champions,&initial_competitions->domestic_holders})for(const auto& [country,id]:*titles)if(!catalogue.selectable(country)||!clubs.contains(id)||clubs.at(id).country!=country||clubs.at(id).kind!=ClubKind::club)throw std::invalid_argument("world12: invalid domestic title identity");
+        if(initial_competitions->manager_services_complete)for(const auto& manager:managers)if(!manager.career->season_services)throw std::invalid_argument("world12: completed initial services lack manager records");
         const size_t sizes[]={64,24,32};std::set<ClubId> participants;
         for(size_t k=0;k<3;++k){const auto& field=initial_competitions->fields[k];if(field.size()!=sizes[k])throw std::invalid_argument("world12: incomplete European field");
             for(auto id:field)if(!clubs.contains(id)||clubs.at(id).kind!=ClubKind::club||!participants.insert(id).second)throw std::invalid_argument("world12: invalid/repeated European club");

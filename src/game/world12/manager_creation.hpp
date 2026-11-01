@@ -8,7 +8,7 @@ struct InitialManagerChoice {
     std::string name;uint8_t portrait=0,strength=1;
 };
 // Verified numeric facility/environment/sponsor state; no names, pointers or packed IDs.
-ManagerCareerState manager_career_state_from_legacy(const GameState&,uint8_t seat,const std::vector<PlayerId>& players={});
+ManagerCareerState manager_career_state_from_legacy(const GameState&,uint8_t seat,const std::vector<PlayerId>& players={},bool season_services=false);
 void install_manager_career_state(GameState&,uint8_t seat,const ManagerCareerState&,const std::vector<PlayerId>& players={});
 // Fresh-career confirmation, including identity-preserving placement, strength,
 // facilities and the existing account/contract/lineup phase. Rules are supplied

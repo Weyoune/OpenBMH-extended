@@ -31,11 +31,11 @@ World master() {
     for(uint8_t country=0;country<62;++country){ClubRecord c;c.id={club++};c.country=Country(country);c.kind=ClubKind::national_team;c.name="National team";c.crest={c.id.value};world.crests[c.crest]={"W/TEST.VGA",0};world.clubs[c.id]=c;}
     world.validate();return world;
 }
-CareerSnapshot initialized(const World& master,GameScope scope,const GameState& ref,const LeImage& de,const LeImage& en) {
+CareerSnapshot initialized(const World& master,GameScope scope,const GameState& ref,const LeImage& de,const LeImage& en,uint8_t mode=3,uint8_t duration=5,uint8_t difficulty=3,uint8_t local_league=0) {
     CareerSnapshot state;auto& w=state.world;w=select_world_scope(master,scope);w.players_initialized=true;w.markets=CareerMarkets{};w.free_players=CareerPlayerPools{};
     InitialStrengthRanges ranges;for(auto& range:ranges)range={25,75};GameRandom game(17);WatcomRandom random(91);
-    CareerSettings settings{3,3,5,uint8_t(scope.germany+scope.england),false};
-    for(auto country:{Country::germany,Country::england})if(scope.domestic_enabled(country)){const auto league=w.catalogue.starting_league(country,0);const uint8_t seat=uint8_t(w.managers.size());
+    CareerSettings settings{mode,difficulty,duration,uint8_t(scope.germany+scope.england),false};
+    for(auto country:{Country::germany,Country::england})if(scope.domestic_enabled(country)){const auto league=w.catalogue.starting_league(country,local_league);const uint8_t seat=uint8_t(w.managers.size());
         add_initial_manager(w,{seat,w.membership[league.value].clubs[0],league,"Manager "+std::to_string(seat),seat,1},settings,ranges,ref,country==Country::germany?de:en,game,random);}
     state.results=SeasonResults::empty(w.catalogue);state.game_seed=game.seed();state.watcom_seed=random.seed();return state;
 }
@@ -63,10 +63,34 @@ int main()try {
         auto missing=before;for(auto it=missing.world.clubs.begin();it!=missing.world.clubs.end();++it)if(it->second.country==Country(31)&&it->second.kind==ClubKind::club){missing.world.clubs.erase(it);break;}const auto missing_before=missing;
         rejects([&]{owner_app::prepare_initial_competitions(missing,owner,{71,0},schedule,{de,en},ref);},"incomplete European reserve pool accepted");check(missing==missing_before&&owner.revision==0,"late field error leaked lineup/random/history state");
         broken=before;changed_owner=&owner;draw_hook=interrupt;rejects([&]{owner_app::prepare_initial_competitions(broken,owner,{71,0},schedule,{de,en},ref);},"external initial season owner overwritten");draw_hook=nullptr;check(broken==before&&owner.revision==1,"interrupted initial season lost external revision or leaked candidate");
+        auto service=prepared,second_service=prepared;owner={74,0};owner_app::ManagerActionOwner second_owner=owner;
+        const auto sales=owner_app::initialize_first_season_manager_services(service,owner,{74,0},ref);
+        owner_app::initialize_first_season_manager_services(second_service,second_owner,{74,0},ref);
+        check(service==second_service&&owner.revision==1&&sales.tickets.size()==service.world.managers.size()&&sales.watcom_draws>0,"initial ticket/reset services changed across repeat or lost owner/receipt");
+        check(service.game_seed==prepared.game_seed&&service.world.initial_competitions->manager_services_complete,"ticket/reset stage changed G or lost completion marker");
+        for(const auto& manager:service.world.managers){check(manager.career->season_services&&manager.career->season_services->tickets_sold>0&&manager.career->season_services->ticket_income>0,"initial tickets missing");
+            check(manager.career->season_services->strength_history_count==0&&manager.match_state->goal_notices==0&&manager.match_state->tax_policy==0,"initial seasonal flags/history were not reset");
+            for(const auto& row:manager.tactics->backing->scalar_rows)check(row[6]==0&&row[15]>=20&&row[15]<=50,"initial tactical reset/familiarity not retained");}
+        check(read_save(make_save(service))==service,"ticket/reset state lost on snapshot roundtrip");
+        const auto service_done=service;rejects([&]{owner_app::initialize_first_season_manager_services(service,owner,{74,1},ref);},"ticket/reset services replay accepted");check(service==service_done&&owner.revision==1,"ticket/reset replay mutated state");
+        auto interrupted=prepared;owner={75,0};changed_owner=&owner;draw_hook=interrupt;
+        rejects([&]{owner_app::initialize_first_season_manager_services(interrupted,owner,{75,0},ref);},"changed ticket/reset owner overwritten");draw_hook=nullptr;
+        check(interrupted==prepared&&owner.revision==1,"interrupted ticket/reset stage leaked candidate");
+        auto malformed=service;malformed.world.managers[0].career->season_services->advertising_contracts[0][0]=1;rejects([&]{malformed.validate();},"duplicate sponsor encoding accepted");
         auto bytes=encode_world(before.world);auto old=bmh::cli::parse_json(std::string(bytes.begin(),bytes.end()));old.object()->at("version")=12;const auto text=bmh::cli::dump_json(old);const auto previous=decode_world(Bytes(text.begin(),text.end()));
         check(!previous.initial_competitions&&!previous.managers[0].career->season_records,"older world invented initial fields/history");++scopes;
         CareerSnapshot old_snapshot;old_snapshot.world=previous;old_snapshot.results=SeasonResults::empty(previous.catalogue);
         rejects([&]{AiMatchProjection::create_for_humans(old_snapshot,{previous.managers[0].club},ref,{3,3,false,true});},"missing historical state was silently regenerated for scoring");
+    }
+    for(uint8_t mode:{1,2,3})for(uint8_t duration:{1,5})for(uint8_t difficulty:{0,9}) {
+        auto state=initialized(data,{false,true,true},ref,de,en,mode,duration,difficulty,4);const auto dates=calendar(state.world.catalogue);owner_app::ManagerActionOwner owner{81,0};
+        owner_app::prepare_initial_competitions(state,owner,owner,dates,{de,en},ref);
+        const auto sales=owner_app::initialize_first_season_manager_services(state,owner,owner,ref);const auto& m=state.world.managers[0];
+        check(sales.watcom_draws>=25&&m.career->season_services->tickets_sold>0,"lower-English ticket/reset stage omitted required draws/sales");
+        if(difficulty==0)check(m.finance->balance==50000000,"difficulty-one fixed capital changed during initial sales");
+        if(duration==1)for(const auto& row:m.career->season_services->advertising_offers)for(auto byte:row)check(byte==0,"one-year career invented advertising offers");
+        check(m.career->sponsors[0].months==uint8_t(mode==1||duration==1),"starting sponsor condition changed during seasonal reset");
+        check(read_save(make_save(state))==state,"alternate mode/duration/difficulty service snapshot lost state");
     }
     std::cout<<scopes<<" initial competition scopes: 120 unique European clubs, national entropy/scope, source layout, history/snapshot/calendar and atomic rollback passed\n";
 }catch(const std::exception& error){draw_hook=nullptr;std::cerr<<error.what()<<'\n';return 1;}

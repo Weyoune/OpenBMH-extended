@@ -52,3 +52,48 @@ InitialCompetitionOutcome prepare_initial_competitions(CareerSnapshot& state,Man
     state=std::move(candidate);++owner.revision;return outcome;
 }
 }
+
+namespace bmh::app::world12 {
+namespace {
+// Exact local relation projection for the two scalar popularity routines. No
+// unrequested club is manufactured or persisted in the bounded workspace.
+void install_season_relations(bmh::GameState& local,const bmh::world12::World& world,bmh::world12::ClubId id) {
+    using namespace bmh;using namespace bmh::world12;const auto& fields=*world.initial_competitions;const auto country=world.clubs.at(id).country;
+    const auto champion=fields.champions.find(country),cup=fields.domestic_holders.find(country);
+    if(champion==fields.champions.end()||cup==fields.domestic_holders.end())throw std::invalid_argument("world12: initial title relations are unavailable");
+    const auto word=[&](uint32_t at,uint16_t value){local.memory.add_block(at,2);local.memory.set16(at,value);};
+    const auto byte=[&](uint32_t at,uint8_t value){local.memory.add_block(at,1);local.memory.set8(at,value);};
+    const uint32_t lists[]={layout::Career_CompetitionPointersEnglish_ExecutableField25,layout::Career_CompetitionPointersEnglish_RuntimeField14,layout::Career_CompetitionPointersEnglish_ExecutableField19};
+    const uint32_t counts[]={layout::Career_EuropeanClub_ExecutableField,layout::Career_EuropeanClub_ExecutableField2,layout::Career_EuropeanClub_ExecutableField3};
+    for(size_t k=0;k<3;++k){const bool present=std::find(fields.fields[k].begin(),fields.fields[k].end(),id)!=fields.fields[k].end();byte(counts[k],uint8_t(present));word(lists[k],present?0:0xffff);}
+    word(layout::Cup_AdvanceCup_RuntimeField6,champion->second==id?0:0xffff);
+    word(layout::Season_CareerSeasonSetup_RuntimeField,cup->second==id?0:0xffff);
+    const uint32_t holders[]={layout::Season_CareerSeasonSetup_RuntimeField4,layout::Season_CareerSeasonSetup_RuntimeField5,layout::Season_CareerSeasonSetup_RuntimeField6};
+    for(size_t k=0;k<3;++k)word(holders[k],fields.holders[k]==id?0:0xffff);
+}
+}
+InitialManagerServicesOutcome initialize_first_season_manager_services(bmh::world12::CareerSnapshot& state,
+    ManagerActionOwner& owner,ManagerActionOwner expected,const bmh::GameState& reference) {
+    using namespace bmh;using namespace bmh::world12;state.validate();
+    if(!owner.scope||owner.scope!=expected.scope||owner.revision!=expected.revision||owner.revision==std::numeric_limits<uint64_t>::max()||
+        state.date||state.season||!state.world.loans.empty()||!state.world.initial_competitions||state.world.initial_competitions->manager_services_complete||!state.world.settings||
+        !state.calendar||state.calendar->next_day||std::any_of(state.league_rounds.begin(),state.league_rounds.end(),[](auto n){return n!=0;}))throw std::invalid_argument("world12: invalid first-season manager service phase");
+    for(const auto& m:state.world.managers)if(!m.career||!m.career->season_records||m.career->season_services)throw std::invalid_argument("world12: initial manager service state is missing or already present");
+    const auto before=state;auto candidate=state;const auto settings=*state.world.settings;WatcomRandom random(state.watcom_seed);InitialManagerServicesOutcome outcome;
+    // Original sells every manager's tickets before resetting any manager.
+    std::vector<std::pair<uint8_t,ClubId>> managers;for(const auto& m:state.world.managers)managers.emplace_back(m.seat,m.club);
+    for(const auto& [seat,club]:managers){auto projected=AiMatchProjection::create_for_humans(candidate,{club},reference,{settings.mode,settings.difficulty,settings.foreign_rule,true});
+        install_season_relations(projected.state,candidate.world,club);initialize_season_tickets(projected.state,0,random);projected.commit_match_state(candidate.world,true);
+        const auto m=std::find_if(candidate.world.managers.begin(),candidate.world.managers.end(),[&](const auto& m){return m.seat==seat;});const auto& data=*m->career->season_services;outcome.tickets.push_back({seat,data.tickets_sold,data.ticket_income});}
+    for(const auto& [seat,club]:managers){auto projected=AiMatchProjection::create_for_humans(candidate,{club},reference,{settings.mode,settings.difficulty,settings.foreign_rule,true});
+        install_season_relations(projected.state,candidate.world,club);
+        const auto loans=layout::Career_CareerManagersEnd_RuntimeField;projected.state.memory.add_block(loans,24);for(size_t i=0;i<12;++i)projected.state.memory.set16(loans+uint32_t(i*2),0xfff);
+        MinuteReport report;reset_manager_season(projected.state,0,random,report);if(report.unsupported)throw std::invalid_argument(report.reason);
+        projected.commit_match_state(candidate.world,true);
+    }
+    for(auto& [id,club]:candidate.world.clubs)if(club.league.valid())club.fairplay_points=0;
+    candidate.results=SeasonResults::empty(candidate.world.catalogue);candidate.world.initial_competitions->manager_services_complete=true;candidate.watcom_seed=random.seed();candidate.validate();
+    if(state!=before||owner.scope!=expected.scope||owner.revision!=expected.revision)throw std::invalid_argument("world12: manager service owner changed during initialization");
+    outcome.watcom_draws=random.calls();state=std::move(candidate);++owner.revision;return outcome;
+}
+}
