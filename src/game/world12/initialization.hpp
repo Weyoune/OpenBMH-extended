@@ -28,4 +28,8 @@ PlayerInitializationOutcome initialize_career_players(World&,const PlayerInitial
 // Reference supplies the initial numeric stock/fund records, not world identities.
 PlayerInitializationOutcome initialize_career_markets_and_moods(World&,
     const GameState& reference,GameRandom&,WatcomRandom&);
+// Completes the club-career age/familiarity and 54-player release phase.
+// Overflow follows Original transfer scoring and lineup selection with global IDs.
+PlayerInitializationOutcome initialize_career_player_pools(World&,const PlayerInitializationPlan&,
+    const GameState& reference,bool foreign_rule,GameRandom&,WatcomRandom&);
 }

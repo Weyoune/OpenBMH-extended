@@ -130,6 +130,8 @@ void clubs_change_places(GameState& g, int a, int b);
 void reset_club_moods(GameState& g, GameRandom& game, WatcomRandom& rand, bool new_career = false);
 // One new-career club, after the caller's initial W(0,2) draw.
 void initialize_career_club_mood(GameState&, int team, GameRandom&, WatcomRandom&);
+// Regenerate the released player's numeric state, before pool/club placement.
+void regenerate_released_player(GameState&,int player,GameRandom&,WatcomRandom&);
 
 // The CareerSession_RuntimeError_RuntimeField4 branch of DailyInterest (see above). Missing runtime context or
 // invalid state is reported through MinuteReport; presenters are supplied by the caller.

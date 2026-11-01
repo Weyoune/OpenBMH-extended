@@ -60,7 +60,7 @@ def prepare(base,tables,output,english):
         roster=empty()
         if i<164:
             for j,value in enumerate(slots[i*24:(i+1)*24]):
-                if value&4095!=4095:roster[j]={'player':value&4095,'flags':1 if value&32768 else 2}
+                if value&4095!=4095:roster[j]={'player':value&4095,'flags':((value>>15)&1)|((value>>13)&2)|((value>>11)&4)|((value>>9)&8)}
             members[league]['clubs'].append(i)
         clubs.append({'id':i,'name':club_names[i],'country':country,'kind':1 if i>=383 else 0,'league':league,'crest':i,'kit':db['kits'][i],'rating':db['strength'][i-194] if i>=194 else 0,'short_span':db['short'][i] if i<194 else 0,'roster':roster})
     teams={int(t['teamid']):t for t in rows(tables,'teams')};people={int(p['playerid']):p for p in rows(tables,'players')};names=names_from_table(tables)
@@ -115,7 +115,7 @@ def prepare(base,tables,output,english):
                 first=names.get(int(p.get('firstnameid',0)),'');last=names.get(int(p.get('lastnameid',0)),'');common=names.get(int(p.get('commonnameid',0)),'');name=(first[:1]+'.'+last).strip('.') if last else common or first or 'N.Spieler'
                 rating=max(20,min(95,int(p.get('overallrating',strength(team)))))
             else:name='N.Spieler '+str(next_player);rating=max(20,min(90,strength(team)-8))
-            name=legacy_name(name).decode('ascii');nation=club['country'];te=max(10,min(99,rating-4));ko=max(10,min(99,rating+4));player={'id':next_player,'name':name,'form_word':55|(te<<7)|(ko<<14),'skill_word':(nation&31)<<27,'identity_word':pos,'bonus':128 if nation>=32 else 0};players.append(player);club['roster'][order]={'player':next_player,'flags':1 if order<11 else 2};provenance['new_players'].append({'id':next_player,'source_player':int(p['playerid']) if p else None,'source_team':int(team['teamid']),'fictional_fields':['attributes','nationality','age','skills','squad_order']+(['name'] if not p else []),'policy':'classic-calibrated-and-engine-generated'});next_player+=1
+            name=legacy_name(name).decode('ascii');nation=club['country'];te=max(10,min(99,rating-4));ko=max(10,min(99,rating+4));player={'id':next_player,'name':name,'form_word':55|(te<<7)|(ko<<14),'skill_word':(nation&31)<<27,'identity_word':pos,'bonus':128 if nation>=32 else 0};players.append(player);club['roster'][order]={'player':next_player,'flags':1 if order<11 else 2 if order<17 else 0};provenance['new_players'].append({'id':next_player,'source_player':int(p['playerid']) if p else None,'source_team':int(team['teamid']),'fictional_fields':['attributes','nationality','age','skills','squad_order']+(['name'] if not p else []),'policy':'classic-calibrated-and-engine-generated'});next_player+=1
     # New crests are assigned after all base cells, with explicit fictional
     # placeholders until supplied source artwork has been matched independently.
     next_crest=max(x&511 for x in badges)+1

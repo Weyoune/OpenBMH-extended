@@ -217,13 +217,16 @@ void new_career_markets_and_moods(GameState& g, GameRandom& game, WatcomRandom& 
     reset_club_moods(g, game, rand, true);
 }
 
+void initialize_career_squad_player(Player& p,WatcomRandom& rand) {
+    p.w364 |= uint32_t(rand.range(4, 0x10)) << 21;
+    p.w368 = (p.w368 & 0xffffc000u) + uint32_t(rand.range(0, 0x3fff));
+}
+
 bool new_career_players(GameState& g, GameRandom& game, WatcomRandom& rand, MinuteReport& report) {
     for (size_t slot = 0; slot < runtime_dimensions.pool_first; slot++) {
         const int id = g.squad_slots.at(slot) & 0x0fff;
         if (id == 0x0fff) continue;
-        Player& p = g.players.at(size_t(id));
-        p.w364 |= uint32_t(rand.range(4, 0x10)) << 21;
-        p.w368 = (p.w368 & 0xffffc000u) + uint32_t(rand.range(0, 0x3fff));
+        initialize_career_squad_player(g.players.at(size_t(id)),rand);
     }
     for (int slot = runtime_dimensions.extra_slots_first; slot < runtime_dimensions.extra_slots_first + 0x36; slot++)
         if (!release_player(g, slot, game, rand, report)) return false;

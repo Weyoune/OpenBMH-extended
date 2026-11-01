@@ -90,10 +90,16 @@ struct CareerMarkets {
     uint8_t first_default_name=0;
     bool operator==(const CareerMarkets&)const=default;
 };
+struct CareerPlayerPools {
+    std::array<PlayerId,80> domestic;
+    std::array<PlayerId,20> foreign;
+    bool operator==(const CareerPlayerPools&)const=default;
+};
 struct World {
     bool players_initialized=false;
     // Present after the market/mood phase; old saves do not invent these values.
     std::optional<CareerMarkets> markets={};
+    std::optional<CareerPlayerPools> free_players={};
     int32_t development_balance=0;
     uint8_t trend_rotation=0;
     Catalogue catalogue=Catalogue::dual_classic();

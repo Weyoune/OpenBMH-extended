@@ -1054,6 +1054,18 @@ void set_age(GameState& g, int player, int age) {
 
 }  // namespace
 
+void regenerate_released_player(GameState& g,int player,GameRandom& game,WatcomRandom& rand) {
+    const uint32_t skills = g.players.at(size_t(player)).w35c;
+    regenerate_player(g, player, 0x32, game, rand);
+    Player& p = g.players.at(size_t(player));
+    p.w35c = skills;
+    g.player_bonus.at(size_t(player)) &= 0x80;
+    p.w368 &= 0xf8003fffu;
+    p.w364 &= 3;
+    p.w364 |= uint32_t(rand.range(4, 0xf)) << 21;
+    p.w35c &= 0x07ffffffu;
+}
+
 // MonthChange(slot): a player leaves his club for the free agents (foreigners to their own
 // pool): his loan entry and youth mark go, he gets new values (RegeneratePlayer: all but w35c),
 // an age W(4, 15) and no injury; the club closes the gap (ReleasePlayer)
@@ -1078,15 +1090,7 @@ bool release_player(GameState& g, int slot, GameRandom& game, WatcomRandom& rand
     int free = -1;
     for (int s = start; s < start + count && free < 0; s++)
         if (g.squad_slots.at(size_t(s)) == 0x0FFF) free = s;
-    const uint32_t skills = g.players.at(size_t(player)).w35c;  // RegeneratePlayer
-    regenerate_player(g, player, 0x32, game, rand);
-    Player& p = g.players.at(size_t(player));
-    p.w35c = skills;
-    g.player_bonus.at(size_t(player)) &= 0x80;
-    p.w368 &= 0xf8003fffu;
-    p.w364 &= 3;
-    p.w364 |= uint32_t(rand.range(4, 0xf)) << 21;
-    p.w35c &= 0x07ffffffu;
+    regenerate_released_player(g,player,game,rand);
     if (free < 0) {
         // no room among the free agents: a club takes him (TransferBid(slot, 0, 0, -1))
         transfer_bid(g, slot, 0, false, -1, game, rand, report);

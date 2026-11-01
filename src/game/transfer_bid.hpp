@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <array>
 
 #include "game/random.hpp"
 #include "game/human_buyer_sale.hpp"
@@ -9,6 +10,16 @@
 
 namespace bmh {
 struct MinuteReport;
+
+// Scalar input to the Original candidate score. Identity mapping, eligibility,
+// foreign-skip order and sorting belong to the owning transfer operation.
+struct TransferClubScoreInput {
+    std::array<int,4> averages{},counts{};
+    int nationality=0,region=0,position=0,player_strength=0,players=0,need=0,entry40_bids=0;
+    uint16_t flags=0;
+    bool large_squad=false,domestic_capacity=false;
+};
+int transfer_club_score(const TransferClubScoreInput&,WatcomRandom&);
 
 // ProjectTransferOfferList rates an existing bid. source_slot is the actual absolute SquadSlots
 // index supplied by its caller, not an inferred pool index or player ID.

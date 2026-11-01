@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <stdexcept>
 
 #include "game/lineup.hpp"
 #include "game/match.hpp"
@@ -554,6 +555,42 @@ void advertising_offers(GameState& g, int manager, WatcomRandom& rand, MinuteRep
         }
 }
 
+int transfer_club_score(const TransferClubScoreInput& input,WatcomRandom& rand) {
+    if(input.position<0 || input.position>3 || input.entry40_bids<0 || input.entry40_bids>4)
+        throw std::invalid_argument("transfer: invalid candidate score input");
+    int score=(input.region==input.nationality || input.nationality>4)?0x46:0;
+    int16_t strength=0;
+    for(int p=0;p<4;++p)strength=int16_t(strength+input.averages[size_t(p)]);
+    strength=int16_t(strength>>2);
+    const int diff = std::abs(input.player_strength - strength);  // Abs2
+    const int r = rand.range(int16_t(input.need) + 3, int16_t(input.need) + 0xd);
+    if (int16_t(diff) < r) score += int(int16_t(input.need + 0xe - diff)) * 16 + 100;
+    else score -= int16_t(diff) * 8;
+    const int8_t* wanted = input.large_squad ? kWantedBig : kWantedSmall;
+    int16_t d = int16_t(wanted[input.position] - int8_t(input.counts[input.position]));
+    if (d < 0) {
+        score += int(d) * 256;
+    } else {
+        d = int16_t(d + 1);
+        if (input.position == 0 && int8_t(input.counts[0]) < 2) d = int16_t(d + (2 - int8_t(input.counts[0])) * 4);
+        score += int(d) << 6;
+        if (score > 1) {
+            if (strength > rand.range(0x5a, 0x62) && int16_t(diff) < rand.range(0, 0x14)) score += rand.range(10, 0x28);
+            score += ((input.flags >> 14) & 3) << 4;
+        }
+    }
+    int16_t limit = int16_t((input.domestic_capacity ? 3 : 0) + 0xe);
+    int cnt = input.players;
+    if (int16_t(cnt) < limit) {
+        // (a bug of the original: it counts the club among the bidders of entry 40)
+        const int8_t twice = int8_t(input.entry40_bids);
+        cnt = uint8_t(cnt + twice / 2);
+        limit = int16_t(limit - cnt);
+        if (limit > 0 && int16_t(diff) < limit * 5 + 10) score += int(limit) << 7;
+    }
+    return score;
+}
+
 void transfer_bid(GameState& g, int slot, uint32_t list, bool high, int months, GameRandom& game, WatcomRandom& rand,
                   MinuteReport& report) {
     StaticMemory& mem = g.memory;
@@ -591,7 +628,6 @@ void transfer_bid(GameState& g, int slot, uint32_t list, bool high, int months, 
                 avg[p] = int16_t(a.value);
                 count[p] = a.players;
             }
-            int score = (region == nat || nat > 4) ? 0x46 : 0;
             int16_t strength = 0;
             for (int p = 0; p < 4; p++) strength = int16_t(strength + avg[p]);
             strength = int16_t(strength >> 2);
@@ -602,34 +638,15 @@ void transfer_bid(GameState& g, int slot, uint32_t list, bool high, int months, 
                 const int16_t wanted = int16_t(kLeagueLevel[league * 2] + kPositionLevel[pos]);
                 if (strength < wanted && strength < int16_t(half)) need = wanted - strength;
             }
-            const int diff = std::abs(half - strength);  // Abs2
-            const int r = rand.range(int16_t(need) + 3, int16_t(need) + 0xd);
-            if (int16_t(diff) < r) score += int(int16_t(need + 0xe - diff)) * 16 + 100;
-            else score -= int16_t(diff) * 8;
-            const int8_t* wanted = team < runtime_dimensions.big_squad_teams ? kWantedBig : kWantedSmall;
-            int16_t d = int16_t(wanted[position] - int8_t(count[position]));
-            if (d < 0) {
-                score += int(d) << 8;
-            } else {
-                d = int16_t(d + 1);
-                if (position == 0 && int8_t(count[0]) < 2) d = int16_t(d + (2 - int8_t(count[0])) * 4);
-                score += int(d) << 6;
-                if (score > 1) {
-                    if (strength > rand.range(0x5a, 0x62) && int16_t(diff) < rand.range(0, 0x14)) score += rand.range(10, 0x28);
-                    score += ((g.team_flags.at(size_t(team)) >> 14) & 3) << 4;
-                }
-            }
-            int16_t limit = int16_t((region == 0 ? 3 : 0) + 0xe);
-            int cnt = players;
-            if (int16_t(cnt) < limit) {
-                // (a bug of the original: it counts the club among the bidders of entry 40)
-                int8_t twice = 0;
-                for (int b = 0; b < 4; b++)
-                    if (mem.u16(kTransferList + 40 * kListEntry + uint32_t(b) * 2) == uint16_t(team)) twice++;
-                cnt = uint8_t(cnt + twice / 2);
-                limit = int16_t(limit - cnt);
-                if (limit > 0 && int16_t(diff) < limit * 5 + 10) score += int(limit) << 7;
-            }
+            TransferClubScoreInput input;
+            std::copy_n(avg,4,input.averages.begin());std::copy_n(count,4,input.counts.begin());
+            input.nationality=nat;input.region=region;input.position=position;input.player_strength=half;
+            input.players=players;input.need=need;input.flags=g.team_flags.at(size_t(team));
+            input.large_squad=team<runtime_dimensions.big_squad_teams;input.domestic_capacity=region==0;
+            // Original mistakenly counts bidders of entry 40 for this shortage bonus.
+            if(players<(region==0?17:14))for(int b=0;b<4;++b)
+                if(mem.u16(kTransferList+40*kListEntry+uint32_t(b)*2)==uint16_t(team))++input.entry40_bids;
+            const int score=transfer_club_score(input,rand);
             keys.push_back(uint32_t(score + 100000));
             teams.push_back(int16_t(team));
             needs.push_back(need);

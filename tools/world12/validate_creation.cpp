@@ -44,6 +44,21 @@ int main(int argc,char** argv)try {
     for(size_t i=0;i<world.markets->funds.size();++i)if(world.markets->funds[i]!=expected.memory.u8(layout::FundBlock+uint32_t(i)))throw std::runtime_error("source initial fund state differs");
     for(const auto& [id,club]:world.clubs)if(club.morale!=expected.team_morale.at(id.value)||club.match_flags!=expected.team_flags.at(id.value))throw std::runtime_error("source initial club mood/balance differs");
     if(decode_world(encode_world(world))!=world)throw std::runtime_error("source market/mood state failed roundtrip");
+    const bool foreign_rule=german.u8(layout::ForeignPlayerLimitEnabled)!=0;expected.projected_foreign_rule=foreign_rule;
+    MinuteReport initialization_report;
+    if(!new_career_players(expected,a,ar,initialization_report))throw std::runtime_error("Source age/free-player phase failed");
+    initialize_career_player_pools(world,plan,initial_rules,foreign_rule,b,br);
+    if(a.seed()!=b.seed()||a.calls()!=b.calls()||ar.seed()!=br.seed()||ar.calls()!=br.calls())throw std::runtime_error("typed age/free-player RNG differs from Source");
+    for(const auto& [id,p]:world.players){const auto& native=expected.players.at(id.value);
+        if(p.attributes.w35c!=native.w35c||p.attributes.w368!=native.w368||p.attributes.w364!=native.w364||p.bonus!=expected.player_bonus.at(id.value)||p.cards!=expected.player_cards.at(id.value))throw std::runtime_error("Source age/release/player-card state differs");}
+    for(const auto& members:world.membership)for(auto id:members.clubs){const auto& club=world.clubs.at(id);const auto range=squad_range(int(id.value));
+        if(club.match_flags!=expected.team_flags.at(id.value))throw std::runtime_error("Source overflow lineup flags differ");
+        for(size_t row=0;row<24;++row){const auto raw=expected.squad_slots.at(range.first+row);const auto& slot=club.roster[row];
+            if((raw&0xfff)==0xfff){if(!slot.empty())throw std::runtime_error("Source initial roster empty differs");}
+            else if(slot.player.value!=(raw&0xfff)||slot.flags!=uint16_t(((raw&0x8000)?1:0)|((raw&0x4000)?2:0)|((raw&0x2000)?4:0)|((raw&0x1000)?8:0)))throw std::runtime_error("Source initial overflow roster differs: club="+std::to_string(id.value)+" row="+std::to_string(row)+" expected="+std::to_string(raw)+" got_player="+std::to_string(slot.player.value)+" flags="+std::to_string(slot.flags));}}
+    const auto compare_pool=[&](const auto& pool,int first){for(size_t i=0;i<pool.size();++i){const auto raw=expected.squad_slots.at(size_t(first)+i);if((raw==0xfff)!=(!pool[i].valid())||(raw!=0xfff&&raw!=pool[i].value))throw std::runtime_error("Source initial free pool differs");}};
+    compare_pool(world.free_players->domestic,runtime_dimensions.free_first);compare_pool(world.free_players->foreign,runtime_dimensions.foreign_free_first);
+    if(decode_world(encode_world(world))!=world)throw std::runtime_error("source free-player phase failed roundtrip");
     world.managers={{0,"Manager",world.membership[0].clubs[0],{0},0}};
     expected.manager_teams={0};initialize_career_manager_team_settings(expected,0);expected.manager_records[0x288]=0x16;expected.manager_records[0x218]=expected.manager_records[0x219]=15;
     expected.level=3;expected.projected_foreign_rule=german.u8(layout::ForeignPlayerLimitEnabled)!=0;
@@ -73,6 +88,7 @@ int main(int argc,char** argv)try {
     std::cout<<round.matches.size()<<" source-data human/AI league matches, goals="<<goals<<", human events="<<presented<<"; actual scoring/settlement/snapshot passed (isolated probe)\n";
     std::cout<<"Source manager board/contracts/account phase and ages match direct Core calls; this excludes earlier club/stadium selection\n";
     std::cout<<"Thirty stock days, six funds, every initial club mood/balance and both RNG streams match direct Core initialization\n";
+    std::cout<<"Roster ages/familiarity, 54 regenerated extras, bounded free pools and overflow AI transfers match direct Core initialization\n";
     std::cout<<world.players.size()<<" real-data player records and both RNG streams match direct Original startup_players; initialized world roundtrip passed\n";
     return 0;
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}
