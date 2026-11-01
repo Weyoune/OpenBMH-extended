@@ -21,6 +21,9 @@ std::array<uint8_t,4> seats(const AiMatchProjection& p){
 ManagerEconomy read_manager(const GameState& g,size_t local,const std::array<uint8_t,4>& map){
     ManagerEconomy m;const auto rec=local*record_size;
     m.deposit=word(g.manager_records,rec+0x318);m.interest_income=word(g.manager_records,rec+0x870);m.overdraft_interest=word(g.manager_records,rec+0x89c);
+    m.submitted_balance_plan=word(g.manager_records,rec+0x320);
+    std::copy_n(g.manager_records.begin()+ptrdiff_t(rec+0x54),8,m.planned_stand_capacity.begin());
+    std::copy_n(g.manager_records.begin()+ptrdiff_t(rec+0x44),8,m.stand_flags.begin());
     m.camp_bill=word(g.manager_records,rec+0x850);m.camp_weeks=g.manager_records.at(rec+0x287);m.camp_flags=g.manager_records.at(rec+0x21f);m.weekly_count=g.manager_records.at(rec+0x285);
     std::copy_n(g.manager_records.begin()+ptrdiff_t(rec+0x1e),30,m.construction_weeks.begin());
     std::copy_n(g.manager_records.begin()+ptrdiff_t(rec+0x17a),52,m.facility_history.begin());
@@ -32,6 +35,9 @@ ManagerEconomy read_manager(const GameState& g,size_t local,const std::array<uin
 void write_manager(GameState& g,size_t local,const ManagerEconomy& m,const std::array<uint8_t,4>& map){
     const auto rec=local*record_size;
     put(g.manager_records,rec+0x318,m.deposit);put(g.manager_records,rec+0x870,m.interest_income);put(g.manager_records,rec+0x89c,m.overdraft_interest);
+    put(g.manager_records,rec+0x320,m.submitted_balance_plan);
+    std::copy(m.planned_stand_capacity.begin(),m.planned_stand_capacity.end(),g.manager_records.begin()+ptrdiff_t(rec+0x54));
+    std::copy(m.stand_flags.begin(),m.stand_flags.end(),g.manager_records.begin()+ptrdiff_t(rec+0x44));
     put(g.manager_records,rec+0x850,m.camp_bill);g.manager_records.at(rec+0x287)=m.camp_weeks;g.manager_records.at(rec+0x21f)=m.camp_flags;g.manager_records.at(rec+0x285)=m.weekly_count;
     std::copy(m.construction_weeks.begin(),m.construction_weeks.end(),g.manager_records.begin()+ptrdiff_t(rec+0x1e));
     std::copy(m.facility_history.begin(),m.facility_history.end(),g.manager_records.begin()+ptrdiff_t(rec+0x17a));

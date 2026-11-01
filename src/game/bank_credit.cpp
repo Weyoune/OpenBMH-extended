@@ -84,6 +84,14 @@ BankCreditContext bank_credit_context(const GameState& g, const LeImage& exe, in
     return c;
 }
 
+void install_bank_credit_rules(GameState& g,const LeImage& exe) {
+    std::array<uint8_t,49> table{};
+    for(size_t i=0;i<table.size();++i)table[i]=exe.u8(layout::BankCredit_BankCreditContext_RuntimeField3+uint32_t(i));
+    const double divisor=std::bit_cast<double>(uint64_t(exe.u32(layout::BankCredit_BankCreditContext_RuntimeField))|uint64_t(exe.u32(layout::BankCredit_BankCreditContext_RuntimeField2))<<32);
+    if(!std::isfinite(divisor)||divisor<=0)throw std::invalid_argument("bank credit: invalid supplied divisor");
+    g.credit_rate_table=table;g.credit_divisor=divisor;g.credit_rate_table_available=true;
+}
+
 bool change_bank_credit_interest(GameState& g, int manager, uint8_t new_rate) {
     if (manager < 0 || size_t(manager) >= g.manager_teams.size() || !g.credit_rate_table_available)
         return false;

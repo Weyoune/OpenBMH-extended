@@ -199,7 +199,7 @@ int facility_rating(GameState& g, int manager, int* second, WatcomRandom* rand) 
     return (((100 - closed) * sum / 100 + first / 4 + (*second >> 4)) * 0x5a) / 0x72 + 0x18;
 }
 
-void manager_offers(GameState& g, int manager, WatcomRandom& rand, MinuteReport& report) {
+void manager_offers(GameState& g, int manager, WatcomRandom& rand, MinuteReport& report,const WeeklyOfferHooks* hooks) {
     if (g.memory.u32(::bmh::layout::CompetitionSelection) == 2) return;
     Record rec = record(g, manager);
     const bool events_off = false;  // OpenBMH deviates from the original: uses the supported weekly-event configuration, with its rule switch disabled.
@@ -224,7 +224,7 @@ void manager_offers(GameState& g, int manager, WatcomRandom& rand, MinuteReport&
         }
         if (kind <= 7 && rec.b(0x170 + size_t(kind)) != 0) continue;
         if (!events_off && rand.range(0, (0x39 - g.level) * 0xd - kOfferLate[kind] * 0x16c) != 0) continue;
-        if (kOfferLate[kind] != 0 && g.league_rounds.at(rec.b(0x210)) >= 0x14) continue;
+        if (kOfferLate[kind] != 0 && (g.projected_match_clubs.empty()?g.league_rounds.at(rec.b(0x210)):g.projected_match_clubs.at(rec.u16(0x290)).round_cursor) >= 0x14) continue;
         int league = rec.b(0x210);
         if (league > 2) league--;
         uint8_t value = 0;  // local_18
@@ -285,7 +285,14 @@ void manager_offers(GameState& g, int manager, WatcomRandom& rand, MinuteReport&
         }
         // The other offers ask the manager (PresentManagerDialog with JA/NEIN, a message box only).
         // GameState::offer_answer decides (the replays decline unless told otherwise).
-        if (!g.offer_answer) {
+        bool accepted=g.offer_answer;
+        if(hooks){
+            if(!hooks->answer){report.fail("weekly offer: missing owned decision presenter");return;}
+            const auto answer=hooks->answer(g,{manager,kind,value,sum,msg});
+            if(!answer){report.fail("weekly offer: decision presenter cancelled or unsupported");return;}
+            accepted=*answer;
+        }
+        if (!accepted) {
             if (kind == 14) {
                 // declined dividends: with 1 in 2 the payment comes anyway, twice (WeeklyRuntimeField3),
                 // else WeeklyRuntimeField4 - both message boxes only
@@ -336,8 +343,11 @@ void season_ticket_compensation_source(GameState& g, int manager,
         if (rec.b(0x34 + size_t(i)) == 0) rec.b(0x5c) = uint8_t(rec.b(0x5c) + rec.b(0x4c + size_t(i)));
     int missing = int(rec.u16(0x2ac)) - rec.b(0x5c) * 1000;
     if (missing <= 0) return;
-    const int league = league_of(int16_t(rec.u16(0x290)));
-    int weeks = 0x11 - g.league_rounds.at(size_t(league));
+    const auto team=int16_t(rec.u16(0x290));
+    const int league = match_team_league(g,team);
+    const int round=g.projected_match_clubs.empty()?g.league_rounds.at(size_t(league)):g.projected_match_clubs.at(size_t(team)).round_cursor;
+    if(round<0||round>255||league<0||league>8)throw std::invalid_argument("weekly ticket compensation: invalid league/round");
+    int weeks = 0x11 - round;
     if (weeks > 0xf) weeks = 0xf;
     const int32_t per = int32_t(kTicketRefund[league * 4] | kTicketRefund[league * 4 + 1] << 8 |
                                 kTicketRefund[league * 4 + 2] << 16 | uint32_t(kTicketRefund[league * 4 + 3]) << 24);
@@ -487,10 +497,16 @@ int club_attraction(const GameState& g, int team) {
                 europe = c + 1;
                 break;
             }
-    int8_t bonus = int8_t(kEuropeBonus[europe] * 10 + 10);
-    if (team == int(g.memory.u16(::bmh::layout::Cup_AdvanceCup_RuntimeField6))) bonus = int8_t(bonus + 10);
-    for (int k = 0; k < 4; k++)
-        if (g.memory.u16(::bmh::layout::Season_CareerSeasonSetup_RuntimeField + uint32_t(kWinnerEntry[k]) * 0x28) == uint16_t(team)) bonus = int8_t(bonus + kWinnerBonus[k]);
+    ClubAttractionTitles titles;titles.european_cup=uint8_t(europe);
+    titles.champion=team==int(g.memory.u16(::bmh::layout::Cup_AdvanceCup_RuntimeField6));
+    for(size_t k=0;k<4;++k)titles.holders[k]=g.memory.u16(::bmh::layout::Season_CareerSeasonSetup_RuntimeField+uint32_t(kWinnerEntry[k])*0x28)==uint16_t(team);
+    return club_attraction(g,team,titles);
+}
+int club_attraction(const GameState& g,int team,const ClubAttractionTitles& titles) {
+    if(titles.european_cup>3)throw std::invalid_argument("advertising: invalid European cup class");
+    int8_t bonus=int8_t(kEuropeBonus[titles.european_cup]*10+10);
+    if(titles.champion)bonus=int8_t(bonus+10);
+    for(size_t k=0;k<4;++k)if(titles.holders[k])bonus=int8_t(bonus+kWinnerBonus[k]);
     const int strength = uint16_t(team_average(g, team, 0xff).value);
     int position = int8_t(table_position(g, team));
     if (position == -1) position = 10;
@@ -501,7 +517,7 @@ int club_attraction(const GameState& g, int team) {
     return std::clamp(v, 0, 100);
 }
 
-void advertising_offers(GameState& g, int manager, WatcomRandom& rand, MinuteReport& report) {
+static void advertising_offers_impl(GameState& g,int manager,WatcomRandom& rand,MinuteReport& report,const ClubAttractionTitles* titles) {
     (void)report;
     if (g.memory.u8(::bmh::layout::CareerDuration) == 1) return;
     Record rec = record(g, manager);
@@ -513,7 +529,7 @@ void advertising_offers(GameState& g, int manager, WatcomRandom& rand, MinuteRep
                 if (g.manager_records.at(m * kRecord + 0xa39 + size_t(k) * 0xc) == 0) mask |= 1u << m;
         if (mask != 0x80000000u) post_text(g, int64_t(mask), text_id(::bmh::layout::Weekly_AdvertisingOffers_TextPointer));
     }
-    int score = int16_t(int8_t(club_attraction(g, int16_t(rec.u16(0x290)))));
+    int score=int16_t(int8_t(titles?club_attraction(g,int16_t(rec.u16(0x290)),*titles):club_attraction(g,int16_t(rec.u16(0x290)))));
     if (g.memory.u8(::bmh::layout::GameMode) == 3 && (g.projected_match_clubs.empty()?g.league_rounds.at(size_t(league_of(int16_t(rec.u16(0x290))))):g.projected_match_clubs.at(rec.u16(0x290)).round_cursor) > 0x11) {
         int t = rec.i32(0x320) / 100000;
         t = std::clamp(t, -10, 10);
@@ -554,6 +570,9 @@ void advertising_offers(GameState& g, int manager, WatcomRandom& rand, MinuteRep
             rec.set16(o + 8, uint16_t(score));
         }
 }
+
+void advertising_offers(GameState& g,int manager,WatcomRandom& rand,MinuteReport& report){advertising_offers_impl(g,manager,rand,report,nullptr);}
+void advertising_offers(GameState& g,int manager,WatcomRandom& rand,MinuteReport& report,const ClubAttractionTitles& titles){advertising_offers_impl(g,manager,rand,report,&titles);}
 
 int transfer_club_score(const TransferClubScoreInput& input,WatcomRandom& rand) {
     if(input.position<0 || input.position>3 || input.entry40_bids<0 || input.entry40_bids>4)

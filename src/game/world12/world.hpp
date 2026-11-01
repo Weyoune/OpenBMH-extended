@@ -142,6 +142,8 @@ struct ManagerEconomy {
     // elapsed months,payments made (bank_credit.hpp).
     std::array<std::array<uint32_t,6>,5> loans{};
     std::array<uint8_t,30> construction_weeks{};
+    std::array<uint8_t,8> planned_stand_capacity{},stand_flags{};
+    uint32_t submitted_balance_plan=0;
     // Source170,171,174..179; 172/173 belong to ManagerMatchState.
     std::array<uint8_t,8> offers{};
     uint8_t camp_weeks=0,camp_flags=0,weekly_count=0;

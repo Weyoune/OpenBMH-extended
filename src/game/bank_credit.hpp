@@ -45,6 +45,7 @@ struct BankCreditBounds {
     bool available = false;
 };
 
+void install_bank_credit_rules(GameState&,const LeImage&);
 BankCreditContext bank_credit_context(const GameState&, const LeImage&, int manager, int counterparty = 0);
 // ChangeBankCreditInterest: apply the automatic interest change to the bank loan record.
 bool change_bank_credit_interest(GameState&, int manager, uint8_t new_rate);

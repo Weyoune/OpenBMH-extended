@@ -103,7 +103,7 @@ int main()try {
     rejects([&]{daily_finance(missing,rules,DailyEconomyKind::plain_day);},"missing economy was silently initialized");check(missing==untouched,"invalid phase changed state");
     auto invalid=state;invalid.world.economy->messages[0].recipients=1u<<8;rejects([&]{make_save(invalid);},"unknown mailbox manager accepted");
     invalid=state;invalid.world.economy->managers[1].weekly_count=53;rejects([&]{make_save(invalid);},"oversized weekly history accepted");
-    auto raw=encode_world(initial.world);std::string legacy(raw.begin(),raw.end());const auto version=legacy.find("\"version\":16");check(version!=std::string::npos,"new economy schema version missing");legacy.replace(version,12,"\"version\":15");
+    auto raw=encode_world(initial.world);std::string legacy(raw.begin(),raw.end());const auto version=legacy.find("\"version\":17");check(version!=std::string::npos,"new economy schema version missing");legacy.replace(version,12,"\"version\":15");
     auto legacy_world=initial.world;legacy_world.economy.reset();check(decode_world(Bytes(legacy.begin(),legacy.end()))==legacy_world,"previous world schema15 ceased to load");
-    std::cout<<"Daily interest/shares, sparse global loan/holding/mail maps, weekly camp/history, persistent mailbox, schemas15/16 and rollback passed\n";
+    std::cout<<"Daily interest/shares, sparse global loan/holding/mail maps, weekly camp/history, persistent mailbox, schemas15/17 and rollback passed\n";
 }catch(const std::exception& error){draw_hook=nullptr;std::cerr<<error.what()<<'\n';return 1;}

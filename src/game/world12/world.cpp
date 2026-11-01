@@ -24,7 +24,7 @@ void World::validate(bool complete)const {
     if(settings && (!free_players || settings->mode<1 || settings->mode>3 || settings->difficulty>9 || settings->duration>5 || settings->planned_managers<1 || settings->planned_managers>4 || managers.size()>settings->planned_managers))throw std::invalid_argument("world12: invalid career settings");
     for(const auto& manager:managers)if(manager.career) {
         if(!settings)throw std::invalid_argument("world12: initial manager state requires career settings");
-        if(manager.career->season_services){const auto& season=*manager.career->season_services;if(season.strength_history_count>38)throw std::invalid_argument("world12: invalid seasonal history cursor");
+        if(manager.career->season_services){const auto& season=*manager.career->season_services;if(season.strength_history_count>38)throw std::invalid_argument("world12: invalid seasonal history cursor");if(manager.match_state&&manager.match_state->designated_takers)for(size_t b=8;b<12;++b)if(season.advertising_contracts[16][b])throw std::invalid_argument("world12: packed taker reference in sponsor backing");
             for(size_t i:{0u,14u,15u})for(size_t b:{0u,1u,2u,3u,5u})if(season.advertising_contracts[i][b])throw std::invalid_argument("world12: duplicate initial sponsor scalar encoding");}
         std::set<PlayerId> attempts;for(auto player:manager.career->poach_attempts)if(player.valid()&&(!players.contains(player)||!attempts.insert(player).second))throw std::invalid_argument("world12: invalid poaching history identity");
         for(const auto& youth:manager.career->environment.youth)if(youth.position>11||youth.league>2)throw std::invalid_argument("world12: invalid youth team state");

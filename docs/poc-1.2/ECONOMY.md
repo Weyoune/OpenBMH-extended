@@ -1,6 +1,7 @@
 # Economic state, daily interest and weekly settlement
 
-World schema **16** adds an optional career economy. Schema 1–15 source packs and
+World schema **16** added an optional career economy. The current writer uses schema17 (planned stand targets/flags and the submitted
+plan); schema1–16 source packs and
 older development snapshots remain readable; no missing account fields are
 silently inferred when running an economic phase. S9 remains the outer typed save
 container. Fresh GUI careers explicitly initialize economic state before desktop

@@ -301,3 +301,30 @@ Both saved careers exactly match the controller after-state plus the four manual
 save draws. Actual-data GUI tests explicitly verify that accepted sale/loan news
 is persisted. Screenshots, corresponding saves and comparison receipts stay in
 the private QA repository.
+
+
+## Owned weekly incidents and advertising
+
+[Weekly manager offers and facilities](WEEKLY_INCIDENTS.md) now have an explicit
+decision callback and staged publication of offers, ageing/damage, construction
+completion, advertising, compensation, messages and both RNG streams. Missing or
+cancelled answers no longer mean an implicit decline in the typed path. Current
+competition/title relations are mandatory qualified inputs. Bank rate metadata
+comes from the supplied reference; no rates are guessed.
+
+Schema17 retains planned block targets/flags and the submitted balance plan. It
+also fixes sponsor backing overwriting two remapped designated-taker references;
+older typed backing is normalized without changing the canonical player IDs.
+The S9 outer save container remains unchanged.
+
+All eight question kinds pass yes/no/cancel/missing-presenter checks, along with
+sparse actor ownership, stand completion, saved targets, taker isolation and stale
+rollback. Twenty-eight actual-data full-Core cases include a credit-interest
+change, ticket refunds, advertising and complete field/mail/RNG comparisons.
+Twenty-four complete predecessor/current Core economic weeks remain byteidentical.
+Market evolution, monthly services, general event/day ownership and the weekly
+GUI presenters still need integration; no time-advance shortcut is enabled.
+
+Milestone validation: the application builds and all 31 targeted Linux regression
+checks pass. The weekly decision GUI is not wired into time advancement yet;
+controlled phase saves and Source comparison receipts remain private.

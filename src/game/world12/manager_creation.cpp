@@ -33,6 +33,8 @@ ManagerCareerState manager_career_state_from_legacy(const GameState& state,uint8
         services.ticket_income=word32(state.manager_records,at+0x754);services.total_ticket_income=word32(state.manager_records,at+0x868);
         for(size_t i=0;i<30;++i)copy(0x8cc+i*12,services.advertising_offers[i]);
         for(size_t i=0;i<17;++i)copy(0xa34+i*12,services.advertising_contracts[i]);
+        if((uint16_t(state.manager_records.at(at+0xb0a))|uint16_t(state.manager_records.at(at+0xb0b))<<8)==0x3253)
+            std::fill(services.advertising_contracts[16].begin()+8,services.advertising_contracts[16].end(),uint8_t(0));
         for(size_t i:{0u,14u,15u}){std::fill_n(services.advertising_contracts[i].begin(),4,uint8_t(0));services.advertising_contracts[i][5]=0;}
         services.strength_history_count=state.manager_records.at(at+0x284);copy(0x222,services.strength_history);copy(0x248,services.position_history);
     }
@@ -57,7 +59,11 @@ void install_manager_career_state(GameState& state,uint8_t seat,const ManagerCar
     if(input.season_services){const auto& services=*input.season_services;state.manager_records.at(at+0x2ac)=uint8_t(services.tickets_sold);state.manager_records.at(at+0x2ad)=uint8_t(services.tickets_sold>>8);
         put32(state.manager_records,at+0x754,services.ticket_income);put32(state.manager_records,at+0x868,services.total_ticket_income);
         for(size_t i=0;i<30;++i)copy(0x8cc+i*12,services.advertising_offers[i]);
-        for(size_t i=0;i<17;++i)copy(0xa34+i*12,services.advertising_contracts[i]);
+        const bool takers=(uint16_t(state.manager_records.at(at+0xb0a))|uint16_t(state.manager_records.at(at+0xb0b))<<8)==0x3253;
+        for(size_t i=0;i<17;++i) {
+            const size_t count=takers&&i==16?8:12;
+            std::copy_n(services.advertising_contracts[i].begin(),count,state.manager_records.begin()+ptrdiff_t(at+0xa34+i*12));
+        }
         state.manager_records.at(at+0x284)=services.strength_history_count;copy(0x222,services.strength_history);copy(0x248,services.position_history);
     }
     const size_t sponsors[]={0xae8,0xadc,0xa34};

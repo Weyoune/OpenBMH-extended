@@ -105,7 +105,17 @@ void weekly_processing(GameState& g, GameRandom& game, WatcomRandom& rand, Minut
                        TransferAllocatorContext allocator = TransferAllocatorContext::unsupported);
 
 // The single steps, public for tests.
-void manager_offers(GameState& g, int manager, WatcomRandom& rand, MinuteReport& report);       // Bool
+struct WeeklyOfferQuestion {
+    int manager=-1,kind=-1;
+    uint8_t value=0;
+    int32_t amount=0;
+    std::string original_message;
+};
+struct WeeklyOfferHooks {
+    // Missing/empty answer is unsupported, never an implicit decline.
+    std::function<std::optional<bool>(const GameState&,const WeeklyOfferQuestion&)> answer;
+};
+void manager_offers(GameState& g, int manager, WatcomRandom& rand, MinuteReport& report,const WeeklyOfferHooks* hooks=nullptr);       // Bool
 void facility_ageing(GameState& g, int manager, GameRandom& game, WatcomRandom& rand, MinuteReport& report);  // FacilityDamage
 void facility_damage(GameState& g, int manager, GameRandom& game, WatcomRandom& rand);          // SeasonTicketCompensation
 void season_ticket_compensation(GameState& g, int manager);                                     // Void3
@@ -168,6 +178,14 @@ bool pre_match_offer(GameState& g, int manager, GameRandom& game, WatcomRandom& 
 
 // ClubAttraction(team, 0): how attractive a club is for advertisers (0-100): its European
 // campaign, its league and table position (weekly.cpp).
+struct ClubAttractionTitles {
+    uint8_t european_cup=0;
+    bool champion=false;
+    // Domestic cup, UEFA Cup, Champions League, Cup Winners' Cup.
+    std::array<bool,4> holders{};
+};
+int club_attraction(const GameState&,int team,const ClubAttractionTitles&);
+void advertising_offers(GameState&,int manager,WatcomRandom&,MinuteReport&,const ClubAttractionTitles&);
 int club_attraction(const GameState& g, int team);
 
 }  // namespace bmh
