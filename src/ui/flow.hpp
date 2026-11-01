@@ -130,7 +130,7 @@ public:
     void attach_world12_career(DeskState,const LeImage& reference);
     void show_world12_preparation(PreparationState,int menu_kind);
     void open_world12_file_dialog(SaveLoadMode,const LeImage&,SaveLoadInfoReader);
-    struct World12DesktopView {std::unique_ptr<DesktopScreen> desktop;LeImage reference;std::vector<int> teams;};
+    struct World12DesktopView {std::unique_ptr<DesktopScreen> desktop;std::unique_ptr<LeImage> reference;std::vector<int> teams;};
     World12DesktopView prepare_world12_file_result(DeskState,const LeImage&,const SaveLoadRequest&)const;
     World12DesktopView prepare_world12_manager_result(DeskState,const LeImage&,const DeskRequest&)const;
     void finish_world12_desktop(World12DesktopView) noexcept;
@@ -428,7 +428,7 @@ private:
     uint64_t join_context_revision_ = 0;
     void acknowledge_contract_mutation(ContractsState, DeskState, PreparationState, ContractActionKind);
     std::filesystem::path data_;
-    std::optional<LeImage> world12_reference_;
+    std::unique_ptr<LeImage> world12_reference_;
     LeImage render_reference() const;
     std::filesystem::path save_directory_;
     SetupLeagueSymbol setup_symbol_;

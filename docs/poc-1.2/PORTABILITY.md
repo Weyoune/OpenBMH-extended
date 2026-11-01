@@ -22,3 +22,10 @@ confinement.
 
 Native CI build/test results are separate from manual graphical platform QA.
 Neither this change nor a successful Linux build establishes release readiness.
+
+The next Windows build passed the snapshot assertions and found the same issue
+in desktop publication: an optional `LeImage` can construct a tree-backed runtime
+policy while accepting a prepared view. Prepared views and the retained desktop
+reference now own their image through `unique_ptr`. Image copying/allocation
+happens before publication. The complete prepared-view move remains checked as
+no-throw, without weakening the existing transactional guarantee.

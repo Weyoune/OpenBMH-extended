@@ -694,11 +694,12 @@ void StartupFlow::attach_initialized_career(CareerInitializationResult result) {
 }
 
 void StartupFlow::attach_world12_career(DeskState state,const LeImage& reference) {
+    auto owned_reference=std::make_unique<LeImage>(reference);
     if(!pending_||desktop_||!pending_->options.country_selection||state.source!="world12"||state.options!=pending_->options||state.managers.size()!=pending_->managers.size())throw FormatError("world12: invalid desktop attachment");
     validate_desk_state(state);
     for(size_t i=0;i<state.managers.size();++i){const auto& selected=pending_->managers[i];const auto& actual=state.managers[i];if(!selected.world_club.valid()||selected.world_club!=actual.world_club||selected.name!=actual.name||selected.portrait!=actual.portrait)throw FormatError("world12: confirmed desktop identity mismatch");}
     const auto teams=state.manager_teams;auto desktop=std::make_unique<DesktopScreen>(data_,std::move(state),reference);
-    desktop_=std::move(desktop);pending_.reset();engine_attached_=true;confirmed_runtime_teams_=teams;world12_reference_=reference;
+    desktop_=std::move(desktop);pending_.reset();engine_attached_=true;confirmed_runtime_teams_=teams;world12_reference_=std::move(owned_reference);
 }
 
 LeImage StartupFlow::render_reference() const {
@@ -726,7 +727,7 @@ void StartupFlow::open_world12_file_dialog(SaveLoadMode mode,const LeImage& refe
         manager=desktop_->state().manager_slot;revision=desktop_->state().revision;backdrop=desktop_->render();gradient=desktop_->state().gradient_text;
     }else if(mode!=SaveLoadMode::load||setup_symbol_!=SetupLeagueSymbol::country_selection)throw FormatError("world12: setup can only load games");
     auto next=std::make_unique<SaveLoadScreen>(data_,save_directory_,mode,manager,revision,std::move(backdrop),gradient,SaveLoadFileKind::game,-1,reference,std::move(reader));
-    auto owned_reference=reference;
+    auto owned_reference=std::make_unique<LeImage>(reference);
     if(desktop_)desktop_->resolve_local_menu();
     world12_reference_=std::move(owned_reference);save_load_=std::move(next);
 }
@@ -735,17 +736,17 @@ StartupFlow::World12DesktopView StartupFlow::prepare_world12_file_result(DeskSta
         throw FormatError("world12: stale file result owner");
     validate_desk_state(state);
     if(request.action==SaveLoadAction::save&&(!desktop_||state.managers!=desktop_->state().managers||state.manager_slot!=desktop_->state().manager_slot||state.options!=desktop_->state().options||state.badge_atlas!=desktop_->state().badge_atlas))throw FormatError("world12: save changed current career identity");
-    World12DesktopView view;view.reference=reference;view.teams=state.manager_teams;view.desktop=std::make_unique<DesktopScreen>(data_,std::move(state),reference);return view;
+    World12DesktopView view;view.reference=std::make_unique<LeImage>(reference);view.teams=state.manager_teams;view.desktop=std::make_unique<DesktopScreen>(data_,std::move(state),reference);return view;
 }
 StartupFlow::World12DesktopView StartupFlow::prepare_world12_manager_result(DeskState state,const LeImage& reference,const DeskRequest& request)const {
     if(!desktop_||!desktop_->pending()||*desktop_->pending()!=request||request.kind!=DeskRequestKind::advance_turn||in_preparation_menu()||in_readonly_view()||state.source!="world12"||state.revision<=request.revision)
         throw FormatError("world12: manager transition has no current desktop owner");
     validate_desk_state(state);
     if(state.options!=desktop_->state().options||state.managers!=desktop_->state().managers||state.day_counter!=desktop_->state().day_counter)throw FormatError("world12: initial manager transition changed roster or date");
-    World12DesktopView view;view.reference=reference;view.teams=state.manager_teams;view.desktop=std::make_unique<DesktopScreen>(data_,std::move(state),reference);return view;
+    World12DesktopView view;view.reference=std::make_unique<LeImage>(reference);view.teams=state.manager_teams;view.desktop=std::make_unique<DesktopScreen>(data_,std::move(state),reference);return view;
 }
 void StartupFlow::finish_world12_desktop(World12DesktopView view) noexcept {
-    static_assert(std::is_nothrow_move_assignable_v<LeImage>&&std::is_nothrow_move_constructible_v<LeImage>);
+    static_assert(std::is_nothrow_move_constructible_v<World12DesktopView>&&std::is_nothrow_move_assignable_v<std::unique_ptr<LeImage>>);
     desktop_=std::move(view.desktop);world12_reference_=std::move(view.reference);confirmed_runtime_teams_=std::move(view.teams);
     save_load_.reset();preparation_.reset();manager_.reset();pending_.reset();confirmed_.clear();awaiting_context_=false;engine_attached_=true;
 }
