@@ -39,7 +39,7 @@ void World::validate(bool complete)const {
     for(const auto&[id,crest]:crests){const auto& path=crest.path;if(!id.valid()||crest.cell>=8||path.empty()||path.find("..")!=std::string::npos||path.find(':')!=std::string::npos||path[0]=='/'||path.find('\\')!=std::string::npos)throw std::invalid_argument("world12: invalid crest resource");}
     if(free_players) {
         if(!markets)throw std::invalid_argument("world12: free-player phase requires career markets");
-        const auto validate_pool=[&](const auto& pool){bool empty=false;for(auto player:pool){if(!player.valid()){empty=true;continue;}if(empty||!players.contains(player)||!rostered.insert(player).second)throw std::invalid_argument("world12: missing, repeated or noncompact free player");}};
+        const auto validate_pool=[&](const auto& pool){for(auto player:pool){if(!player.valid())continue;if(!players.contains(player)||!rostered.insert(player).second)throw std::invalid_argument("world12: missing or repeated free player");}};
         validate_pool(free_players->domestic);validate_pool(free_players->foreign);
     }
     if(initial_competitions){

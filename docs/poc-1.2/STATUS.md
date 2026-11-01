@@ -360,3 +360,35 @@ Actual-data GUI input tests also pass with schema18 and mapped initial/retained
 bidder history, including startup, management, save/load, pending decisions and
 four-manager loan handoffs. No new bidding screen or playable day advancement is
 claimed; the new phase changes market bids and their Watcom stream only.
+
+
+## Regular-market countdown and actual settlement
+
+[Auctions](MARKET_AUCTIONS.md) now stage regular listing countdown, shared Core
+ranking/selection, expiry and season-end settlement with actual AI/human/free-agent
+roster changes. Human choices/notices and allocator observations are explicit.
+Accounts, full boards, persistent mail, Source history and loan-owner contracts
+publish together; rejected or cancelled work cannot leave partial typed state.
+Source paid-but-blocked outcomes are preserved rather than reported as movement.
+
+Free agents and loan references have explicit non-roster mappings; no fake club
+is introduced. Acquisition clears the exact native pool slot instead of compacting
+later entries. Sixty actual-data full-Core cases compare 48 moves and 18 loans,
+including both human managers, free agents, history/owner-board metadata, full
+rosters/accounts/mail, both RNG streams and saved snapshots. The test fixture uses
+actual remapped manager clubs and includes the second manager's external memory.
+Twenty-four complete predecessor/current Core economic weeks remain byteidentical.
+
+Monthly renewal/returns, the ordinary auction GUI and complete saved event/day
+ownership remain open; this phase alone does not enable calendar advancement.
+
+Milestone validation: the application builds and all 33 targeted Linux regression
+checks pass. Free-pool validation now permits native holes while preserving unique
+ownership. Controlled auction-phase saves and independent Source comparison
+receipts stay private; the ordinary auction GUI is not yet connected to time
+advancement.
+
+Actual-data GUI controller checks also pass: setup, preparation, graphical
+save/load, German/English pending decisions and four-manager loan handoffs. This
+protects existing interaction paths; no claim is made that the new ordinary
+auction presenters have been wired into the GUI.

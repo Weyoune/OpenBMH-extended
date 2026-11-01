@@ -1390,7 +1390,7 @@ bool decide_bids(GameState& g, int k, GameRandom& game, WatcomRandom& rand, Minu
             }
         }
         const SquadRange range = squad_range(bidder);
-        const int nation = team_region(bidder) & 0xFF;  // Foreigners
+        const int nation = match_team_region(g,bidder) & 0xFF;  // Foreigners
         const int others = foreigners(g, bidder, range.first, range.count, nation);
         // The foreigner limit of a computer seller's list (more than three foreigners in the
         // bidder's squad, a player of another nation) only stops computer bidders: a human

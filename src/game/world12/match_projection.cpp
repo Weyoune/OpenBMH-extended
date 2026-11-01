@@ -147,6 +147,32 @@ AiMatchProjection AiMatchProjection::create_for_desktop(const CareerSnapshot& sn
     }
     return result;
 }
+void AiMatchProjection::include_players(const World& world,const std::vector<PlayerId>& requested) {
+    if(world.managers!=original_managers_||world.settings!=original_settings_)throw std::invalid_argument("world12: stale extra-player workspace");
+    for(auto id:requested){if(!id.valid())continue;if(std::find(players_.begin(),players_.end(),id)!=players_.end())continue;
+        const auto& p=world.players.at(id);if(players_.size()>=4095||state.player_names.size()+p.attributes.name.size()+1>65535)throw std::invalid_argument("world12: extra-player workspace overflow");
+        players_.push_back(id);originals_.push_back(p);state.players.push_back(p.attributes);state.player_cards.push_back(p.cards);state.player_bonus.push_back(p.bonus);
+        state.player_name_offsets.push_back(uint16_t(state.player_names.size()));state.player_names.insert(state.player_names.end(),p.attributes.name.begin(),p.attributes.name.end());state.player_names.push_back(0);
+    }
+    state.counts.players=uint32_t(players_.size());
+}
+void AiMatchProjection::include_club_references(const World& world,const std::vector<ClubId>& requested) {
+    if(world.managers!=original_managers_||world.settings!=original_settings_)throw std::invalid_argument("world12: stale extra-club workspace");
+    if(manager_reference_clubs_.empty())manager_reference_clubs_=clubs_;
+    for(auto id:requested){if(!id.valid())continue;if(std::find(manager_reference_clubs_.begin(),manager_reference_clubs_.end(),id)!=manager_reference_clubs_.end())continue;
+        const auto& club=world.clubs.at(id);const auto local=manager_reference_clubs_.size();if(local>=state.club_ids.size()||state.club_names.size()+club.name.size()+1>65535)throw std::invalid_argument("world12: extra-club reference overflow");
+        const auto offset=uint16_t(state.club_names.size());state.club_names.insert(state.club_names.end(),club.name.begin(),club.name.end());state.club_names.push_back(0);
+        manager_reference_clubs_.push_back(id);state.club_ids[local]=offset;record_opponents_[offset]=id;
+        if(local<size_t(runtime_dimensions.record_teams))for(size_t m=0;m<manager_seats_.size();++m){auto at=state.manager_results.begin()+ptrdiff_t((m*size_t(runtime_dimensions.record_teams)+local)*10);std::fill_n(at,10,uint8_t(255));
+            const auto& manager=*std::find_if(world.managers.begin(),world.managers.end(),[&](const auto& actor){return actor.seat==manager_seats_[m];});
+            const auto previous=manager.match_state->head_to_head.find(id);if(previous!=manager.match_state->head_to_head.end())std::copy(previous->second.begin(),previous->second.end(),at);
+        }
+    }
+}
+uint32_t AiMatchProjection::local_club_reference(ClubId id)const {
+    const auto& refs=manager_reference_clubs_.empty()?clubs_:manager_reference_clubs_;const auto found=std::find(refs.begin(),refs.end(),id);
+    if(found==refs.end())throw std::out_of_range("world12: club reference is not projected");return uint32_t(found-refs.begin());
+}
 ClubId AiMatchProjection::global_club(uint32_t local)const{return manager_reference_clubs_.empty()?clubs_.at(local):manager_reference_clubs_.at(local);}
 PlayerId AiMatchProjection::global_player(uint32_t local)const{return players_.at(local);}
 uint32_t AiMatchProjection::local_club(ClubId id)const{auto it=std::find(clubs_.begin(),clubs_.end(),id);if(it==clubs_.end())throw std::out_of_range("world12: club is not projected");return uint32_t(it-clubs_.begin());}
@@ -163,7 +189,7 @@ void AiMatchProjection::commit_player_attributes(World& world)const {
 void AiMatchProjection::commit_match_state(World& world,bool capture_season_services)const {commit_state(world,capture_season_services,std::nullopt);}
 void AiMatchProjection::commit_transfer_state(World& world,PlayerId player,ClubId seller,ClubId buyer,bool moved)const {
     if(seller==buyer||!player.valid())throw std::invalid_argument("world12: invalid transfer movement");
-    local_club(seller);local_club(buyer);local_player(player);
+    if(seller.valid())local_club(seller);local_club(buyer);local_player(player);
     commit_state(world,false,moved?std::optional<TransferMove>{{player,seller,buyer}}:std::nullopt);
 }
 void AiMatchProjection::commit_state(World& world,bool capture_season_services,std::optional<TransferMove> movement)const {
@@ -202,6 +228,12 @@ void AiMatchProjection::commit_state(World& world,bool capture_season_services,s
             target.season_stats.opponents[i]=found->second;
             target.season_stats.dates[i]=uint16_t(state.club_table.at(record+0x3a+i*2)|uint16_t(state.club_table.at(record+0x3b+i*2))<<8);
         }
+    }
+    if(movement&&!movement->seller.valid()) {
+        if(!candidate.free_players)throw std::invalid_argument("world12: acquired player has no free pool");
+        bool found=false;const auto remove=[&](auto& pool){const auto at=std::find(pool.begin(),pool.end(),movement->player);if(at==pool.end())return;if(found)throw std::invalid_argument("world12: free player belongs to duplicate pools");*at={};found=true;};
+        remove(candidate.free_players->domestic);remove(candidate.free_players->foreign);
+        if(!found)throw std::invalid_argument("world12: transferred free player was not available");
     }
     for(size_t local=0;local<manager_seats_.size();++local) {
         const auto found=std::find_if(candidate.managers.begin(),candidate.managers.end(),[&](const auto& manager){return manager.seat==manager_seats_[local];});

@@ -30,7 +30,7 @@ void CareerSnapshot::validate()const{
         }
     }
     if(transfers){
-        for(size_t seat=0;seat<4;++seat){const auto& rows=transfers->history[seat];if(rows.size()>30)throw FormatError("world12: transfer history exceeds Source capacity");for(const auto& row:rows)if(!world.players.contains(row.player)||!world.clubs.contains(row.other))throw FormatError("world12: unknown transfer history actor");}
+        for(size_t seat=0;seat<4;++seat){const auto& rows=transfers->history[seat];if(rows.size()>30)throw FormatError("world12: transfer history exceeds Source capacity");for(const auto& row:rows)if(!world.players.contains(row.player)||(row.other.valid()&&!world.clubs.contains(row.other)))throw FormatError("world12: unknown transfer history actor");}
         if(transfers->loans.size()>12)throw FormatError("world12: owner loan snapshots exceed Source capacity");std::set<PlayerId> players;std::array<int,4> counts{};
         for(const auto& contract:transfers->loans){const auto loan=std::find_if(world.loans.begin(),world.loans.end(),[&](const auto& l){return l.player==contract.player;});const auto owner=std::find_if(world.managers.begin(),world.managers.end(),[&](const auto& m){return m.seat==contract.manager;});
             if(contract.manager>=4||!players.insert(contract.player).second||loan==world.loans.end()||owner==world.managers.end()||owner->club!=loan->owner||++counts[contract.manager]>3)throw FormatError("world12: invalid owner loan contract");

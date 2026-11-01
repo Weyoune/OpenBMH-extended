@@ -11,6 +11,7 @@
 #include "game/world12/economy.hpp"
 #include "game/world12/weekly_incidents.hpp"
 #include "game/world12/market_bids.hpp"
+#include "game/world12/market_auctions.hpp"
 #include "game/world12/standings.hpp"
 #include "game/bank_credit.hpp"
 #include "game/pending_offer.hpp"
@@ -138,6 +139,57 @@ int main(int argc,char** argv)try {
         }
         if(!added)throw std::runtime_error("global bid oracle generated no bids");
         std::cout<<checks<<" full-Core global market bid comparisons, "<<added<<" actual bids: all buyers/fees/salaries/terms/bonuses/RNG/snapshots match\n";
+    }
+    {
+        size_t auctions=0,moves=0,loans=0;
+        for(int kind=0;kind<10;++kind)for(uint32_t seed:{1u,91u,703u})for(bool accept:{false,true}){
+            auto typed=state;auto core=native;core.memory.set8(layout::ActiveManager,0);const int main_team=core.manager_teams[0];int ai_seller=0;while(ai_seller==main_team)++ai_seller;int ai_buyer=ai_seller+1;while(ai_buyer==main_team)++ai_buyer;
+            for(size_t row=0;row<40;++row){typed.world.transfer_market->rows[row].reset();core.squad_slots.at(size_t(runtime_dimensions.pool_first)+row)=0xfff;}
+            if(kind>=8){auto peer=typed.world.managers[0];peer.seat=1;peer.portrait=1;peer.name="Auction peer";peer.club=identities.at(core.club_ids[size_t(ai_buyer)]);typed.world.managers.push_back(peer);typed.world.settings->planned_managers=2;
+                core.manager_teams.push_back(ai_buyer);core.team_morale[size_t(ai_buyer)]|=128;core.memory.set8(layout::ManagerCount,2);core.memory.set8(layout::OriginalManagerCount,2);
+                std::copy_n(core.manager_records.begin(),0xb0c,core.manager_records.begin()+0xb0c);std::copy_n(core.tactics.begin(),0x840,core.tactics.begin()+0x840);std::copy_n(core.manager_options.begin(),5,core.manager_options.begin()+5);std::copy_n(core.manager_ratings.begin(),60,core.manager_ratings.begin()+60);
+                for(uint32_t n=0;n<0x24;++n)core.memory.set8(layout::EnvironmentYouthTeams+0x24+n,core.memory.u8(layout::EnvironmentYouthTeams+n));
+                std::fill_n(core.manager_records.begin()+0xb0c+0xa8,25,uint8_t(0));std::copy(peer.name.begin(),peer.name.end(),core.manager_records.begin()+0xb0c+0xa8);core.manager_records[0xb0c+0x290]=uint8_t(ai_buyer);core.manager_records[0xb0c+0x291]=uint8_t(ai_buyer>>8);core.manager_records[0xb0c+0x221]=1;
+            }
+            const bool free=kind==6||kind==7;const bool seller_human=kind==2||kind==3||kind>=8;const bool buyer_human=kind==4||kind==5||kind==7||kind>=8;const bool loan=kind<6?(kind%2):kind==9;
+            const int seller_team=seller_human?main_team:ai_seller,buyer_team=kind>=8?ai_buyer:buyer_human?main_team:ai_buyer;
+            PlayerId player;if(free)player=*std::find_if(typed.world.free_players->domestic.begin(),typed.world.free_players->domestic.end(),[](auto id){return id.valid();});else player={uint32_t(core.squad_slots[size_t(seller_team)*24+19]&0xfff)};
+            core.players.at(player.value).w368&=0x07ffffffu;core.player_bonus.at(player.value)&=127;typed.world.players.at(player).attributes.w368=core.players[player.value].w368;typed.world.players.at(player).bonus=core.player_bonus[player.value];
+            const auto seller=free?ClubId{}:identities.at(core.club_ids[size_t(seller_team)]),buyer=identities.at(core.club_ids[size_t(buyer_team)]);
+            MarketListing listing;listing.player=player;listing.seller=seller;listing.human_seller=seller_human;listing.fee=100000;listing.salary=1000;listing.asking_percent=100;listing.demand_percent=100;listing.weeks=1;
+            listing.bids[0]={buyer,1000000,100000,uint8_t(loan?0x8c:24),{}};typed.world.transfer_market->rows[0]=listing;
+            const auto at=layout::EditorList;for(uint32_t n=0;n<0x58;++n)core.memory.set8(at+n,0);for(uint32_t n=0;n<4;++n)core.memory.set16(at+n*2,0xffff);
+            core.memory.set16(at,uint16_t(buyer_team));core.memory.set16(at+8,free?0xfff:uint16_t(seller_team|(seller_human?0x8000:0)));core.memory.set32(at+0xc,100000);core.memory.set32(at+0x1c,1000000);core.memory.set32(at+0x2c,100000);core.memory.set32(at+0x30,1000);core.memory.set8(at+0x34,uint8_t(loan?0x8c:24));core.memory.set8(at+0x54,100);core.memory.set8(at+0x55,100);core.memory.set8(at+0x56,1);core.squad_slots[size_t(runtime_dimensions.pool_first)]=uint16_t(player.value);
+            core.mailbox.assign(kMailboxEntries*kMailboxEntry,0);initialize_career_economy(typed,core);typed.game_seed=17;typed.watcom_seed=seed;
+            core.transfer_offer_selector=[&](const GameState&,const TransferOfferListView& view){return accept?view.preferred_bid_index:-1;};core.transfer_decision_observer=[](const TransferDecisionEvent&){};
+            MarketAuctionHooks hooks;hooks.active_seat=0;hooks.allocator=TransferAllocatorContext::zero;hooks.select=[&](const GameState&,const TransferOfferListView& view,const AiMatchProjection&)->std::optional<int>{return accept?view.preferred_bid_index:-1;};hooks.notice=[](const GameState&,const TransferDecisionEvent&,const AiMatchProjection&){};
+            GameRandom g(17);WatcomRandom w(seed);MinuteReport report;transfer_list_countdown(core,g,w,report,false,TransferAllocatorContext::zero);if(report.unsupported)throw std::runtime_error(report.reason);
+            const auto result=process_market_auctions(typed,reference,texts,hooks);moves+=result.moved;loans+=result.loans;
+            if(typed.game_seed!=g.seed()||typed.watcom_seed!=w.seed())throw std::runtime_error("auction RNG differs at kind "+std::to_string(kind));
+            for(const auto& [id,p]:typed.world.players)if(p.attributes.w35c!=core.players[id.value].w35c||p.attributes.w364!=core.players[id.value].w364||p.attributes.w368!=core.players[id.value].w368||p.cards!=core.player_cards[id.value]||p.bonus!=core.player_bonus[id.value])throw std::runtime_error("auction player/board attributes differ");
+            for(size_t team=0;team<164;++team){const auto id=identities.at(core.club_ids[team]);const auto& roster=typed.world.clubs.at(id).roster;for(size_t row=0;row<24;++row){const auto raw=core.squad_slots[team*24+row];const uint16_t flags=uint16_t(((raw&0x8000)?1:0)|((raw&0x4000)?2:0)|((raw&0x2000)?4:0)|((raw&0x1000)?8:0));if((roster[row].empty()?0xfffu:roster[row].player.value)!=(raw&0xfff)||roster[row].flags!=flags)throw std::runtime_error("auction canonical roster differs");}}
+            for(size_t m=0;m<typed.world.managers.size();++m)if(typed.world.managers[m].finance!=manager_initial_finance_from_legacy(core,int(m))||typed.world.managers[m].tactics!=manager_full_tactics_from_legacy(core,int(m),players)||typed.world.managers[m].career!=manager_career_state_from_legacy(core,uint8_t(m),players,true))throw std::runtime_error("auction human state differs kind="+std::to_string(kind)+" seed="+std::to_string(seed)+" answer="+std::to_string(accept)+" manager="+std::to_string(m)+" finance="+std::to_string(typed.world.managers[m].finance==manager_initial_finance_from_legacy(core,int(m)))+" tactics="+std::to_string(typed.world.managers[m].tactics==manager_full_tactics_from_legacy(core,int(m),players))+" career="+std::to_string(typed.world.managers[m].career==manager_career_state_from_legacy(core,uint8_t(m),players,true)));
+            for(size_t m=0;m<typed.world.managers.size();++m){const auto at=m*0xb0c;const auto read32=[&](size_t offset){uint32_t v=0;for(size_t b=0;b<4;++b)v|=uint32_t(core.manager_records[at+offset+b])<<(b*8);return v;};
+                if(uint32_t(typed.transfers->balance[m])!=read32(0x330))throw std::runtime_error("auction transfer balance differs");
+                const auto identity=read32(0x7d8);const auto& history=typed.transfers->history[m];
+                if(identity){if(history.size()!=1||history[0].player!=player||history[0].other!=((read32(0x760)&1)?seller:buyer)||history[0].source_word!=read32(0x760))throw std::runtime_error("auction qualified history differs");}else if(!history.empty())throw std::runtime_error("auction invented Source transfer history");
+            }
+            std::vector<Loan> expected_loans;for(uint32_t n=0;n<200;++n){const auto raw=core.memory.u32(layout::Career_RemoveJoinLoans_RuntimeField+n*4);if(raw)expected_loans.push_back({{raw&0xfff},identities.at(core.club_ids[(raw>>12)&0x3ff]),identities.at(core.club_ids[raw>>22]),core.memory.u8(layout::ClubPlayerDetail_InvalidArgument_RuntimeField+n)});}
+            if(typed.world.loans!=expected_loans)throw std::runtime_error("auction global loan parties/months differ");
+            if(result.moved&&loan&&seller_human){if(typed.transfers->loans.size()!=1)throw std::runtime_error("auction owner snapshot count="+std::to_string(typed.transfers->loans.size())+" kind="+std::to_string(kind)+" seed="+std::to_string(seed)+" answer="+std::to_string(accept)+" global loans="+std::to_string(typed.world.loans.size()));const auto& contract=typed.transfers->loans[0];int slot=-1;for(int n=0;n<12;++n)if(core.memory.u16(layout::Career_CareerManagersEnd_RuntimeField+uint32_t(n*2))==player.value){slot=n;break;}
+                if(slot<0||contract.player!=player||contract.manager!=0)throw std::runtime_error("auction owner snapshot identity differs");const auto at=layout::ClubInfo_FormatError_RuntimeField+uint32_t(slot*0x58);
+                for(size_t n=0;n<0x58;++n)if((n<0x44||n>=0x48)&&contract.board[n]!=core.memory.u8(at+uint32_t(n)))throw std::runtime_error("auction owner contract board differs");
+                const auto mark=core.memory.u16(at+0x44),marked=core.memory.u16(at+0x46);if(contract.mark!=(mark==0xfff?PlayerId{}:PlayerId{mark})||contract.marked_by!=(marked==0xfff?PlayerId{}:PlayerId{marked}))throw std::runtime_error("auction loan mark references differ");
+            }
+            const size_t pools[]={size_t(runtime_dimensions.free_first),size_t(runtime_dimensions.foreign_free_first)};for(size_t pool=0;pool<2;++pool){const size_t count=pool?20:80;for(size_t n=0;n<count;++n){const auto expected=core.squad_slots[pools[pool]+n]&0xfff;const auto actual=pool?typed.world.free_players->foreign[n]:typed.world.free_players->domestic[n];if((actual.valid()?actual.value:0xfffu)!=expected)throw std::runtime_error("auction native free-pool slots differ");}}
+            std::vector<ClubId> human_clubs;for(const auto& m:typed.world.managers)human_clubs.push_back(m.club);
+            auto projection=AiMatchProjection::create_for_humans(typed,human_clubs,reference,{3,3,false,true});install_career_economy(projection,typed.world);if(compare_mailbox(projection.state.mailbox,core.mailbox))throw std::runtime_error("auction mailbox differs");
+            if(read_save(make_save(typed))!=typed)throw std::runtime_error("auction snapshot differs");
+            if(!proof.empty()&&kind==7&&seed==91&&accept){const auto file=proof/"free-agent-auction.FBM";write_savegame(file,make_save(typed));if(read_save(load_savegame(file))!=typed)throw std::runtime_error("auction disk snapshot differs");}
+            ++auctions;
+        }
+        if(!moves||!loans)throw std::runtime_error("auction oracle exercised no movement/loans");
+        std::cout<<auctions<<" full-Core auction comparisons, "<<moves<<" actual moves and "<<loans<<" loans: AI/human/free-agent rosters/accounts/boards/pool slots/mail/RNG/snapshots match\n";
     }
     {
         auto startup=state,source_start=state;auto initial_template=native;

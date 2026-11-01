@@ -101,7 +101,7 @@ int main()try {
             check(read_save(make_save(snapshot))==snapshot,"free-player state lost on snapshot roundtrip");
             auto duplicate=initialized;duplicate.free_players->foreign[1]=duplicate.free_players->foreign[0];
             rejects([&]{duplicate.validate();},"duplicated free player accepted");
-            auto gap=initialized;gap.free_players->foreign[0]={};rejects([&]{gap.validate();},"noncompact free pool accepted");
+            auto gap=initialized;gap.free_players->foreign[0]={};gap.validate();check(!gap.free_players->foreign[0].valid(),"removed free-player slot was compacted");
             const auto ready=initialized;const auto pg=mg;const auto pw=mw;
             rejects([&]{initialize_career_player_pools(initialized,plan,reference,false,mg,mw);},"initial free players released twice");
             check(initialized==ready&&mg.calls()==pg.calls()&&mw.calls()==pw.calls(),"duplicate release mutated world or seeds");

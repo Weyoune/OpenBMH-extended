@@ -16,6 +16,10 @@ public:
         const GameState& rules_template,HumanProjectionPolicy);
     static AiMatchProjection create_for_desktop(const CareerSnapshot&,const std::vector<ClubId>&,
         const GameState& rules_template,HumanProjectionPolicy);
+    // Explicit non-roster references for market/free-agent/loan workspaces.
+    void include_players(const World&,const std::vector<PlayerId>&);
+    void include_club_references(const World&,const std::vector<ClubId>&);
+    uint32_t local_club_reference(ClubId)const;
     GameState state;
     ClubId global_club(uint32_t local)const;
     PlayerId global_player(uint32_t local)const;

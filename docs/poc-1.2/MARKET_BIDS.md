@@ -54,6 +54,7 @@ market and complete new-bid phases. Twenty-four predecessor/current full Core
 economic weeks and RNG traces remain byteidentical. These are controlled Core
 comparisons, not newly recorded Original DOS gameplay or complete career tests.
 
-Remaining transfer work includes countdown, expiry ranking, human seller/buyer
-presenters, actual roster/account/history/loan settlement and monthly renewal.
+The [auction adapter](MARKET_AUCTIONS.md) now supplies countdown, expiry ranking
+and actual roster/account/history/loan settlement. Human seller/buyer presenters
+still need GUI integration, and monthly renewal/returns remain open.
 Those must be integrated with daily ownership before enabling playable progress.
