@@ -730,14 +730,21 @@ void StartupFlow::open_world12_file_dialog(SaveLoadMode mode,const LeImage& refe
     if(desktop_)desktop_->resolve_local_menu();
     world12_reference_=std::move(owned_reference);save_load_=std::move(next);
 }
-StartupFlow::World12FileView StartupFlow::prepare_world12_file_result(DeskState state,const LeImage& reference,const SaveLoadRequest& request)const {
+StartupFlow::World12DesktopView StartupFlow::prepare_world12_file_result(DeskState state,const LeImage& reference,const SaveLoadRequest& request)const {
     if(!save_load_||!save_load_->pending()||*save_load_->pending()!=request||request.file_kind!=SaveLoadFileKind::game||state.source!="world12"||state.revision<=request.revision)
         throw FormatError("world12: stale file result owner");
     validate_desk_state(state);
     if(request.action==SaveLoadAction::save&&(!desktop_||state.managers!=desktop_->state().managers||state.manager_slot!=desktop_->state().manager_slot||state.options!=desktop_->state().options||state.badge_atlas!=desktop_->state().badge_atlas))throw FormatError("world12: save changed current career identity");
-    World12FileView view;view.reference=reference;view.teams=state.manager_teams;view.desktop=std::make_unique<DesktopScreen>(data_,std::move(state),reference);return view;
+    World12DesktopView view;view.reference=reference;view.teams=state.manager_teams;view.desktop=std::make_unique<DesktopScreen>(data_,std::move(state),reference);return view;
 }
-void StartupFlow::finish_world12_file_result(World12FileView view) noexcept {
+StartupFlow::World12DesktopView StartupFlow::prepare_world12_manager_result(DeskState state,const LeImage& reference,const DeskRequest& request)const {
+    if(!desktop_||!desktop_->pending()||*desktop_->pending()!=request||request.kind!=DeskRequestKind::advance_turn||in_preparation_menu()||in_readonly_view()||state.source!="world12"||state.revision<=request.revision)
+        throw FormatError("world12: manager transition has no current desktop owner");
+    validate_desk_state(state);
+    if(state.options!=desktop_->state().options||state.managers!=desktop_->state().managers||state.day_counter!=desktop_->state().day_counter)throw FormatError("world12: initial manager transition changed roster or date");
+    World12DesktopView view;view.reference=reference;view.teams=state.manager_teams;view.desktop=std::make_unique<DesktopScreen>(data_,std::move(state),reference);return view;
+}
+void StartupFlow::finish_world12_desktop(World12DesktopView view) noexcept {
     static_assert(std::is_nothrow_move_assignable_v<LeImage>&&std::is_nothrow_move_constructible_v<LeImage>);
     desktop_=std::move(view.desktop);world12_reference_=std::move(view.reference);confirmed_runtime_teams_=std::move(view.teams);
     save_load_.reset();preparation_.reset();manager_.reset();pending_.reset();confirmed_.clear();awaiting_context_=false;engine_attached_=true;

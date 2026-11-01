@@ -29,6 +29,7 @@ public:
     void confirm_manager(const ui::ManagerChoice&,uint64_t expected_revision);
     void prepare_start(uint64_t expected_revision);
     DesktopEntryOutcome begin_first_event(uint64_t expected_revision);
+    DesktopEntryOutcome advance_manager(const ui::DeskRequest&);
     void open_preparation(const ui::DeskRequest&);
     void apply_preparation(const ui::PreparationRequest&);
     void close_preparation();

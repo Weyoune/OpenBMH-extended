@@ -4,6 +4,8 @@
 #include "game/turn.hpp"
 #include "game/matchday_setup.hpp"
 #include "game/weekly.hpp"
+#include "game/pending_offer.hpp"
+#include <algorithm>
 #include "game/world12/codec.hpp"
 #include "game/world12/manager_match_state.hpp"
 #include "game/world12/manager_finance.hpp"
@@ -103,6 +105,34 @@ int main(int argc,char** argv)try {
     }
     if(offers<16||!loans||!lures)throw std::runtime_error("initial event oracle did not exercise all offer kinds");
     std::cout<<events<<" Native first-event comparisons, "<<offers<<" offers including "<<loans<<" loan terms and "<<lures<<" salary-only approaches: quotes/bidders/terms/warnings/order/prestige/both RNGs/snapshots match\n";
+    {auto loop=state;auto classic=native;const auto model=loop.world.managers.front();loop.world.settings->mode=1;loop.world.settings->planned_managers=4;
+        classic.memory.set8(layout::GameMode,1);classic.memory.set8(layout::ManagerCount,4);classic.memory.set8(layout::OriginalManagerCount,4);
+        int next_team=0;for(uint8_t seat=1;seat<4;++seat){while(classic.manager_of(next_team)>=0)++next_team;const int team=next_team++;
+            auto m=model;m.seat=seat;m.name="Loop "+std::to_string(seat);m.portrait=seat;m.club=identities.at(classic.club_ids.at(size_t(team)));m.start_league=loop.world.clubs.at(m.club).league;loop.world.managers.push_back(m);
+            classic.manager_teams.push_back(team);classic.team_morale.at(size_t(team))|=0x80;
+            std::copy_n(classic.manager_records.begin(),0xb0c,classic.manager_records.begin()+size_t(seat)*0xb0c);
+            std::copy_n(classic.tactics.begin(),0x840,classic.tactics.begin()+size_t(seat)*0x840);std::copy_n(classic.manager_options.begin(),5,classic.manager_options.begin()+size_t(seat)*5);std::copy_n(classic.manager_ratings.begin(),60,classic.manager_ratings.begin()+size_t(seat)*60);
+            const auto rec=size_t(seat)*0xb0c;classic.manager_records[rec+0x290]=uint8_t(team);classic.manager_records[rec+0x291]=uint8_t(team>>8);classic.manager_records[rec+0x221]=seat;
+            for(size_t n=0;n<25;++n)classic.manager_records[rec+0xa8+n]=n<m.name.size()?uint8_t(m.name[n]):0;
+        }
+        for(uint32_t n=0;n<4;++n)classic.memory.set16(layout::NextDeskManager+n*2,uint16_t(n));
+        loop.desktop.reset();owner_app::initialize_desktops(loop,reference);loop.validate();
+        GameRandom g(loop.game_seed);WatcomRandom w(loop.watcom_seed);MinuteReport r;std::vector<uint8_t> refs(50);MatchdayContext context;context.month=7;context.referees=&refs;
+        const auto groups=prepare_event(classic,0,context,g,w,r);if(!groups.empty()||r.unsupported)throw std::runtime_error("four-manager oracle event is not empty");
+        enter_event_desk(classic,0,groups,g,w,r,true,[](const GameState&,WatcomRandom&){});owner_app::ManagerActionOwner active{92,0};owner_app::prepare_first_desk_event(loop,active,active,reference);
+        for(int position=0;position<4;++position){const auto& event=*loop.desktop->initial_event;
+            if(event.manager_position!=position||loop.desktop->active_seat!=classic.memory.u8(layout::ActiveManager)||loop.game_seed!=g.seed()||loop.watcom_seed!=w.seed())throw std::runtime_error("four-manager cursor/RNG differs from full Core");
+            for(int n=0;n<4;++n)if(event.manager_order[size_t(n)]!=classic.memory.u16(layout::NextDeskManager+uint32_t(n*2)))throw std::runtime_error("four-manager order was reshuffled");
+            const auto seat=*loop.desktop->active_seat;const auto& desk=loop.desktop->managers.at(seat);
+            if(desk.prestige!=classic.manager_records.at(size_t(seat)*0xb0c+0x211))throw std::runtime_error("next manager prestige differs");
+            for(size_t row=0;row<54;++row)for(size_t b=0;b<16;++b)if(desk.layout[row][b]!=classic.memory.u8(layout::Desktops+uint32_t(size_t(seat)*0x360+row*16+b)))throw std::runtime_error("next manager Source layout differs");
+            if(read_save(make_save(loop))!=loop)throw std::runtime_error("four-manager saved cursor differs");
+            if(position<3){PendingOfferDeskRequest request;request.runtime_mode=PendingOfferDeskRuntimeMode::normal_interactive;request.manager_count=4;request.manager_position=position;
+                const auto pending=process_natural_pending_offers_after_desk(classic,request,g,w,{},r);if(!pending.completed||r.unsupported)throw std::runtime_error("four-manager native after-desk path unsupported");
+                enter_event_desk(classic,position+1,groups,g,w,r,true,[](const GameState&,WatcomRandom&){});owner_app::advance_initial_manager(loop,active,active,reference);}
+        }
+        std::cout<<"Four-manager full-Core desk loop: order/cursor, after-desk path, all layouts/prestige, both RNGs and mid-loop saved snapshots match\n";
+    }
     size_t scopes=0;
     for(int mask=1;mask<8;++mask){const GameScope scope{bool(mask&1),bool(mask&2),bool(mask&4)};if(!scope.club_play())continue;
         CareerSnapshot scoped;scoped.world=select_world_scope(master,scope);const auto limits=read_initial_strength_ranges(scoped.world.catalogue,german,english);const auto initial=make_player_initialization_plan(master,scope,limits);

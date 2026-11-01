@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "app/world12_session.hpp"
 #include "app/world12_desktop.hpp"
+#include "ui/desktop.hpp"
 #include "game/world12/codec.hpp"
 #include "game/career.hpp"
 #include "game/calendar.hpp"
@@ -60,6 +61,12 @@ void Session::prepare_start(uint64_t revision) {
 }
 DesktopEntryOutcome Session::begin_first_event(uint64_t revision) {
     return prepare_first_desk_event(state_,owner_,{owner_.scope,revision},resources_.reference);
+}
+
+DesktopEntryOutcome Session::advance_manager(const ui::DeskRequest& request) {
+    if(request.kind!=ui::DeskRequestKind::advance_turn)throw FormatError("world12: not a manager-advance request");
+    validate_file_owner(request.manager_slot,request.revision);
+    return advance_initial_manager(state_,owner_,{owner_.scope,request.revision},resources_.reference);
 }
 
 }

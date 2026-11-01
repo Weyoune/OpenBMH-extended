@@ -27,8 +27,12 @@ std::optional<PendingDeskOffer> initial_offer(CareerSnapshot& state,uint8_t seat
     auto& local=projection.state;const auto& club=world.clubs.at(manager.club);
     // A fresh event cannot contain bought-for-later or already pending rows.
     // Subsequent-day offer processing will own those separate state machines.
-    for(size_t k=40;k<44;++k)if(world.transfer_market->rows[k])
-        throw std::invalid_argument("world12: initial unsolicited offer slots are not empty");
+    for(size_t k=40;k<44;++k)if(world.transfer_market->rows[k]){
+        // A quote without a bidder does not occupy Source OfferSlots. The next
+        // manager may overwrite it, exactly as the native entry routine does.
+        if(k!=40||std::any_of(world.transfer_market->rows[k]->bids.begin(),world.transfer_market->rows[k]->bids.end(),[](const auto& bid){return bid.bidder.valid();}))
+            throw std::invalid_argument("world12: initial unsolicited offer slots need their decision owner");
+    }
     bool fit=false,empty=false;
     for(const auto& row:club.roster){if(row.empty())empty=true;else if(world.players.at(row.player).attributes.w35c>>27==0)fit=true;}
     if(!fit&&!empty)throw std::invalid_argument("world12: no fit initial offer player; Original selection would not terminate");
@@ -103,4 +107,23 @@ DesktopEntryOutcome prepare_first_desk_event(CareerSnapshot& state,ManagerAction
     if(state!=before||owner.scope!=expected.scope||owner.revision!=expected.revision)throw std::invalid_argument("world12: initial event owner changed during preparation");
     DesktopEntryOutcome outcome{game.calls()+entered.game_draws,random.calls()+entered.watcom_draws,entered.autosave_due};state=std::move(candidate);++owner.revision;return outcome;
 }
+DesktopEntryOutcome advance_initial_manager(CareerSnapshot& state,ManagerActionOwner& owner,ManagerActionOwner expected,const GameState& reference) {
+    state.validate();
+    if(!owner.scope||owner.scope!=expected.scope||owner.revision!=expected.revision||owner.revision==std::numeric_limits<uint64_t>::max()||!state.desktop||!state.desktop->active_seat||!state.desktop->initial_event)
+        throw std::invalid_argument("world12: stale or missing initial manager-loop owner");
+    const auto& event=*state.desktop->initial_event;
+    if(state.desktop->autosave_pending)throw std::invalid_argument("world12: pending autosave needs its file owner before the next desk");
+    if(event.offer)throw std::invalid_argument("world12: current player offer needs its decision before leaving the desk");
+    if(size_t(event.manager_position)+1>=event.manager_order.size())throw std::invalid_argument("world12: last manager needs the complete daily/weekly service owner");
+    const auto before=state;auto candidate=state;WatcomRandom random(state.watcom_seed);
+    auto& next=*candidate.desktop->initial_event;++next.manager_position;
+    const auto seat=next.manager_order[next.manager_position];candidate.desktop->active_seat.reset();
+    next.offer=initial_offer(candidate,seat,reference,random);
+    candidate.watcom_seed=random.seed();candidate.desktop->active_seat.reset();
+    ManagerActionOwner staged{owner.scope,0};const auto entered=enter_initial_manager_desktop(candidate,staged,staged,seat,reference);
+    candidate.validate();
+    if(state!=before||owner.scope!=expected.scope||owner.revision!=expected.revision)throw std::invalid_argument("world12: manager-loop owner changed during transition");
+    DesktopEntryOutcome outcome{entered.game_draws,random.calls()+entered.watcom_draws,entered.autosave_due};state=std::move(candidate);++owner.revision;return outcome;
+}
+
 }

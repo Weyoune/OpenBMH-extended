@@ -20,6 +20,7 @@ struct PendingDeskOffer {
 };
 struct InitialDeskEvent {
     uint16_t matchday_number=0;
+    uint8_t manager_position=0;
     std::vector<uint8_t> manager_order;
     // The initial event has no fixtures. Its Toto coupon is open and empty.
     bool pools_open=true;

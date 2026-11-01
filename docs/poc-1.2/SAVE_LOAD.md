@@ -6,7 +6,7 @@ The development SDL entry now uses the Original file dialog for typed O1.2 snaps
 
 `Session::resume` validates the saved world, complete manager state and its retained event/desktop cursor, derives options from saved settings/scope, and takes a fresh runtime owner revision. It does not call new-career initialization, generate people, redraw competitions, sell tickets, reset a season, enter the desk or consume randomness. Existing initial competition notices/ticket receipts are reconstructed read-only from their stored state. Local modal ownership is empty after load.
 
-The current event model describes the first preparation day; snapshots without its required runtime owner are rejected explicitly. General subsequent-day ownership remains an implementation gate. Older S4–S6 containers can still be decoded by the format reader, but incomplete development snapshots are not turned into a new career to make them appear loadable.
+The current event model describes the first preparation day; snapshots without its required runtime owner are rejected explicitly. General subsequent-day ownership remains an implementation gate. Older S4–S7 containers can still be decoded by the format reader, but incomplete development snapshots are not turned into a new career to make them appear loadable.
 
 ## Original dialog, typed preview
 
@@ -18,7 +18,7 @@ Load from setup works without an existing Session and honours saved settings eve
 
 A matching actual dialog request and idle active-manager/revision are required. The target must be a regular `.FBM` in the configured save directory; symlinks, outside directories, wrong file kinds, directories as targets and unconfirmed overwrites are rejected.
 
-Manual save retains the Original four Watcom draws for save ID/key/random byte. The staged snapshot stores the post-save seed; the game RNG and calendar remain unchanged. A successful manual write also fulfils a retained pending-save flag. The encrypted file keeps the typed snapshot framing (currently S7); no fabricated legacy plain information header is added.
+Manual save retains the Original four Watcom draws for save ID/key/random byte. The staged snapshot stores the post-save seed; the game RNG and calendar remain unchanged. A successful manual write also fulfils a retained pending-save flag. The encrypted file keeps the typed snapshot framing (currently S8); no fabricated legacy plain information header is added.
 
 The controller stages both Session and rendered desktop first. The writer creates an exclusive temporary in the destination directory, writes/flushes/closes it, reopens/decodes it and compares the complete snapshot. Publication uses same-directory atomic replacement for a confirmed overwrite, or no-replace publication for a new file. Linux/macOS use rename or an exclusive hard-link publication; Windows uses CreateFileW/MoveFileExW. Failures before publication remove the temporary and preserve the previous target and live RNG/revision. Successful publication is followed only by nonthrowing Session/UI moves.
 

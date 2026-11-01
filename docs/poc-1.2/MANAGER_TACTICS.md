@@ -1,6 +1,6 @@
 # Typed human tactical fields
 
-World schema version 6 introduced optional `Manager::tactics`; version 7 adds complete numeric board backing, explicit global player references, formation tables/masks, remaining automation bytes and the club's stored indoor-lineup bit. Versions 1–5 remain readable and leave tactics explicitly uninitialized; version 6 retains its scalar fields without inventing backing. The manager-free imported master needs no changes. Snapshot framing remains `OBMH12S7` (S4–S6 remain readable without invented newer state); tactical values are part of the embedded versioned world JSON.
+World schema version 6 introduced optional `Manager::tactics`; version 7 adds complete numeric board backing, explicit global player references, formation tables/masks, remaining automation bytes and the club's stored indoor-lineup bit. Versions 1–5 remain readable and leave tactics explicitly uninitialized; version 6 retains its scalar fields without inventing backing. The manager-free imported master needs no changes. Snapshot framing remains `OBMH12S8` (S4–S7 remain readable without invented newer state); tactical values are part of the embedded versioned world JSON.
 
 ## Verified fields
 

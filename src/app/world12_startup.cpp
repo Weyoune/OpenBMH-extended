@@ -19,13 +19,13 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
             auto staged=std::make_unique<Session>(*session);const auto save=staged->prepare_manual_save(request);
             auto desk=ui::world12_initial_desktop(data,staged->snapshot(),staged->reference(),staged->rules(),staged->options(),staged->revision());
             auto view=flow.prepare_world12_file_result(std::move(desk),staged->rules(),request);
-            publish_game_save(path,save,request.overwrite);session.swap(staged);flow.finish_world12_file_result(std::move(view));return {};
+            publish_game_save(path,save,request.overwrite);session.swap(staged);flow.finish_world12_desktop(std::move(view));return {};
         }
         const auto revision=session?session->revision():request.revision;if(revision==std::numeric_limits<uint64_t>::max())throw FormatError("world12: load revision exhausted");
         auto saved=bmh::world12::read_save(load_savegame(path));auto resources=load_runtime_resources(data);
         auto staged=std::make_unique<Session>(Session::resume(std::move(resources),std::move(saved),session?session->scope():scope,revision+1));
         auto desk=ui::world12_initial_desktop(data,staged->snapshot(),staged->reference(),staged->rules(),staged->options(),staged->revision());
-        auto view=flow.prepare_world12_file_result(std::move(desk),staged->rules(),request);session.swap(staged);flow.finish_world12_file_result(std::move(view));return {};
+        auto view=flow.prepare_world12_file_result(std::move(desk),staged->rules(),request);session.swap(staged);flow.finish_world12_desktop(std::move(view));return {};
     }
     if(action.request==ui::FlowRequest::new_career){const auto* request=flow.pending_career();if(!request||!request->options.country_selection)throw FormatError("world12: no typed career request");
         if(request->managers.empty()){
@@ -38,6 +38,12 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
     }
     if(action.request==ui::FlowRequest::manager_confirmed){const auto* choice=flow.pending_manager();if(!session||!choice)throw FormatError("world12: missing manager confirmation owner");
         auto staged=std::make_unique<Session>(*session);staged->confirm_manager(*choice,choice->roster_revision);flow.resume_manager_selection(staged->selection_context());session.swap(staged);return {StartupProgress::selecting,{}};
+    }
+    if(action.request==ui::FlowRequest::kickoff){
+        if(!session||!flow.desktop()||!flow.desktop()->pending()||*flow.desktop()->pending()!=action.desk_action)throw FormatError("world12: manager transition has no matching view owner");
+        auto staged=std::make_unique<Session>(*session);staged->advance_manager(action.desk_action);
+        auto desk=ui::world12_initial_desktop(data,staged->snapshot(),staged->reference(),staged->rules(),staged->options(),staged->revision());
+        auto view=flow.prepare_world12_manager_result(std::move(desk),staged->rules(),action.desk_action);session.swap(staged);flow.finish_world12_desktop(std::move(view));return {};
     }
     if(action.request==ui::FlowRequest::desk_action){
         if(!session||!flow.desktop()||!flow.desktop()->pending()||*flow.desktop()->pending()!=action.desk_action)throw FormatError("world12: desktop command has no matching view owner");

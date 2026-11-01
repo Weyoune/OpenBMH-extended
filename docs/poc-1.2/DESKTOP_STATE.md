@@ -12,7 +12,7 @@ The autosave hook signals a pending write after commit instead of invoking the l
 
 ## Snapshot compatibility
 
-The writer now uses `OBMH12S7` (see [preparation menus](PREPARATION.md)); S5 originally introduced desktop state. The desktop record remains inside the existing O1.2 container. The reader also accepts S4 without desktop state and S5 without initial event state. The desktop section contains an explicit presence flag, up to four unique occupied seats, their fixed-size layout/prestige data and bounded autosave fields. Invalid presence flags, duplicate/unknown seats, invalid active seats and truncated records are rejected. The WORLD12 JSON format remains version 15.
+The writer now uses `OBMH12S8` (see [manager cursor](MANAGER_LOOP.md)); S5 originally introduced desktop state. The desktop record remains inside the existing O1.2 container. The reader also accepts S4 without desktop state and S5 without initial event state. The desktop section contains an explicit presence flag, up to four unique occupied seats, their fixed-size layout/prestige data and bounded autosave fields. Invalid presence flags, duplicate/unknown seats, invalid active seats and truncated records are rejected. The WORLD12 JSON format remains version 15.
 
 ## Verification
 
