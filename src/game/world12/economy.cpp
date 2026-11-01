@@ -64,11 +64,12 @@ void install_mailbox(GameState& g,const CareerEconomy& e,const std::array<uint8_
 }
 void capture_mailbox(CareerEconomy& e,const GameState& g,const std::array<uint8_t,4>& map){
     const auto global_mask=[&](uint32_t raw){uint32_t value=raw&0x80000000u;for(uint32_t n=0;n<4;++n)if(raw&(1u<<n))value|=1u<<map[n];return value;};
-    e.messages.clear();
-    for(size_t row=0;row<kMailboxEntries;++row){const auto at=row*kMailboxEntry;if(!word(g.mailbox,at))break;EconomyMessage m;
+    e.messages.clear();size_t retained=0;
+    for(size_t row=0;row<kMailboxEntries;++row){const auto at=row*kMailboxEntry;if(std::any_of(g.mailbox.begin()+ptrdiff_t(at),g.mailbox.begin()+ptrdiff_t(at+kMailboxEntry),[](auto b){return b!=0;}))retained=row+1;EconomyMessage m;
         m.recipients=global_mask(word(g.mailbox,at));m.read_by=global_mask(word(g.mailbox,at+4));m.date=uint16_t(uint16_t(g.mailbox[at+8])<<8|g.mailbox[at+9]);
         std::copy_n(g.mailbox.begin()+ptrdiff_t(at+10),kMailboxText,m.text.begin());e.messages.push_back(m);
     }
+    e.messages.resize(retained);
     e.recipient_mask=global_mask(g.memory.u32(layout::MailboxRecipientMask));
 }
 }
@@ -100,6 +101,12 @@ void capture_career_economy(World& world,const AiMatchProjection& projection){
     e.week=g.memory.u8(layout::Savestate_Layout_ExecutableField);
     for(uint8_t n=0;n<projection.human_managers();++n){const auto had_monthly=e.managers[map[n]].monthly.has_value();e.managers[map[n]]=read_manager(g,n,map);if(!had_monthly)e.managers[map[n]].monthly.reset();}
     capture_mailbox(e,g,map);
+}
+Bytes career_mailbox_bytes(const CareerEconomy& economy){GameState g;const std::array<uint8_t,4> identity{0,1,2,3};install_mailbox(g,economy,identity);return g.mailbox;}
+MailboxEditFailure edit_career_message(CareerEconomy& economy,int actor,int row,const std::array<uint8_t,0xa0>& expected,MailboxEditKind kind){
+    GameState g;const std::array<uint8_t,4> identity{0,1,2,3};install_mailbox(g,economy,identity);
+    const auto failure=edit_mailbox_entry(g.mailbox,actor,row,expected,kind);if(failure!=MailboxEditFailure::none)return failure;
+    auto candidate=economy;capture_mailbox(candidate,g,identity);economy=std::move(candidate);return failure;
 }
 void append_economy_message(CareerEconomy& economy,const EconomyMessage& message){
     if(!message.recipients||(message.recipients&~0x8000000fu)||message.read_by)throw std::invalid_argument("world12: invalid newly posted economy message");

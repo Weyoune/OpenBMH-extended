@@ -5,6 +5,7 @@
 #include "game/world12/codec.hpp"
 #include "game/messages.hpp"
 #include <iostream>
+#include <algorithm>
 namespace {
 using namespace bmh;using namespace bmh::world12;
 void check(bool value,const char* message){if(!value)throw std::runtime_error(message);}
@@ -103,7 +104,18 @@ int main()try {
     rejects([&]{daily_finance(missing,rules,DailyEconomyKind::plain_day);},"missing economy was silently initialized");check(missing==untouched,"invalid phase changed state");
     auto invalid=state;invalid.world.economy->messages[0].recipients=1u<<8;rejects([&]{make_save(invalid);},"unknown mailbox manager accepted");
     invalid=state;invalid.world.economy->managers[1].weekly_count=53;rejects([&]{make_save(invalid);},"oversized weekly history accepted");
-    auto raw=encode_world(initial.world);std::string legacy(raw.begin(),raw.end());const auto version=legacy.find("\"version\":20");check(version!=std::string::npos,"new economy schema version missing");legacy.replace(version,12,"\"version\":15");
+    auto raw=encode_world(initial.world);std::string legacy(raw.begin(),raw.end());const auto version=legacy.find("\"version\":21");check(version!=std::string::npos,"new economy schema version missing");legacy.replace(version,12,"\"version\":15");
     auto legacy_world=initial.world;legacy_world.economy.reset();check(decode_world(Bytes(legacy.begin(),legacy.end()))==legacy_world,"previous world schema15 ceased to load");
-    std::cout<<"Daily interest/shares, sparse global loan/holding/mail maps, weekly camp/history, persistent mailbox, schemas15/18 and rollback passed\n";
+    {
+        auto sparse=initial;auto& economy=*sparse.world.economy;economy.messages.clear();economy.recipient_mask=0;
+        for(uint8_t n=0;n<3;++n){EconomyMessage message;message.recipients=2;message.date=uint16_t(10+n);message.text[0]=uint8_t('A'+n);append_economy_message(economy,message);}
+        auto raw=career_mailbox_bytes(economy);std::array<uint8_t,0xa0> first;std::copy_n(raw.begin(),first.size(),first.begin());
+        check(edit_career_message(economy,1,0,first,MailboxEditKind::delete_for_manager)==MailboxEditFailure::none,"canonical mailbox deletion refused");
+        check(economy.messages.size()==3&&economy.messages[0].recipients==0&&economy.messages[0].text[0]=='A'&&economy.messages[2].text[0]=='C',"canonical mailbox lost physical hole or following message");
+        check(read_save(make_save(sparse))==sparse,"sparse mailbox snapshot failed");
+        const auto encoded=encode_world(sparse.world);std::string old(encoded.begin(),encoded.end());const auto version=old.find("\"version\":21");check(version!=std::string::npos,"sparse mailbox schema version missing");old.replace(version,12,"\"version\":20");rejects([&]{decode_world(Bytes(old.begin(),old.end()));},"older schema admitted unrepresentable physical mail holes");
+
+        EconomyMessage next;next.recipients=2;next.date=20;next.text[0]='D';append_economy_message(economy,next);check(economy.messages.size()==3&&economy.messages[0].text[0]=='D'&&economy.messages[1].text[0]=='B',"new mail did not refill first Original hole");
+    }
+    std::cout<<"Daily interest/shares, sparse global loan/holding/mail maps, weekly camp/history, persistent/sparse mailbox, schemas15/21 and rollback passed\n";
 }catch(const std::exception& error){draw_hook=nullptr;std::cerr<<error.what()<<'\n';return 1;}

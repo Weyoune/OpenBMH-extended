@@ -2244,7 +2244,7 @@ void StartupFlow::show_mailbox(MailboxState state) {
         state.revision != desktop_->state().revision)
         throw FormatError("mailbox: expected a pending message navigation on the engine desk");
     auto screen = std::make_unique<MailboxScreen>(data_, std::move(state),
-        original_to_utf8(desktop_->state().manager_name), desktop_->render());
+        original_to_utf8(desktop_->state().manager_name), desktop_->render(),render_reference());
     desktop_->resolve_local_menu();
     mailbox_ = std::move(screen);
 }
@@ -2360,7 +2360,7 @@ void StartupFlow::acknowledge_mailbox(MailboxState state, PreparationState prepa
         mailbox_->pending()->revision != desktop_->state().revision ||
         mailbox_->pending()->manager_slot != state.manager_slot ||
         state.revision != preparation.desktop.revision ||
-        preparation.desktop.source != "engine_projection" ||
+        preparation.desktop.source != desktop_->state().source ||
         preparation.desktop.manager_slot != state.manager_slot ||
         preparation.desktop.runtime_club != desktop_->state().runtime_club ||
         preparation.desktop.day_counter != desktop_->state().day_counter ||

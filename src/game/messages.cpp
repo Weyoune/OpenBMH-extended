@@ -7,6 +7,29 @@
 #include <cstdio>
 
 namespace bmh {
+MailboxEditFailure edit_mailbox_entry(std::vector<uint8_t>& bytes,int actor,int row,
+    const std::array<uint8_t,0xa0>& expected,MailboxEditKind kind){
+    if(actor<0||actor>3)return MailboxEditFailure::invalid_actor;
+    if(row<0||row>=int(kMailboxEntries)||bytes.size()<kMailboxEntries*kMailboxEntry)return MailboxEditFailure::missing;
+    const size_t at=size_t(row)*kMailboxEntry;
+    if(!std::equal(expected.begin(),expected.end(),bytes.begin()+ptrdiff_t(at)))return MailboxEditFailure::changed;
+    const auto word=[&](size_t p){return uint32_t(bytes[p])|uint32_t(bytes[p+1])<<8|uint32_t(bytes[p+2])<<16|uint32_t(bytes[p+3])<<24;};
+    const uint32_t bit=1u<<actor,recipients=word(at),kept=word(at+4);
+    if(!(recipients&bit))return MailboxEditFailure::not_recipient;
+    size_t target=at;uint32_t value=recipients;
+    switch(kind){
+    case MailboxEditKind::toggle_keep:{size_t count=0;for(size_t n=0;n<kMailboxEntries;++n)if((word(n*kMailboxEntry)&bit)&&(word(n*kMailboxEntry+4)&bit))++count;
+        // Source tests recipient+1, including its per-seat quota exception.
+        if(!((recipients+1u)&bit)&&count>=5)return MailboxEditFailure::keep_limit;
+        target+=4;value=kept^bit;break;}
+    case MailboxEditKind::delete_for_manager:
+        if(kept&bit)return MailboxEditFailure::kept;
+        value=recipients^bit;if(value==0x80000000u)value=0;break;
+    default:return MailboxEditFailure::unknown;
+    }
+    for(size_t n=0;n<4;++n)bytes[target+n]=uint8_t(value>>(n*8));return MailboxEditFailure::none;
+}
+
 
 namespace {
 

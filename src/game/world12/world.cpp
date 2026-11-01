@@ -19,7 +19,7 @@ void validate_manager_tactics(const ManagerTactics& tactics) {
 void World::validate(bool complete)const {
     if(economy){for(const auto& m:economy->managers)if(m.monthly&&m.monthly->history_count>12)throw std::invalid_argument("world12: invalid monthly history cursor");if(!settings||economy->week>11||economy->messages.size()>40||economy->recipient_mask&~0x8000000fu)throw std::invalid_argument("world12: invalid career economy");
         for(const auto& m:economy->managers)if(m.weekly_count>52)throw std::invalid_argument("world12: invalid weekly history cursor");
-        for(const auto& m:economy->messages)if(!m.recipients||(m.recipients&~0x8000000fu)||(m.read_by&~15u))throw std::invalid_argument("world12: invalid message recipients");}
+        for(const auto& m:economy->messages)if((m.recipients&~0x8000000fu)||(m.read_by&~15u))throw std::invalid_argument("world12: invalid message recipients");}
     if(markets && (!players_initialized || markets->first_default_name>1))throw std::invalid_argument("world12: invalid career market state");
     if(settings && (!free_players || settings->mode<1 || settings->mode>3 || settings->difficulty>9 || settings->duration>5 || settings->planned_managers<1 || settings->planned_managers>4 || managers.size()>settings->planned_managers))throw std::invalid_argument("world12: invalid career settings");
     for(const auto& manager:managers)if(manager.career) {

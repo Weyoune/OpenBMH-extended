@@ -13,6 +13,8 @@
 #include "formats/palette.hpp"
 #include "ui/pending_offer.hpp"
 #include "ui/incoming_transfer.hpp"
+#include "game/world12/economy.hpp"
+#include "game/world12/desktop_projection.hpp"
 #include <fstream>
 #include <algorithm>
 #include <chrono>
@@ -280,6 +282,40 @@ void actual_save_load(ui::StartupFlow& flow,std::unique_ptr<session_app::Session
     if(!output.empty()){std::filesystem::copy_file(path,output/"manual-save.FBM",std::filesystem::copy_options::overwrite_existing);std::ofstream(output/"save-directory.txt")<<directory.string()<<'\n';}
     std::cout<<"Actual Original file dialogs: save/confirmed overwrite/info/desktop load/setup load/corrupt rejection/reopened pitch, four save draws and zero resume draws passed\n";
 }
+void actual_mailbox(const std::filesystem::path& data,const CareerSnapshot& base,const std::filesystem::path& output){
+    const auto directory=std::filesystem::temp_directory_path()/("openbmh-mailbox-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);
+    struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code ignored;std::filesystem::remove_all(path,ignored);}} cleanup{directory};
+    auto fixture=base;auto& economy=*fixture.world.economy;economy.messages.clear();economy.recipient_mask=0;
+    const auto actor=*fixture.desktop->active_seat;const auto peer=fixture.world.managers[0].seat==actor?fixture.world.managers[1].seat:fixture.world.managers[0].seat;
+    for(int row=0;row<4;++row){EconomyMessage message;message.recipients=row==1?0x80000000u|(1u<<actor)|(1u<<peer):1u<<(row==3?peer:actor);message.date=uint16_t(fixture.date);
+        const std::string text="Synthetic mailbox message "+std::to_string(row);std::copy(text.begin(),text.end(),message.text.begin());append_economy_message(economy,message);}
+    const auto file=directory/"Mailbox.FBM";write_savegame(file,make_save(fixture));
+    ui::StartupFlow flow(data,directory,ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> session;
+    const auto send=[&](const ui::FlowResult& action){const auto result=session_app::serve_startup(flow,action,session,data,91,88);if(!result.error.empty())throw std::runtime_error("mailbox GUI: "+result.error);};
+    flow.click(60,215);send(flow.click(240,215));send(flow.send_key("ENTER"));check(session&&flow.screen_name()=="desktop","mailbox fixture did not load through setup");
+    const auto seed=session->snapshot().game_seed;const auto wr=session->snapshot().watcom_seed;
+    if(!output.empty())std::filesystem::create_directories(output);
+    const auto capture=[&](const char* name){if(output.empty())return;const auto frame=flow.render();const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));std::ofstream f(output/(std::string(name)+".ppm"),std::ios::binary);f<<"P6\n320 240\n255\n";for(auto pixel:frame.pixels){const auto color=palette.argb[pixel];f.put(char(color>>16));f.put(char(color>>8));f.put(char(color));}};
+    flow.move(1,239);const auto opening=flow.click(182,220);check(opening.request==ui::FlowRequest::desk_action&&opening.desk_action.menu_kind==63,"Original newspaper shortcut did not request mailbox");send(opening);
+    check(flow.screen_name()=="mailbox"&&session->mailbox_view().messages.size()==3,"mailbox leaked other manager or hid an owned message");capture("before");
+    const auto rules=session->rules();
+    const auto button=[&](int i){return flow.click(0x33+(rules.u8(layout::MailboxScreen_Click_RuntimeField+uint32_t(i))+rules.u8(layout::MailboxScreen_Click_RuntimeField3+uint32_t(i)))/2,0x16+(rules.u8(layout::MailboxScreen_Click_RuntimeField2+uint32_t(i))+rules.u8(layout::MailboxScreen_Click_RuntimeField4+uint32_t(i)))/2);};
+    const auto article=[&]{return flow.click(0x33+(rules.u8(layout::MailboxScreen_Click_RuntimeField5)+rules.u8(layout::MailboxScreen_Click_RuntimeField7))/2,0x16+(rules.u8(layout::MailboxScreen_Click_RuntimeField6)+rules.u8(layout::MailboxScreen_Click_RuntimeField8))/2);};
+    send(button(2));const auto keep=article();check(keep.request==ui::FlowRequest::mailbox_action,"Original keep control did not emit typed action");send(keep);
+    check(session->snapshot().world.economy->messages[0].read_by&(1u<<actor),"mailbox keep was not saved for global actor");
+    const auto kept=session->snapshot();const auto revision=session->revision();send(button(3));const auto refused=article();check(!session_app::serve_startup(flow,refused,session,data,91,88).error.empty()&&session->snapshot()==kept&&session->revision()==revision&&!flow.pending_mailbox(),"kept message deletion leaked state or kept a stale pending command");capture("kept-refusal");
+    send(button(2));send(article());send(button(3));const auto first=article();send(first);
+    check(session->snapshot().world.economy->messages[0].recipients==0&&session->mailbox_view().messages[0].entry_index==1,"mailbox deletion compacted physical slots or lost later mail");
+    const auto untouched=session->snapshot();rejects([&]{session->edit_mailbox(first.mailbox_action);},"mailbox replay bypassed revision guard");check(session->snapshot()==untouched,"stale mailbox action changed state");
+    send(article());check(session->snapshot().world.economy->messages[1].recipients==(0x80000000u|(1u<<peer)),"shared mail deletion removed peer recipient");capture("after");
+    const auto before_close=session->revision();send(flow.click(0,0,true));
+    check(flow.screen_name()=="desktop"&&!session->preparation_open()&&session->revision()==before_close&&!flow.desktop()->state().mailbox_notification_pending,"mailbox close failed to return to exact parent/clear actor latch");
+    check(session->snapshot().world.economy->recipient_mask&(1u<<peer),"mailbox close acknowledged peer notifications");
+    check(session->snapshot().game_seed==seed&&session->snapshot().watcom_seed==wr&&session->snapshot().date==fixture.date,"mailbox consumed RNG or advanced date");
+    write_savegame(file,make_save(session->snapshot()));check(read_save(load_savegame(file))==session->snapshot(),"physical mailbox hole failed disk roundtrip");
+    if(!output.empty())std::filesystem::copy_file(file,output/"after.FBM",std::filesystem::copy_options::overwrite_existing);
+    std::cout<<"Actual Original mailbox shortcut, shared/private recipients, keep/refusal/delete, physical holes, actor-only close, RNG-neutral snapshots and stale rollback passed\n";
+}
 void actual_four_managers(const std::filesystem::path& data,const std::filesystem::path& output) {
     const auto resources=session_app::load_runtime_resources(data);ui::StartupFlow flow(data,{},ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> session;
     const auto arrow=[&](int index){flow.click(resources.german.u16(layout::Setup_FormatError_RuntimeField3+uint32_t(index*2))+10,resources.german.u8(layout::Setup_FormatError_RuntimeField4+uint32_t(index))+10);};
@@ -477,6 +513,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     check(read_save(make_save(multi->snapshot()))==multi->snapshot(),"mixed initial event did not survive save");
     if(!output.empty())write_savegame(output/"first-event.FBM",make_save(multi->snapshot()));
     actual_management(mixed,multi,data,output.empty()?output:output/"mixed-management");
+    actual_mailbox(data,multi->snapshot(),output.empty()?output:output/"mailbox");
     actual_four_managers(data,output);
     actual_pending(data,output.empty()?output:output/"pending");
     actual_pending_multiplayer(data,output.empty()?output:output/"pending");

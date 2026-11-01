@@ -770,7 +770,7 @@ void StartupFlow::show_notified_mailbox(MailboxState state) {
         state.revision != desktop_->state().revision)
         throw FormatError("mailbox: automatic notification requires the idle active club desk");
     mailbox_ = std::make_unique<MailboxScreen>(data_, std::move(state),
-        original_to_utf8(desktop_->state().manager_name), desktop_->render());
+        original_to_utf8(desktop_->state().manager_name), desktop_->render(),render_reference());
 }
 
 void StartupFlow::acknowledge_mailbox_close(const MailboxCloseRequest& request, DeskState desk,
@@ -778,7 +778,7 @@ void StartupFlow::acknowledge_mailbox_close(const MailboxCloseRequest& request, 
     if (!mailbox_ || !pending_mailbox_close_ || *pending_mailbox_close_ != request || !desktop_ ||
         !engine_attached_ || request.manager_slot != desktop_->state().manager_slot ||
         request.manager_slot != mailbox_->state().manager_slot || request.revision != desktop_->state().revision ||
-        request.revision != mailbox_->state().revision || desk.source != "engine_projection" ||
+        request.revision != mailbox_->state().revision || desk.source != desktop_->state().source ||
         desk.revision != request.revision || preparation.desktop.revision != request.revision ||
         desk.manager_slot != request.manager_slot || desk.runtime_club != desktop_->state().runtime_club ||
         desk.day_counter != desktop_->state().day_counter || desk.mailbox_notification_pending)

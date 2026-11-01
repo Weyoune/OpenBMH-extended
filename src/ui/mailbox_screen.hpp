@@ -19,6 +19,8 @@ class MailboxScreen {
 public:
     MailboxScreen(const std::filesystem::path& data, MailboxState state,
                   std::string manager_name, Image desktop_background);
+    MailboxScreen(const std::filesystem::path& data, MailboxState state,
+                  std::string manager_name, Image desktop_background,const LeImage& reference);
     Image render() const;
     bool click(int x, int y, bool right = false);
     bool key(std::string_view value);

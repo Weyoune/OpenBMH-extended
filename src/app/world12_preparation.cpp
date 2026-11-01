@@ -112,7 +112,7 @@ void Session::apply_preparation(const ui::PreparationRequest& request) {
     projection.commit_match_state(candidate.world);capture_display(candidate,projection);candidate.validate();
     if(state_!=before||owner_.revision!=revision)throw FormatError("world12: preparation owner changed during command");state_=std::move(candidate);++owner_.revision;
 }
-void Session::close_preparation(){if(!preparation_menu_)throw FormatError("world12: no preparation menu to close");preparation_menu_.reset();}
+void Session::close_preparation(){if(preparation_menu_&&*preparation_menu_==63)throw FormatError("world12: mailbox requires its owned close request");if(!preparation_menu_)throw FormatError("world12: no preparation menu to close");preparation_menu_.reset();}
 ui::PreparationState Session::preparation_view(const std::filesystem::path& data)const {
     return ui::world12_preparation(data,state_,resources_.reference,resources_.german,options_,owner_.revision);
 }

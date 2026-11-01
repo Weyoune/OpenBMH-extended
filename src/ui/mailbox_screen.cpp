@@ -30,10 +30,14 @@ void copy(Image& out, const Image& source, int sx, int sy, int dx, int dy, int w
 
 MailboxScreen::MailboxScreen(const std::filesystem::path& data, MailboxState state,
                              std::string manager_name, Image desktop_background)
+    :MailboxScreen(data,std::move(state),std::move(manager_name),std::move(desktop_background),load_le(asset_path(data,"BMH.exe"))) {}
+
+MailboxScreen::MailboxScreen(const std::filesystem::path& data,MailboxState state,
+                             std::string manager_name,Image desktop_background,const LeImage& reference)
     : state_(std::move(state)), manager_name_(std::move(manager_name)),
       desktop_background_(std::move(desktop_background)),
       atlas_(load_vga(asset_path(data / "KB", "32.VGA"))),
-      exe_(load_le(asset_path(data, "BMH.exe"))), texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
+      exe_(reference), texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
       font_(load_font(asset_path(data / "F", "BMH3.FNT"))) {
     validate_state(state_);
     page_ = page_count() - 1; // MailboxStateFromGame opens the latest three-message page.

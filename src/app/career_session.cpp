@@ -4363,52 +4363,18 @@ bool CareerSession::dispatch_mailbox(const ui::MailboxActionRequest& request, ui
         error = "Diese Nachricht gehört zu einem veralteten Postfach.";
         return false;
     }
-    constexpr size_t entry_size = 0xa0, entries = 40;
-    if (request.entry_index < 0 || size_t(request.entry_index) >= entries ||
-        g_.mailbox.size() < entries * entry_size) {
-        error = "Diese Nachricht ist nicht mehr vorhanden.";
-        return false;
+    MailboxEditKind kind=static_cast<MailboxEditKind>(255);
+    if(request.kind==ui::MailboxActionKind::toggle_keep)kind=MailboxEditKind::toggle_keep;
+    else if(request.kind==ui::MailboxActionKind::delete_for_manager)kind=MailboxEditKind::delete_for_manager;
+    switch(edit_mailbox_entry(g_.mailbox,active,request.entry_index,request.expected_entry,kind)){
+    case MailboxEditFailure::none:break;
+    case MailboxEditFailure::missing:error="Diese Nachricht ist nicht mehr vorhanden.";return false;
+    case MailboxEditFailure::changed:error="Diese Nachricht wurde inzwischen geändert.";return false;
+    case MailboxEditFailure::not_recipient:error="Diese Nachricht ist nicht an diesen Manager gerichtet.";return false;
+    case MailboxEditFailure::keep_limit:error="Die Originalgrenze für gemerkte Nachrichten ist erreicht.";return false;
+    case MailboxEditFailure::kept:error="Diese Nachricht ist noch gemerkt.";return false;
+    default:error="Unbekannte Postfachaktion.";return false;
     }
-    const size_t at = size_t(request.entry_index) * entry_size;
-    if (!std::equal(request.expected_entry.begin(), request.expected_entry.end(), g_.mailbox.begin() + at)) {
-        error = "Diese Nachricht wurde inzwischen geändert.";
-        return false;
-    }
-    const auto word = [&](size_t p) {
-        return uint32_t(g_.mailbox[p]) | uint32_t(g_.mailbox[p + 1]) << 8 |
-               uint32_t(g_.mailbox[p + 2]) << 16 | uint32_t(g_.mailbox[p + 3]) << 24;
-    };
-    const uint32_t bit = uint32_t(1) << active;
-    const uint32_t recipients = word(at), kept = word(at + 4);
-    if (!(recipients & bit)) {
-        error = "Diese Nachricht ist nicht an diesen Manager gerichtet.";
-        return false;
-    }
-    size_t target = at;
-    uint32_t value = recipients;
-    if (request.kind == ui::MailboxActionKind::toggle_keep) {
-        int count = 0;
-        for (size_t i = 0; i < entries; ++i)
-            if ((word(i * entry_size) & bit) && (word(i * entry_size + 4) & bit)) ++count;
-        // MailboxStateFromGame tests (recipient word + 1), NOT the kept word. Preserve
-        // its manager-specific five-entry exception, including blocked unkeep.
-        if (!((recipients + 1u) & bit) && count >= 5) {
-            error = "Die Originalgrenze für gemerkte Nachrichten ist erreicht.";
-            return false;
-        }
-        target += 4; value = kept ^ bit;
-    } else if (request.kind == ui::MailboxActionKind::delete_for_manager) {
-        if (kept & bit) {
-            error = "Diese Nachricht ist noch gemerkt.";
-            return false;
-        }
-        value = recipients ^ bit;
-        if (value == 0x80000000u) value = 0;
-    } else {
-        error = "Unbekannte Postfachaktion.";
-        return false;
-    }
-    for (size_t i = 0; i < 4; ++i) g_.mailbox[target + i] = uint8_t(value >> (8 * i));
     ++revision;
     return true;
 }

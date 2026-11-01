@@ -7,7 +7,7 @@
 #include "ui/world12_manager_selection.hpp"
 #include "ui/preparation.hpp"
 #include "game/pending_offer.hpp"
-namespace bmh::ui {struct DeskRequest;struct SaveLoadRequest;}
+namespace bmh::ui {struct DeskRequest;struct SaveLoadRequest;struct MailboxState;struct MailboxActionRequest;struct MailboxCloseRequest;}
 namespace bmh::app::world12 {
 struct RuntimeResources {
     bmh::world12::World master;
@@ -32,6 +32,10 @@ public:
     DesktopEntryOutcome begin_first_event(uint64_t expected_revision);
     DesktopEntryOutcome advance_manager(const ui::DeskRequest&);
     PendingOfferResult resolve_pending(const std::filesystem::path&,const ui::DeskRequest&,const PendingOfferHooks&);
+    void open_mailbox(const ui::DeskRequest&);
+    ui::MailboxState mailbox_view()const;
+    void edit_mailbox(const ui::MailboxActionRequest&);
+    void close_mailbox(const ui::MailboxCloseRequest&);
     void open_preparation(const ui::DeskRequest&);
     void apply_preparation(const ui::PreparationRequest&);
     void close_preparation();

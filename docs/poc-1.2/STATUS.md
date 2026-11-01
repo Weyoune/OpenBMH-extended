@@ -447,3 +447,14 @@ market tick preserves the Source event-seeking order and stops at the annual
 desk boundary. Seventy dated full-Core fixtures match; they deliberately omit
 match/calendar execution. See [daily services](DAILY_SERVICES.md). Saved event
 ownership and GUI day progression remain the next integration gate.
+
+## Original mailbox GUI
+
+The existing newspaper shortcut now opens the Original mailbox for the typed
+active manager. Keep/delete actions use the shared legacy kernel, authenticated
+physical entries and global manager quota semantics. Shared recipients survive
+another manager's deletion. Close clears only the active notification latch,
+without RNG/date/revision advancement. Schema21 retains deleted physical holes
+and raw text so following messages and first-hole insertion survive save/load.
+Actual GUI captures and a saved fixture accompany the QA receipt. Automatic
+notification presentation will be attached with the general event owner.

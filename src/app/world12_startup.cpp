@@ -27,6 +27,16 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
         auto desk=ui::world12_initial_desktop(data,staged->snapshot(),staged->reference(),staged->rules(),staged->options(),staged->revision());
         auto view=flow.prepare_world12_file_result(std::move(desk),staged->rules(),request);session.swap(staged);flow.finish_world12_desktop(std::move(view));return {};
     }
+    if(action.request==ui::FlowRequest::mailbox_action){
+        if(!session||!flow.pending_mailbox()||*flow.pending_mailbox()!=action.mailbox_action)throw FormatError("world12: mailbox command has no view owner");
+        auto staged=std::make_unique<Session>(*session);staged->edit_mailbox(action.mailbox_action);
+        auto view=staged->mailbox_view();auto parent=staged->preparation_view(data);flow.acknowledge_mailbox(std::move(view),std::move(parent));session.swap(staged);return {};
+    }
+    if(action.request==ui::FlowRequest::mailbox_closed){
+        if(!session||!flow.pending_mailbox_close()||*flow.pending_mailbox_close()!=action.mailbox_close)throw FormatError("world12: mailbox close has no view owner");
+        auto staged=std::make_unique<Session>(*session);staged->close_mailbox(action.mailbox_close);auto parent=staged->preparation_view(data);auto desk=parent.desktop;
+        flow.acknowledge_mailbox_close(action.mailbox_close,std::move(desk),std::move(parent));session.swap(staged);return {};
+    }
     if(action.request==ui::FlowRequest::new_career){const auto* request=flow.pending_career();if(!request||!request->options.country_selection)throw FormatError("world12: no typed career request");
         if(request->managers.empty()){
             if(session)throw FormatError("world12: a startup session already exists");
@@ -52,6 +62,9 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
     }
     if(action.request==ui::FlowRequest::desk_action){
         if(!session||!flow.desktop()||!flow.desktop()->pending()||*flow.desktop()->pending()!=action.desk_action)throw FormatError("world12: desktop command has no matching view owner");
+        if(action.desk_action.kind==ui::DeskRequestKind::open_menu&&action.desk_action.menu_kind==63){
+            auto staged=std::make_unique<Session>(*session);staged->open_mailbox(action.desk_action);flow.show_mailbox(staged->mailbox_view());session.swap(staged);return {};
+        }
         if(action.desk_action.kind==ui::DeskRequestKind::open_menu&&(action.desk_action.menu_kind==10||action.desk_action.menu_kind==11)){
             session->validate_file_owner(action.desk_action.manager_slot,action.desk_action.revision);
             flow.open_world12_file_dialog(action.desk_action.menu_kind==10?ui::SaveLoadMode::load:ui::SaveLoadMode::save,session->rules(),save_info_reader(session->rules()));return {};
@@ -67,5 +80,5 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
     if(action.request==ui::FlowRequest::submenu_closed&&session&&!flow.in_preparation_menu()){if(session->preparation_open())session->close_preparation();return {};}
     if(action.request!=ui::FlowRequest::none&&action.request!=ui::FlowRequest::submenu_opened&&action.request!=ui::FlowRequest::submenu_closed)throw FormatError("world12: this frontend action has no typed owner yet");
     return {};
-}catch(const std::exception& error){if(action.request==ui::FlowRequest::file_action&&flow.pending_file()&&*flow.pending_file()==action.file_action)flow.reject_file_action(error.what());if(action.request==ui::FlowRequest::desk_action||action.request==ui::FlowRequest::kickoff)flow.reject_desk_action(error.what());else if(action.request==ui::FlowRequest::submenu_action&&flow.matches_pending_preparation(action.submenu_action))flow.reject_preparation_action(error.what());return {StartupProgress::idle,error.what()};}
+}catch(const std::exception& error){if(action.request==ui::FlowRequest::mailbox_action&&flow.pending_mailbox())flow.reject_mailbox(error.what());if(action.request==ui::FlowRequest::mailbox_closed&&flow.pending_mailbox_close())flow.reject_mailbox_close(error.what());if(action.request==ui::FlowRequest::file_action&&flow.pending_file()&&*flow.pending_file()==action.file_action)flow.reject_file_action(error.what());if(action.request==ui::FlowRequest::desk_action||action.request==ui::FlowRequest::kickoff)flow.reject_desk_action(error.what());else if(action.request==ui::FlowRequest::submenu_action&&flow.matches_pending_preparation(action.submenu_action))flow.reject_preparation_action(error.what());return {StartupProgress::idle,error.what()};}
 }

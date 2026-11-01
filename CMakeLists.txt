@@ -1238,11 +1238,16 @@ add_library(bmhworld12_app STATIC src/app/world12_cups.cpp src/app/world12_manag
 target_link_libraries(bmhworld12_app PUBLIC bmhworld12)
 add_library(bmhworld12_ui STATIC src/ui/world12_other_games.cpp src/ui/world12_manager_selection.cpp src/ui/world12_desktop.cpp src/ui/world12_preparation.cpp)
 target_link_libraries(bmhworld12_ui PUBLIC bmhui bmhworld12)
-add_library(bmhworld12_session STATIC src/app/world12_session.cpp src/app/world12_startup.cpp src/app/world12_preparation.cpp src/app/world12_save_load.cpp)
+add_library(bmhworld12_session STATIC src/app/world12_session.cpp src/app/world12_startup.cpp src/app/world12_preparation.cpp
+    src/app/world12_mailbox.cpp src/app/world12_save_load.cpp)
 target_link_libraries(bmhworld12_session PUBLIC bmhworld12_app bmhworld12_ui)
 if(TARGET openbmh_play)
     target_link_libraries(openbmh_play PRIVATE bmhworld12_session)
 endif()
+
+add_executable(mailbox_actions_unit_tests tests/mailbox_actions_unit_tests.cpp)
+target_link_libraries(mailbox_actions_unit_tests PRIVATE bmhcore)
+add_test(NAME mailbox_actions_unit_tests COMMAND mailbox_actions_unit_tests)
 
 add_executable(world12_daily_services_tests tests/world12_daily_services_tests.cpp)
 target_link_libraries(world12_daily_services_tests PRIVATE bmhworld12)

@@ -743,7 +743,7 @@ void DesktopScreen::acknowledge_mailbox_parent(DeskState updated) {
     validate_desk_state(updated);
     const bool revision_ok = updated.revision == state_.revision ||
         (state_.revision != std::numeric_limits<uint64_t>::max() && updated.revision == state_.revision + 1);
-    if (pending_ || updated.source != "engine_projection" ||
+    if (pending_ || updated.source != state_.source ||
         updated.manager_slot != state_.manager_slot || updated.runtime_club != state_.runtime_club ||
         !revision_ok ||
         (state_.mailbox_notification_pending == false && updated.mailbox_notification_pending))

@@ -13,6 +13,7 @@
 // When the box is full the oldest entry (read ones first) is dropped (DropOldestMessage).
 
 #include <cstdint>
+#include <array>
 #include <string>
 #include <vector>
 
@@ -24,6 +25,12 @@ namespace bmh {
 constexpr size_t kMailboxEntries = 40;
 constexpr size_t kMailboxEntry = 0xA0;
 constexpr size_t kMailboxText = 0x96;
+
+enum class MailboxEditKind { toggle_keep,delete_for_manager };
+enum class MailboxEditFailure { none,invalid_actor,missing,changed,not_recipient,keep_limit,kept,unknown };
+MailboxEditFailure edit_mailbox_entry(std::vector<uint8_t>&,int actor,int row,
+    const std::array<uint8_t,0xa0>& expected,MailboxEditKind);
+
 
 // PostMessage. recipients: a manager index, -1 = all managers, or a mask with bit 31 set.
 void post_message(GameState& g, int64_t recipients, const std::vector<uint8_t>& text);
