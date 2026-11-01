@@ -29,6 +29,10 @@ struct InitialDeskEvent {
 };
 struct DesktopRuntime {
     std::vector<ManagerDesktop> managers;
+    // The next shuffle starts from the preceding event's order, not seat order.
+    // Empty means an older snapshot did not preserve this owner information.
+    std::vector<uint8_t> manager_order;
+    std::optional<uint16_t> matchday_number;
     std::optional<uint8_t> active_seat;
     bool autosave_pending=false;
     uint16_t autosave_month=0,autosave_months=0;

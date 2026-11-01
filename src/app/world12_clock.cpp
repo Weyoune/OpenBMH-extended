@@ -44,6 +44,8 @@ void finish_initial_event(CareerSnapshot& state,ManagerActionOwner& owner,Manage
     if(candidate.world.free_players){for(auto id:candidate.world.free_players->domestic)clear(id);for(auto id:candidate.world.free_players->foreign)clear(id);}
     if(candidate.world.transfer_market)for(const auto& row:candidate.world.transfer_market->rows)if(row)clear(row->player);
     candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();
+    candidate.desktop->manager_order=event.manager_order;
+    candidate.desktop->matchday_number=event.matchday_number;
     candidate.desktop->initial_event.reset();candidate.desktop->active_seat.reset();complete_empty_day(candidate);candidate.progress=progress;candidate.validate();
     if(state!=before)throw FormatError("world12: initial event changed while closing");owner_matches(owner,expected);state=std::move(candidate);++owner.revision;
 }

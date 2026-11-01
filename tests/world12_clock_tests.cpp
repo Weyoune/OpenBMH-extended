@@ -84,7 +84,7 @@ int main()try {
     check(state.game_seed==initial.game_seed&&state.watcom_seed==initial.watcom_seed&&owner.revision==8&&!state.world.transfer_market->rows[40],"event close consumed RNG, retained an unowned quote or lost revision");
     check(!state.world.managers[0].tactics->backing->marks[0].valid()&&state.world.managers[0].tactics->backing->scalar_rows[11][0x10]==0x7f,"empty match finish did not clear marking and retain lineup/bench status");
     check(!(state.world.players.at(state.world.clubs.at(state.world.membership[0].clubs[2]).roster[0].player).attributes.w364&0x1000u),"empty kickoff skipped canonical AI played flags");
-    const auto pending=state;check(read_save(make_save(state))==state&&make_save(state).stream[7]=='B',"SB pending clock snapshot failed");
+    const auto pending=state;check(read_save(make_save(state))==state&&make_save(state).stream[7]=='C',"SC pending clock/order snapshot failed");
     auto truncated=make_save(state);truncated.stream.pop_back();rejects([&]{read_save(truncated);},"truncated clock accepted");
     auto invalid=state;invalid.progress->phase=ProgressPhase::scheduled_event;rejects([&]{invalid.validate();},"scheduled owner accepted without appointment");
     auto bad=state;app::ManagerActionOwner wrong{52,8};rejects([&]{app::advance_clock_step(bad,owner,wrong,rules,TextDb{},{});},"foreign progression owner accepted");check(bad==pending,"foreign progression changed state");

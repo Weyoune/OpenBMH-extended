@@ -102,6 +102,8 @@ DesktopEntryOutcome prepare_first_desk_event(CareerSnapshot& state,ManagerAction
     for(const auto& manager:candidate.world.managers)event.manager_order.push_back(manager.seat);
     for(size_t i=0;i<event.manager_order.size();++i)std::swap(event.manager_order[i],event.manager_order[size_t(game.range(0,int(event.manager_order.size())-1))]);
     event.offer=initial_offer(candidate,event.manager_order.front(),reference,random);
+    candidate.desktop->manager_order=event.manager_order;
+    candidate.desktop->matchday_number=event.matchday_number;
     candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();candidate.desktop->initial_event=std::move(event);
     ManagerActionOwner staged{owner.scope,0};const auto entered=enter_initial_manager_desktop(candidate,staged,staged,candidate.desktop->initial_event->manager_order.front(),reference);
     candidate.validate();

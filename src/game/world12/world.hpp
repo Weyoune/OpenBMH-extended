@@ -132,6 +132,17 @@ struct Manager {
     std::optional<ManagerCareerState> career={};
     bool operator==(const Manager&)const=default;
 };
+// A nomination references the club-owned players without transferring them.
+// Its national tactical board is independent of the manager's club board.
+struct NationalSquad {
+    ClubId team;
+    uint32_t nominated_on=0;
+    std::optional<uint8_t> coach;
+    std::array<RosterSlot,24> roster;
+    ManagerTactics tactics;
+    ManagerMatchState match_state;
+    bool operator==(const NationalSquad&)const=default;
+};
 struct CrestResource {std::string path;uint8_t cell=0;bool operator==(const CrestResource&)const=default;};
 struct EconomyMessage {
     uint32_t recipients=0,read_by=0;uint16_t date=0;
@@ -213,6 +224,7 @@ struct TransferMarket {
 };
 using GlobalPlayerStatistics = std::map<std::pair<ClubId,PlayerId>,PlayerClubStatistics>;
 struct World {
+    std::vector<NationalSquad> national_squads;
     GlobalPlayerStatistics player_statistics;
     std::optional<CareerEconomy> economy;
     bool players_initialized=false;

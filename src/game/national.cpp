@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "formats/executable_layout.hpp"
 #include "game/national.hpp"
+#include "game/national_selection.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -20,7 +21,6 @@ constexpr size_t kBoardSlot = 0x58;
 constexpr uint32_t kDesktops = ::bmh::layout::Desktops;   // desktop layouts, 0x360 per manager slot
 constexpr size_t kDesktop = 0x360;
 const int& kPoolSlots = runtime_dimensions.pool_first;      // CareerRuntimeField: the clubs' squads end here
-constexpr uint8_t kNominated[4] = {3, 5, 7, 5};  // NationalRuntimeField: keepers, defence, midfield, attack
 
 // the manager's team (record +0x290) as the port caches it
 void refresh_manager_teams(GameState& g) {
@@ -101,6 +101,18 @@ void new_board_entry(GameState& g, int manager, int index, int slot, WatcomRando
     std::memset(e + 0x12, 0, 7);
 }
 
+int16_t national_nomination_strength(const Player& player, bool abroad) {
+    int16_t strength = int16_t(player.strength(false));
+    if (player.position() > 1)
+        strength = int16_t(strength + ((player.w364 >> 2) & 0x3f) + (((player.w368 >> 18) & 0x3f) >> 1));
+    if (abroad) strength = int16_t(strength * 11 / 10);
+    return strength;
+}
+
+bool national_nomination_available(const Player& player) {
+    return (player.w35c >> 27) == 0 || ((player.w364 >> 16) & 0x1f) == 0;
+}
+
 bool national_team_day(GameState& g, WatcomRandom& rand, MinuteReport& report) {
     StaticMemory& mem = g.memory;
     const SquadRange national = squad_range(kNoTeam);
@@ -118,31 +130,18 @@ bool national_team_day(GameState& g, WatcomRandom& rand, MinuteReport& report) {
 
     // the strongest available German players per position (NationalRuntimeField of each), kept in
     // ascending order: a stronger one pushes the weakest out
-    int16_t best[4][7] = {}, slots[4][7] = {};
+    NationalSquadSelection selection;
     for (size_t s = 0; s < kPoolSlots; s++) {
         const int id = g.squad_slots.at(s) & 0xfff;
         if (id == 0xfff) continue;
         const Player& p = g.players.at(size_t(id));
-        const bool fit = (p.w35c >> 27) == 0 || ((p.w364 >> 16) & 0x1f) == 0;
-        if (!fit || nationality(g, id) != 0) continue;
-        const int pos = int(p.w364 & 3);
-        int16_t strength = int16_t(p.strength(false));  // Strength(w35c, 0)
-        if (pos > 1) strength = int16_t(strength + ((p.w364 >> 2) & 0x3f) + (((p.w368 >> 18) & 0x3f) >> 1));
-        if (s > 0x86f) strength = int16_t((strength * 0xb) / 10);  // (the clubs from slot 0x870 on)
-        int i = 0;
-        // NationalTeamDay caps the insertion index at the positional quota. Guard
-        // before indexing: the full seven-player row has no C++ eighth element.
-        while (i < kNominated[pos] && strength > best[pos][i]) i++;
-        if (i == 0) continue;
-        const int j = i - 1;
-        // Int16T: entries 1..j move down one place, the new one takes place j
-        for (int k = 0; k < j; k++) best[pos][k] = best[pos][k + 1], slots[pos][k] = slots[pos][k + 1];
-        best[pos][j] = strength;
-        slots[pos][j] = int16_t(s);
+        if (!national_nomination_available(p) || nationality(g, id) != 0) continue;
+        selection.consider(p.position(), national_nomination_strength(p, s > 0x86f), uint32_t(s));
     }
     // PendingOfferAnswer for each, weakest first, into the board of slot 0
     for (int pos = 0; pos < 4; pos++)
-        for (int k = 0; k < kNominated[pos]; k++) add_to_squad(g, 0, slots[pos][k], int(national.first), rand);
+        for (int k = 0; k < NationalSquadSelection::quotas[pos]; k++)
+            add_to_squad(g, 0, int(selection.token(pos, k)), int(national.first), rand);
     // Int2(0x165, 0xe4) with manager 0's option byte (ManagerAutomation) at 1
     const uint8_t option = g.manager_options.at(0);
     g.manager_options.at(0) = 1;

@@ -1,6 +1,35 @@
-# 1.2 development status
+# OpenBMH-Extended 1.0 Beta development status
 
-The application is **not yet a playable 1.2 release**. Branch `1.2` remains isolated from 1.1 and stable main.
+The application is **not yet a playable shared-career Beta**. Development is on `main` in this repository. Classic is maintained separately. Historical `1.2` names below identify the internal data model and earlier implementation milestones.
+
+
+## Latest integrated career work
+
+National nomination uses global player identities and the shared Original
+selection, contract-board and automatic-lineup calculations. German and English
+squads have their own saved tactical records; nomination does not transfer a
+player away from his club. Home squads precede expatriates, with Original
+positional quotas, availability OR, score bonus and stable tie ordering.
+World schema 24 stores these records and reads older empty-national-state worlds
+without inventing a squad. An older schema cannot silently discard an active one.
+
+The calendar owner authenticates the exact nomination appointment, prepares all
+represented countries atomically, and retains a single manager's country-specific
+coach boundary. Without a human coach, the actual empty setup, option cycle,
+manager shuffle and event closure run before saved daily processing resumes.
+Snapshot SC preserves the preceding event's manager order and matchday number;
+old S4–SB snapshots remain readable, but an unknown historical order is not guessed.
+
+Verification includes twelve direct Original nomination comparisons across two
+countries, three seeds and coach/no-coach cases, global IDs and a 4,680-player
+synthetic world, rejected/replayed transactions and saved continuation. The real
+four-manager data-only session reaches day 4, prepares German/English squads,
+saves/reloads, closes the uncoached appointment, and resumes daily services to its
+next appointment on day 17. These are backend/session-controller checks, not a
+claim that the GUI now completes the whole career. The human national preparation
+desk, general scheduled match/competition ownership and seasonal progression
+remain release work.
+
 
 Completed foundation:
 

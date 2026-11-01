@@ -93,4 +93,13 @@ PendingOfferResult Session::resolve_pending(const std::filesystem::path& data,co
     return resolve_initial_offer(state_,owner_,{owner_.scope,request.revision},resources_.reference,texts,hooks);
 }
 
+NationalAppointmentOutcome Session::prepare_national_day(uint64_t revision) {
+    if(preparation_menu_)throw FormatError("world12: an open menu owns the current career");
+    return prepare_national_appointment(state_,owner_,{owner_.scope,revision},resources_.reference);
+}
+NationalAppointmentOutcome Session::finish_uncoached_national_day(uint64_t revision) {
+    if(preparation_menu_)throw FormatError("world12: an open menu owns the current career");
+    return finish_uncoached_national_appointment(state_,owner_,{owner_.scope,revision},resources_.reference);
+}
+
 }

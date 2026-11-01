@@ -20,6 +20,11 @@ namespace bmh {
 
 struct MinuteReport;
 
+// The shared nomination score retains the original signed 16-bit arithmetic
+// and foreign-club bonus. Availability deliberately preserves its OR rule.
+int16_t national_nomination_strength(const Player&, bool abroad);
+bool national_nomination_available(const Player&);
+
 // SwapManagerSlots(a, b): manager slots a and b change places - the manager records (0xb0c
 // bytes), the tactics boards (0x840) and the desktop layouts (block Desktops, 0x360).
 void swap_manager_slots(GameState& g, int a, int b);

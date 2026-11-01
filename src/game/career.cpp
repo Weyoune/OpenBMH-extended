@@ -483,13 +483,17 @@ void initialize_career_manager_funds(GameState& g,int manager,int difficulty,int
     put32(g.manager_records,rec+0x31c,uint32_t(400000-league*100000));put32(g.manager_records,rec+0x310,1);
 }
 
-void career_managers_begin(GameState& g, bool adding) {
-    g.memory.add_block(::bmh::layout::CareerSession_FormatError_RuntimeField6, 1);
-    g.memory.set8(::bmh::layout::CareerSession_FormatError_RuntimeField6, 1);
+void initialize_national_manager_record(GameState& g) {
     const size_t rec = 4 * kRecord;
     put32(g.manager_records, rec + 0x314, 1000000);
     put32(g.manager_records, rec + 0x324, 1000000);
     for (size_t i = 0; i < 0xd; i++) g.manager_records.at(rec + 0xc5 + i) = 2;
+}
+
+void career_managers_begin(GameState& g, bool adding) {
+    g.memory.add_block(::bmh::layout::CareerSession_FormatError_RuntimeField6, 1);
+    g.memory.set8(::bmh::layout::CareerSession_FormatError_RuntimeField6, 1);
+    initialize_national_manager_record(g);
     if (adding) {
         const size_t count = g.memory.u8(::bmh::layout::ManagerCount);
         g.manager_teams.resize(count);

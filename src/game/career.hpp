@@ -140,6 +140,7 @@ struct CareerManager {
 // ConfirmManager before the first dialog: manager slot 4 (the national team's) gets the
 // training plan 2 and 1 000 000 money.
 void career_managers_begin(GameState& g, bool adding = false);
+void initialize_national_manager_record(GameState&);
 
 // StartingSponsors initializes the three sponsor contracts for mode I, or for a
 // one-year career before season day 0. The date check uses GameState.date,

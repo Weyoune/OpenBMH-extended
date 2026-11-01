@@ -70,6 +70,33 @@ std::optional<ManagerTacticalBacking> decode_tactical_backing(const J& value) {
     bytes(field(value,"formations"),result.formations);bytes(field(value,"formation_tail"),result.formation_tail);bytes(field(value,"enabled_formations"),result.enabled_formations);bytes(field(value,"automation"),result.automation);
     return result;
 }
+J encode_tactics(const ManagerTactics& tactics) {
+    A rows;
+    for(const auto& row:tactics.rows) {
+        A orders;for(auto value:row.orders)orders.emplace_back(int(value));
+        rows.emplace_back(O{{"orders",std::move(orders)},{"partner",int(row.partner)},
+            {"depth",int(row.depth)},{"lane",int(row.lane)}});
+    }
+    return O{{"rows",std::move(rows)},{"automatic_weights",int(tactics.automatic_weights)},
+        {"automatic_formation",int(tactics.automatic_formation)},
+        {"backing",encode_tactical_backing(tactics.backing)}};
+}
+ManagerTactics decode_tactics(const J& input,uint32_t version) {
+    ManagerTactics tactics;const auto& rows=array(field(input,"rows"));
+    if(rows.size()!=24)throw FormatError("world12: tactics require 24 rows");
+    for(size_t i=0;i<24;++i) {
+        const auto& row=rows[i];const auto& orders=array(field(row,"orders"));
+        if(orders.size()!=4)throw FormatError("world12: tactics require four player orders");
+        for(size_t j=0;j<4;++j)tactics.rows[i].orders[j]=uint8_t(number(orders[j],255));
+        tactics.rows[i].partner=uint8_t(number(field(row,"partner"),255));
+        tactics.rows[i].depth=uint8_t(number(field(row,"depth"),255));
+        tactics.rows[i].lane=uint8_t(number(field(row,"lane"),255));
+    }
+    tactics.automatic_weights=uint8_t(number(field(input,"automatic_weights"),255));
+    tactics.automatic_formation=uint8_t(number(field(input,"automatic_formation"),8));
+    if(version>=7)tactics.backing=decode_tactical_backing(field(input,"backing"));
+    return tactics;
+}
 J encode_manager_match(const std::optional<ManagerMatchState>& input) {
     if(!input)return nullptr;const auto& m=*input;
     const auto bytes=[](const auto& values){A a;for(auto value:values)a.emplace_back(int(value));return J(std::move(a));};
@@ -246,12 +273,44 @@ Bytes encode_world(const World& world){
     for(const auto&m:world.membership){A ids;for(auto c:m.clubs)ids.push_back(id(c.value));members.emplace_back(O{{"league",id(m.league.value)},{"clubs",std::move(ids)}});}
     for(const auto&[key,crest]:world.crests)crests.emplace_back(O{{"id",id(key.value)},{"resource",crest.path},{"cell",int(crest.cell)}});
     for(const auto&l:world.loans)loans.emplace_back(O{{"player",id(l.player.value)},{"owner",id(l.owner.value)},{"borrower",id(l.borrower.value)},{"months",int(l.months)},{"source_slot",l.source_slot?J(int(*l.source_slot)):J(nullptr)}});
-    for(const auto&m:world.managers){J finance=nullptr;if(m.finance){const auto& f=*m.finance;finance=O{{"balance",J(int64_t(f.balance))},{"credit",id(f.credit)},{"income",id(f.income)},{"expenses",id(f.expenses)},{"bonus_paid",id(f.bonus_paid)},{"baseline",f.baseline?J(O{{"starting_balance",id(f.baseline->starting_balance)},{"account_flags",id(f.baseline->account_flags)}}):J(nullptr)}};}J tactics=nullptr;if(m.tactics){A rows;for(const auto& row:m.tactics->rows){A orders;for(auto value:row.orders)orders.emplace_back(int(value));rows.emplace_back(O{{"orders",std::move(orders)},{"partner",int(row.partner)},{"depth",int(row.depth)},{"lane",int(row.lane)}});}tactics=O{{"rows",std::move(rows)},{"automatic_weights",int(m.tactics->automatic_weights)},{"automatic_formation",int(m.tactics->automatic_formation)},{"backing",encode_tactical_backing(m.tactics->backing)}};}managers.emplace_back(O{{"seat",int(m.seat)},{"name",m.name},{"club",id(m.club.value)},{"start_league",id(m.start_league.value)},{"portrait",int(m.portrait)},{"finance",std::move(finance)},{"tactics",std::move(tactics)},{"match_state",encode_manager_match(m.match_state)},{"career",encode_manager_career(m.career)}});}
-    auto raw=cli::dump_json(O{{"format","openbmh-world-12"},{"version",int(kWorldSchemaVersion)},{"profile",kProfile},{"scope",O{{"germany",world.catalogue.scope.germany},{"england",world.catalogue.scope.england},{"international",world.catalogue.scope.international}}},{"player_statistics",encode_statistics(world.player_statistics)},{"players_initialized",world.players_initialized},{"economy",encode_economy(world.economy)},{"markets",encode_markets(world.markets)},{"free_players",encode_free_players(world.free_players)},{"settings",encode_settings(world.settings)},{"initial_competitions",encode_initial_competitions(world.initial_competitions)},{"transfer_market",encode_market(world.transfer_market)},{"development_balance",J(int64_t(world.development_balance))},{"trend_rotation",int(world.trend_rotation)},{"players",std::move(players)},{"clubs",std::move(clubs)},{"leagues",std::move(members)},{"crests",std::move(crests)},{"loans",std::move(loans)},{"managers",std::move(managers)}});return Bytes(raw.begin(),raw.end());
+    for(const auto&m:world.managers){J finance=nullptr;if(m.finance){const auto& f=*m.finance;finance=O{{"balance",J(int64_t(f.balance))},{"credit",id(f.credit)},{"income",id(f.income)},{"expenses",id(f.expenses)},{"bonus_paid",id(f.bonus_paid)},{"baseline",f.baseline?J(O{{"starting_balance",id(f.baseline->starting_balance)},{"account_flags",id(f.baseline->account_flags)}}):J(nullptr)}};}J tactics=m.tactics?encode_tactics(*m.tactics):J(nullptr);managers.emplace_back(O{{"seat",int(m.seat)},{"name",m.name},{"club",id(m.club.value)},{"start_league",id(m.start_league.value)},{"portrait",int(m.portrait)},{"finance",std::move(finance)},{"tactics",std::move(tactics)},{"match_state",encode_manager_match(m.match_state)},{"career",encode_manager_career(m.career)}});}
+    A nationals;
+    for(const auto& squad:world.national_squads) {
+        A roster;for(const auto& row:squad.roster)roster.emplace_back(O{
+            {"player",row.empty()?J(nullptr):id(row.player.value)},{"flags",int(row.flags)}});
+        nationals.emplace_back(O{{"team",id(squad.team.value)},{"nominated_on",id(squad.nominated_on)},
+            {"coach",squad.coach?J(int(*squad.coach)):J(nullptr)},{"roster",std::move(roster)},
+            {"tactics",encode_tactics(squad.tactics)},{"match_state",encode_manager_match(squad.match_state)}});
+    }
+    auto raw=cli::dump_json(O{{"format","openbmh-world-12"},{"version",int(kWorldSchemaVersion)},{"profile",kProfile},{"scope",O{{"germany",world.catalogue.scope.germany},{"england",world.catalogue.scope.england},{"international",world.catalogue.scope.international}}},{"national_squads",std::move(nationals)},{"player_statistics",encode_statistics(world.player_statistics)},{"players_initialized",world.players_initialized},{"economy",encode_economy(world.economy)},{"markets",encode_markets(world.markets)},{"free_players",encode_free_players(world.free_players)},{"settings",encode_settings(world.settings)},{"initial_competitions",encode_initial_competitions(world.initial_competitions)},{"transfer_market",encode_market(world.transfer_market)},{"development_balance",J(int64_t(world.development_balance))},{"trend_rotation",int(world.trend_rotation)},{"players",std::move(players)},{"clubs",std::move(clubs)},{"leagues",std::move(members)},{"crests",std::move(crests)},{"loans",std::move(loans)},{"managers",std::move(managers)}});return Bytes(raw.begin(),raw.end());
 }
 World decode_world(const Bytes& bytes){
     if(bytes.size()>32*1024*1024)throw FormatError("world12: database too large");auto root=cli::parse_json(std::string(bytes.begin(),bytes.end()));const auto version=number(field(root,"version"));if(text(field(root,"format"))!="openbmh-world-12"||(version<1||version>kWorldSchemaVersion)||text(field(root,"profile"))!=kProfile)throw FormatError("world12: unsupported database profile/version");
     World w;
+    if(version>=24) {
+        const auto& squads=array(field(root,"national_squads"));
+        if(squads.size()>2)throw FormatError("world12: national squad capacity exceeded");
+        for(const auto& input:squads) {
+            NationalSquad squad;squad.team={number(field(input,"team"))};
+            squad.nominated_on=number(field(input,"nominated_on"),4294967295u);
+            const auto& coach=field(input,"coach");
+            if(coach.integer())squad.coach=uint8_t(number(coach,3));
+            else if(!std::holds_alternative<std::nullptr_t>(coach.value))throw FormatError("world12: invalid national coach");
+            const auto& roster=array(field(input,"roster"));
+            if(roster.size()!=24)throw FormatError("world12: national roster requires 24 slots");
+            for(size_t i=0;i<24;++i) {
+                const auto& player=field(roster[i],"player");
+                if(player.integer())squad.roster[i].player={number(player)};
+                else if(!std::holds_alternative<std::nullptr_t>(player.value))throw FormatError("world12: invalid national player");
+                squad.roster[i].flags=uint16_t(number(field(roster[i],"flags"),15));
+            }
+            squad.tactics=decode_tactics(field(input,"tactics"),version);
+            const auto match=decode_manager_match(field(input,"match_state"));
+            if(!match)throw FormatError("world12: missing national match state");
+            squad.match_state=*match;w.national_squads.push_back(std::move(squad));
+        }
+    }else if(const auto found=root.object()->find("national_squads");found!=root.object()->end()&&!array(found->second).empty())
+        throw FormatError("world12: older schema cannot restore national squads");
     if(version>=23)w.player_statistics=decode_statistics(field(root,"player_statistics"));
     else if(const auto found=root.object()->find("player_statistics");found!=root.object()->end()&&!array(found->second).empty())
         throw FormatError("world12: older schema cannot restore wide player statistics");
@@ -262,9 +321,7 @@ const auto& roster=array(field(j,"roster"));if(roster.size()!=24)throw FormatErr
     for(const auto&j:array(field(root,"crests")))if(!w.crests.emplace(CrestId{number(field(j,"id"))},CrestResource{text(field(j,"resource")),uint8_t(number(field(j,"cell"),7))}).second)throw FormatError("world12: duplicate crest ID");
     for(const auto&j:array(field(root,"loans"))){Loan loan{{number(field(j,"player"))},{number(field(j,"owner"))},{number(field(j,"borrower"))},uint8_t(number(field(j,"months"),255))};if(version>=19){const auto& slot=field(j,"source_slot");if(slot.integer())loan.source_slot=uint16_t(number(slot,199));else if(!std::holds_alternative<std::nullptr_t>(slot.value))throw FormatError("world12: invalid optional loan slot");}w.loans.push_back(loan);}
     for(const auto&j:array(field(root,"managers"))){Manager manager{uint8_t(number(field(j,"seat"),3)),text(field(j,"name")),{number(field(j,"club"))},{number(field(j,"start_league"),uint32_t(kLeagueSlots-1))},uint8_t(number(field(j,"portrait"),11))};if(version>=5){const auto& f=field(j,"finance");if(f.object())manager.finance=ManagerFinance{signed_number(field(f,"balance")),number(field(f,"credit"),4294967295u),number(field(f,"income"),4294967295u),number(field(f,"expenses"),4294967295u),number(field(f,"bonus_paid"),4294967295u)};else if(!std::holds_alternative<std::nullptr_t>(f.value))throw FormatError("world12: invalid optional manager finances");}if(version>=6){const auto& t=field(j,"tactics");if(t.object()){
-ManagerTactics tactics;const auto& rows=array(field(t,"rows"));if(rows.size()!=24)throw FormatError("world12: tactics require 24 rows");
-for(size_t i=0;i<24;++i){const auto& r=rows[i];const auto& orders=array(field(r,"orders"));if(orders.size()!=4)throw FormatError("world12: tactics require four player orders");for(size_t a=0;a<4;++a)tactics.rows[i].orders[a]=uint8_t(number(orders[a],255));tactics.rows[i].partner=uint8_t(number(field(r,"partner"),255));tactics.rows[i].depth=uint8_t(number(field(r,"depth"),255));tactics.rows[i].lane=uint8_t(number(field(r,"lane"),255));}
-tactics.automatic_weights=uint8_t(number(field(t,"automatic_weights"),255));tactics.automatic_formation=uint8_t(number(field(t,"automatic_formation"),8));if(version>=7)tactics.backing=decode_tactical_backing(field(t,"backing"));manager.tactics=tactics;
+manager.tactics=decode_tactics(t,version);
 }else if(!std::holds_alternative<std::nullptr_t>(t.value))throw FormatError("world12: invalid optional manager tactics");}if(version>=8&&manager.finance){const auto& baseline=field(field(j,"finance"),"baseline");if(baseline.object())manager.finance->baseline=ManagerFinanceBaseline{number(field(baseline,"starting_balance"),4294967295u),number(field(baseline,"account_flags"),4294967295u)};else if(!std::holds_alternative<std::nullptr_t>(baseline.value))throw FormatError("world12: invalid initial account baseline");}if(version>=9)manager.match_state=decode_manager_match(field(j,"match_state"));if(version>=12)manager.career=decode_manager_career(field(j,"career"),version);if(version<17&&manager.match_state&&manager.match_state->designated_takers&&manager.career&&manager.career->season_services)std::fill(manager.career->season_services->advertising_contracts[16].begin()+8,manager.career->season_services->advertising_contracts[16].end(),uint8_t(0));w.managers.push_back(std::move(manager));}
     try{w.validate();}catch(const std::exception&e){throw FormatError(e.what());}return w;
 }

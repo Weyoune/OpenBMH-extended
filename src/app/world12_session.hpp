@@ -3,6 +3,7 @@
 #include "app/world12_initial_season.hpp"
 #include "app/world12_first_event.hpp"
 #include "app/world12_clock.hpp"
+#include "app/world12_national.hpp"
 #include "formats/le.hpp"
 #include "ui/manager.hpp"
 #include "ui/world12_manager_selection.hpp"
@@ -35,6 +36,8 @@ public:
     void finish_initial_day(const ui::DeskRequest&);
     ClockStepOutcome advance_saved_clock(uint64_t expected_revision,const std::filesystem::path&,const ClockHooks&);
     ClockStepOutcome seek_saved_event(uint64_t expected_revision,const std::filesystem::path&,const ClockHooks&);
+    NationalAppointmentOutcome prepare_national_day(uint64_t expected_revision);
+    NationalAppointmentOutcome finish_uncoached_national_day(uint64_t expected_revision);
 
     PendingOfferResult resolve_pending(const std::filesystem::path&,const ui::DeskRequest&,const PendingOfferHooks&);
     void open_mailbox(const ui::DeskRequest&);

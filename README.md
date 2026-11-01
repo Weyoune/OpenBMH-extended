@@ -4,7 +4,7 @@
 reconstruction. The current shared German/English career implementation is still
 being integrated; a successful build is not a playable Beta release.
 
-The faithful Classic line remains **[OpenBMH 1.0.2](https://github.com/Weyoune/openbmh)**.
+The faithful Classic line remains **[OpenBMH 1.0.x](https://github.com/Weyoune/openbmh)**.
 Use that repository for the original league structures and original-game community
 maintenance. Extended development, its native data editor and future Beta releases
 live here. See [the project split](docs/PROJECT_SPLIT.md).

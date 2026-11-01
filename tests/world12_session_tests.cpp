@@ -149,7 +149,7 @@ void first_event_tests(const CareerSnapshot& pending,const GameState& source) {
         check(owner.revision==5&&state.desktop->active_seat==order.front()&&state.desktop->initial_event->manager_order==order&&state.desktop->initial_event->offer.has_value()==offer,"initial event lost order/offer/owner");
         check(result.game_draws>=order.size()+100&&result.watcom_draws>1&&state.date==before.date&&state.calendar==before.calendar&&state.results==before.results,"initial event skipped random draws or advanced time");
         check(read_save(make_save(state))==state,"initial event/offer save roundtrip differs");
-        {auto old=make_save(state);old.stream.pop_back();const auto& event=*state.desktop->initial_event;const size_t tail=7+event.manager_order.size()+(event.offer?4:0);old.stream.erase(old.stream.end()-ptrdiff_t(tail)+3);old.stream[7]='7';check(read_save(old)==state,"S7 first-event snapshot lost its implicit position zero");}
+        {auto previous=state;previous.desktop->manager_order.clear();previous.desktop->matchday_number.reset();auto old=make_save(previous);old.stream.pop_back();const auto& event=*previous.desktop->initial_event;const size_t tail=7+event.manager_order.size()+(event.offer?4:0);old.stream.erase(old.stream.end()-ptrdiff_t(tail)+3);old.stream[7]='7';check(read_save(old)==previous,"S7 first-event snapshot lost its implicit position zero or invented persistent metadata");}
 
         {auto resources=synthetic();resources.reference=reference;resume_draws=0;draw_hook=count_resume_draw;
             auto resumed=session_app::Session::resume(resources,state,91,100);draw_hook=nullptr;
@@ -358,6 +358,29 @@ void actual_four_managers(const std::filesystem::path& data,const std::filesyste
     check(resumed.snapshot().date==expected_day&&resumed.snapshot().calendar->next_day==expected_day,"actual event seeker skipped a country/national appointment");
     if(!output.empty())write_savegame(output/"first-scheduled-clock.FBM",make_save(resumed.snapshot()));
     std::cout<<"Actual four-manager saved clock: "<<phases<<" resumed phases to day "<<expected_day<<", weekly/training/finance complete; scheduled event retained for its owner\n";
+    const auto appointment=prepare_day(resumed.snapshot());
+    if(appointment&&appointment->leagues.empty()&&appointment->others.size()==1&&appointment->others[0].source_entry==0x4006) {
+        const auto before=resumed.snapshot();
+        const auto nomination=resumed.prepare_national_day(resumed.revision());
+        check(nomination.nominations.size()==2&&!nomination.coach_desk_required&&resumed.snapshot().date==before.date&&
+              resumed.snapshot().calendar==before.calendar,"actual national nomination skipped its calendar boundary");
+        auto saved=read_save(make_save(resumed.snapshot()));
+        resumed=session_app::Session::resume(resources,std::move(saved),92,resumed.revision());
+        const auto waiting=resumed.snapshot();const auto revision=resumed.revision();
+        rejects([&]{resumed.prepare_national_day(revision);},"actual saved nomination was replayed");
+        check(resumed.snapshot()==waiting&&resumed.revision()==revision,"actual duplicate nomination changed streams");
+        const auto finished=resumed.finish_uncoached_national_day(resumed.revision());
+        check(resumed.snapshot().date==before.date+1&&resumed.snapshot().progress->phase==ProgressPhase::daily_services&&
+              finished.watcom_draws==1&&finished.game_draws==4,"actual uncoached empty national event has wrong date/draws");
+        saved=read_save(make_save(resumed.snapshot()));resumed=session_app::Session::resume(resources,std::move(saved),92,resumed.revision());
+        if(!output.empty())write_savegame(output/"national-nomination-complete.FBM",make_save(resumed.snapshot()));
+        const auto next=resumed.seek_saved_event(resumed.revision(),data,hooks);
+        check(next.phase==ProgressPhase::scheduled_event&&resumed.snapshot().date>before.date+1,
+              "actual completed nomination did not resume daily services to its next appointment");
+        if(!output.empty())write_savegame(output/"after-national-next-event.FBM",make_save(resumed.snapshot()));
+        std::cout<<"Actual four-manager national nomination: two global squads, saved replay guard, Source empty setup/option cycle/order shuffle, resumed daily processing to day "<<resumed.snapshot().date<<" passed\n";
+    }
+
 
 }
 void actual_pending(const std::filesystem::path& data,const std::filesystem::path& output) {

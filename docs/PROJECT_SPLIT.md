@@ -2,7 +2,7 @@
 
 | Project | Repository | Version line |
 | --- | --- | --- |
-| OpenBMH Classic | [Weyoune/openbmh](https://github.com/Weyoune/openbmh) | 1.0.2, original-game reconstruction |
+| OpenBMH Classic | [Weyoune/openbmh](https://github.com/Weyoune/openbmh) | 1.0.x, original-game reconstruction |
 | OpenBMH-Extended | [Weyoune/OpenBMH-extended](https://github.com/Weyoune/OpenBMH-extended) | 1.0 Beta, extended country/database development |
 
 The prior OpenBMH 1.1 Beta releases and native `obdeddi` editor belong to Extended.
