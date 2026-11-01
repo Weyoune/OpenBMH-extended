@@ -178,3 +178,9 @@ Older schemas start with the surviving native tactical values when first
 observed; lost high bits remain unknown. Typed title-history archival remains
 unavailable, and the reference game's title list is not presented as typed career
 history. See [long-career save format](formats/LONG_CAREER.md).
+
+
+Release-driven incoming-transfer presenters require a matching press observed
+inside that modal. An orphan or repeated release from the preceding result table
+cannot decline an offer or dismiss its confirmation. Repeated presses while a
+button is held still form one gesture; fresh left/right clicks keep their actions.
