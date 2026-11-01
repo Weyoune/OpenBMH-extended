@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "app/world12_weather.hpp"
 #include "cli/json.hpp"
+#include "game/world12/prepared_event.hpp"
+#include "game/week.hpp"
+#include <bit>
+#include <limits>
 #include <algorithm>
 #include <map>
 namespace bmh::app::world12 {
@@ -58,5 +62,48 @@ WeatherPreparation prepare_fixture_weather(const World& world,int month,
     }
     result.game_draws=staged_game.calls()-previous_game;result.watcom_draws=staged_random.calls()-previous_random;
     game=staged_game;random=staged_random;return result;
+}
+WeatherPreparation prepare_event_weather(CareerSnapshot& state,ManagerActionOwner& owner,
+    ManagerActionOwner expected,const std::vector<uint8_t>& catalogue,const CupSources& sources) {
+    state.validate();
+    if(!owner.scope||owner.scope!=expected.scope||owner.revision!=expected.revision||
+       owner.revision==std::numeric_limits<uint64_t>::max()||state.prepared_event||!state.progress||
+       state.progress->phase!=ProgressPhase::scheduled_event||!state.desktop||state.desktop->manager_order.empty()||catalogue.size()!=50)
+        throw FormatError("world12: missing or stale event-weather owner");
+    const auto ticket=prepare_day(state);
+    if(!ticket||ticket->leagues.empty()&&ticket->cups.empty())throw FormatError("world12: event weather has no scheduled matches");
+    for(const auto& appointment:ticket->others)if(!domestic_cups_on(appointment))
+        throw FormatError("world12: weather for this shared/national appointment needs its competition owner");
+    const auto before=state;auto candidate=state;PreparedEvent event;
+    event.day=ticket->day;event.calendar_revision=ticket->revision;
+    std::copy(catalogue.begin(),catalogue.end(),event.referee_properties.begin());
+    std::vector<FixtureWeatherRequest> requests;
+    for(const auto& league:ticket->leagues) {
+        PreparedGroup group;group.league=league.appointment.league;group.round=league.appointment.round;
+        for(auto fixture:league.matches){requests.push_back({fixture,2});group.matches.push_back({fixture});}
+        event.groups.push_back(std::move(group));
+    }
+    for(const auto& cup:ticket->cups) {
+        const auto stage=std::find_if(candidate.cups.rbegin(),candidate.cups.rend(),[&](const auto& s){return s.cup==cup.cup;});
+        const auto& source=cup_country(cup.cup)==Country::germany?sources.german:sources.english;
+        const auto verified=KnockoutStage::from_source(cup.cup,source,cup.source_entry,stage->rounds.front().fixtures,candidate.world,stage->seeded);
+        if(verified.flags!=stage->flags||verified.planned_rounds!=stage->planned_rounds||verified.next_entry!=stage->next_entry)
+            throw FormatError("world12: source cup rules changed before weather preparation");
+        PreparedGroup group;group.cup=cup.cup;group.source_entry=cup.source_entry;group.leg=cup.leg;
+        group.round=uint8_t(stage->rounds.size());group.revision=cup.revision;group.flags=prepared_cup_flags(*stage);
+        for(auto fixture:cup.matches){requests.push_back({fixture,group.flags});group.matches.push_back({fixture});}
+        event.groups.push_back(std::move(group));
+    }
+    GameRandom game(candidate.game_seed);WatcomRandom random(candidate.watcom_seed);
+    const auto weather=prepare_fixture_weather(candidate.world,month_code(candidate.date),requests,catalogue,game,random);
+    size_t index=0;
+    for(auto& group:event.groups)for(auto& match:group.matches) {
+        const auto& prepared=weather.matches.at(index++);match.temperature=std::bit_cast<int8_t>(prepared.weather.temperature);
+        match.rain=prepared.weather.rain;match.referee=prepared.weather.referee;match.referee_country=prepared.referee_country;
+    }
+    candidate.prepared_event=std::move(event);candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();candidate.validate();
+    if(state!=before||owner.scope!=expected.scope||owner.revision!=expected.revision)
+        throw FormatError("world12: event-weather state changed during preparation");
+    state=std::move(candidate);++owner.revision;return weather;
 }
 }

@@ -130,5 +130,10 @@ AiDayOutcome Session::play_scheduled_leagues(uint64_t revision,
     if(state_!=before||owner_.revision!=revision)throw FormatError("world12: league session changed during calculation");
     state_=std::move(candidate);owner_.revision=staged_owner.revision;return outcome;
 }
+WeatherPreparation Session::prepare_scheduled_weather(uint64_t revision) {
+    if(preparation_menu_)throw FormatError("world12: an open menu owns the current career");
+    return prepare_event_weather(state_,owner_,{owner_.scope,revision},resources_.referee_properties,
+        {resources_.german,resources_.english});
+}
 
 }

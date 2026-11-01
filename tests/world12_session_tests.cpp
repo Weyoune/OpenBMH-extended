@@ -385,6 +385,18 @@ void actual_four_managers(const std::filesystem::path& data,const std::filesyste
             check(field!=upcoming->cups.end()&&field->matches.size()==1,"actual country Super-Cup has no initialized fixture");
         }
         if(!output.empty())write_savegame(output/"after-national-next-event.FBM",make_save(resumed.snapshot()));
+        {
+            auto prepared_session=resumed;const auto before_weather=prepared_session.snapshot();
+            const auto weather=prepared_session.prepare_scheduled_weather(prepared_session.revision());
+            check(weather.matches.size()==2&&prepared_session.snapshot().prepared_event&&
+                  prepared_session.snapshot().date==before_weather.date,"actual pre-match weather was not stored without advancing the date");
+            auto prepared_save=make_save(prepared_session.snapshot());
+            auto weather_loaded=session_app::Session::resume(resources,read_save(prepared_save),93,prepared_session.revision());
+            check(weather_loaded.snapshot()==prepared_session.snapshot(),"actual stored conditions changed after resuming SD");
+            rejects([&]{weather_loaded.prepare_scheduled_weather(weather_loaded.revision());},"actual loaded weather was generated again");
+            if(!output.empty())write_savegame(output/"prepared-finals-weather.FBM",prepared_save);
+            std::cout<<"Actual stored Super-Cup/Charity Shield weather: source catalogue, countries, both streams, SD save/resume and no redraw passed\n";
+        }
         std::vector<session_app::CupDayConditions> cup_inputs;
         for(const auto& stage:upcoming->cups) {
             AiLeagueConditions match;match.date=resumed.snapshot().date;match.month=month_code(match.date);

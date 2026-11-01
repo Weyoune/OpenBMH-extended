@@ -66,6 +66,28 @@ struct CareerProgress {
     uint8_t epoch_weekday=0,last_manager=0;
     bool operator==(const CareerProgress&)const=default;
 };
+struct PreparedFixture {
+    Fixture fixture;
+    int8_t temperature=0;
+    uint8_t rain=0,referee=0;
+    Country referee_country=Country::germany;
+    bool operator==(const PreparedFixture&)const=default;
+};
+struct PreparedGroup {
+    std::optional<LeagueId> league;
+    std::optional<DomesticCup> cup;
+    uint8_t source_entry=0,round=0,leg=0,flags=2;
+    uint64_t revision=0;
+    std::vector<PreparedFixture> matches;
+    bool operator==(const PreparedGroup&)const=default;
+};
+struct PreparedEvent {
+    uint16_t day=0;
+    uint64_t calendar_revision=0;
+    std::array<uint8_t,50> referee_properties{};
+    std::vector<PreparedGroup> groups;
+    bool operator==(const PreparedEvent&)const=default;
+};
 struct CareerSnapshot {
     World world;
     SeasonResults results;
@@ -77,6 +99,7 @@ struct CareerSnapshot {
     std::optional<DesktopRuntime> desktop;
     std::optional<TransferRuntime> transfers;
     std::optional<CareerProgress> progress;
+    std::optional<PreparedEvent> prepared_event;
     // Typed active career snapshots will extend this record as their owning
     // progression transactions are integrated. No legacy FBM stream is guessed.
     void validate()const;

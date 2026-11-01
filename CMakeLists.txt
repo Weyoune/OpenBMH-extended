@@ -1208,6 +1208,7 @@ endif()
 # Country-aware 1.2 world foundation. Kept separate from legacy packed state until
 # its application/progression adapters are completely verified.
 add_library(bmhworld12 STATIC
+    src/game/world12/prepared_event.cpp
     src/game/world12/national.cpp
     src/game/world12/catalogue.cpp
     src/game/world12/world.cpp

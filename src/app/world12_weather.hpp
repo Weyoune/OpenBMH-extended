@@ -3,6 +3,7 @@
 #include "game/world12/world.hpp"
 #include "game/world12/fixtures.hpp"
 #include "game/matchday_setup.hpp"
+#include "app/world12_cups.hpp"
 namespace bmh::app::world12 {
 struct RefereeCatalogue {
     std::vector<std::string> names;
@@ -30,4 +31,6 @@ struct WeatherPreparation {
 WeatherPreparation prepare_fixture_weather(const bmh::world12::World&,int month,
     const std::vector<FixtureWeatherRequest>&,const std::vector<uint8_t>& catalogue,
     GameRandom&,WatcomRandom&);
+WeatherPreparation prepare_event_weather(bmh::world12::CareerSnapshot&,ManagerActionOwner&,
+    ManagerActionOwner expected,const std::vector<uint8_t>& catalogue,const CupSources&);
 }

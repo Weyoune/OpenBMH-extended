@@ -15,9 +15,11 @@ shared resources; separate real-world national referee databases are not claimed
 
 `prepare_fixture_weather` preflights identities and pool sizes before consuming
 randomness, preserves the global fixture identities and publishes both random
-streams only after complete preparation. The career event owner must store its
-result with the prepared event before displaying or saving a pre-match desk.
-That event/UI integration is not implemented by this primitive.
+streams only after complete preparation. The calendar owner stores its result in a checked PreparedEvent before
+displaying a pre-match desk. Snapshot SD preserves the exact fixture identities,
+weather, country referees, source properties and post-preparation random streams.
+A loaded preparation cannot be redrawn. Visible pre-match desk integration remains
+a separate step.
 
 ## Data-only resource
 
@@ -38,3 +40,16 @@ Tests cover all 117 fixtures, country uniqueness, source skills, repeatable
 random streams, late invalid requests, invalid resource versions/dimensions,
 zero/one-degree snow versus negative temperature bytes and pool exhaustion.
 The actual data-only session regression also passes with the private new export.
+
+## Prepared event snapshots
+
+`prepare_event_weather` validates the scheduled ticket and original cup metadata
+before drawing. Complete league/cup group environments commit under one revision
+without advancing the date. The SD reader checks group kind, round/leg, revision,
+fixture identity/order, valid rain and unique referees per country; truncated,
+changed-calendar and duplicate preparations reject. S4–SC snapshots remain readable.
+
+The actual four-manager session prepares both day-17 finals with source referee
+resources, writes SD, resumes it and rejects a second weather preparation. This
+branch does not claim that saved conditions are already consumed by a complete
+visible pre-match/gate/live owner.

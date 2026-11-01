@@ -54,6 +54,7 @@ CupDayOutcome play_domestic_cup_day(CareerSnapshot& state,ManagerActionOwner& ow
     if(!owner.scope||owner.scope!=expected.scope||owner.revision!=expected.revision||
        owner.revision==std::numeric_limits<uint64_t>::max())throw FormatError("world12: stale domestic match-day owner");
     const auto scheduled=prepare_day(state);
+    if(state.prepared_event)throw FormatError("world12: stored match preparation requires its event-consumption owner");
     if(!scheduled||*scheduled!=ticket||!ticket.leagues.empty()||ticket.cups.empty()||conditions.size()!=ticket.cups.size()||
        (state.progress&&state.progress->phase!=ProgressPhase::scheduled_event))
         throw FormatError("world12: incomplete or non-domestic-only match date");

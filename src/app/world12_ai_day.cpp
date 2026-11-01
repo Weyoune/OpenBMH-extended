@@ -14,6 +14,7 @@ static AiDayOutcome play_league_day_impl(CareerSnapshot& state,AiDayOwner& owner
         owner.revision==std::numeric_limits<uint64_t>::max())
         throw std::invalid_argument("world12: stale AI day owner");
     state.validate();
+    if(state.prepared_event)throw FormatError("world12: stored match preparation requires its event-consumption owner");
     const auto expected=prepare_day(state);
     if(!expected || *expected!=ticket || conditions.size()!=ticket.leagues.size())
         throw std::invalid_argument("world12: stale or incomplete AI day request");

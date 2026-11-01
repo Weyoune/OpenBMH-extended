@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "world12_fixture.hpp"
+#include "fixture_tables.hpp"
 #include "app/world12_weather.hpp"
 #include "cli/json.hpp"
+#include "game/calendar.hpp"
 #include <iostream>
 #include <map>
 #include <set>
@@ -12,6 +14,7 @@ void check(bool value,const char* message){if(!value)throw std::runtime_error(me
 template<class F>void rejects(F f,const char* message){bool failed=false;try{f();}catch(const std::exception&){failed=true;}check(failed,message);}
 }
 int main()try {
+    set_fixture_tables(bmh::test::authored_fixture_tables());
     const auto world=bmh::test::world12::complete_world();const std::vector<uint8_t> catalogue(50,0x24);
     cli::Json::Array names,properties;
     for(size_t i=0;i<50;++i){names.emplace_back("Referee "+std::to_string(i));properties.emplace_back(0x24);}
@@ -49,5 +52,33 @@ int main()try {
     auto invalid=requests;invalid.back().fixture.away={};
     rejects([&]{weather_app::prepare_fixture_weather(world,7,invalid,catalogue,game,random);},"missing late weather participant was accepted");
     check(game.seed()==gs&&random.seed()==ws,"late identity error drew partial country weather");
+    CareerSnapshot state;state.world=world;state.date=17;state.game_seed=31;state.watcom_seed=713;
+    state.world.players_initialized=true;state.world.markets.emplace();state.world.free_players.emplace();state.world.settings=CareerSettings{};
+    const auto club=state.world.membership[0].clubs[0];state.world.managers={{0,"Manager",club,{0},0}};
+    state.results=SeasonResults::empty(state.world.catalogue);
+    SeasonCalendar schedule;
+    for(const auto& league:state.world.catalogue.leagues)for(uint8_t round=1;round<=league.rounds();++round)
+        schedule.leagues.push_back({uint16_t(17+(round-1)*7),league.id,round});
+    state.calendar=CalendarCursor{schedule,17,7};state.desktop.emplace();ManagerDesktop desk;desk.seat=0;
+    state.desktop->managers={desk};state.desktop->manager_order={0};state.desktop->matchday_number=123;
+    const auto epoch=calendar_epoch();state.progress=CareerProgress{ProgressPhase::scheduled_event,DayEntry::plain_day,16,0,uint16_t(epoch.year),uint8_t(epoch.weekday),0};
+    state.validate();const auto previous=state;
+    const auto de_rules=bmh::test::world12::country_rules(false),en_rules=bmh::test::world12::country_rules(true);
+    weather_app::ManagerActionOwner owner{71,1};
+    const auto prepared=weather_app::prepare_event_weather(state,owner,owner,catalogue,{de_rules,en_rules});
+    check(prepared.matches.size()==117&&owner.revision==2&&state.date==previous.date&&state.calendar==previous.calendar&&state.prepared_event,
+          "owned weather preparation changed date or lost its persistent payload");
+    const auto file=make_save(state);
+    check(file.stream[7]=='D'&&read_save(file)==state,"prepared match conditions/streams were not saved exactly in SD");
+    const auto stable=state;
+    rejects([&]{weather_app::prepare_event_weather(state,owner,owner,catalogue,{de_rules,en_rules});},"saved weather could be redrawn");
+    check(state==stable&&owner.revision==2,"duplicate weather preparation changed state/revision");
+    auto corrupt=state;corrupt.prepared_event->groups[0].matches[0].rain=8;
+    rejects([&]{make_save(corrupt);},"invalid saved rain accepted");
+    corrupt=state;corrupt.prepared_event->groups[0].matches[1].referee=corrupt.prepared_event->groups[0].matches[0].referee;
+    rejects([&]{make_save(corrupt);},"repeated country referee accepted in saved preparation");
+    corrupt=state;++corrupt.prepared_event->calendar_revision;
+    rejects([&]{make_save(corrupt);},"saved environment for a stale calendar accepted");
+    auto truncated=file;truncated.stream.pop_back();rejects([&]{read_save(truncated);},"truncated SD match environment accepted");
     std::cout<<"117 simultaneous fixtures: country referee masks, source weather, retained identities, replay and pre-draw rejection passed\n";
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}
