@@ -28,7 +28,7 @@ AiLeagueRoundOutcome run_ai_league_matches(World& world,const GameState& base,co
         if(fixture.home==fixture.away || c.month<1 || c.month>12 || c.temperature<-128 || c.temperature>127 || c.rain<0 || c.rain>7 ||
             c.spectators>uint32_t(std::numeric_limits<int>::max()) || c.referee>=c.referee_properties.size() || c.presentation_buttons.size()<0xb4)
             throw std::invalid_argument("world12: incomplete AI league match conditions");
-        if(c.month!=conditions[0].month || c.date!=conditions[0].date || c.referee_properties!=conditions[0].referee_properties || c.presentation_buttons!=conditions[0].presentation_buttons)
+        if(c.month!=conditions[0].month || c.date!=conditions[0].date || c.referee_properties!=conditions[0].referee_properties || c.presentation_buttons!=conditions[0].presentation_buttons || c.teams_prepared!=conditions[0].teams_prepared)
             throw std::invalid_argument("world12: inconsistent shared league-round conditions");
         const auto& home=world.clubs.at(fixture.home);const auto& away=world.clubs.at(fixture.away);
         if(!home.league.valid()||!away.league.valid()||!world.catalogue.league(home.league).active||!world.catalogue.league(away.league).active||
@@ -74,7 +74,7 @@ AiLeagueRoundOutcome run_ai_league_matches(World& world,const GameState& base,co
         }
     }
     for(size_t team=0;team<participants.size();++team) {
-        bmh::prepare_team(local,int(team),match_competition_class(group_type),int(team));
+        if(!conditions[0].teams_prepared)bmh::prepare_team(local,int(team),match_competition_class(group_type),int(team));
         const auto formation=size_t(local.formation(int(team)))*22;
         if(formation+22>local.formations.size())throw std::invalid_argument("world12: missing Original formation table");
         for(size_t row=0;row<11;++row)if(local.formations[formation+row]>=24 || local.formations[formation+11+row]>8)

@@ -27,7 +27,10 @@ void CareerSnapshot::validate()const{
             for(auto seat:desktop->manager_order){if(seat>=4||!seen[seat]||ordered[seat])throw FormatError("world12: invalid persistent manager order");ordered[seat]=true;}
         }
         if(desktop->initial_event){const auto& event=*desktop->initial_event;
-            if(date||season||!calendar||calendar->next_day||event.matchday_number>10000||event.manager_order.size()!=world.managers.size()||event.manager_position>=event.manager_order.size()||!event.pools_open||!calendar->schedule.leagues_on(0).empty()||!calendar->schedule.others_on(0).empty())throw FormatError("world12: invalid initial desktop event");
+            const bool scheduled=prepared_event&&prepared_event->desk_phase==PreparedEvent::DeskPhase::desks;
+            if(!calendar||event.matchday_number>10000||event.manager_order.size()!=world.managers.size()||event.manager_position>=event.manager_order.size()||!event.pools_open||
+               (!scheduled&&(date||season||calendar->next_day||!calendar->schedule.leagues_on(0).empty()||!calendar->schedule.others_on(0).empty())))
+                throw FormatError("world12: invalid owned desktop event");
             std::array<bool,4> ordered{};for(auto seat:event.manager_order){if(seat>=4||!seen[seat]||ordered[seat])throw FormatError("world12: invalid initial desk order");ordered[seat]=true;}
             if(!desktop->manager_order.empty()&&(desktop->manager_order!=event.manager_order||desktop->matchday_number!=event.matchday_number))throw FormatError("world12: current and persistent event metadata disagree");
             if(desktop->active_seat&&*desktop->active_seat!=event.manager_order[event.manager_position])throw FormatError("world12: initial desk/order mismatch");
@@ -47,7 +50,8 @@ void CareerSnapshot::validate()const{
             for(auto id:{contract.mark,contract.marked_by})if(id.valid()&&!world.players.contains(id))throw FormatError("world12: unknown loan-board player reference");for(size_t b=0x44;b<0x48;++b)if(contract.board[b])throw FormatError("world12: packed reference in loan contract backing");}
     }
     if(progress){const auto& p=*progress;
-        if(uint8_t(p.phase)>uint8_t(ProgressPhase::season_end)||uint8_t(p.entry)>1||p.epoch_year<1600||p.epoch_year>9999||p.epoch_weekday>6||p.last_manager>3||!calendar||!desktop||desktop->active_seat||desktop->initial_event||desktop->autosave_pending||p.previous_date==0xffffffffu||date!=p.previous_date+1||date<p.season_start||date-p.season_start!=calendar->next_day||
+        const bool scheduled_desk=prepared_event&&prepared_event->desk_phase==PreparedEvent::DeskPhase::desks&&p.phase==ProgressPhase::scheduled_event;
+        if(uint8_t(p.phase)>uint8_t(ProgressPhase::season_end)||uint8_t(p.entry)>1||p.epoch_year<1600||p.epoch_year>9999||p.epoch_weekday>6||p.last_manager>3||!calendar||!desktop||(!scheduled_desk&&(desktop->active_seat||desktop->initial_event||desktop->autosave_pending))||p.previous_date==0xffffffffu||date!=p.previous_date+1||date<p.season_start||date-p.season_start!=calendar->next_day||
            std::none_of(world.managers.begin(),world.managers.end(),[&](const auto& m){return m.seat==p.last_manager;}))throw FormatError("world12: invalid saved progression owner/clock");
         const bool scheduled=!calendar->schedule.leagues_on(calendar->next_day).empty()||!calendar->schedule.others_on(calendar->next_day).empty();
         if(p.phase==ProgressPhase::scheduled_event&&!scheduled)throw FormatError("world12: saved event has no calendar appointment");
@@ -60,7 +64,7 @@ void CareerSnapshot::validate()const{
     if(calendar){calendar->schedule.validate(world.catalogue);if(calendar->next_day>calendar->schedule.days)throw FormatError("world12: invalid calendar cursor");std::array<uint8_t,kLeagueSlots> expected{};for(const auto&a:calendar->schedule.leagues)if(a.day<calendar->next_day)expected[a.league.value]=a.round;if(expected!=league_rounds)throw FormatError("world12: saved rounds disagree with committed calendar days");for(uint32_t l=0;l<kLeagueSlots;++l)for(int r=1;r<=world.catalogue.leagues[l].rounds();++r)for(int m=0;m<world.catalogue.leagues[l].clubs/2;++m)if(results.result(world.catalogue,{l},r,m).played!=(r<=league_rounds[l]))throw FormatError("world12: saved scores disagree with committed rounds");}
     validate_prepared_event(*this);
 }
-Savegame make_save(const CareerSnapshot& snapshot){snapshot.validate();Savegame save;save.version="O1.2";save.key=0;save.checksum_ok=true;save.stream={'O','B','M','H','1','2','S',uint8_t(snapshot.prepared_event?(snapshot.prepared_event->gates_booked?'E':'D'):snapshot.desktop&&!snapshot.desktop->manager_order.empty()?'C':snapshot.progress?'B':'A')};
+Savegame make_save(const CareerSnapshot& snapshot){snapshot.validate();Savegame save;save.version="O1.2";save.key=0;save.checksum_ok=true;save.stream={'O','B','M','H','1','2','S',uint8_t(snapshot.prepared_event?(snapshot.prepared_event->desk_phase!=PreparedEvent::DeskPhase::unstarted?'F':snapshot.prepared_event->gates_booked?'E':'D'):snapshot.desktop&&!snapshot.desktop->manager_order.empty()?'C':snapshot.progress?'B':'A')};
     const auto put=[&](uint64_t v,int width=4){for(int i=0;i<width;++i)save.stream.push_back(uint8_t(v>>(i*8)));};auto world=encode_world(snapshot.world);put(world.size());put(snapshot.date);put(snapshot.season);put(snapshot.watcom_seed);put(std::bit_cast<uint32_t>(snapshot.game_seed));save.stream.insert(save.stream.end(),world.begin(),world.end());for(auto round:snapshot.league_rounds)put(round,1);
     for(const auto&league:snapshot.results.leagues)for(const auto&r:league){put(r.played?1:0,1);put(r.home,1);put(r.away,1);}
     put(snapshot.calendar?1:0,1);if(snapshot.calendar){const auto&cursor=*snapshot.calendar;put(cursor.schedule.days,2);put(cursor.next_day,2);put(cursor.revision,8);put(cursor.schedule.leagues.size());put(cursor.schedule.others.size());for(const auto&a:cursor.schedule.leagues){put(a.day,2);put(a.league.value);put(a.round,1);}for(const auto&a:cursor.schedule.others){put(a.day,2);put(uint8_t(a.domain),1);put(a.source_entry,2);}}
@@ -84,6 +88,7 @@ Savegame make_save(const CareerSnapshot& snapshot){snapshot.validate();Savegame 
     if(ordered){put(snapshot.desktop->manager_order.size(),1);for(auto seat:snapshot.desktop->manager_order)put(seat,1);put(*snapshot.desktop->matchday_number,2);}
     if(snapshot.prepared_event) {
         const auto& event=*snapshot.prepared_event;put(event.day,2);put(event.calendar_revision,8);
+        if(event.desk_phase!=PreparedEvent::DeskPhase::unstarted){put(uint8_t(event.desk_phase),1);put(event.gates_booked?1:0,1);}
         for(auto property:event.referee_properties)put(property,1);put(event.groups.size(),1);
         for(const auto& group:event.groups) {
             put(group.cup?1:0,1);put(group.league?group.league->value:uint32_t(*group.cup));
@@ -94,7 +99,7 @@ Savegame make_save(const CareerSnapshot& snapshot){snapshot.validate();Savegame 
     for(auto byte:save.stream)save.checksum=uint8_t(save.checksum+byte);return save;
 }
 CareerSnapshot read_save(const Savegame& save){
-    if(save.version!="O1.2"||!save.checksum_ok)throw FormatError("world12: incompatible or damaged save");const auto&raw=save.stream;if(raw.size()<28||(std::string(raw.begin(),raw.begin()+8)!="OBMH12S4"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12S5"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12S6"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12S7"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12S8"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12S9"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SA"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SB"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SC"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SD"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SE"))throw FormatError("world12: unknown development save schema");size_t at=8;
+    if(save.version!="O1.2"||!save.checksum_ok)throw FormatError("world12: incompatible or damaged save");const auto&raw=save.stream;if(raw.size()<28||(std::string(raw.begin(),raw.begin()+8)!="OBMH12S4"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12S5"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12S6"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12S7"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12S8"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12S9"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SA"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SB"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SC"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SD"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SE"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SF"))throw FormatError("world12: unknown development save schema");size_t at=8;
     const auto get=[&](int width=4){if(at+size_t(width)>raw.size())throw FormatError("world12: truncated save field");uint64_t value=0;for(int i=0;i<width;++i)value|=uint64_t(raw[at++])<<(8*i);return value;};
     auto size=get();if(size>32*1024*1024)throw FormatError("world12: world stream too large");CareerSnapshot state;state.date=uint32_t(get());state.season=uint32_t(get());state.watcom_seed=uint32_t(get());state.game_seed=std::bit_cast<int32_t>(uint32_t(get()));if(at+size>raw.size())throw FormatError("world12: truncated world stream");state.world=decode_world(Bytes(raw.begin()+at,raw.begin()+at+size));at+=size;for(auto&round:state.league_rounds)round=uint8_t(get(1));state.results=SeasonResults::empty(state.world.catalogue);
     for(auto&league:state.results.leagues)for(auto&r:league){auto played=get(1);if(played>1)throw FormatError("world12: invalid result flag");r={played!=0,uint8_t(get(1)),uint8_t(get(1))};}
@@ -131,6 +136,8 @@ CareerSnapshot read_save(const Savegame& save){
     }
     if(raw[7]>='D') {
         PreparedEvent event;event.gates_booked=raw[7]=='E';event.day=uint16_t(get(2));event.calendar_revision=get(8);
+        if(raw[7]=='F'){const auto phase=get(1),gates=get(1);if(phase<1||phase>2||gates>1)throw FormatError("world12: invalid prepared desk phase");event.desk_phase=PreparedEvent::DeskPhase(phase);event.gates_booked=gates!=0;}
+
         for(auto& property:event.referee_properties)property=uint8_t(get(1));
         const auto groups=get(1);if(groups<1||groups>32)throw FormatError("world12: invalid prepared group count");
         for(uint64_t g=0;g<groups;++g) {

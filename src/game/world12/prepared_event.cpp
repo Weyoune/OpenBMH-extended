@@ -18,6 +18,10 @@ void validate_prepared_event(const CareerSnapshot& state) {
        state.desktop->manager_order.empty()||!state.calendar||event.day!=state.calendar->next_day||
        event.calendar_revision!=state.calendar->revision||event.groups.size()>32)
         throw FormatError("world12: prepared match environment has no current calendar owner");
+    if(uint8_t(event.desk_phase)>2||
+       (event.desk_phase==PreparedEvent::DeskPhase::desks&&(!state.desktop->initial_event||event.gates_booked))||
+       (event.desk_phase!=PreparedEvent::DeskPhase::desks&&(state.desktop->initial_event||state.desktop->active_seat||state.desktop->autosave_pending)))
+        throw FormatError("world12: prepared match desk owner/phase mismatch");
     const auto ticket=prepare_day(state);
     if(!ticket||ticket->leagues.size()+ticket->cups.size()!=event.groups.size()||event.groups.empty())
         throw FormatError("world12: prepared match groups do not cover the calendar ticket");

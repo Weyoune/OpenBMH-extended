@@ -83,11 +83,13 @@ struct PreparedGroup {
     bool operator==(const PreparedGroup&)const=default;
 };
 struct PreparedEvent {
+    enum class DeskPhase:uint8_t { unstarted,desks,complete };
     uint16_t day=0;
     uint64_t calendar_revision=0;
     std::array<uint8_t,50> referee_properties{};
     std::vector<PreparedGroup> groups;
     bool gates_booked=false;
+    DeskPhase desk_phase=DeskPhase::unstarted;
     bool operator==(const PreparedEvent&)const=default;
 };
 struct CareerSnapshot {

@@ -120,7 +120,9 @@ DesktopScreen::DesktopScreen(const std::filesystem::path& data,DeskState state,c
     if (state_.next_opponent && *state_.next_opponent >= 0 && state_.next_opponent_badge &&
         !state_.next_opponent_badge_fallback) {
         const int selector = *state_.next_opponent_badge & 0x1ff;
-        next_opponent_badge_ = load_vga(asset_path(data / "W", std::to_string(selector >> 3) + ".VGA"));
+        next_opponent_badge_ = load_vga(state_.next_opponent_badge_atlas.empty()
+            ?asset_path(data / "W", std::to_string(selector >> 3) + ".VGA")
+            :asset_path(data,state_.next_opponent_badge_atlas));
     }
     shortcut_bar_visible_ = state_.shortcut_bar_always;
 }
@@ -735,8 +737,17 @@ void DesktopScreen::acknowledge(DeskState updated) {
     Image next_badge = badge_;
     if ((updated.badge >> 3) != (state_.badge >> 3)||updated.badge_atlas!=state_.badge_atlas)
         next_badge = load_vga(updated.badge_atlas.empty()?asset_path(data_/"W",std::to_string(updated.badge>>3)+".VGA"):asset_path(data_,updated.badge_atlas));
+    auto next_opponent=next_opponent_badge_;
+    if(updated.next_opponent_badge!=state_.next_opponent_badge||updated.next_opponent_badge_atlas!=state_.next_opponent_badge_atlas||
+       updated.next_opponent_badge_fallback!=state_.next_opponent_badge_fallback) {
+        next_opponent.reset();
+        if(updated.next_opponent&&*updated.next_opponent>=0&&updated.next_opponent_badge&&!updated.next_opponent_badge_fallback)
+            next_opponent=load_vga(updated.next_opponent_badge_atlas.empty()
+                ?asset_path(data_/"W",std::to_string(*updated.next_opponent_badge>>3)+".VGA")
+                :asset_path(data_,updated.next_opponent_badge_atlas));
+    }
     shortcut_bar_visible_ = updated.shortcut_bar_always || shortcut_bar_edge_toggle_;
-    state_ = std::move(updated); badge_ = std::move(next_badge);
+    state_ = std::move(updated); badge_ = std::move(next_badge);next_opponent_badge_=std::move(next_opponent);
     pending_.reset(); last_rejection_.clear();
 }
 void DesktopScreen::acknowledge_mailbox_parent(DeskState updated) {

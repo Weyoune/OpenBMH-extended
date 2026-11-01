@@ -26,16 +26,17 @@ void initialize_desktops(CareerSnapshot& state,const GameState& reference) {
 DesktopEntryOutcome enter_initial_manager_desktop(CareerSnapshot& state,ManagerActionOwner& owner,
     ManagerActionOwner expected,uint8_t seat,const GameState& reference) {
     state.validate();
+    const bool scheduled=state.prepared_event&&state.prepared_event->desk_phase==PreparedEvent::DeskPhase::desks;
     if(!owner.scope||owner.scope!=expected.scope||owner.revision!=expected.revision||
-       owner.revision==std::numeric_limits<uint64_t>::max()||!state.desktop||!state.world.settings||state.date||state.season||state.desktop->active_seat||
-       std::any_of(state.league_rounds.begin(),state.league_rounds.end(),[](auto r){return r!=0;}))
+       owner.revision==std::numeric_limits<uint64_t>::max()||!state.desktop||!state.world.settings||state.desktop->active_seat||
+       (!scheduled&&(state.date||state.season||std::any_of(state.league_rounds.begin(),state.league_rounds.end(),[](auto r){return r!=0;}))))
         throw std::invalid_argument("world12: invalid desktop owner/state");
     const auto manager=std::find_if(state.world.managers.begin(),state.world.managers.end(),[&](const auto& m){return m.seat==seat;});
     if(manager==state.world.managers.end())throw std::invalid_argument("world12: unknown desktop manager");
     // Initial confirmations occupy seats in order. Source uses manager index
     // zero for monthly accounting; do not misapply that to an arbitrary sparse
     // or reordered roster, or to an English process-wide reference layout.
-    for(size_t i=0;i<state.world.managers.size();++i)if(state.world.managers[i].seat!=i)
+    for(size_t i=0;i<state.world.managers.size();++i)if(!scheduled&&state.world.managers[i].seat!=i)
         throw std::invalid_argument("world12: initial desktop requires ordered manager seats");
     if(kEnglishCompetitions)throw std::invalid_argument("world12: desktop requires the German numeric reference profile");
     // Season-end sponsorship has its own financial/message owner. Do not run

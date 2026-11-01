@@ -87,6 +87,7 @@ struct DeskState {
     // Source SourceDrawerTeam case 15: resolved only from the current prepared event.
     std::string next_competition_label, next_competition_detail, next_opponent_name;
     std::optional<uint16_t> next_opponent_badge;
+    std::string next_opponent_badge_atlas;
     bool next_opponent_badge_fallback = false;
     // Read-only contents for SourceDrawerTeam switch-local cases 0..4, 9..10,
     // 0x0c, 0x10..0x11, and 0x14..0x15. Cases 0x0d and 0x16 are source-empty. Portrait/name are

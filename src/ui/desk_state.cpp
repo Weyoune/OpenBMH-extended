@@ -752,7 +752,8 @@ std::string desk_json(const DeskState& d) {
         << ",\"next_opponent_name\":" << json_quote(original_to_utf8(d.next_opponent_name))
         << ",\"next_opponent_badge\":";
     if (d.next_opponent_badge) out << *d.next_opponent_badge; else out << "null";
-    out << ",\"next_opponent_badge_fallback\":" << (d.next_opponent_badge_fallback ? "true" : "false");
+    out << ",\"next_opponent_badge_atlas\":" << json_quote(d.next_opponent_badge_atlas)
+        << ",\"next_opponent_badge_fallback\":" << (d.next_opponent_badge_fallback ? "true" : "false");
     out << ",\"warnings\":[";
     for (size_t i = 0; i < d.warnings.size(); ++i) {
         if (i) out << ',';

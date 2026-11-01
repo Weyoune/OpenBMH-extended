@@ -15,7 +15,8 @@ AttendanceOutcome book_event_attendance(CareerSnapshot& state,ManagerActionOwner
     state.validate();
     if(!owner.scope||owner.scope!=expected.scope||owner.revision!=expected.revision||
        owner.revision==std::numeric_limits<uint64_t>::max()||!state.prepared_event||state.prepared_event->gates_booked||
-       !state.world.settings||!state.world.economy||!state.progress)
+       !state.world.settings||!state.world.economy||!state.progress||
+       state.prepared_event->desk_phase==PreparedEvent::DeskPhase::desks)
         throw FormatError("world12: missing or stale gate-income owner");
     for(const auto& manager:state.world.managers)
         if(!manager.career||!manager.career->season_services||!manager.match_state||!manager.match_state->attendance)
@@ -48,8 +49,10 @@ AttendanceOutcome book_event_attendance(CareerSnapshot& state,ManagerActionOwner
             local.memory.set8(competition+0x1d,uint8_t(played));
         }
         descriptor.desc[0]=type;for(size_t b=0;b<4;++b)descriptor.desc[0xcc+b]=uint8_t(competition>>(8*b));
-        prepare_team(local,home,match_competition_class(type),0);prepare_team(local,away,match_competition_class(type),1);
-        auto_lineup(local,home,local.manager_of(home)>=0?0xe4:100);auto_lineup(local,away,local.manager_of(away)>=0?0xe4:100);
+        if(candidate.prepared_event->desk_phase==PreparedEvent::DeskPhase::unstarted) {
+            prepare_team(local,home,match_competition_class(type),0);prepare_team(local,away,match_competition_class(type),1);
+            auto_lineup(local,home,local.manager_of(home)>=0?0xe4:100);auto_lineup(local,away,local.manager_of(away)>=0?0xe4:100);
+        }
         MinuteReport report;const auto bits=match_mode_bits(local,descriptor,context,report);
         if(report.unsupported)throw FormatError(report.reason);
         const auto amount=attendance(local,home,away,bits,match.temperature,match.rain,type,game,random,report);

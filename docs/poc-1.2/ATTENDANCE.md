@@ -33,8 +33,9 @@ boundary, actual source-prepared finals, and all twelve first league rounds in
 the private four-manager fixture. Calculated crowds, gate/catering effects,
 record history, SE save/load, duplicate rejection and actual scoring passed.
 
-These are backend/session calculations. General pre-match manager desks,
-unsolicited offers/coupons, complete live/result UI, competition premiums and
+These are backend/session calculations. Mode-I [scheduled manager desks](SCHEDULED_DESKS.md)
+now precede booked receipts, with SF retaining their phase. Unsolicited offers/coupons,
+complete live/result UI, competition premiums and
 annual transitions remain release work. Three played seasons are not claimed.
 Native single-account money storage is still 32-bit; this record extension does
 not solve the separate large-balance overflow issue.

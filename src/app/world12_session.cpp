@@ -142,6 +142,15 @@ AttendanceOutcome Session::book_scheduled_attendance(uint64_t revision,const std
     return book_event_attendance(state_,owner_,{owner_.scope,revision},resources_.reference,texts,
         {resources_.german,resources_.english});
 }
+DesktopEntryOutcome Session::begin_scheduled_desks(uint64_t revision) {
+    if(preparation_menu_)throw FormatError("world12: an open menu owns the current career");
+    return bmh::app::world12::begin_scheduled_desks(state_,owner_,{owner_.scope,revision},resources_.reference);
+}
+void Session::finish_scheduled_desks(const ui::DeskRequest& request) {
+    if(request.kind!=ui::DeskRequestKind::advance_turn)throw FormatError("world12: not a scheduled desk completion request");
+    validate_file_owner(request.manager_slot,request.revision);
+    bmh::app::world12::finish_scheduled_desks(state_,owner_,{owner_.scope,request.revision});
+}
 void Session::play_prepared_matches(uint64_t revision,const HumanRoundHooks& hooks) {
     if(preparation_menu_||revision!=owner_.revision||!state_.prepared_event||!state_.prepared_event->gates_booked||
        !state_.progress||state_.progress->phase!=ProgressPhase::scheduled_event)
@@ -154,6 +163,7 @@ void Session::play_prepared_matches(uint64_t revision,const HumanRoundHooks& hoo
         for(const auto& match:group.matches){AiLeagueConditions c;c.date=candidate.date;c.month=month_code(candidate.date);
             c.temperature=match.temperature;c.rain=match.rain;c.referee=match.referee;c.spectators=*match.spectators;
             c.referee_properties.assign(event.referee_properties.begin(),event.referee_properties.end());
+            c.teams_prepared=true;
             c.presentation_buttons.assign(0xb4,1);conditions.push_back(std::move(c));}
         if(group.league)leagues.push_back({{event.day,*group.league,group.round},std::move(conditions)});
         else cups.push_back({*group.cup,group.source_entry,group.revision,std::move(conditions)});

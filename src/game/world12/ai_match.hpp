@@ -11,6 +11,9 @@ struct AiLeagueConditions {
     uint8_t referee=0;
     std::vector<uint8_t> referee_properties;
     std::vector<uint8_t> presentation_buttons;
+    // The event owner has already switched competition cards and squad status.
+    // Repeating prepare_team after a manager edited the lineup loses that state.
+    bool teams_prepared=false;
 };
 struct AiLeagueOutcome {
     Fixture fixture;

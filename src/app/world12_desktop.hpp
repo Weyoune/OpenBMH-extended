@@ -10,8 +10,8 @@ struct DesktopEntryOutcome {
     uint64_t game_draws=0,watcom_draws=0;
     bool autosave_due=false;
 };
-// Initial, zero-round DeskDate only, using the German numeric reference profile
-// and the ordered initial manager seats. The event owner prepares fixtures/order, pre-match offers
+// Initial, zero-round DeskDate or an owned scheduled desktop cursor, using the
+// German numeric reference profile. The event owner prepares fixtures/order, pre-match offers
 // and pools BEFORE this boundary. It does not prepare or finish a calendar day.
 // Autosave is signalled to the owner; no file is written by this transaction.
 DesktopEntryOutcome enter_initial_manager_desktop(bmh::world12::CareerSnapshot&,
