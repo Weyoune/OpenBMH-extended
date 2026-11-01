@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "app/world12_initial_season.hpp"
 #include "app/world12_first_event.hpp"
+#include "app/world12_pending.hpp"
 #include "game/turn.hpp"
 #include "game/matchday_setup.hpp"
 #include "game/weekly.hpp"
@@ -24,7 +25,7 @@ int main(int argc,char** argv)try {
     if(argc!=4)throw std::runtime_error("usage: world12_initial_season_validate WORLD12.JSON German-reference FLTD.EXE");
     const auto master=decode_world(read_file(argv[1]));const std::filesystem::path data=argv[2];const auto profile=load_data_profile(data);install_runtime_profile(profile);
     const auto german=load_le(data/"BMH.exe"),english=bmh::launch::translate_fltd(argv[3]);install_career_rules(german);install_fixture_tables(german);uint8_t sizes[kLeagueCount];for(size_t i=0;i<kLeagueCount;++i)sizes[i]=profile.leagues[i];set_league_sizes(sizes);
-    const auto db=load_database(data/"M3D.MAN",profile.counts);auto native=startup_state(german,db,read_file(data/"M3.MEN"),read_file(data/"M3.DAT"));const auto reference=native;
+    const auto db=load_database(data/"M3D.MAN",profile.counts);auto native=startup_state(german,db,read_file(data/"M3.MEN"),read_file(data/"M3.DAT"));const auto reference=native;const auto texts=load_textd(data/"TEXTD.BLK");native.texts=&texts;
     CareerSnapshot state;state.world=select_world_scope(master,{true,false,true});state.results=SeasonResults::empty(state.world.catalogue);
     const auto ranges=read_initial_strength_ranges(state.world.catalogue,german,english);const auto plan=make_player_initialization_plan(master,state.world.catalogue.scope,ranges);
     GameRandom game(17),native_game(17);WatcomRandom random(91),native_random(91);MinuteReport report;
@@ -83,7 +84,7 @@ int main(int argc,char** argv)try {
     if(read_save(make_save(state))!=state)throw std::runtime_error("initial market snapshot differs");
     std::cout<<initial_market.listings<<" initial market listings and shuffled fixtures, checkpoint/toggle/quotes/snapshot match Native; W="<<initial_market.watcom_draws<<'\n';
     owner_app::initialize_desktops(state,reference);
-    size_t events=0,offers=0,loans=0,lures=0;
+    size_t events=0,offers=0,loans=0,lures=0,settlements=0,moved_sales=0,moved_loans=0;
     for(uint32_t seed=1;seed<30000&&(offers<16||!loans||!lures);++seed){
         WatcomRandom probe(seed);probe.range(0,10000);const bool expected_offer=probe.range(0,70-int16_t(state.world.managers[0].match_state->staff_ratings[0])/50)==0;
         if(!expected_offer&&events)continue;
@@ -101,9 +102,38 @@ int main(int argc,char** argv)try {
         if(row){if(row->player.value!=(classic.squad_slots.at(size_t(runtime_dimensions.pool_first)+40)&0xfff)||row->fee!=classic.memory.u32(at+0x2c)||row->salary!=classic.memory.u32(at+0x30)||row->asking_percent!=classic.memory.u8(at+0x54)||row->demand_percent!=classic.memory.u8(at+0x55))throw std::runtime_error("initial offer quote differs");
             const auto& bid=row->bids[0];if(bid.bidder.valid()&&(bid.bidder!=identities.at(classic.club_ids.at(classic.memory.u16(at)))||bid.fee!=classic.memory.u32(at+0x1c)||bid.salary!=classic.memory.u32(at+0xc)||bid.months!=classic.memory.u8(at+0x34)))throw std::runtime_error("initial offer bidder/amount/term differs");}
         if(found){++offers;loans+=bool(row->bids[0].months&128);lures+=event.offer->salary_only;if(event.offer->warned!=bool(classic.memory.u32(layout::OfferSlots)&0x80000000u))throw std::runtime_error("initial offer warning differs");}
+        if(found)for(int decision=0;decision<4;++decision){auto core=classic;auto resolved=typed;GameRandom cg(typed.game_seed);WatcomRandom cw(typed.watcom_seed);MinuteReport checked;
+            PendingOfferHooks hooks;hooks.answer=[&](const GameState&,const PendingOfferQuestion& q){return decision==2&&q.kind==PendingOfferQuestionKind::severance?PendingOfferAnswer::no:decision==3&&q.kind==PendingOfferQuestionKind::salary_demand?PendingOfferAnswer::no:PendingOfferAnswer::yes;};hooks.select_transfer=[&](const GameState&,const TransferOfferListView&){return PendingOfferTransferChoice{decision==0?PendingOfferTransferChoiceKind::decline:PendingOfferTransferChoiceKind::bid,decision==0?-1:0};};hooks.notice=[](const GameState&,const PendingOfferNotice&){};
+            PendingOfferDeskRequest request;request.runtime_mode=PendingOfferDeskRuntimeMode::normal_interactive;request.manager_count=1;request.manager_position=0;
+            const auto expected=process_natural_pending_offers_after_desk(core,request,cg,cw,hooks,checked);if(checked.unsupported||!expected.completed)throw std::runtime_error("Native pending fixture: "+checked.reason);
+            owner_app::ManagerActionOwner tx{93,0};const auto result=owner_app::resolve_initial_offer(resolved,tx,tx,reference,texts,hooks);
+            if(result.completed!=expected.completed||result.transferred!=expected.transferred||result.salary_accepted!=expected.salary_accepted||resolved.game_seed!=cg.seed()||resolved.watcom_seed!=cw.seed())throw std::runtime_error("pending result/RNG differs at seed "+std::to_string(seed)+" choice "+std::to_string(decision));
+            for(const auto& [id,p]:resolved.world.players)if(p.attributes.w35c!=core.players.at(id.value).w35c||p.attributes.w364!=core.players.at(id.value).w364||p.attributes.w368!=core.players.at(id.value).w368||p.cards!=core.player_cards.at(id.value)||p.bonus!=core.player_bonus.at(id.value))throw std::runtime_error("pending player attributes/cards differ");
+            for(size_t team=0;team<164;++team){const auto id=identities.at(core.club_ids.at(team));const auto& roster=resolved.world.clubs.at(id).roster;for(size_t r=0;r<24;++r){const auto raw=core.squad_slots.at(team*24+r);if((roster[r].empty()?0xfffu:roster[r].player.value)!=(raw&0xfff))throw std::runtime_error("pending canonical roster differs");}}
+            if(resolved.world.managers[0].finance!=manager_initial_finance_from_legacy(core,0))throw std::runtime_error("pending paid account differs");
+            if(resolved.world.managers[0].tactics!=manager_full_tactics_from_legacy(core,0,players))throw std::runtime_error("pending complete contract/tactics board differs");
+            if(!resolved.transfers||uint32_t(resolved.transfers->balance[0])!=uint32_t(core.manager_records[0x330]|uint32_t(core.manager_records[0x331])<<8|uint32_t(core.manager_records[0x332])<<16|uint32_t(core.manager_records[0x333])<<24)||resolved.desktop->initial_event->offer||resolved.world.transfer_market->rows[40])throw std::runtime_error("pending transfer account/cleanup differs");
+            if(result.transferred){
+                const auto read32=[&](size_t at){return uint32_t(core.manager_records.at(at))|uint32_t(core.manager_records.at(at+1))<<8|uint32_t(core.manager_records.at(at+2))<<16|uint32_t(core.manager_records.at(at+3))<<24;};
+                const auto& history=resolved.transfers->history[0];
+                if(history.size()!=1||history[0].player!=row->player||history[0].other!=row->bids[0].bidder||history[0].source_word!=read32(0x760))throw std::runtime_error("pending qualified transfer history differs");
+                if(row->bids[0].months&128){++moved_loans;
+                    if(resolved.world.loans.size()!=1||resolved.transfers->loans.size()!=1)throw std::runtime_error("accepted loan lost contract");
+                    const auto& contract=resolved.transfers->loans[0];int slot=-1;
+                    for(int n=0;n<12;++n)if(core.memory.u16(layout::Career_CareerManagersEnd_RuntimeField+uint32_t(n*2))==row->player.value){slot=n;break;}
+                    if(slot<0||contract.player!=row->player||contract.manager!=0)throw std::runtime_error("pending loan owner/player differs");
+                    const auto at=layout::ClubInfo_FormatError_RuntimeField+uint32_t(slot*0x58);
+                    for(size_t n=0;n<0x58;++n)if((n<0x44||n>=0x48)&&contract.board[n]!=core.memory.u8(at+uint32_t(n)))throw std::runtime_error("pending loan owner board differs");
+                    const auto mark=core.memory.u16(at+0x44),marked=core.memory.u16(at+0x46);
+                    if(contract.mark!=(mark==0xfff?PlayerId{}:PlayerId{mark})||contract.marked_by!=(marked==0xfff?PlayerId{}:PlayerId{marked}))throw std::runtime_error("pending loan board identity differs");
+                }else ++moved_sales;
+            }
+            if(read_save(make_save(resolved))!=resolved)throw std::runtime_error("pending history/loan snapshot differs");++settlements;
+        }
         if(read_save(make_save(typed))!=typed)throw std::runtime_error("initial event snapshot differs");++events;
     }
-    if(offers<16||!loans||!lures)throw std::runtime_error("initial event oracle did not exercise all offer kinds");
+    std::cout<<settlements<<" full-Core pending decisions, "<<moved_sales<<" actual sales and "<<moved_loans<<" actual loans compared with canonical rosters/accounts/RNG/snapshots\n";
+    if(offers<16||!loans||!lures||!moved_sales||!moved_loans)throw std::runtime_error("initial event oracle did not exercise all offer kinds");
     std::cout<<events<<" Native first-event comparisons, "<<offers<<" offers including "<<loans<<" loan terms and "<<lures<<" salary-only approaches: quotes/bidders/terms/warnings/order/prestige/both RNGs/snapshots match\n";
     {auto loop=state;auto classic=native;const auto model=loop.world.managers.front();loop.world.settings->mode=1;loop.world.settings->planned_managers=4;
         classic.memory.set8(layout::GameMode,1);classic.memory.set8(layout::ManagerCount,4);classic.memory.set8(layout::OriginalManagerCount,4);

@@ -5,7 +5,7 @@
 #include <limits>
 namespace bmh::app::world12 {
 StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,std::unique_ptr<Session>& session,
-    const std::filesystem::path& data,uint32_t seed,uint64_t scope)try {
+    const std::filesystem::path& data,uint32_t seed,uint64_t scope,const PendingOfferHooks& hooks)try {
     if(action.request==ui::FlowRequest::load_game){
         if(session)throw FormatError("world12: setup load cannot replace an active startup session");
         const auto resources=load_runtime_resources(data);flow.open_world12_file_dialog(ui::SaveLoadMode::load,resources.german,save_info_reader(resources.german));return {};
@@ -41,7 +41,12 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
     }
     if(action.request==ui::FlowRequest::kickoff){
         if(!session||!flow.desktop()||!flow.desktop()->pending()||*flow.desktop()->pending()!=action.desk_action)throw FormatError("world12: manager transition has no matching view owner");
-        auto staged=std::make_unique<Session>(*session);staged->advance_manager(action.desk_action);
+        auto staged=std::make_unique<Session>(*session);
+        if(staged->snapshot().desktop->initial_event->offer){
+            staged->resolve_pending(data,action.desk_action,hooks);
+            const auto& event=*staged->snapshot().desktop->initial_event;
+            if(size_t(event.manager_position)+1<event.manager_order.size()&&!staged->snapshot().desktop->autosave_pending){auto next=action.desk_action;next.revision=staged->revision();staged->advance_manager(next);}
+        }else staged->advance_manager(action.desk_action);
         auto desk=ui::world12_initial_desktop(data,staged->snapshot(),staged->reference(),staged->rules(),staged->options(),staged->revision());
         auto view=flow.prepare_world12_manager_result(std::move(desk),staged->rules(),action.desk_action);session.swap(staged);flow.finish_world12_desktop(std::move(view));return {};
     }

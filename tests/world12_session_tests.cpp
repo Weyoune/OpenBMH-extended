@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "world12_fixture.hpp"
 #include "app/world12_startup.hpp"
+#include "app/world12_pending.hpp"
 #include "app/world12_desktop.hpp"
 #include "app/world12_save_load.hpp"
 #include "game/world12/match_projection.hpp"
@@ -10,6 +11,8 @@
 #include "game/save.hpp"
 #include "formats/data_profile.hpp"
 #include "formats/palette.hpp"
+#include "ui/pending_offer.hpp"
+#include "ui/incoming_transfer.hpp"
 #include <fstream>
 #include <algorithm>
 #include <chrono>
@@ -29,6 +32,42 @@ session_app::RuntimeResources synthetic() {
     r.german=image;r.english=image;r.reference.stocks.resize(12*0x5c);r.reference.memory.add_block(layout::FundBlock,6*0x1c);r.reference.formations.resize(0x580);r.reference.manager_records.resize(5*0xb0c);r.reference.tactics.resize(4*0x840);r.reference.manager_options.resize(20);r.reference.manager_ratings.resize(240);
     const uint8_t depths[]={0,5,5,5,5,10,10,10,10,17,17};for(size_t m=0;m<4;++m){r.reference.manager_options[m*5]=1;for(size_t mode=0;mode<2;++mode)for(size_t f=0;f<8;++f)for(size_t row=0;row<11;++row)r.reference.formations[m*0x160+mode*0xb0+f*22+row]=depths[row];}
     r.reference.memory.add_block(layout::EnvironmentYouthTeams,4*0x24);return r;
+}
+void transfer_snapshot_tests(CareerSnapshot state) {
+    const auto manager=state.world.managers.front();
+    const auto borrower=std::find_if(state.world.clubs.begin(),state.world.clubs.end(),[&](const auto& entry){return entry.first!=manager.club&&std::none_of(state.world.managers.begin(),state.world.managers.end(),[&](const auto& m){return m.club==entry.first;});})->first;
+    auto& seller=state.world.clubs.at(manager.club).roster;
+    auto& buyer=state.world.clubs.at(borrower).roster;
+    const auto incoming=std::find_if(buyer.begin(),buyer.end(),[](const auto& slot){return slot.empty();});
+    check(incoming!=buyer.end(),"loan snapshot fixture has no borrower roster slot");
+    const PlayerId player{0xf0000101u};auto record=state.world.players.at(seller[0].player);
+    record.id=player;state.world.players.emplace(player,record);*incoming={player,0};
+    state.world.loans.push_back({player,manager.club,borrower,6});
+    state.transfers.emplace();auto& runtime=*state.transfers;
+    runtime.balance={-1000000,0,2000000,-2147483647};
+    runtime.history[manager.seat].push_back({player,borrower,0xabcdef01});
+    LoanContract contract;contract.player=player;contract.manager=manager.seat;
+    contract.board.fill(17);for(size_t b=0x44;b<0x48;++b)contract.board[b]=0;
+    contract.mark=seller[0].player;contract.marked_by=seller[1].player;
+    runtime.loans.push_back(contract);
+    check(read_save(make_save(state))==state,"S9 lost global loan/history refs, signed balance or owner board");
+    auto invalid=state;invalid.transfers->loans[0].board[0x44]=1;
+    rejects([&]{make_save(invalid);},"packed local player reference leaked into S9 backing");
+    invalid=state;invalid.transfers->loans[0].mark={0xfffffffeu};
+    rejects([&]{make_save(invalid);},"unknown global loan mark accepted");
+    invalid=state;invalid.transfers->loans.push_back(contract);
+    rejects([&]{make_save(invalid);},"duplicate saved loan contract accepted");
+    invalid=state;invalid.transfers->loans[0].manager=4;
+    rejects([&]{make_save(invalid);},"invalid loan manager accepted");
+    invalid=state;invalid.world.loans.clear();
+    rejects([&]{make_save(invalid);},"owner contract without active loan accepted");
+    invalid=state;invalid.transfers->history[manager.seat][0].other={0xfffffffeu};
+    rejects([&]{make_save(invalid);},"unknown transfer-history club accepted");
+    auto truncated=make_save(state);truncated.stream.pop_back();
+    rejects([&]{read_save(truncated);},"truncated S9 loan contract accepted");
+    auto previous=state;previous.transfers.reset();previous.world.loans.clear();
+    auto s8=make_save(previous);s8.stream.pop_back();s8.stream[7]='8';
+    check(read_save(s8)==previous,"previous S8 snapshot ceased to load");
 }
 unsigned resume_draws=0;
 void count_resume_draw(int){++resume_draws;}
@@ -76,11 +115,11 @@ void desktop_tests(CareerSnapshot prepared,const GameState& source,const std::fi
     auto invalid=before;invalid.desktop->managers.push_back(invalid.desktop->managers.front());rejects([&]{make_save(invalid);},"duplicate saved desktop accepted");
     invalid=before;invalid.desktop->active_seat=4;rejects([&]{make_save(invalid);},"unknown active desktop accepted");
     auto truncated=make_save(before);truncated.stream.pop_back();rejects([&]{read_save(truncated);},"truncated desktop snapshot accepted");
-    auto s5=make_save(before);const size_t count=before.desktop->managers.size(),stride=54*16+4,start=s5.stream.size()-1-count*stride;
+    auto s5=make_save(before);s5.stream.pop_back();const size_t count=before.desktop->managers.size(),stride=54*16+4,start=s5.stream.size()-1-count*stride;
     for(size_t i=count;i-->0;)s5.stream.erase(s5.stream.begin()+start+i*stride+2,s5.stream.begin()+start+i*stride+4);
     auto s6=s5;s6.stream[7]='6';check(read_save(s6)==before,"previous S6 snapshot ceased to load");
     s5.stream[7]='5';s5.stream.pop_back();s5.checksum=0;for(auto b:s5.stream)s5.checksum=uint8_t(s5.checksum+b);check(read_save(s5)==before,"previous S5 desktop snapshot ceased to load");
-    auto old=before;old.desktop.reset();auto legacy=make_save(old);legacy.stream[7]='4';legacy.stream.pop_back();legacy.checksum=0;for(auto b:legacy.stream)legacy.checksum=uint8_t(legacy.checksum+b);check(read_save(legacy)==old,"previous S4 snapshot ceased to load");
+    auto old=before;old.desktop.reset();auto legacy=make_save(old);legacy.stream.pop_back();legacy.stream[7]='4';legacy.stream.pop_back();legacy.checksum=0;for(auto b:legacy.stream)legacy.checksum=uint8_t(legacy.checksum+b);check(read_save(legacy)==old,"previous S4 snapshot ceased to load");
 }
 CareerSnapshot first_event_fixture(CareerSnapshot state,const GameState& reference) {
     InitialCompetitionFields fields;std::vector<ClubId> clubs;for(const auto& [id,club]:state.world.clubs)if(club.kind==ClubKind::club)clubs.push_back(id);
@@ -106,7 +145,7 @@ void first_event_tests(const CareerSnapshot& pending,const GameState& source) {
         check(owner.revision==5&&state.desktop->active_seat==order.front()&&state.desktop->initial_event->manager_order==order&&state.desktop->initial_event->offer.has_value()==offer,"initial event lost order/offer/owner");
         check(result.game_draws>=order.size()+100&&result.watcom_draws>1&&state.date==before.date&&state.calendar==before.calendar&&state.results==before.results,"initial event skipped random draws or advanced time");
         check(read_save(make_save(state))==state,"initial event/offer save roundtrip differs");
-        {auto old=make_save(state);const auto& event=*state.desktop->initial_event;const size_t tail=7+event.manager_order.size()+(event.offer?4:0);old.stream.erase(old.stream.end()-ptrdiff_t(tail)+3);old.stream[7]='7';check(read_save(old)==state,"S7 first-event snapshot lost its implicit position zero");}
+        {auto old=make_save(state);old.stream.pop_back();const auto& event=*state.desktop->initial_event;const size_t tail=7+event.manager_order.size()+(event.offer?4:0);old.stream.erase(old.stream.end()-ptrdiff_t(tail)+3);old.stream[7]='7';check(read_save(old)==state,"S7 first-event snapshot lost its implicit position zero");}
 
         {auto resources=synthetic();resources.reference=reference;resume_draws=0;draw_hook=count_resume_draw;
             auto resumed=session_app::Session::resume(resources,state,91,100);draw_hook=nullptr;
@@ -123,6 +162,34 @@ void first_event_tests(const CareerSnapshot& pending,const GameState& source) {
             if(offer||order.size()==1){rejects([&]{session_app::advance_initial_manager(loop,turn,turn,reference);},"manager transition skipped pending offer or final-day services");check(loop==accepted_loop&&turn.revision==1,"rejected manager transition leaked state");}
             else {session_app::advance_initial_manager(loop,turn,{83,1},reference);check(turn.revision==2&&loop.desktop->initial_event->manager_position==1&&loop.desktop->active_seat==order[1]&&loop.date==state.date&&loop.calendar==state.calendar&&loop.results==state.results,"next manager changed order/date or lost cursor");
                 check(read_save(make_save(loop))==loop,"nonzero manager cursor did not survive save");const auto next=loop;rejects([&]{session_app::advance_initial_manager(loop,turn,{83,1},reference);},"stale manager advance replay accepted");check(loop==next,"stale manager transition changed state");}}
+        if(offer) {
+            TextDb texts;texts.strings.resize(TEXT_COUNT,"Synthetic message");
+            const auto pending=state;
+            session_app::ManagerActionOwner tx{84,7};
+            PendingOfferHooks decline;
+            decline.answer=[](const GameState&,const PendingOfferQuestion&){return PendingOfferAnswer::yes;};
+            decline.select_transfer=[](const GameState&,const TransferOfferListView&){return PendingOfferTransferChoice{PendingOfferTransferChoiceKind::decline,-1};};
+            rejects([&]{session_app::resolve_initial_offer(state,tx,{84,6},reference,texts,decline);},"stale pending decision accepted");
+            check(state==pending&&tx.revision==7,"stale pending decision changed snapshot");
+            const auto aborted=[](){throw std::runtime_error("cancelled by presenter");};
+            auto cancel=decline;
+            cancel.answer=[&](const GameState&,const PendingOfferQuestion&)->PendingOfferAnswer{aborted();return PendingOfferAnswer::unsupported;};
+            cancel.select_transfer=[&](const GameState&,const TransferOfferListView&)->PendingOfferTransferChoice{aborted();return {};};
+            rejects([&]{session_app::resolve_initial_offer(state,tx,tx,reference,texts,cancel);},"cancelled pending presenter committed");
+            check(state==pending&&tx.revision==7,"cancelled pending decision leaked staged state/RNG");
+            const auto result=session_app::resolve_initial_offer(state,tx,tx,reference,texts,decline);
+            check(result.completed&&result.processed==1&&!result.transferred&&tx.revision==8&&!state.desktop->initial_event->offer&&!state.world.transfer_market->rows[40],"owned pending decline/salary decision did not finish");
+            check(read_save(make_save(state))==state,"resolved pending state failed S9 roundtrip");
+            const auto resolved=state;
+            rejects([&]{session_app::resolve_initial_offer(state,tx,tx,reference,texts,decline);},"resolved pending decision replay accepted");
+            check(state==resolved&&tx.revision==8,"replayed pending decision changed state");
+            state=pending;
+            auto interrupted=decline;
+            interrupted.answer=[&](const GameState&,const PendingOfferQuestion&){++tx.revision;return PendingOfferAnswer::yes;};
+            interrupted.select_transfer=[&](const GameState&,const TransferOfferListView&){++tx.revision;return PendingOfferTransferChoice{PendingOfferTransferChoiceKind::decline,-1};};
+            rejects([&]{session_app::resolve_initial_offer(state,tx,tx,reference,texts,interrupted);},"pending decision overwrote externally changed owner");
+            check(state==pending&&tx.revision==9,"pending rollback lost externally changed revision");
+        }
         const auto accepted=state;rejects([&]{session_app::prepare_first_desk_event(state,owner,owner,reference);},"initial event replay accepted");check(state==accepted&&owner.revision==5,"replayed initial event leaked state");
     }
     auto interrupted=before;session_app::ManagerActionOwner owner{81,4};interrupted_desktop_owner=&owner;draw_hook=interrupt_desktop;
@@ -223,6 +290,148 @@ void actual_four_managers(const std::filesystem::path& data,const std::filesyste
     }
     check(seen.size()==4,"four-manager UI repeated or skipped an owner");std::cout<<"Four actual alternating German/English managers: Original kickoff cycles saved shuffled cursor, every owner once; final daily-service boundary remains explicit\n";
 }
+void actual_pending(const std::filesystem::path& data,const std::filesystem::path& output) {
+    const auto resources=session_app::load_runtime_resources(data);
+    const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));
+    for(auto country:{Country::germany,Country::england}) {
+        ui::SetupOptions options;options.country_selection=true;
+        session_app::Session prepared(resources,options,91,75);
+        const auto context=prepared.selection_context();
+        const auto& group=country==Country::germany?context.world->germany[0]:context.world->england[0];
+        ui::ManagerChoice choice;choice.master_club=-1;choice.world_club=group.clubs[0].id;
+        choice.country=country;choice.name="Offer manager";choice.roster_revision=context.revision;
+        prepared.confirm_manager(choice,context.revision);prepared.prepare_start(prepared.revision());
+        const auto base=prepared.snapshot();
+        for(int kind=0;kind<4;++kind) {
+            CareerSnapshot fixture;bool found=false;
+            for(uint32_t seed=1;seed<30000;++seed) {
+                WatcomRandom probe(seed);probe.range(0,10000);
+                if(probe.range(0,70-int16_t(base.world.managers[0].match_state->staff_ratings[0])/50))continue;
+                auto candidate=base;candidate.watcom_seed=seed;session_app::ManagerActionOwner owner{75,0};
+                session_app::prepare_first_desk_event(candidate,owner,owner,resources.reference);
+                const auto& event=*candidate.desktop->initial_event;if(!event.offer)continue;
+                const auto& row=*candidate.world.transfer_market->rows[event.offer->row];
+                const bool matches=kind==3?event.offer->warned:!event.offer->salary_only&&bool(row.bids[0].months&128)==(kind==2);
+                if(matches){fixture=std::move(candidate);found=true;break;}
+            }
+            check(found,"could not generate actual-data pending GUI fixture");
+            const auto label=std::string(country==Country::germany?"de":"en")+"-"+std::to_string(kind);
+            const auto directory=std::filesystem::temp_directory_path()/("openbmh-pending-"+label+"-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+            std::filesystem::create_directory(directory);
+            struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code ignored;std::filesystem::remove_all(path,ignored);}} cleanup{directory};
+            write_savegame(directory/"Pending.FBM",make_save(fixture));
+            ui::StartupFlow flow(data,directory,ui::SetupLeagueSymbol::country_selection);
+            std::unique_ptr<session_app::Session> session;
+            const auto send=[&](const ui::FlowResult& action,const PendingOfferHooks& hooks=PendingOfferHooks{}){
+                const auto result=session_app::serve_startup(flow,action,session,data,777,75,hooks);
+                if(!result.error.empty())throw std::runtime_error("pending GUI "+label+": "+result.error);
+            };
+            send(flow.click(240,215));flow.click(80,55);send(flow.send_key("ENTER"));
+            check(session&&session->snapshot()==fixture&&flow.screen_name()=="desktop","pending GUI load lost offer owner");
+            const auto capture=[&](std::string_view name,const Image& image){
+                if(output.empty())return;std::filesystem::create_directories(output);
+                std::ofstream file(output/(label+"-"+std::string(name)+".ppm"),std::ios::binary);file<<"P6\n320 240\n255\n";
+                for(auto p:image.pixels){const auto c=palette.argb[p];file.put(char(c>>16));file.put(char(c>>8));file.put(char(c));}
+            };
+            const auto kickoff=[&]{const auto& items=flow.desktop()->state().items;
+                const auto icon=std::find_if(items.begin(),items.end(),[](const auto& i){return i.kind==12;});
+                return flow.click(icon->x+icon->width/2,icon->y+icon->height/2);};
+            capture("before",flow.render());
+            const auto rejected=session_app::serve_startup(flow,kickoff(),session,data,777,75);
+            check(!rejected.error.empty()&&session->snapshot()==fixture&&!flow.desktop()->pending(),"missing pending presenter changed session or left a stuck view");
+            const auto revision=session->revision();const auto& crest=fixture.world.crests.at(fixture.world.clubs.at(fixture.world.managers[0].club).crest);
+            int questions=0,choices=0,notices=0;PendingOfferHooks hooks;
+            const auto bind=[&](ui::TaxDialogProjection& view){view.badge_sprite=crest.cell;view.badge_atlas=crest.path;view.badge_fallback=false;};
+            hooks.answer=[&](const GameState& state,const PendingOfferQuestion& q){
+                auto view=ui::pending_offer_question_dialog(state,q);bind(view);
+                ui::GameEndTaxDialog dialog(data,std::move(view),{},flow.render(),resources.german);
+                capture(q.kind==PendingOfferQuestionKind::salary_demand?"salary":"severance",dialog.render());++questions;return PendingOfferAnswer::yes;
+            };
+            hooks.select_transfer=[&](const GameState& state,const TransferOfferListView& offers){
+                auto view=ui::pending_offer_transfer_decision_from_game(state,offers);
+                view.badge_sprite=view.seller_badge_sprite=crest.cell;view.badge_atlas=view.seller_badge_atlas=crest.path;view.notice_badge_fallback=false;
+                ui::IncomingTransferScreen dialog(data,std::move(view),true,resources.german);
+                capture("offer",dialog.render());if(dialog.notice_active())dialog.dismiss_notice();
+                const auto selected=dialog.click(100,150,kind==0);check(selected.has_value(),"Original offer row did not select/decline");++choices;
+                return PendingOfferTransferChoice{*selected<0?PendingOfferTransferChoiceKind::decline:PendingOfferTransferChoiceKind::bid,*selected};
+            };
+            hooks.notice=[&](const GameState& state,const PendingOfferNotice& notice){
+                auto view=ui::pending_offer_notice_dialog(state,notice);bind(view);
+                capture("notice",ui::GameEndTaxDialog(data,std::move(view),{},flow.render(),resources.german).render());++notices;
+            };
+            send(kickoff(),hooks);
+            const auto& after=session->snapshot();
+            check(session->revision()==revision+1&&after.date==0&&!after.desktop->initial_event->offer&&flow.screen_name()=="desktop","pending GUI lost completed decision or advanced the day");
+            check(kind==3?questions>0:choices==1,"pending GUI failed to present required decision");
+            const auto player=fixture.world.transfer_market->rows[40]->player;
+            const auto buyer=fixture.world.transfer_market->rows[40]->bids[0].bidder;
+            const auto& roster=after.world.clubs.at(buyer).roster;
+            const bool moved=std::any_of(roster.begin(),roster.end(),[&](const auto& slot){return slot.player==player;});
+            if(kind==0||kind==3)check(!moved,"decline/salary GUI moved player");
+            if(kind==1||kind==2)check(moved,"accepted actual GUI offer did not move player");
+            if(kind==2)check(after.world.loans.size()==1&&after.transfers&&after.transfers->loans.size()==1,"actual GUI loan lost owner contract");
+            check(read_save(make_save(after))==after,"actual GUI pending settlement failed save roundtrip");
+            capture("after",flow.render());
+            if(!output.empty()){write_savegame(output/(label+"-before.FBM"),make_save(fixture));write_savegame(output/(label+"-after.FBM"),make_save(after));}
+            std::cout<<"Actual pending GUI "<<label<<": questions="<<questions<<" choices="<<choices<<" notices="<<notices<<" moved="<<moved<<'\n';
+        }
+    }
+}
+void actual_pending_multiplayer(const std::filesystem::path& data,const std::filesystem::path& output) {
+    const auto resources=session_app::load_runtime_resources(data);
+    ui::SetupOptions options;options.country_selection=true;options.managers=4;
+    session_app::Session prepared(resources,options,91,76);
+    std::vector<ui::ManagerChoice> confirmed;
+    for(int seat=0;seat<4;++seat) {
+        ui::ManagerScreen chooser(data,seat,confirmed,prepared.selection_context());
+        if(seat%2)chooser.click(200,95);
+        auto choice=chooser.choice();choice.slot=seat;choice.portrait=seat;choice.name="Pending "+std::to_string(seat);
+        // The session validates current ownership, independently of the chooser.
+        const auto country=seat%2?Country::england:Country::germany;
+        const auto league=prepared.snapshot().world.catalogue.starting_league(country,0);
+        const auto& clubs=prepared.snapshot().world.membership[league.value].clubs;
+        choice.world_club=*std::find_if(clubs.begin(),clubs.end(),[&](auto id){return std::none_of(prepared.snapshot().world.managers.begin(),prepared.snapshot().world.managers.end(),[&](const auto& m){return m.club==id;});});
+        prepared.confirm_manager(choice,choice.roster_revision);confirmed.push_back(choice);
+    }
+    prepared.prepare_start(prepared.revision());const auto base=prepared.snapshot();
+    CareerSnapshot fixture;bool found=false;
+    for(uint32_t seed=1;seed<30000;++seed) {
+        WatcomRandom probe(seed);probe.range(0,10000);
+        if(probe.range(0,70))continue;
+        auto candidate=base;candidate.watcom_seed=seed;session_app::ManagerActionOwner owner{76,0};
+        session_app::prepare_first_desk_event(candidate,owner,owner,resources.reference);
+        const auto& event=*candidate.desktop->initial_event;
+        if(event.offer&&!event.offer->salary_only&&(candidate.world.transfer_market->rows[event.offer->row]->bids[0].months&128)){fixture=std::move(candidate);found=true;break;}
+    }
+    check(found,"four-manager pending fixture found no initial loan");
+    const auto directory=std::filesystem::temp_directory_path()/("openbmh-pending-multi-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::filesystem::create_directory(directory);
+    struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code ignored;std::filesystem::remove_all(path,ignored);}} cleanup{directory};
+    write_savegame(directory/"Pending.FBM",make_save(fixture));
+    ui::StartupFlow flow(data,directory,ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> session;
+    PendingOfferHooks hooks;hooks.answer=[](const GameState&,const PendingOfferQuestion&){return PendingOfferAnswer::yes;};
+    hooks.select_transfer=[](const GameState&,const TransferOfferListView&){return PendingOfferTransferChoice{PendingOfferTransferChoiceKind::bid,0};};
+    const auto send=[&](const ui::FlowResult& action){const auto result=session_app::serve_startup(flow,action,session,data,777,76,hooks);if(!result.error.empty())throw std::runtime_error("multi pending: "+result.error);};
+    send(flow.click(240,215));flow.click(80,55);send(flow.send_key("ENTER"));
+    std::set<uint8_t> seen;
+    for(size_t position=0;position<4;++position) {
+        const auto& current=session->snapshot();const auto seat=*current.desktop->active_seat;seen.insert(seat);
+        check(current.desktop->initial_event->manager_position==position,"pending decision lost saved manager position");
+        if(!output.empty()){std::filesystem::create_directories(output);write_savegame(output/("pending-manager-"+std::to_string(position)+".FBM"),make_save(current));}
+        const auto& items=flow.desktop()->state().items;const auto icon=std::find_if(items.begin(),items.end(),[](const auto& i){return i.kind==12;});
+        const auto revision=session->revision();const bool offer=current.desktop->initial_event->offer.has_value();const auto before=current;
+        const auto action=flow.click(icon->x+icon->width/2,icon->y+icon->height/2);
+        if(position<3||offer) {
+            send(action);check(session->revision()==revision+(position<3&&offer?2:1),"multi pending revision skipped/repeated transaction");
+            check(!session->snapshot().world.loans.empty()&&session->snapshot().transfers&&session->snapshot().transfers->loans.size()==session->snapshot().world.loans.size(),"next manager discarded previous outgoing loan contract");
+            check(read_save(make_save(session->snapshot()))==session->snapshot(),"multi-manager pending snapshot differs");
+        }else {
+            check(!session_app::serve_startup(flow,action,session,data,777,76,hooks).error.empty()&&session->snapshot()==before,"last pending manager skipped daily services");
+        }
+    }
+    check(seen.size()==4,"pending loan handoff skipped/repeated a manager");
+    std::cout<<"Four actual German/English Mode-III managers: accepted outgoing loan, atomic offer/handoff revisions and retained owner contract across every desk passed\n";
+}
 void actual(const std::filesystem::path& data,const std::filesystem::path& output) {
     auto resources=session_app::load_runtime_resources(data);
     check(resources.reference.manager_teams.empty(),"reference retained invented manager ownership");
@@ -263,6 +472,8 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     if(!output.empty())write_savegame(output/"first-event.FBM",make_save(multi->snapshot()));
     actual_management(mixed,multi,data,output.empty()?output:output/"mixed-management");
     actual_four_managers(data,output);
+    actual_pending(data,output.empty()?output:output/"pending");
+    actual_pending_multiplayer(data,output.empty()?output:output/"pending");
     std::cout<<"Actual standalone data-only package: original setup/England picker -> typed confirmation -> all start services/market/snapshot passed; first empty event/desktop attached; remaining management and subsequent day owners still pending\n";
 }
 }
@@ -275,10 +486,11 @@ int main(int argc,char** argv)try {
         for(auto country:{Country::germany,Country::england})if(scope.domestic_enabled(country)){const auto context=session.selection_context();const auto league=session.snapshot().world.catalogue.starting_league(country,0);ui::ManagerChoice choice;choice.slot=int(session.snapshot().world.managers.size());choice.master_club=-1;choice.world_club=session.snapshot().world.membership[league.value].clubs[0];choice.country=country;choice.name="Session "+std::to_string(choice.slot);choice.portrait=choice.slot;choice.roster_revision=context.revision;
             session.confirm_manager(choice,context.revision);check(session.snapshot().world.managers.back().club==choice.world_club&&session.revision()==context.revision+1,"session chooser lost stable identity/revision");const auto accepted=session.snapshot();rejects([&]{session.confirm_manager(choice,context.revision);},"session replayed accepted chooser result");check(session.snapshot()==accepted,"replayed manager changed session");}
         check(read_save(make_save(session.snapshot()))==session.snapshot(),"pending session snapshot lost state");
+        transfer_snapshot_tests(session.snapshot());
         desktop_tests(session.snapshot(),resources.reference);
         first_event_tests(session.snapshot(),resources.reference);
     }
     file_io_tests();
     if(argc>1)actual(argv[1],argc>2?std::filesystem::path(argv[2]):std::filesystem::path{});
-    std::cout<<"Six session scopes, owned chooser revisions, Original desktop entry/RNG/country policy, S4/S5/S6/S7/S8 saves, first events/offers and rollback passed\n";
+    std::cout<<"Six session scopes, owned chooser revisions, Original desktop entry/RNG/country policy, S4/S5/S6/S7/S8/S9 saves, first events/offers and cancelled/stale pending rollback passed\n";
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}

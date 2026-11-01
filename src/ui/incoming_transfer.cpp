@@ -284,11 +284,13 @@ std::string incoming_transfer_decision_json(const IncomingTransferDecisionState&
 IncomingTransferScreen::IncomingTransferScreen(const std::filesystem::path& data,
                                                IncomingTransferDecisionState state,
                                                bool gradient_text)
-    : state_(std::move(state)), exe_(load_le(asset_path(data, "BMH.exe"))),
+    :IncomingTransferScreen(data,std::move(state),gradient_text,load_le(asset_path(data,"BMH.exe"))) {install_original_badge_policy(exe_);}
+IncomingTransferScreen::IncomingTransferScreen(const std::filesystem::path& data,IncomingTransferDecisionState state,bool gradient_text,const LeImage& reference)
+    : state_(std::move(state)), exe_(reference),
       texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
       body_(load_font(asset_path(data / "F", "BMH3.FNT"))),
       heading_(load_font(asset_path(data / "F", "BMH2.FNT"))),
-      sprite_font_(data),
+      sprite_font_(data,reference),
       background_(load_vga(asset_path(data / "KB", "129.VGA"))),
       negotiation_(load_vga(asset_path(data / "KB", "31.VGA"))),
       gradient_text_(gradient_text), widgets_(load_vga(asset_path(data / "KB", "0.VGA"))),
@@ -306,13 +308,13 @@ IncomingTransferScreen::IncomingTransferScreen(const std::filesystem::path& data
             [](const IncomingTransferOfferSlot& offer) { return offer.present; })))
         throw FormatError("incoming transfer: pending Source view must contain only raw bid0");
     badge_atlas_=state_.notice_badge_fallback||state_.badge_sprite<0?widgets_:
-        load_vga(asset_path(data/"W",std::to_string(state_.badge_sprite>>3)+".VGA"));
+        load_vga(state_.badge_atlas.empty()?asset_path(data/"W",std::to_string(state_.badge_sprite>>3)+".VGA"):asset_path(data,state_.badge_atlas));
     // SourceBadgeFallback chooses the neutral fallback from the raw team token before
     // indexing ClubBadgeSelectors. A real selector can itself be 90..137 and must still
     // load its W atlas, so do not classify seller art by selector value.
     seller_badge_atlas_ = source_neutral_seller_token(source_seller_team_token(state_)) ||
         state_.seller_badge_sprite < 0 ? widgets_ :
-        load_vga(asset_path(data / "W", std::to_string(state_.seller_badge_sprite >> 3) + ".VGA"));
+        load_vga(state_.seller_badge_atlas.empty()?asset_path(data/"W",std::to_string(state_.seller_badge_sprite>>3)+".VGA"):asset_path(data,state_.seller_badge_atlas));
     notice_active_ = !state_.notice_text.empty();
     if (!notice_active_ && state_.notice_text_address != 0) {
         state_.notice_text = text_at(texts_, state_.notice_text_address);

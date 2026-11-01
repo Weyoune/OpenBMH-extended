@@ -87,6 +87,7 @@ struct TaxDialogProjection {
     int portrait = 0;
     bool badge_fallback = false; // Source runtime club gate, distinct from sprite identity
     int badge_sprite = 0; // Source selector game.club_heap_78[team*2] & 0x1ff
+    std::string badge_atlas;
 };
 
 class GameEndTaxDialog {
@@ -94,6 +95,8 @@ public:
     enum class Button { none, acknowledge, yes, no };
     GameEndTaxDialog(const std::filesystem::path& data, TaxDialogProjection projection,
                      GameEndRenderOptions options = {}, std::optional<Image> restored_backdrop = {});
+    GameEndTaxDialog(const std::filesystem::path& data,TaxDialogProjection,GameEndRenderOptions,
+                     std::optional<Image>,const LeImage& reference);
     Image backdrop() const;
     Image render(std::optional<Button> pressed = {}) const;
     // The hit test reports only which Original button was clicked. It does not

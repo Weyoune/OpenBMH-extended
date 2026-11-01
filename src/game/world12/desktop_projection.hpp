@@ -5,5 +5,6 @@
 namespace bmh::world12 {
 // Bounded local IDs are drawing/action coordinates only. The projection retains
 // the explicit mapping back to global clubs, players and manager seats.
-AiMatchProjection project_manager_desktop(const CareerSnapshot&,const GameState& reference);
+AiMatchProjection project_manager_desktop(const CareerSnapshot&,const GameState& reference,
+    const std::vector<ClubId>& extra_clubs={});
 }

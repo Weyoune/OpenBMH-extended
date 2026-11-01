@@ -234,7 +234,7 @@ Image GameEndFinalScreen::render() const {
     }
     return out;
 }
-struct GameEndTaxDialog::FontData { Font small,large;LeImage exe;SpriteFont sprite;explicit FontData(const std::filesystem::path& p):small(load_font(asset_path(p/"F","BMH3.FNT"))),large(load_font(asset_path(p/"F","BMH2.FNT"))),exe(load_le(asset_path(p,"BMH.exe"))),sprite(p){} };
+struct GameEndTaxDialog::FontData { Font small,large;LeImage exe;SpriteFont sprite;explicit FontData(const std::filesystem::path& p):FontData(p,load_le(asset_path(p,"BMH.exe"))){} FontData(const std::filesystem::path& p,const LeImage& reference):small(load_font(asset_path(p/"F","BMH3.FNT"))),large(load_font(asset_path(p/"F","BMH2.FNT"))),exe(reference),sprite(p,reference){} };
 struct ProgramErrorScreen::FontData {
     Font font,header; LeImage exe;
     explicit FontData(const std::filesystem::path& p)
@@ -271,10 +271,12 @@ Image ProgramErrorScreen::render() const {
     return out;
 }
 GameEndTaxDialog::GameEndTaxDialog(const std::filesystem::path& data,TaxDialogProjection p,GameEndRenderOptions options,std::optional<Image> restored_backdrop)
+ :GameEndTaxDialog(data,std::move(p),options,std::move(restored_backdrop),load_le(asset_path(data,"BMH.exe"))) {install_original_badge_policy(font_->exe);}
+GameEndTaxDialog::GameEndTaxDialog(const std::filesystem::path& data,TaxDialogProjection p,GameEndRenderOptions options,std::optional<Image> restored_backdrop,const LeImage& reference)
  : projection_(std::move(p)),options_(options),restored_backdrop_(std::move(restored_backdrop)),background_(load_vga(asset_path(data/"KB","129.VGA"))),widgets_(load_vga(asset_path(data/"KB","0.VGA"))),
-   faces_(load_vga(asset_path(data/"KB","26.VGA"))),texts_(load_textd(asset_path(data,"TEXTD.BLK"))),font_(std::make_shared<FontData>(data)) {
+   faces_(load_vga(asset_path(data/"KB","26.VGA"))),texts_(load_textd(asset_path(data,"TEXTD.BLK"))),font_(std::make_shared<FontData>(data,reference)) {
     if(!projection_.badge_fallback)
-        badge_=load_vga(asset_path(data/"W",std::to_string(std::max(0,projection_.badge_sprite)>>3)+".VGA"));
+        badge_=load_vga(projection_.badge_atlas.empty()?asset_path(data/"W",std::to_string(std::max(0,projection_.badge_sprite)>>3)+".VGA"):asset_path(data,projection_.badge_atlas));
 }
 Image GameEndTaxDialog::backdrop() const {
     const bool restored=restored_backdrop_&&restored_backdrop_->width==320&&restored_backdrop_->height==240;

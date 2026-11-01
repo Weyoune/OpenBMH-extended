@@ -9,5 +9,5 @@ struct StartupResult {StartupProgress progress=StartupProgress::idle;std::string
 // Prepared includes the owned initial empty event and explicit typed desktop.
 // Initial draw/ticket presentations and later management/day actions remain separate.
 StartupResult serve_startup(ui::StartupFlow&,const ui::FlowResult&,std::unique_ptr<Session>&,
-    const std::filesystem::path& data,uint32_t seed,uint64_t scope);
+    const std::filesystem::path& data,uint32_t seed,uint64_t scope,const PendingOfferHooks& hooks={});
 }

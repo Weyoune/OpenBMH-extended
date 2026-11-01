@@ -25,7 +25,10 @@ public:
     size_t human_managers()const{return manager_seats_.size();}
     void commit_player_attributes(World&)const;
     void commit_match_state(World&,bool capture_season_services=false)const;
+    void commit_transfer_state(World&,PlayerId,ClubId seller,ClubId buyer,bool moved)const;
 private:
+    struct TransferMove {PlayerId player;ClubId seller,buyer;};
+    void commit_state(World&,bool,std::optional<TransferMove>)const;
     std::vector<ClubId> clubs_;
     std::vector<PlayerId> players_;
     std::vector<PlayerRecord> originals_;

@@ -64,6 +64,7 @@ struct IncomingTransferDecisionView {
 enum class IncomingTransferTitle : uint8_t { decision, player_purchase, player_loan };
 
 struct IncomingTransferDecisionState {
+    std::string badge_atlas,seller_badge_atlas;
     IncomingTransferTitle title = IncomingTransferTitle::decision;
     bool source_outgoing_editor_context = false;
     // True only for the explicit DispatchClubPlayerPendingOffers special-entry adapter below.
@@ -126,6 +127,8 @@ public:
     IncomingTransferScreen(const std::filesystem::path& data,
                            IncomingTransferDecisionState state,
                            bool gradient_text = true);
+    IncomingTransferScreen(const std::filesystem::path& data,IncomingTransferDecisionState,
+                           bool gradient_text,const LeImage& reference);
     Image render() const;
     Image render_at_elapsed(uint64_t elapsed_ms) const;
     // Passive result supplied by the synchronous engine observer after its

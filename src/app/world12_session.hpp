@@ -6,6 +6,7 @@
 #include "ui/manager.hpp"
 #include "ui/world12_manager_selection.hpp"
 #include "ui/preparation.hpp"
+#include "game/pending_offer.hpp"
 namespace bmh::ui {struct DeskRequest;struct SaveLoadRequest;}
 namespace bmh::app::world12 {
 struct RuntimeResources {
@@ -30,6 +31,7 @@ public:
     void prepare_start(uint64_t expected_revision);
     DesktopEntryOutcome begin_first_event(uint64_t expected_revision);
     DesktopEntryOutcome advance_manager(const ui::DeskRequest&);
+    PendingOfferResult resolve_pending(const std::filesystem::path&,const ui::DeskRequest&,const PendingOfferHooks&);
     void open_preparation(const ui::DeskRequest&);
     void apply_preparation(const ui::PreparationRequest&);
     void close_preparation();

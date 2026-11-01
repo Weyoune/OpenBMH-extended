@@ -2,6 +2,7 @@
 #include "app/world12_session.hpp"
 #include "app/world12_desktop.hpp"
 #include "ui/desktop.hpp"
+#include "app/world12_pending.hpp"
 #include "game/world12/codec.hpp"
 #include "game/career.hpp"
 #include "game/calendar.hpp"
@@ -67,6 +68,12 @@ DesktopEntryOutcome Session::advance_manager(const ui::DeskRequest& request) {
     if(request.kind!=ui::DeskRequestKind::advance_turn)throw FormatError("world12: not a manager-advance request");
     validate_file_owner(request.manager_slot,request.revision);
     return advance_initial_manager(state_,owner_,{owner_.scope,request.revision},resources_.reference);
+}
+
+PendingOfferResult Session::resolve_pending(const std::filesystem::path& data,const ui::DeskRequest& request,const PendingOfferHooks& hooks) {
+    if(request.kind!=ui::DeskRequestKind::advance_turn)throw FormatError("world12: pending offer is not a desk-exit request");validate_file_owner(request.manager_slot,request.revision);
+    const auto texts=load_textd(ui::asset_path(data,"TEXTD.BLK"));
+    return resolve_initial_offer(state_,owner_,{owner_.scope,request.revision},resources_.reference,texts,hooks);
 }
 
 }

@@ -160,7 +160,13 @@ void AiMatchProjection::commit_player_attributes(World& world)const {
     for(size_t i=0;i<players_.size();++i){auto& target=candidate.players.at(players_[i]);target.attributes=state.players[i];target.bonus=state.player_bonus[i];}
     candidate.validate();world=std::move(candidate);
 }
-void AiMatchProjection::commit_match_state(World& world,bool capture_season_services)const {
+void AiMatchProjection::commit_match_state(World& world,bool capture_season_services)const {commit_state(world,capture_season_services,std::nullopt);}
+void AiMatchProjection::commit_transfer_state(World& world,PlayerId player,ClubId seller,ClubId buyer,bool moved)const {
+    if(seller==buyer||!player.valid())throw std::invalid_argument("world12: invalid transfer movement");
+    local_club(seller);local_club(buyer);local_player(player);
+    commit_state(world,false,moved?std::optional<TransferMove>{{player,seller,buyer}}:std::nullopt);
+}
+void AiMatchProjection::commit_state(World& world,bool capture_season_services,std::optional<TransferMove> movement)const {
     if(!manager_seats_.empty()&&(state.manager_teams.size()!=manager_seats_.size()||state.manager_records.size()!=manager_seats_.size()*0xb0c||
         state.manager_options.size()!=manager_seats_.size()*5||state.manager_ratings.size()!=manager_seats_.size()*60||
         state.manager_results.size()!=manager_seats_.size()*size_t(runtime_dimensions.record_teams)*10))
@@ -184,7 +190,8 @@ void AiMatchProjection::commit_match_state(World& world,bool capture_season_serv
             if((raw&0xfff)==0xfff){if(raw!=0xfff)throw std::invalid_argument("world12: match flags on an empty roster slot");slot={};}
             else {slot.player=global_player(raw&0xfff);slot.flags=uint16_t(((raw&0x8000)?1:0)|((raw&0x4000)?2:0)|((raw&0x2000)?4:0)|((raw&0x1000)?8:0));after.insert(slot.player);}
         }
-        if(before!=after)throw std::invalid_argument("world12: match changed roster membership or moved a player between clubs");
+        if(movement){if(clubs_[team]==movement->seller){if(!before.erase(movement->player))throw std::invalid_argument("world12: transferred player was not at seller");}if(clubs_[team]==movement->buyer&&!before.insert(movement->player).second)throw std::invalid_argument("world12: transferred player was already at buyer");}
+        if(before!=after)throw std::invalid_argument("world12: operation changed unowned roster membership");
         target.match_flags=state.team_flags.at(team);target.fairplay_points=state.memory.u16(layout::DeskRecords_Teams_RuntimeField+uint32_t(team*2));target.morale=state.team_morale.at(team)&63;
         const size_t record=team*0x4a;
         for(size_t i=0;i<42;++i)target.season_stats.counters[i]=state.club_table.at(record+i);

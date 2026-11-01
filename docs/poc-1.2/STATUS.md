@@ -223,3 +223,27 @@ Save/load milestone checks: all 28 targeted Linux regressions, the existing Clas
 The [retained manager cursor](MANAGER_LOOP.md) now advances the Original desktop to the next human seat in the existing shuffled order and survives save/load. Mode-I four-manager German/English input tests and an independent full-Core four-seat comparison cover all positions, layouts/prestige and both random streams. Pending player decisions, pending autosave and the final daily/weekly processing boundary remain explicit barriers; no day is skipped. S8 retains the cursor and reads S4–S7. This is not completed day advancement.
 
 Manager-loop milestone checks: all 28 targeted Linux regressions and the existing Classic desktop/file/preparation suites pass; the graphical application builds. Actual GUI-input tests create four alternating German/English Mode-I managers, traverse each saved shuffled position once, roundtrip S8 snapshots and preserve the explicit final-day barrier. The full-Core four-manager comparison matches every retained layout/prestige and both RNG streams, including Source after-desk scanning. An actual SDL/Xvfb run reproduces the handoffs and loads a nonzero-position snapshot in a fresh process. Screenshots and per-position saves remain private. Mode-III pending decisions and complete daily/weekly processing remain open.
+
+
+## Initial player-offer settlement
+
+[Pending-offer ownership](PENDING_OFFERS.md) now stages the existing full Core
+salary/negotiation/severance/sale/AI-loan path, publishing qualified roster changes,
+accounts, transfer history, loan contracts and both random streams together.
+S9 retains these fields and reads S4–S8. German/English dialogs use the actual
+manager crest and explicit rendering reference. Completed decisions survive the
+still-explicit final daily-service boundary. Missing/cancelled presenters and
+stale/repeated decisions retain the previous state. Complete daily/weekly/monthly
+processing, loan returns and the remaining management/match/release work remain
+open; this is not a playable 1.2 release.
+
+Milestone validation: 28 targeted Linux regressions, eight real-data
+German/English GUI decision cases and a four-manager Mode-III outgoing-loan
+handoff pass. The independent full-Core matrix compares complete contract/tactics
+boards, canonical rosters/accounts, transfer history, loan boards and both RNGs
+for 72 decisions (30 sales, two loans). Actual SDL mouse runs cover German
+decline and English sale, save and fresh-process load. Both resulting saved
+careers exactly match controller settlement plus the four manual-save draws.
+This stronger check found and fixed a dialog-release click-through into training.
+Classic desktop/preparation/file/pending-dialog suites pass. Original-derived
+screenshots, test saves and receipts remain in the private QA repository.

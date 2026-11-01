@@ -35,6 +35,22 @@ struct DesktopRuntime {
     std::optional<InitialDeskEvent> initial_event;
     bool operator==(const DesktopRuntime&)const=default;
 };
+struct TransferHistoryRow {
+    PlayerId player;ClubId other;uint32_t source_word=0;
+    bool operator==(const TransferHistoryRow&)const=default;
+};
+struct LoanContract {
+    PlayerId player;uint8_t manager=0;
+    std::array<uint8_t,0x58> board{};
+    PlayerId mark,marked_by;
+    bool operator==(const LoanContract&)const=default;
+};
+struct TransferRuntime {
+    std::array<int32_t,4> balance{};
+    std::array<std::vector<TransferHistoryRow>,4> history;
+    std::vector<LoanContract> loans;
+    bool operator==(const TransferRuntime&)const=default;
+};
 struct CareerSnapshot {
     World world;
     SeasonResults results;
@@ -44,6 +60,7 @@ struct CareerSnapshot {
     std::optional<CalendarCursor> calendar;
     std::vector<KnockoutStage> cups;
     std::optional<DesktopRuntime> desktop;
+    std::optional<TransferRuntime> transfers;
     // Typed active career snapshots will extend this record as their owning
     // progression transactions are integrated. No legacy FBM stream is guessed.
     void validate()const;
