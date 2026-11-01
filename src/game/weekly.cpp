@@ -880,7 +880,13 @@ uint32_t interested_managers(const GameState& g, int seller, int buyer) {
     for (size_t m = 0; m < g.manager_teams.size(); m++) {
         if (seller == 0xFFF) continue;
         const int league = g.manager_records.at(m * kRecord + 0x210);
-        if (league_of(seller) != league && league_of(buyer) != league) continue;
+        if(g.projected_match_clubs.empty()) {
+            if(league_of(seller)!=league&&league_of(buyer)!=league)continue;
+        }else{
+            const auto own_team=g.manager_teams[m];
+            const auto same_league=[&](int team){return match_team_league(g,team)==match_team_league(g,own_team)&&match_team_region(g,team)==match_team_region(g,own_team);};
+            if(!same_league(seller)&&!same_league(buyer))continue;
+        }
         const int own = int8_t(table_position(g, g.manager_teams[m]));
         if (std::abs(own - int16_t(table_position(g, seller))) > 5 && std::abs(own - int16_t(table_position(g, buyer))) > 5)
             continue;

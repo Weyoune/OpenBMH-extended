@@ -392,3 +392,30 @@ Actual-data GUI controller checks also pass: setup, preparation, graphical
 save/load, German/English pending decisions and four-manager loan handoffs. This
 protects existing interaction paths; no claim is made that the new ordinary
 auction presenters have been wired into the GUI.
+
+
+## Atomic weekly sequence and monthly new listings
+
+[Weekly services](WEEKLY_SERVICES.md) now compose all existing weekly stages and
+training into one staged publication. Later failures roll back earlier incidents,
+transfers and random streams. The complete-sequence test found and fixed transfer
+news using temporary team numbers instead of actual country/division ownership.
+
+Monthly new-listing renewal now shares Source allocation/selection/valuation and
+search-profile matching, preserving physical free-pool holes, existing rows and
+parity. All current24-slot international clubs retain large-squad policy. No
+season shuffle, player movement or date increment is introduced by renewal.
+
+64 controlled full-Core weekly-plus-training passes (eight repeated sequences)
+and twelve monthly renewal cases with96 new listings match fields, rosters,
+accounts/boards, mail, draw counts and snapshots. Service fixtures hold their date
+and competition context fixed; these are not claimed as played weeks/careers.
+Twenty-four baseline/current legacy economic-week outputs remain byteidentical.
+Loan returns and the other monthly steps, saved general events/daily progression
+and actual GUI adoption remain open.
+
+Milestone validation: the application builds and all 34 targeted Linux regression
+checks pass. Actual-data GUI controller tests also pass for startup, preparation,
+save/load, pending decisions and four-manager loan handoffs. Controlled complete-
+weekly/monthly-listing snapshots and comparison receipts stay private; the new
+service sequence is not yet a GUI calendar-advance path.

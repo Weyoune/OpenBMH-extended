@@ -6,12 +6,15 @@
 #include "game/matchday_setup.hpp"
 #include "game/weekly.hpp"
 #include "game/week.hpp"
+#include "game/month.hpp"
 #include "game/save.hpp"
 #include "game/world12/weekly_players.hpp"
 #include "game/world12/economy.hpp"
 #include "game/world12/weekly_incidents.hpp"
 #include "game/world12/market_bids.hpp"
 #include "game/world12/market_auctions.hpp"
+#include "game/world12/weekly_services.hpp"
+#include "game/world12/monthly_market.hpp"
 #include "game/world12/standings.hpp"
 #include "game/bank_credit.hpp"
 #include "game/pending_offer.hpp"
@@ -190,6 +193,49 @@ int main(int argc,char** argv)try {
         }
         if(!moves||!loans)throw std::runtime_error("auction oracle exercised no movement/loans");
         std::cout<<auctions<<" full-Core auction comparisons, "<<moves<<" actual moves and "<<loans<<" loans: AI/human/free-agent rosters/accounts/boards/pool slots/mail/RNG/snapshots match\n";
+    }
+    {
+        size_t passes=0;
+        for(uint32_t seed:{1u,91u,703u,1777u})for(bool answer:{false,true}) {
+            auto typed=state;auto core=native;core.memory.set8(layout::ActiveManager,0);core.mailbox.assign(kMailboxEntries*kMailboxEntry,0);initialize_career_economy(typed,core);typed.game_seed=17;typed.watcom_seed=seed;core.offer_answer=answer;
+            WeeklyIncidentContext context{typed.date,typed.season,{}};WeeklyClubRelations relation;relation.club=typed.world.managers[0].club;const auto team=core.manager_teams[0];
+            const uint32_t lists[]={layout::Career_CompetitionPointersEnglish_ExecutableField25,layout::Career_CompetitionPointersEnglish_RuntimeField14,layout::Career_CompetitionPointersEnglish_ExecutableField19};const uint32_t counts[]={layout::Career_EuropeanClub_ExecutableField,layout::Career_EuropeanClub_ExecutableField2,layout::Career_EuropeanClub_ExecutableField3};
+            for(size_t cup=0;cup<3&&!relation.advertising.european_cup;++cup)for(size_t n=0;n<core.memory.u8(counts[cup]);++n)if(core.memory.u16(lists[cup]+uint32_t(n*2))==team){relation.advertising.european_cup=uint8_t(cup+1);break;}
+            relation.advertising.champion=core.memory.u16(layout::Cup_AdvanceCup_RuntimeField6)==team;const uint32_t entries[]={0,15,19,21};for(size_t k=0;k<4;++k)relation.advertising.holders[k]=core.memory.u16(layout::Season_CareerSeasonSetup_RuntimeField+entries[k]*0x28)==team;context.clubs.push_back(relation);
+            WeeklyIncidentHooks incidents;incidents.answer=[&](const GameState&,uint8_t,const WeeklyOfferQuestion&)->std::optional<bool>{return answer;};MarketAuctionHooks auction;auction.active_seat=0;auction.allocator=TransferAllocatorContext::zero;auction.select=[&](const GameState&,const TransferOfferListView& v,const AiMatchProjection&)->std::optional<int>{return answer?v.preferred_bid_index:-1;};auction.notice=[](const GameState&,const TransferDecisionEvent&,const AiMatchProjection&){};
+            core.transfer_offer_selector=[&](const GameState&,const TransferOfferListView& v){return answer?v.preferred_bid_index:-1;};core.transfer_decision_observer=[](const TransferDecisionEvent&){};
+            GameRandom g(17);WatcomRandom w(seed);
+            for(int week=0;week<8;++week){const auto old_g=g.calls(),old_w=w.calls();MinuteReport report;weekly_processing(core,g,w,report,TransferAllocatorContext::zero);if(report.unsupported)throw std::runtime_error(report.reason);familiarity_decay(core,g,w);train_squad(core,0,g,w);
+            const auto result=process_weekly_services(typed,reference,texts,context,incidents,auction,{true});
+            if(typed.game_seed!=g.seed()||typed.watcom_seed!=w.seed()||result.game_draws!=g.calls()-old_g||result.watcom_draws!=w.calls()-old_w)throw std::runtime_error("complete weekly RNG differs from full Core");
+            for(const auto& [id,p]:typed.world.players)if(p.attributes.w35c!=core.players[id.value].w35c||p.attributes.w364!=core.players[id.value].w364||p.attributes.w368!=core.players[id.value].w368||p.cards!=core.player_cards[id.value])throw std::runtime_error("complete weekly player differs");
+            for(size_t team=0;team<164;++team){const auto id=identities.at(core.club_ids[team]);const auto& roster=typed.world.clubs.at(id).roster;for(size_t row=0;row<24;++row){const auto raw=core.squad_slots[team*24+row];const uint16_t flags=uint16_t(((raw&0x8000)?1:0)|((raw&0x4000)?2:0)|((raw&0x2000)?4:0)|((raw&0x1000)?8:0));if((roster[row].empty()?0xfffu:roster[row].player.value)!=(raw&0xfff)||roster[row].flags!=flags)throw std::runtime_error("complete weekly roster differs");}}
+            if(typed.world.managers[0].finance!=manager_initial_finance_from_legacy(core,0)||typed.world.managers[0].tactics!=manager_full_tactics_from_legacy(core,0,players)||typed.world.managers[0].career!=manager_career_state_from_legacy(core,0,players,true))throw std::runtime_error("complete weekly manager state differs");
+            auto p=AiMatchProjection::create_for_humans(typed,{relation.club},reference,{3,3,false,true});install_career_economy(p,typed.world);if(compare_mailbox(p.state.mailbox,core.mailbox)){for(size_t row=0;row<40;++row){const auto at=row*kMailboxEntry;if(!std::equal(p.state.mailbox.begin()+ptrdiff_t(at),p.state.mailbox.begin()+ptrdiff_t(at+kMailboxEntry),core.mailbox.begin()+ptrdiff_t(at))){std::cerr<<"mail row="<<row<<" actual=";for(size_t b=0;b<10;++b)std::cerr<<int(p.state.mailbox[at+b])<<",";std::cerr<<" source=";for(size_t b=0;b<10;++b)std::cerr<<int(core.mailbox[at+b])<<",";std::cerr<<"\n";break;}}throw std::runtime_error("complete weekly mail differs week="+std::to_string(week)+" seed="+std::to_string(seed)+" answer="+std::to_string(answer));}
+            if(read_save(make_save(typed))!=typed)throw std::runtime_error("complete weekly snapshot differs");
+            if(!proof.empty()&&seed==91&&answer){const auto file=proof/"complete-weekly.FBM";write_savegame(file,make_save(typed));if(read_save(load_savegame(file))!=typed)throw std::runtime_error("complete weekly disk snapshot differs");}++passes;
+            }
+        }
+        std::cout<<passes<<" complete full-Core weekly+training transactions: fields, aggregate draw counts, accounts/boards/mail/snapshots match\n";
+    }
+    {
+        size_t passes=0,listings=0;
+        for(int variant=0;variant<3;++variant)for(uint32_t seed:{1u,91u,703u,1777u}){
+            auto typed=state;auto core=native;core.memory.set8(layout::ActiveManager,0);core.mailbox.assign(kMailboxEntries*kMailboxEntry,0);initialize_career_economy(typed,core);typed.watcom_seed=seed;
+            typed.world.managers[0].career->transfer_filters.fill(0);typed.world.managers[0].career->transfer_filters[5]=31;typed.world.managers[0].career->transfer_filters[7]=99;
+            for(size_t n=0;n<18;++n)core.manager_records[0x1f6+n]=typed.world.managers[0].career->transfer_filters[n];
+            if(variant>=1){for(size_t n=0;n<80;++n)if((variant==1?n%3==0:n>2)&&!std::any_of(typed.world.transfer_market->rows.begin(),typed.world.transfer_market->rows.end(),[&](const auto& row){return row&&row->player==typed.world.free_players->domestic[n];})){typed.world.free_players->domestic[n]={};core.squad_slots[size_t(runtime_dimensions.free_first)+n]=0xfff;}
+                for(size_t n=0;n<20;++n)if((variant==1?n%3==0:n>2)&&!std::any_of(typed.world.transfer_market->rows.begin(),typed.world.transfer_market->rows.end(),[&](const auto& row){return row&&row->player==typed.world.free_players->foreign[n];})){typed.world.free_players->foreign[n]={};core.squad_slots[size_t(runtime_dimensions.foreign_free_first)+n]=0xfff;}
+            }
+            WatcomRandom w(seed);MinuteReport report;new_transfer_list_entries(core,w,report);if(report.unsupported)throw std::runtime_error(report.reason);const auto result=renew_monthly_market(typed,reference,texts,{});listings+=result.added;
+            if(typed.watcom_seed!=w.seed()||result.watcom_draws!=w.calls()||typed.world.transfer_market->list_toggle!=core.list_toggle)throw std::runtime_error("monthly listings RNG/toggle differs variant="+std::to_string(variant));
+            for(size_t row=0;row<40;++row){const auto raw=core.squad_slots[size_t(runtime_dimensions.pool_first)+row]&0xfff;const auto& listing=typed.world.transfer_market->rows[row];if((raw==0xfff)!=!listing)throw std::runtime_error("monthly listing empty slot differs");if(!listing)continue;const auto at=layout::EditorList+uint32_t(row*0x58);const auto seller=core.memory.u16(at+8)&0x7fff;const auto owner=seller==0xfff?ClubId{}:identities.at(core.club_ids[seller]);
+                if(listing->player.value!=raw||listing->seller!=owner||listing->fee!=core.memory.u32(at+0x2c)||listing->salary!=core.memory.u32(at+0x30)||listing->asking_percent!=core.memory.u8(at+0x54)||listing->demand_percent!=core.memory.u8(at+0x55)||listing->weeks!=core.memory.u8(at+0x56))throw std::runtime_error("monthly listing quote/owner differs");
+            }
+            auto p=AiMatchProjection::create_for_humans(typed,{typed.world.managers[0].club},reference,{3,3,false,true});install_career_economy(p,typed.world);if(compare_mailbox(p.state.mailbox,core.mailbox))throw std::runtime_error("monthly search profile news differs");if(read_save(make_save(typed))!=typed)throw std::runtime_error("monthly listing snapshot differs");
+            if(!proof.empty()&&variant==2&&seed==91){const auto file=proof/"monthly-listings.FBM";write_savegame(file,make_save(typed));if(read_save(load_savegame(file))!=typed)throw std::runtime_error("monthly listing disk snapshot differs");}++passes;
+        }
+        std::cout<<passes<<" full-Core monthly renewal comparisons, "<<listings<<" listings: pool holes, scarce free agents, club selection, quotes/search news/RNG/snapshots match\n";
     }
     {
         auto startup=state,source_start=state;auto initial_template=native;
