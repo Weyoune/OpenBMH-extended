@@ -61,3 +61,12 @@ that holder's account. The Original instead retains only the last holder's
 amount and books it into the record after the active managers. This correction
 is selected explicitly for typed1.2 processing; the ordinary Classic caller
 keeps its existing policy. See [monthly services](poc-1.2/MONTHLY_SERVICES.md).
+
+## Daily interest at large native balances
+
+OpenBMH deviates from the original: daily debt and deposit interest uses 64-bit
+intermediate arithmetic before the original integer divisions. The balance-plan
+preview uses the same calculation. Original rates, division order and random
+consumption remain unchanged. Account balances and accumulated statistics retain
+the native 32-bit save representation; this change does not add unlimited account
+balances or change the original high-cash deduction policy.

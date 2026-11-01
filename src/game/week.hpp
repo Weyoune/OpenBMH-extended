@@ -27,6 +27,12 @@ namespace bmh {
 // step: bit 7 of record +0x21f (a training camp visit booked today, BookTrainingCamp) is
 // cleared for every manager.
 void daily_interest(GameState& g, WatcomRandom& rand);
+struct DailyInterestAmounts {
+    int32_t borrowing = 0;
+    int32_t cash_and_deposit = 0; // Negative amounts are interest income.
+};
+DailyInterestAmounts daily_interest_amounts(int32_t cash, int32_t deposit, int32_t credit);
+
 // One verified account; the normal legacy wrapper still processes all four.
 void manager_daily_interest(GameState&,int manager,WatcomRandom&);
 

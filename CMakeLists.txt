@@ -1372,3 +1372,7 @@ target_link_libraries(world12_initial_season_validate PRIVATE bmhworld12_app bmh
 
 add_executable(world12_export_english_runtime tools/world12/export_english_runtime.cpp)
 target_link_libraries(world12_export_english_runtime PRIVATE bmhlaunch bmhcore)
+
+add_executable(daily_interest_unit_tests tests/daily_interest_unit_tests.cpp)
+target_link_libraries(daily_interest_unit_tests PRIVATE bmhcore)
+add_test(NAME daily_interest_unit_tests COMMAND daily_interest_unit_tests)
