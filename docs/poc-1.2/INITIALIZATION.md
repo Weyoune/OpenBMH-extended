@@ -61,3 +61,8 @@ Validation: all 25 targeted Linux regressions and the application build pass. An
 ## Complete initial manager confirmation (schema 12)
 
 The [full manager owner](MANAGER_CREATION.md) now wraps identity-preserving placement, destination/displaced-club strengths, stadium/environment/sponsor initialization and the existing contract/account/lineup phase in one transaction. Career rules and semantic stadium/youth/budget/sponsor data persist; poaching history uses explicit global player IDs. Ninety synthetic confirmations, 288 independent pre-refactor comparisons and real four-manager German/English initialization pass. The full confirmation retains supplied formation masks instead of imposing the partial helper's former hardcoded value. The first-season setup and visible GUI career remain pending.
+
+
+## Initial competition boundary (schema 13)
+
+The [first-season competition phase](INITIAL_SEASON.md) now follows confirmed managers: shared Core lineup/balance and national/European selection, domestic draws, campaign history and supplied calendar publish together. This is the boundary before ticket sales and seasonal player/reset/first-step services, not a ready desktop. Older career snapshots retain absent season history rather than inventing it.

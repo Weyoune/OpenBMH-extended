@@ -66,6 +66,7 @@ AiMatchProjection AiMatchProjection::create_for_humans(const CareerSnapshot& sna
     for(const auto& manager:world.managers)if(std::find(requested.begin(),requested.end(),manager.club)!=requested.end()) {
         if(!manager.finance||!manager.finance->baseline||!manager.tactics||!manager.tactics->backing||!manager.match_state)
             throw std::invalid_argument("world12: complete human account/tactics/match state required");
+        if(world.settings&&manager.career&&!manager.career->season_records)throw std::invalid_argument("world12: saved manager campaign history is unavailable");
         managers.push_back(&manager);
     }
     if(managers.empty())throw std::invalid_argument("world12: human projection has no participating manager");

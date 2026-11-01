@@ -22,6 +22,7 @@ ManagerCareerState manager_career_state_from_legacy(const GameState& state,uint8
     copy(0,result.stadium.facility_values);copy(0x16,result.stadium.stand_condition);copy(0x3c,result.stadium.facility_levels);copy(0x4c,result.stadium.stand_capacity);
     result.stadium.capacity_sum=state.manager_records.at(at+0x5c);
     result.board_patience=state.manager_records.at(at+0x26f);result.training_plan=state.manager_records.at(at+0x26e);
+    result.season_records.emplace();copy(0xda,*result.season_records);
     copy(0x1f6,result.transfer_filters);
     for(size_t i=0;i<5;++i){const auto offset=at+0x8b6+i*2;const auto id=uint16_t(state.manager_records[offset]|uint16_t(state.manager_records[offset+1])<<8);
         if(id==0xffff)continue;if(id>=players.size()||!players[id].valid())throw std::invalid_argument("world12: missing mapped poaching attempt");result.poach_attempts[i]=players[id];}
@@ -39,6 +40,7 @@ void install_manager_career_state(GameState& state,uint8_t seat,const ManagerCar
     copy(0,input.stadium.facility_values);copy(0x16,input.stadium.stand_condition);copy(0x3c,input.stadium.facility_levels);copy(0x4c,input.stadium.stand_capacity);
     state.manager_records.at(at+0x5c)=input.stadium.capacity_sum;
     state.manager_records.at(at+0x26f)=input.board_patience;state.manager_records.at(at+0x26e)=input.training_plan;
+    if(input.season_records)copy(0xda,*input.season_records);
     copy(0x1f6,input.transfer_filters);for(size_t i=0;i<5;++i){state.manager_records.at(at+0x8b6+i*2)=uint8_t(attempts[i]);state.manager_records.at(at+0x8b7+i*2)=uint8_t(attempts[i]>>8);}
     const auto base=layout::EnvironmentYouthTeams;
     state.memory.add_block(base,4*0x24);const auto youth=base+uint32_t(seat)*0x24;

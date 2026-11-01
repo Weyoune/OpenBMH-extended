@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "game/world12/world.hpp"
 #include <set>
+#include <algorithm>
 #include <stdexcept>
 namespace bmh::world12 {
 void validate_manager_tactics(const ManagerTactics& tactics) {
@@ -35,6 +36,17 @@ void World::validate(bool complete)const {
         if(!markets)throw std::invalid_argument("world12: free-player phase requires career markets");
         const auto validate_pool=[&](const auto& pool){bool empty=false;for(auto player:pool){if(!player.valid()){empty=true;continue;}if(empty||!players.contains(player)||!rostered.insert(player).second)throw std::invalid_argument("world12: missing, repeated or noncompact free player");}};
         validate_pool(free_players->domestic);validate_pool(free_players->foreign);
+    }
+    if(initial_competitions){
+        if(!settings)throw std::invalid_argument("world12: initial competitions lack career settings");
+        for(const auto& manager:managers)if(!manager.career||!manager.career->season_records||!manager.tactics||!manager.finance||!manager.match_state)throw std::invalid_argument("world12: prepared competitions lack complete manager state");
+        const size_t sizes[]={64,24,32};std::set<ClubId> participants;
+        for(size_t k=0;k<3;++k){const auto& field=initial_competitions->fields[k];if(field.size()!=sizes[k])throw std::invalid_argument("world12: incomplete European field");
+            for(auto id:field)if(!clubs.contains(id)||clubs.at(id).kind!=ClubKind::club||!participants.insert(id).second)throw std::invalid_argument("world12: invalid/repeated European club");
+            std::set<ClubId> qualified;for(auto id:initial_competitions->qualified[k])if(!qualified.insert(id).second||std::find(field.begin(),field.end(),id)==field.end())throw std::invalid_argument("world12: repeated/missing European qualifier");}
+        for(auto id:initial_competitions->holders)if(!participants.contains(id))throw std::invalid_argument("world12: European holder absent from fields");
+        if(initial_competitions->national_field.size()!=(catalogue.scope.international?4u:0u))throw std::invalid_argument("world12: invalid initial national field size");
+        std::set<ClubId> nations;for(auto id:initial_competitions->national_field)if(!clubs.contains(id)||clubs.at(id).kind!=ClubKind::national_team||!nations.insert(id).second)throw std::invalid_argument("world12: invalid initial national identity");
     }
     std::set<PlayerId> loaned;for(const auto& loan:loans){if(!players.contains(loan.player)||!clubs.contains(loan.owner)||!clubs.contains(loan.borrower)||loan.owner==loan.borrower||!loan.months||!loaned.insert(loan.player).second)throw std::invalid_argument("world12: invalid loan");bool at_borrower=false;for(const auto& slot:clubs.at(loan.borrower).roster)at_borrower|=slot.player==loan.player;if(!at_borrower)throw std::invalid_argument("world12: loan player is not at borrower");}
     if(managers.size()>4)throw std::invalid_argument("world12: too many managers");std::set<uint8_t> seats,portraits;std::set<ClubId> owned;

@@ -11,6 +11,7 @@
 
 #include "game/career.hpp"
 #include "game/cup_draw_rules.hpp"
+#include "game/european_rules.hpp"
 #include "game/matchday.hpp"
 #include "game/month.hpp"
 #include "game/national.hpp"
@@ -221,28 +222,10 @@ void league_entrants(GameState& g, int league, int winner, int finalist, int uef
     const LeagueTable t = compute_league_table(g, league, 0, league_matchdays(league), 7, 1);
     uint8_t ranks[24] = {};
     for (int i = 0; i < t.size; i++) ranks[i] = uint8_t(t.rank(i));
-    en.add(1, club_at_rank(league, 0, ranks));
-    const int cl_holder = mem.u16(::bmh::layout::Season_CareerSeasonSetup_RuntimeField5);
-    if (club_league(cl_holder) == league) en.add(1, en.find(cl_holder) == 0 ? cl_holder : club_at_rank(league, 1, ranks));
-    if (en.find(winner) == 0) en.add(2, winner);
-    else if (en.find(finalist) == 0) en.add(2, finalist);
-    const int cw_holder = mem.u16(::bmh::layout::Season_CareerSeasonSetup_RuntimeField6);
-    if (club_league(cw_holder) == league) {
-        if (en.find(cw_holder) == 0) en.add(2, cw_holder);
-        else if (en.find(finalist) == 0) en.add(2, finalist);
-    }
-    const int uefa_holder = mem.u16(::bmh::layout::Season_CareerSeasonSetup_RuntimeField4);
-    if (club_league(uefa_holder) == league) {
-        if (en.find(uefa_holder) == 0) en.add(0, uefa_holder);
-        else uefa++;
-    }
-    for (int rank = 1; uefa != 0; rank++) {
-        const int team = club_at_rank(league, rank, ranks);
-        if (en.find(team) == 0) {
-            en.add(0, team);
-            uefa--;
-        }
-    }
+    std::vector<int> ranked;for(int rank=0;rank<t.size;++rank)ranked.push_back(club_at_rank(league,rank,ranks));
+    const std::array<int,3> holders={mem.u16(layout::Season_CareerSeasonSetup_RuntimeField4),mem.u16(layout::Season_CareerSeasonSetup_RuntimeField5),mem.u16(layout::Season_CareerSeasonSetup_RuntimeField6)};
+    const std::array<bool,3> in_league={club_league(holders[0])==league,club_league(holders[1])==league,club_league(holders[2])==league};
+    european_league_entrants(ranked,winner,finalist,holders,in_league,uefa,[&](int team){return en.find(team);},[&](int kind,int team){en.add(kind,team);});
     static const uint8_t kRound[3] = {1, 3, 2};  // SeasonRuntimeField
     for (size_t m = 0; m < g.manager_teams.size(); m++) {
         const int kind = en.find(g.manager_teams[m]);
@@ -341,6 +324,8 @@ void european_setup(GameState& g, GameRandom& game, WatcomRandom& rand, const Se
         mem.set16(kField0, mem.u16(e + 0x22));
         if (mem.u8(e + 0x1f) == 2) mem.set16(kField0 + 2, mem.u16(e + 0x24)), n = 2;
     }
+    if(s==0){const auto field=initial_national_four(game,rand);for(size_t i=0;i<field.size();++i)mem.set16(kField0+uint32_t(i*2),uint16_t(base+field[i]));}
+    else {
     for (int k = 0; k < 4; k++) {
         const int fixed = kPoolFixed[k + s * 4];
         int left = fixed != 0 ? rand.range(fixed - 2, fixed) : kField[s] - n;
@@ -357,6 +342,7 @@ void european_setup(GameState& g, GameRandom& game, WatcomRandom& rand, const Se
         const uint16_t a = mem.u16(kField0 + i * 2);
         mem.set16(kField0 + i * 2, mem.u16(kField0 + j * 2));
         mem.set16(kField0 + j * 2, a);
+    }
     }
     // CupDrawFromGame(entry of competition 7 - s): the draw of the tournament's first round,
     // shown unless switched off
@@ -413,20 +399,13 @@ void european_fields(GameState& g, GameRandom& game, WatcomRandom& rand) {
             mem.set16(list + j * 2, a);
         }
     };
-    int from = pool;
-    for (int i = int8_t(mem.u8(::bmh::layout::Career_EuropeanClub_ExecutableField3)); i < 0x20; i++, from += 7) en.add(2, pick(from));
-    shuffle(::bmh::layout::Career_CompetitionPointersEnglish_ExecutableField19, 0x20);
-    from = pool;
-    for (int i = int8_t(mem.u8(::bmh::layout::Career_EuropeanClub_ExecutableField2)); i < 0x18; i++, from += 7) en.add(1, pick(from));
-    shuffle(mem.pointer(::bmh::layout::Career_CompetitionPointersEnglish_ExecutableField5), 0x10);  // (the team list of cup entry 16, Career_CompetitionPointersEnglish_ExecutableField5)
-    from = pool;
-    const int start = int8_t(mem.u8(::bmh::layout::Career_EuropeanClub_ExecutableField));
-    int per = 2;
-    for (int i = start; i < 0x40; i++, from += 7) {
-        for (int k = 0; k < per; k++) en.add(0, pick(from));
-        if (i - start == 0x10) per = 1;
-    }
-    shuffle(::bmh::layout::Career_CompetitionPointersEnglish_ExecutableField25, 0x40);
+    fill_initial_european_fields([&](int kind){return int8_t(mem.u8(Entrants::kCount[kind]));},
+        [&](int group){return pick(pool+group*7);},[&](int kind,int team){en.add(kind,team);},
+        [&](int kind,int first,int n){
+            uint32_t list=Entrants::kList[kind]+uint32_t(first)*2;
+            if(kind==1){list=mem.pointer(layout::Career_CompetitionPointersEnglish_ExecutableField5);}
+            shuffle(list,n);
+        });
     mem.set8(::bmh::layout::Career_EuropeanClub_ExecutableField, 0x40), mem.set8(::bmh::layout::Career_EuropeanClub_ExecutableField2, 0x18), mem.set8(::bmh::layout::Career_EuropeanClub_ExecutableField3, 0x20);
 }
 

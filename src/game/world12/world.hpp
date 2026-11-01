@@ -107,6 +107,7 @@ struct ManagerCareerState {
     uint8_t board_patience=0,training_plan=0;
     std::array<uint8_t,18> transfer_filters{};
     std::array<PlayerId,5> poach_attempts;
+    std::optional<std::array<uint8_t,150>> season_records={};
     bool operator==(const ManagerCareerState&)const=default;
 };
 struct Manager {
@@ -129,12 +130,20 @@ struct CareerPlayerPools {
     std::array<PlayerId,20> foreign;
     bool operator==(const CareerPlayerPools&)const=default;
 };
+struct InitialCompetitionFields {
+    // Source order: UEFA Cup, Champions League, Cup Winners' Cup.
+    std::array<std::vector<ClubId>,3> qualified,fields;
+    std::array<ClubId,3> holders;
+    std::vector<ClubId> national_field;
+    bool operator==(const InitialCompetitionFields&)const=default;
+};
 struct World {
     bool players_initialized=false;
     // Present after the market/mood phase; old saves do not invent these values.
     std::optional<CareerMarkets> markets={};
     std::optional<CareerPlayerPools> free_players={};
     std::optional<CareerSettings> settings={};
+    std::optional<InitialCompetitionFields> initial_competitions={};
     int32_t development_balance=0;
     uint8_t trend_rotation=0;
     Catalogue catalogue=Catalogue::dual_classic();
