@@ -15,7 +15,7 @@ void initialize_desktops(CareerSnapshot& state,const GameState& reference) {
         throw std::invalid_argument("world12: invalid desktop initialization phase");
     DesktopRuntime runtime;
     for(const auto& manager:state.world.managers){
-        ManagerDesktop desk;desk.seat=manager.seat;
+        ManagerDesktop desk;desk.seat=manager.seat;desk.display_word=reference.memory.has(layout::CareerSession_AnyOf_ExecutableField+uint32_t(manager.seat)*2)?reference.memory.u16(layout::CareerSession_AnyOf_ExecutableField+uint32_t(manager.seat)*2):0;
         for(size_t record=0;record<desk.layout.size();++record)
             for(size_t byte=0;byte<16;++byte)
                 desk.layout[record][byte]=reference.memory.u8(layout::Desktops+uint32_t(manager.seat)*0x360+uint32_t(record*16+byte));

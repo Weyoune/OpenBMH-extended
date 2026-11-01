@@ -14,6 +14,8 @@ public:
     static AiMatchProjection create(const World&,const std::vector<ClubId>&,const GameState& rules_template);
     static AiMatchProjection create_for_humans(const CareerSnapshot&,const std::vector<ClubId>&,
         const GameState& rules_template,HumanProjectionPolicy);
+    static AiMatchProjection create_for_desktop(const CareerSnapshot&,const std::vector<ClubId>&,
+        const GameState& rules_template,HumanProjectionPolicy);
     GameState state;
     ClubId global_club(uint32_t local)const;
     PlayerId global_player(uint32_t local)const;

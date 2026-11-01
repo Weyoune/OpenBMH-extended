@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "formats/executable_layout.hpp"
 #include "ui/pitch.hpp"
+#include "formats/badge_policy.hpp"
 
 #include <algorithm>
 #include <sstream>
@@ -8,6 +9,7 @@
 #include "formats/savestate.hpp"
 #include "game/messages.hpp"
 #include "game/state.hpp"
+#include "game/schedule.hpp"
 #include "ui/manager.hpp"
 
 namespace bmh::ui {
@@ -166,10 +168,13 @@ std::string pitch_request_json(const PitchRequest& r){std::ostringstream out;
     out<<"}";return out.str();}
 
 PitchScreen::PitchScreen(const std::filesystem::path& data,LineupState state,PitchExtras e)
-    :data_(data),state_(std::move(state)),extras_(std::move(e)),exe_(load_le(asset_path(data,"BMH.exe"))),
-     font_(load_font(asset_path(data/"F","BMH3.FNT"))),sprite_(data),texts_(load_textd(asset_path(data,"TEXTD.BLK"))),
+    :PitchScreen(data,std::move(state),std::move(e),load_le(asset_path(data,"BMH.exe"))) {}
+PitchScreen::PitchScreen(const std::filesystem::path& data,LineupState state,PitchExtras e,const LeImage& reference)
+    :data_(data),state_(std::move(state)),extras_(std::move(e)),exe_(reference),
+     font_(load_font(asset_path(data/"F","BMH3.FNT"))),sprite_(data,reference),texts_(load_textd(asset_path(data,"TEXTD.BLK"))),
      background_(load_vga(asset_path(data/"KB","129.VGA"))),atlas_(load_vga(asset_path(data/"KB","2.VGA"))),
      widgets_(load_vga(asset_path(data/"KB","0.VGA"))),letters_(load_vga(asset_path(data/"KB","54.VGA"))){
+    if(state_.source!="world12")install_original_badge_policy(exe_);
     validate(state_,extras_);
     // OpenBMH deviates from the original: supports owner-bound designated set-piece selection in the extended manager record.
 // Padded clears only transient runtime state on whole-pitch return; the
@@ -189,11 +194,11 @@ PitchScreen::PitchScreen(const std::filesystem::path& data,LineupState state,Pit
         if(hall.width!=193||hall.height!=115)throw FormatError("pitch: invalid original hall surface");
         copy(atlas_,hall,0,0,1,2,193,115);
     }
-    badge_=load_vga(asset_path(data/"W",std::to_string(extras_.badge>>3)+".VGA"));
-    sheet_=std::make_unique<LineupScreen>(data_,state_);
+    badge_=load_vga(extras_.badge_atlas.empty()?asset_path(data/"W",std::to_string(extras_.badge>>3)+".VGA"):asset_path(data,extras_.badge_atlas));
+    sheet_=std::make_unique<LineupScreen>(data_,state_,exe_);
 }
 PitchScreen::PitchScreen(const PitchScreen& other)
-    :PitchScreen(other.data_,other.state_,other.extras_){
+    :PitchScreen(other.data_,other.state_,other.extras_,other.exe_){
     pending_=other.pending_;selected_=other.selected_;hovered_=other.hovered_;ghost_=other.ghost_;
     order_hover_grid_=other.order_hover_grid_;
     scroll_=other.scroll_;close_=other.close_;return_team_=other.return_team_;rejection_=other.rejection_;
@@ -393,9 +398,11 @@ Image PitchScreen::render()const{
     copy(out,badge_,(extras_.badge%8)*38,0,199,188,38,38);
     if(shooter_editor_open_){
         rect(out,239,110,80,113,0x42);
-        const std::array<std::pair<uint32_t,int>,3> labels{{{::bmh::layout::FreeKickTakerLabel,114},{::bmh::layout::PenaltyTakerLabel,146},{::bmh::layout::CornerTakerLabel,178}}};
+        // The supported extension stores penalty, rebound and free-kick takers;
+        // there is no separate corner-taker field in the match engine.
+        const std::array<std::pair<std::string,int>,3> labels{{{original_to_utf8(exe_.cstring(::bmh::layout::PenaltyTakerLabel)),114},{kEnglishCompetitions?"REBOUND":"NACHSCHUSS",146},{original_to_utf8(exe_.cstring(::bmh::layout::FreeKickTakerLabel)),178}}};
         for(size_t i=0;i<labels.size();++i)
-            diamond_button(out,249,labels[i].second,original_to_utf8(exe_.cstring(labels[i].first)),
+            diamond_button(out,249,labels[i].second,labels[i].first,
                            shooter_selection_==int(i)+2);
         diamond_button(out,249,211,original_to_utf8(exe_.cstring(::bmh::layout::AutomaticTakersLabel)),
                        extras_.set_piece_takers==std::array<uint16_t,3>{0,0,0});
@@ -756,7 +763,7 @@ PitchRequest PitchScreen::key(std::string_view key){
 void PitchScreen::acknowledge(LineupState s,PitchExtras e){
     if(!pending_)throw FormatError("pitch: no command to acknowledge");
     validate(s,e);
-    if(s.revision<=state_.revision||s.manager_slot!=state_.manager_slot||s.runtime_club!=state_.runtime_club||s.source!="engine_projection"||!s.entry_prepared)
+    if(s.revision<=state_.revision||s.manager_slot!=state_.manager_slot||s.runtime_club!=state_.runtime_club||s.source!=state_.source||!s.entry_prepared)
         throw FormatError("pitch: stale or mismatched acknowledgement");
     if(e.indoor!=extras_.indoor)
         throw FormatError("pitch: acknowledgement changed the captured live pitch mode");
@@ -894,8 +901,8 @@ void PitchScreen::acknowledge(LineupState s,PitchExtras e){
     }
     if(kind!=PitchRequestKind::select_pitch_page||pending_->page_control!=0)s.view=state_.view;
     else s.view=state_.view==LineupView::data_a?LineupView::data_b:LineupView::data_a;
-    auto new_sheet=std::make_unique<LineupScreen>(data_,s);
-    auto new_badge=load_vga(asset_path(data_/"W",std::to_string(e.badge>>3)+".VGA"));
+    auto new_sheet=std::make_unique<LineupScreen>(data_,s,exe_);
+    auto new_badge=load_vga(e.badge_atlas.empty()?asset_path(data_/"W",std::to_string(e.badge>>3)+".VGA"):asset_path(data_,e.badge_atlas));
     if(kind==PitchRequestKind::set_automatic_weight)weights_dirty_=true;
     else if(kind==PitchRequestKind::apply_formation||kind==PitchRequestKind::save_formation)weights_dirty_=false;
     if(kind==PitchRequestKind::open_set_piece_editor){shooter_editor_open_=true;shooter_selection_=1;order_panel_open_=false;}
@@ -915,7 +922,7 @@ void PitchScreen::acknowledge(LineupState s,PitchExtras e){
     pending_.reset();rejection_.clear();
 }
 void PitchScreen::reject_action(std::string reason){if(!pending_||reason.empty())throw FormatError("pitch: rejection requires pending action and reason");
-    if(sheet_->pending())sheet_=std::make_unique<LineupScreen>(data_,state_);
+    if(sheet_->pending())sheet_=std::make_unique<LineupScreen>(data_,state_,exe_);
     pending_.reset();selected_.reset();hovered_.reset();ghost_.reset();order_hover_grid_.reset();marking_target_row_.reset();rejection_=std::move(reason);
 }
 void PitchScreen::resolve_local_navigation(){

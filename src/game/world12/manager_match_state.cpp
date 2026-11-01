@@ -5,6 +5,7 @@
 namespace bmh::world12 {
 namespace {
 constexpr size_t record_size=0xb0c;
+constexpr std::array<size_t,3> taker_offsets{0xafc,0xafe,0xb08};
 uint16_t word(const Bytes& b,size_t at){return uint16_t(b.at(at)|uint16_t(b.at(at+1))<<8);}
 void put_word(Bytes& b,size_t at,uint16_t value){b.at(at)=uint8_t(value);b.at(at+1)=uint8_t(value>>8);}
 size_t record(const GameState& state,int manager) {
@@ -44,7 +45,7 @@ ManagerMatchState manager_match_state_from_legacy(const GameState& state,int man
     }
     result.designated_takers=word(state.manager_records,at+0xb0a)==0x3253;
     if(result.designated_takers)for(size_t i=0;i<3;++i) {
-        const auto id=word(state.manager_records,at+0xb04+i*2);if(!id)continue;
+        const auto id=word(state.manager_records,at+taker_offsets[i]);if(!id)continue;
         if(id>4095||size_t(id-1)>=players.size()||!players[id-1].valid())throw std::invalid_argument("world12: unknown designated match player");
         result.takers[i]=players[id-1];
     }
@@ -78,6 +79,6 @@ void install_manager_match_state(GameState& state,int manager,const ManagerMatch
     for(size_t i=0;i<clubs.size()&&i<size_t(runtime_dimensions.record_teams);++i)if(const auto found=input.head_to_head.find(clubs[i]);found!=input.head_to_head.end())
         std::copy(found->second.begin(),found->second.end(),state.manager_results.begin()+size_t(manager)*stride+i*10);
     put_word(state.manager_records,at+0xb0a,input.designated_takers?0x3253:0);
-    for(size_t i=0;i<3;++i)put_word(state.manager_records,at+0xb04+i*2,takers[i]);
+    for(size_t i=0;i<3;++i)put_word(state.manager_records,at+taker_offsets[i],takers[i]);
 }
 }

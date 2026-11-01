@@ -6,7 +6,7 @@ Accepted scope: one shared 1–4-manager world, including mixed German/English c
 
 There are 13 league slots and, with both countries enabled, 234 league clubs, 24 roster places and normally 20 initial players per league club. More than 4,095 player records exceed the old twelve-bit IDs; more than 512 distinct crest cells must be supported. New runtime references use separate 32-bit identities and status flags. Audit all old masks, packed loans/offers, calendar/result buffers and national-team assumptions before exposing this profile as playable.
 
-Data uses profile `dual-classic-2`, a new codec and save identity O1.2 (snapshot magic `OBMH12S6` (S4/S5 remain readable without invented newer state)). The retired unreleased Portugal profile and older snapshot layouts are explicitly rejected. No 1.1 save migration. Retain current 2026/27 German/English clubs and fill lower English gaps from existing supplied current data, with explicit fictional provenance where needed. Deduplicate clubs across country leagues and European filler lists. Do not copy original game content into public source.
+Data uses profile `dual-classic-2`, a new codec and save identity O1.2 (snapshot magic `OBMH12S7` (S4–S6 remain readable without invented newer state)). The retired unreleased Portugal profile and older snapshot layouts are explicitly rejected. No 1.1 save migration. Retain current 2026/27 German/English clubs and fill lower English gaps from existing supplied current data, with explicit fictional provenance where needed. Deduplicate clubs across country leagues and European filler lists. Do not copy original game content into public source.
 
 Implementation gates:
 

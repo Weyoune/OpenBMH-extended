@@ -16,7 +16,18 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
     if(action.request==ui::FlowRequest::manager_confirmed){const auto* choice=flow.pending_manager();if(!session||!choice)throw FormatError("world12: missing manager confirmation owner");
         auto staged=std::make_unique<Session>(*session);staged->confirm_manager(*choice,choice->roster_revision);flow.resume_manager_selection(staged->selection_context());session.swap(staged);return {StartupProgress::selecting,{}};
     }
+    if(action.request==ui::FlowRequest::desk_action){
+        if(!session||!flow.desktop()||!flow.desktop()->pending()||*flow.desktop()->pending()!=action.desk_action)throw FormatError("world12: desktop command has no matching view owner");
+        auto staged=std::make_unique<Session>(*session);staged->open_preparation(action.desk_action);
+        auto view=staged->preparation_view(data);flow.show_world12_preparation(std::move(view),action.desk_action.menu_kind);session.swap(staged);return {};
+    }
+    if(action.request==ui::FlowRequest::submenu_action){
+        if(!session||!flow.matches_pending_preparation(action.submenu_action))throw FormatError("world12: preparation command has no matching view owner");
+        auto staged=std::make_unique<Session>(*session);staged->apply_preparation(action.submenu_action);
+        auto view=staged->preparation_view(data);flow.acknowledge_preparation(std::move(view));session.swap(staged);return {};
+    }
+    if(action.request==ui::FlowRequest::submenu_closed&&session&&!flow.in_preparation_menu()){session->close_preparation();return {};}
     if(action.request!=ui::FlowRequest::none&&action.request!=ui::FlowRequest::submenu_opened&&action.request!=ui::FlowRequest::submenu_closed)throw FormatError("world12: this frontend action has no typed owner yet");
     return {};
-}catch(const std::exception& error){if(action.request==ui::FlowRequest::desk_action||action.request==ui::FlowRequest::kickoff)flow.reject_desk_action(error.what());return {StartupProgress::idle,error.what()};}
+}catch(const std::exception& error){if(action.request==ui::FlowRequest::desk_action||action.request==ui::FlowRequest::kickoff)flow.reject_desk_action(error.what());else if(action.request==ui::FlowRequest::submenu_action&&flow.matches_pending_preparation(action.submenu_action))flow.reject_preparation_action(error.what());return {StartupProgress::idle,error.what()};}
 }

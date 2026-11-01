@@ -3,6 +3,7 @@
 #include "app/world12_startup.hpp"
 #include "app/world12_desktop.hpp"
 #include "game/world12/match_projection.hpp"
+#include "game/world12/desktop_projection.hpp"
 #include "game/desk.hpp"
 #include "game/world12/codec.hpp"
 #include "game/save.hpp"
@@ -70,7 +71,10 @@ void desktop_tests(CareerSnapshot prepared,const GameState& source,const std::fi
     auto invalid=before;invalid.desktop->managers.push_back(invalid.desktop->managers.front());rejects([&]{make_save(invalid);},"duplicate saved desktop accepted");
     invalid=before;invalid.desktop->active_seat=4;rejects([&]{make_save(invalid);},"unknown active desktop accepted");
     auto truncated=make_save(before);truncated.stream.pop_back();rejects([&]{read_save(truncated);},"truncated desktop snapshot accepted");
-    auto s5=make_save(before);s5.stream[7]='5';s5.stream.pop_back();s5.checksum=0;for(auto b:s5.stream)s5.checksum=uint8_t(s5.checksum+b);check(read_save(s5)==before,"previous S5 desktop snapshot ceased to load");
+    auto s5=make_save(before);const size_t count=before.desktop->managers.size(),stride=54*16+4,start=s5.stream.size()-1-count*stride;
+    for(size_t i=count;i-->0;)s5.stream.erase(s5.stream.begin()+start+i*stride+2,s5.stream.begin()+start+i*stride+4);
+    auto s6=s5;s6.stream[7]='6';check(read_save(s6)==before,"previous S6 snapshot ceased to load");
+    s5.stream[7]='5';s5.stream.pop_back();s5.checksum=0;for(auto b:s5.stream)s5.checksum=uint8_t(s5.checksum+b);check(read_save(s5)==before,"previous S5 desktop snapshot ceased to load");
     auto old=before;old.desktop.reset();auto legacy=make_save(old);legacy.stream[7]='4';legacy.stream.pop_back();legacy.checksum=0;for(auto b:legacy.stream)legacy.checksum=uint8_t(legacy.checksum+b);check(read_save(legacy)==old,"previous S4 snapshot ceased to load");
 }
 CareerSnapshot first_event_fixture(CareerSnapshot state,const GameState& reference) {
@@ -86,6 +90,11 @@ void first_event_tests(const CareerSnapshot& pending,const GameState& source) {
     const auto before=first_event_fixture(pending,reference);GameRandom g(before.game_seed);std::vector<uint8_t> order;for(const auto& m:before.world.managers)order.push_back(m.seat);
     for(size_t i=0;i<order.size();++i)std::swap(order[i],order[size_t(g.range(0,int(order.size())-1))]);
     const auto& manager=before.world.managers.at(order.front());
+    {auto view=before;view.desktop->active_seat=order.front();auto first=project_manager_desktop(view,reference);const auto untouched=view.world;first.commit_match_state(view.world);check(view.world==untouched,"stable desktop projection changed canonical world on roundtrip");
+        const auto club=manager.club;const auto roster=view.world.clubs.at(club).roster;TacticalAction swap;swap.kind=TacticalActionKind::swap;swap.row=1;swap.second_row=2;swap.player=roster[1].player;swap.first_slot=roster[1];swap.second_slot=roster[2];session_app::ManagerActionOwner owner{82,1};
+        const auto changed=session_app::apply_manager_tactical_action(view.world,owner,{manager.seat,club,82,1},swap,{3,false,false,false,2});check(changed.allowed,"stable projection swap fixture rejected");
+        auto second=project_manager_desktop(view,reference);for(const auto& row:roster)if(!row.empty())check(first.local_player(row.player)==second.local_player(row.player),"desktop player IDs changed when roster rows moved");}
+
     for(bool offer:{false,true}){
         uint32_t seed=1;for(;;++seed){WatcomRandom probe(seed);probe.range(0,10000);if((probe.range(0,70-int16_t(manager.match_state->staff_ratings[0])/50)==0)==offer)break;}
         auto state=before;state.watcom_seed=seed;session_app::ManagerActionOwner owner{81,4};const auto result=session_app::prepare_first_desk_event(state,owner,owner,reference);
@@ -99,6 +108,47 @@ void first_event_tests(const CareerSnapshot& pending,const GameState& source) {
     rejects([&]{session_app::prepare_first_desk_event(interrupted,owner,{81,4},reference);},"initial event overwrote changed owner");draw_hook=nullptr;interrupted_desktop_owner=nullptr;check(interrupted==before&&owner.revision==5,"initial event rollback lost externally changed owner");
     auto occupied=before;occupied.calendar->schedule.others.push_back({0,CalendarDomain::shared,0x40});const auto busy=occupied;owner={81,4};
     rejects([&]{session_app::prepare_first_desk_event(occupied,owner,owner,reference);},"initial empty event skipped actual day-zero appointment");check(occupied==busy&&owner.revision==4,"busy day rejection changed state");
+}
+void actual_management(ui::StartupFlow& flow,std::unique_ptr<session_app::Session>& session,const std::filesystem::path& data,const std::filesystem::path& output) {
+    const auto game=session->snapshot().game_seed;const auto random=session->snapshot().watcom_seed;
+    if(!output.empty())std::filesystem::create_directories(output);
+    const auto send=[&](const ui::FlowResult& action){const auto result=session_app::serve_startup(flow,action,session,data,91,71);if(!result.error.empty())throw std::runtime_error("management input: "+result.error);};
+    const auto capture=[&](const char* name){if(output.empty())return;const auto frame=flow.render();const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));std::ofstream f(output/(std::string(name)+".ppm"),std::ios::binary);f<<"P6\n320 240\n255\n";for(auto p:frame.pixels){const auto c=palette.argb[p];f.put(char(c>>16));f.put(char(c>>8));f.put(char(c));}};
+    const auto open=[&](int kind){const auto& items=flow.desktop()->state().items;const auto item=std::find_if(items.begin(),items.end(),[&](const auto& i){return i.kind==kind;});check(item!=items.end(),"management desktop icon missing");send(flow.click(item->x+item->width/2,item->y+item->height/2));};
+    check(session->snapshot().world.managers.front().tactics->backing->enabled_formations==std::array<uint8_t,2>{15,15},"new manager lacks four Original outdoor/indoor formation presets");
+    open(3);check(flow.screen_name()=="lineup","lineup did not open");capture("lineup-before");
+    const auto actor=*session->snapshot().desktop->active_seat;const auto club=session->snapshot().world.managers.at(actor).club;
+    const auto roster=session->snapshot().world.clubs.at(club).roster;
+    send(flow.click(20,41));const auto exchange=flow.click(20,48);send(exchange);
+    check(session->snapshot().world.clubs.at(club).roster[1].player==roster[2].player&&session->snapshot().world.clubs.at(club).roster[2].player==roster[1].player,"GUI roster exchange lost global player identity");capture("lineup-after");
+    const auto accepted=session->snapshot();const auto revision=session->revision();
+    rejects([&]{session->apply_preparation(exchange.submenu_action);},"backend replayed an accepted lineup swap");check(session->snapshot()==accepted&&session->revision()==revision,"backend replay leaked changes");
+    {auto view=session->preparation_view(data);auto wide=view.lineup;wide.players[0].name=std::string(80,'M');auto short_name=wide;short_name.players[0].name="X";
+        const auto a=ui::LineupScreen(data,wide,session->rules()).render(),b=ui::LineupScreen(data,short_name,session->rules()).render();
+        for(int y=29;y<38;++y)for(int x=63;x<320;++x)check(a.pixels[size_t(y)*320+x]==b.pixels[size_t(y)*320+x],"long player name overwrote another lineup column");}
+    ui::FlowResult forged;forged.request=ui::FlowRequest::submenu_action;ui::LineupRequest fake;fake.kind=ui::LineupRequestKind::swap_players;fake.manager_slot=int(actor);fake.runtime_club=flow.desktop()->state().runtime_club;fake.revision=revision;forged.submenu_action=fake;
+    check(!session_app::serve_startup(flow,forged,session,data,91,71).error.empty()&&session->snapshot()==accepted,"forged menu command mutated session");
+    send(flow.click(100,41));check(flow.screen_name()=="player_card","player information did not open");capture("player-card");send(flow.click(0,0,true));
+    send(flow.click(80,219));check(flow.in_pitch(),"pitch did not open through Source page request");capture("pitch");
+    send(flow.click(205,140));send(flow.click(245,214));
+    auto view=session->preparation_view(data);const auto mask=view.pitch->formation_mask;int formation=0;while(formation<8&&(!(mask&(1<<formation))||formation+1==view.lineup.automatic_formation))++formation;
+    if(formation==8){formation=0;while(formation<8&&!(mask&(1<<formation)))++formation;}check(formation<8,"no enabled formation in Original data");send(flow.click(formation%2?285:245,114+24*(formation/2)));capture("pitch-formation");
+    send(flow.click(205,154));send(flow.click(20,41));view=session->preparation_view(data);const int order=view.lineup.players[1].board[2];send(flow.click(order>2?245:310,180));capture("pitch-orders");
+    send(flow.click(205,180));send(flow.click(260,118));send(flow.click(20,41));capture("pitch-takers");
+    check(session->snapshot().world.managers.at(actor).match_state->takers[0]==session->snapshot().world.clubs.at(club).roster[1].player,"GUI set-piece choice lost global player identity");
+    send(flow.click(260,215));send(flow.click(205,140));
+    check(read_save(make_save(session->snapshot()))==session->snapshot(),"pitch display/takers/roster save roundtrip differs");
+    for(int n=0;n<3&&flow.screen_name()!="desktop";++n)send(flow.click(0,0,true));check(flow.screen_name()=="desktop","pitch did not close to desktop");
+    open(18);check(flow.screen_name()=="tactics","tactics did not open");capture("tactics-before");
+    const auto rules=session->rules();send(flow.click(rules.u8(layout::Tactics_Click_RuntimeField)+1,rules.u8(layout::Tactics_Click_RuntimeField3)+1));capture("tactics-after");send(flow.click(0,0,true));
+    open(16);check(flow.screen_name()=="training","training did not initialize/open");capture("training-before");
+    {auto wide=*session->preparation_view(data).training;wide.players[0].name=std::string(80,'M');auto short_name=wide;short_name.players[0].name="X";
+        const auto a=ui::TrainingScreen(data,wide,session->rules()).render(),b=ui::TrainingScreen(data,short_name,session->rules()).render();
+        for(int y=23;y<29;++y)for(int x=263;x<320;++x)check(a.pixels[size_t(y)*320+x]==b.pixels[size_t(y)*320+x],"long player name overwrote training controls");}
+    send(flow.click(rules.u8(layout::Training_Click_RuntimeField2+3),rules.u8(layout::Training_Click_RuntimeField3+3)));capture("training-after");send(flow.click(0,0,true));
+    check(flow.screen_name()=="desktop"&&session->snapshot().game_seed==game&&session->snapshot().watcom_seed==random&&session->snapshot().date==0,"preparation changed calendar or random streams");
+    if(!output.empty())write_savegame(output/"management.FBM",make_save(session->snapshot()));
+    std::cout<<"Actual lineup swap/player card/pitch/tactics/training GUI commands, stable IDs, no RNG/time advance and saved display state passed\n";
 }
 void actual(const std::filesystem::path& data,const std::filesystem::path& output) {
     auto resources=session_app::load_runtime_resources(data);
@@ -123,6 +173,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     check(unsupported.request==ui::FlowRequest::kickoff,"actual desktop did not route kickoff to its owner");
     const auto declined=session_app::serve_startup(flow,unsupported,session,data,91,71);
     check(!declined.error.empty()&&session->snapshot()==untouched&&session->revision()==live_revision&&!flow.desktop()->pending(),"unsupported next day fell through to legacy or left a stuck command");
+    actual_management(flow,session,data,output);
     ui::StartupFlow mixed(data,{},ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> multi;
     mixed.click(resources.german.u16(layout::Setup_FormatError_RuntimeField3+6*2)+10,resources.german.u8(layout::Setup_FormatError_RuntimeField4+6)+10);
     check(mixed.options().managers==2,"actual setup failed to choose two managers");
@@ -135,7 +186,8 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     const auto event_revision=multi->revision();const auto entered=multi->snapshot();rejects([&]{multi->begin_first_event(event_revision);},"mixed session repeated initial event");check(multi->snapshot()==entered&&multi->revision()==event_revision,"mixed session replay changed state");
     check(read_save(make_save(multi->snapshot()))==multi->snapshot(),"mixed initial event did not survive save");
     if(!output.empty())write_savegame(output/"first-event.FBM",make_save(multi->snapshot()));
-    std::cout<<"Actual standalone data-only package: original setup/England picker -> typed confirmation -> all start services/market/snapshot passed; first empty event/desktop attached; management and subsequent day owners still pending\n";
+    actual_management(mixed,multi,data,output.empty()?output:output/"mixed-management");
+    std::cout<<"Actual standalone data-only package: original setup/England picker -> typed confirmation -> all start services/market/snapshot passed; first empty event/desktop attached; remaining management and subsequent day owners still pending\n";
 }
 }
 int main(int argc,char** argv)try {
@@ -151,5 +203,5 @@ int main(int argc,char** argv)try {
         first_event_tests(session.snapshot(),resources.reference);
     }
     if(argc>1)actual(argv[1],argc>2?std::filesystem::path(argv[2]):std::filesystem::path{});
-    std::cout<<"Six session scopes, owned chooser revisions, Original desktop entry/RNG/country policy, S4/S5/S6 saves, first events/offers and rollback passed\n";
+    std::cout<<"Six session scopes, owned chooser revisions, Original desktop entry/RNG/country policy, S4/S5/S6/S7 saves, first events/offers and rollback passed\n";
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}

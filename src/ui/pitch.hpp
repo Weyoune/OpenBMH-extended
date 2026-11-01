@@ -26,6 +26,7 @@ struct PitchExtras {
     std::optional<bool> indoor;
     int mode = 3;
     uint16_t badge = 0;
+    std::string badge_atlas;
     uint8_t formation_mask = 0, automatic_weights = 0;
     std::array<uint8_t, 8 * 22> formations{};
     std::array<uint16_t, 3> set_piece_takers{}; // player_id+1; offsets +afc,+afe,+b08
@@ -58,7 +59,7 @@ struct PitchRequest {
     int weight_index = -1; // one of three 2-bit fields in manager record +0x288
     uint8_t old_weights = 0, new_weights = 0;
     std::array<uint8_t,22> formation_positions{}; // depth[11], lane[11], save only
-    int set_piece_selector = 0; // original selection 2/3/4 (Freistoß/Elfmeter/Eckball)
+    int set_piece_selector = 0; // extension selection 2/3/4 (penalty/rebound/free kick)
     uint16_t expected_set_piece_value = 0;
     std::array<uint16_t, 3> expected_set_piece_values{};
     uint16_t expected_display_word = 0, new_display_word = 0;
@@ -76,6 +77,7 @@ std::string pitch_request_json(const PitchRequest&);
 class PitchScreen {
 public:
     PitchScreen(const std::filesystem::path& data, LineupState, PitchExtras);
+    PitchScreen(const std::filesystem::path& data, LineupState, PitchExtras,const LeImage& reference);
     PitchScreen(const PitchScreen&);
     PitchScreen& operator=(const PitchScreen&);
     PitchScreen(PitchScreen&&) noexcept = default;

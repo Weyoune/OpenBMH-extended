@@ -19,9 +19,10 @@ std::string original_bytes(std::string_view utf8) {
 }
 
 SpriteFont::SpriteFont(const std::filesystem::path& data_directory)
+    : SpriteFont(data_directory,load_le(asset_path(data_directory,"BMH.exe"))) {install_original_badge_policy(exe_);}
+SpriteFont::SpriteFont(const std::filesystem::path& data_directory,const LeImage& reference)
     : atlas_(load_vga(asset_path(data_directory / "KB", "54.VGA"))),
-      exe_(load_le(asset_path(data_directory, "BMH.exe"))) {
-    install_original_badge_policy(exe_);
+      exe_(reference) {
     if (atlas_.height < 21 || atlas_.width <= 0)
         throw FormatError("sprite font: unsupported KB/54 atlas");
 }

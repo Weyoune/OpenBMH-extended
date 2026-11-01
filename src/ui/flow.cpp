@@ -213,7 +213,7 @@ void StartupFlow::acknowledge_manager_join(CareerInitializationResult result) {
     }
     // All renderers must accept the new projection before exposing it to the player.
     StartupFlow candidate(data_,save_directory_,setup_symbol_);
-    candidate.desktop_=std::make_unique<DesktopScreen>(data_,result.desktop);
+    candidate.desktop_=std::make_unique<DesktopScreen>(data_,result.desktop,render_reference());
     candidate.engine_attached_=true; candidate.attach_preparation_context(std::move(result.preparation));
     auto next_choices=join_choices_;
     auto next_teams=result.desktop.manager_teams;
@@ -394,7 +394,7 @@ FlowResult StartupFlow::click(int x, int y, bool right, bool double_click) {
         const int info_row=contracts_->take_player_info_request();
         if(info_row>=0 && preparation_) for(auto card:preparation_->player_cards) {
             if(card.row==info_row && card.unsupported_record.empty()) {
-                player_card_=std::make_unique<PlayerCardScreen>(data_,std::move(card),contracts_->render());
+                player_card_=std::make_unique<PlayerCardScreen>(data_,std::move(card),contracts_->render(),render_reference());
                 return {true,FlowRequest::submenu_opened};
             }
         }
@@ -674,7 +674,7 @@ void StartupFlow::load_reference(const std::filesystem::path& save, std::optiona
     if (manager_ || desktop_) throw FormatError("reference load requires a fresh startup flow");
     auto state = std::make_unique<PreparationState>(load_preparation_reference(save, load_le(asset_path(data_, "BMH.exe"))));
     if (state->pitch && indoor) state->pitch->indoor = indoor;
-    auto desktop = std::make_unique<DesktopScreen>(data_, state->desktop);
+    auto desktop = std::make_unique<DesktopScreen>(data_, state->desktop,render_reference());
     desktop_ = std::move(desktop); preparation_ = std::move(state);
 }
 
@@ -686,7 +686,7 @@ void StartupFlow::attach_initialized_career(CareerInitializationResult result) {
         throw FormatError("career attachment: engine result does not match confirmed setup");
     validate_confirmed_manager_projection(pending_->managers, result.managers, state);
     const auto runtime_teams = state.manager_teams;
-    auto desktop = std::make_unique<DesktopScreen>(data_, std::move(result.desktop));
+    auto desktop = std::make_unique<DesktopScreen>(data_, std::move(result.desktop),render_reference());
     desktop_ = std::move(desktop); pending_.reset(); engine_attached_ = true;
     confirmed_runtime_teams_ = runtime_teams;
 }
@@ -696,7 +696,24 @@ void StartupFlow::attach_world12_career(DeskState state,const LeImage& reference
     validate_desk_state(state);
     for(size_t i=0;i<state.managers.size();++i){const auto& selected=pending_->managers[i];const auto& actual=state.managers[i];if(!selected.world_club.valid()||selected.world_club!=actual.world_club||selected.name!=actual.name||selected.portrait!=actual.portrait)throw FormatError("world12: confirmed desktop identity mismatch");}
     const auto teams=state.manager_teams;auto desktop=std::make_unique<DesktopScreen>(data_,std::move(state),reference);
-    desktop_=std::move(desktop);pending_.reset();engine_attached_=true;confirmed_runtime_teams_=teams;
+    desktop_=std::move(desktop);pending_.reset();engine_attached_=true;confirmed_runtime_teams_=teams;world12_reference_=reference;
+}
+
+LeImage StartupFlow::render_reference() const {
+    return world12_reference_?*world12_reference_:load_le(asset_path(data_,"BMH.exe"));
+}
+void StartupFlow::show_world12_preparation(PreparationState state,int menu_kind) {
+    if(!world12_reference_||!desktop_||!desktop_->pending()||desktop_->pending()->kind!=DeskRequestKind::open_menu||desktop_->pending()->menu_kind!=menu_kind||in_preparation_menu()||state.desktop.source!="world12"||state.desktop.revision<=desktop_->state().revision)
+        throw FormatError("world12: invalid preparation menu owner");
+    validate_preparation_context(state);
+    if(state.desktop.managers!=desktop_->state().managers||state.desktop.options!=desktop_->state().options||state.desktop.manager_slot!=desktop_->state().manager_slot)throw FormatError("world12: preparation changed manager identity");
+    auto desktop=std::make_unique<DesktopScreen>(data_,state.desktop,*world12_reference_);
+    std::unique_ptr<LineupScreen> lineup;std::unique_ptr<TacticsScreen> tactics;std::unique_ptr<TrainingScreen> training;std::unique_ptr<PitchScreen> pitch;
+    if(menu_kind==3){lineup=std::make_unique<LineupScreen>(data_,state.lineup,*world12_reference_);if(state.lineup.saved_display_flags&8){pitch=std::make_unique<PitchScreen>(data_,state.lineup,*state.pitch,*world12_reference_);lineup.reset();}}
+    else if(menu_kind==18)tactics=std::make_unique<TacticsScreen>(data_,state.tactics,*world12_reference_);
+    else if(menu_kind==16&&state.training)training=std::make_unique<TrainingScreen>(data_,*state.training,*world12_reference_);
+    else throw FormatError("world12: unsupported preparation menu");
+    preparation_=std::make_unique<PreparationState>(std::move(state));desktop_=std::move(desktop);lineup_=std::move(lineup);pitch_=std::move(pitch);tactics_=std::move(tactics);training_=std::move(training);
 }
 
 void StartupFlow::acknowledge_desk(DeskState state) {
@@ -795,7 +812,7 @@ bool StartupFlow::acknowledge_friendly_booking(FriendlyBookingAck ack, DeskState
                             false, desk);
     validate_desk_state(desk);
     validate_preparation_context(preparation);
-    auto next_desktop = std::make_unique<DesktopScreen>(data_, desk);
+    auto next_desktop = std::make_unique<DesktopScreen>(data_, desk,render_reference());
     auto next_preparation = std::make_unique<PreparationState>(std::move(preparation));
     if (!friendly_match_->acknowledge_booking(ack)) return false;
     desktop_ = std::move(next_desktop);
@@ -833,7 +850,7 @@ void StartupFlow::acknowledge_saved_game(DeskState desk, PreparationState prepar
         if (desk.managers[i].name != desktop_->state().managers[i].name ||
             desk.managers[i].portrait != desktop_->state().managers[i].portrait)
             throw FormatError("save/load: manager identity changed while saving");
-    auto next_desktop = std::make_unique<DesktopScreen>(data_, desk);
+    auto next_desktop = std::make_unique<DesktopScreen>(data_, desk,render_reference());
     auto next_preparation = std::make_unique<PreparationState>(std::move(preparation));
     save_load_->acknowledge(); save_load_.reset();
     desktop_ = std::move(next_desktop); preparation_ = std::move(next_preparation);
@@ -887,7 +904,7 @@ void StartupFlow::acknowledge_menu_layout(DeskState desk, PreparationState prepa
     if (desk_json(expected) != desk_json(desk) || desk_json(desk) != desk_json(preparation.desktop))
         throw FormatError("save/load: menu-layout acknowledgement changed state outside the active menu design");
     validate_preparation_context(preparation);
-    auto next_desktop = std::make_unique<DesktopScreen>(data_, std::move(desk));
+    auto next_desktop = std::make_unique<DesktopScreen>(data_, std::move(desk),render_reference());
     auto next_preparation = std::make_unique<PreparationState>(std::move(preparation));
     save_load_->acknowledge(); save_load_.reset();
     desktop_ = std::move(next_desktop); preparation_ = std::move(next_preparation);
@@ -904,7 +921,7 @@ void StartupFlow::attach_loaded_game(DeskState desk, PreparationState preparatio
     validate_desk_state(preparation.desktop);
     if (preparation.desktop.manager_teams != desk.manager_teams || preparation.desktop.runtime_club != desk.runtime_club)
         throw FormatError("save/load: loaded-game manager mapping mismatch");
-    auto next_desktop = std::make_unique<DesktopScreen>(data_, desk);
+    auto next_desktop = std::make_unique<DesktopScreen>(data_, desk,render_reference());
     auto next_preparation = std::make_unique<PreparationState>(std::move(preparation));
     save_load_->acknowledge(); save_load_.reset();
     desktop_ = std::move(next_desktop); preparation_ = std::move(next_preparation);

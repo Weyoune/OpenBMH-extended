@@ -159,7 +159,9 @@ std::string training_request_json(const TrainingRequest& r) {
 }
 
 TrainingScreen::TrainingScreen(const std::filesystem::path& data, TrainingState state)
-    : state_(std::move(state)), exe_(load_le(asset_path(data, "BMH.exe"))),
+    : TrainingScreen(data,std::move(state),load_le(asset_path(data,"BMH.exe"))) {}
+TrainingScreen::TrainingScreen(const std::filesystem::path& data,TrainingState state,const LeImage& reference)
+    : state_(std::move(state)), exe_(reference),
       background_(load_vga(asset_path(data / "KB", "129.VGA"))), widgets_(load_vga(asset_path(data / "KB", "0.VGA"))),
       skill_atlas_(load_vga(asset_path(data / "KB", "2.VGA"))), training_atlas_(load_vga(asset_path(data / "KB", "10.VGA"))),
       letters_(load_vga(asset_path(data / "KB", "54.VGA"))), small_(load_font(asset_path(data / "F", "BMH3.FNT"))),
@@ -243,7 +245,9 @@ Image TrainingScreen::render() const {
     for (const auto& p : state_.players) {
         const int y = 28 + p.row * 8;
         text(out, 185, y, texts_[(::bmh::layout::ClubInfo_Render_TextPointer2 - ::bmh::layout::TextPointerTable) / 4 + p.position], 0x27, 200);
-        text(out, 204, y, p.name, 0x27);
+        auto display_name=p.name;
+        if(small_.text_width(display_name)>57){while(!display_name.empty()&&small_.text_width(display_name+"...")>57)display_name.pop_back();display_name+="...";}
+        text(out, 204, y, display_name, 0x27);
         auto used = std::to_string(p.used); if (used.size() < 2) used.insert(0, 1, ' ');
         text(out, 263, y, used, 0x27);
         if (p.focus) copy(out, widgets_, exe_.u8(::bmh::layout::Training_Render_TextPointer + p.focus), exe_.u8(::bmh::layout::Training_Render_TextPointer2 + p.focus), 277, 23 + p.row * 8, 11, 7);

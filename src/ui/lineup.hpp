@@ -54,6 +54,7 @@ std::string lineup_request_json(const LineupRequest&);
 class LineupScreen {
 public:
     LineupScreen(const std::filesystem::path& data, LineupState state);
+    LineupScreen(const std::filesystem::path& data, LineupState state,const LeImage& reference);
     LineupRequest initialize();
     Image render() const;
     LineupRequest click(int x, int y, bool right = false);

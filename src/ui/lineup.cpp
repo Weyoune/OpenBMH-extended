@@ -129,7 +129,9 @@ std::string lineup_request_json(const LineupRequest& r) {
     return s.str();
 }
 LineupScreen::LineupScreen(const std::filesystem::path& data,LineupState state)
-    :state_(std::move(state)),exe_(load_le(asset_path(data,"BMH.exe"))),
+    : LineupScreen(data,std::move(state),load_le(asset_path(data,"BMH.exe"))) {}
+LineupScreen::LineupScreen(const std::filesystem::path& data,LineupState state,const LeImage& reference)
+    :state_(std::move(state)),exe_(reference),
      font_(load_font(asset_path(data/"F","BMH3.FNT"))),texts_(load_textd(asset_path(data,"TEXTD.BLK"))),
      background_(load_vga(asset_path(data/"KB","129.VGA"))),widgets_(load_vga(asset_path(data/"KB","0.VGA"))),
      atlas_(load_vga(asset_path(data/"KB","2.VGA"))),flags_(load_vga(asset_path(data/"KB","24.VGA"))),
@@ -205,7 +207,9 @@ Image LineupScreen::render() const {
             if(jersey>=10)text(out,0,baseline,exe_.cstring(::bmh::layout::ClubInfo_Render_TextPointer),color);
         }
         const uint8_t name_color=selected_==row?0x27:hovered_==row?0x3e:uint8_t(row%2?0x67:0x6b);
-        text(out,13,baseline,p.name,name_color);
+        auto display_name=p.name;
+        if(font_.text_width(display_name)>49){while(!display_name.empty()&&font_.text_width(display_name+"...")>49)display_name.pop_back();display_name+="...";}
+        text(out,13,baseline,display_name,name_color);
         if(state_.view==LineupView::data_a) {
             text(out,66,baseline,texts_[(::bmh::layout::ClubInfo_Render_TextPointer2-::bmh::layout::TextPointerTable)/4+a.position()],0x6c,82);
             for(int field=0;field<2;++field){int value=(a.w35c>>(field==0?24:21))&7;if(value>4)--value;

@@ -185,7 +185,9 @@ std::vector<std::pair<int,int>> player_statistics_points(const PlayerCardState& 
 }
 
 PlayerCardScreen::PlayerCardScreen(const std::filesystem::path& data,PlayerCardState state,std::optional<Image> parent_frame)
-    :state_(std::move(state)),exe_(load_le(asset_path(data,"BMH.exe"))),
+    :PlayerCardScreen(data,std::move(state),std::move(parent_frame),load_le(asset_path(data,"BMH.exe"))) {}
+PlayerCardScreen::PlayerCardScreen(const std::filesystem::path& data,PlayerCardState state,std::optional<Image> parent_frame,const LeImage& reference)
+    :state_(std::move(state)),exe_(reference),
      small_(load_font(asset_path(data/"F","BMH3.FNT"))),heading_(load_font(asset_path(data/"F","BMH2.FNT"))),
      texts_(load_textd(asset_path(data,"TEXTD.BLK"))),widgets_(load_vga(asset_path(data/"KB","0.VGA"))),
      atlas_(load_vga(asset_path(data/"KB","2.VGA"))),flags_(load_vga(asset_path(data/"KB","24.VGA"))),
@@ -193,14 +195,14 @@ PlayerCardScreen::PlayerCardScreen(const std::filesystem::path& data,PlayerCardS
     validate(state_);
     if(!state_.unsupported_record.empty())throw FormatError("player card: unsupported "+state_.unsupported_record);
     if(state_.statistics)statistics_flags_=state_.statistics->display_flags;
-    badge_=load_vga(asset_path(data/"W",std::to_string(state_.badge>>3)+".VGA"));
+    badge_=load_vga(state_.badge_atlas.empty()?asset_path(data/"W",std::to_string(state_.badge>>3)+".VGA"):asset_path(data,state_.badge_atlas));
     if(state_.loan)for(size_t i=0;i<2;++i){
         const int club=i?state_.loan->borrower:state_.loan->owner;
         if(!original_badge_fallback(club,&exe_))
             loan_badges_[i]=load_vga(asset_path(data/"W",std::to_string(state_.loan->badges[i]>>3)+".VGA"));
     }
     if(atlas_.width==314){Image padded(320,atlas_.height);padded.blit(atlas_,0,0);atlas_=std::move(padded);}
-    parent_frame_=parent_frame?std::move(*parent_frame):LineupScreen(data,state_.lineup).render();
+    parent_frame_=parent_frame?std::move(*parent_frame):LineupScreen(data,state_.lineup,exe_).render();
     if(parent_frame_.width!=320||parent_frame_.height!=240)throw FormatError("player card: parent framebuffer must be 320x240");
 }
 const std::string& PlayerCardScreen::label(uint32_t address) const {return texts_[(address-::bmh::layout::TextPointerTable)/4];}

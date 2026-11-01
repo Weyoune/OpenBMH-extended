@@ -14,6 +14,7 @@ namespace bmh::ui {
 class SpriteFont {
 public:
     explicit SpriteFont(const std::filesystem::path& data_directory);
+    SpriteFont(const std::filesystem::path& data_directory,const LeImage& reference);
     static int centered_title_x(int measured_width);
     int text_width(std::string_view utf8) const;
     // Original modes 5 and 6 share the executable glyph map and select

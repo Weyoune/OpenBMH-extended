@@ -35,7 +35,7 @@ int main()try {
     const auto read=manager_match_state_from_legacy(native,3,clubs,players,&input);
     check(read==input,"manager match bridge lost scalar or global history/taker data");
     const auto known=[](size_t at){return (at>=0xc5&&at<0xda)||(at>=0x5e&&at<0x73)||(at>=0x1ae&&at<0x1f6)||
-        (at>=0x212&&at<0x218)||(at>=0x292&&at<0x2aa)||(at>=0x8aa&&at<0x8b6)||(at>=0xb04&&at<0xb0c)||
+        (at>=0x212&&at<0x218)||(at>=0x292&&at<0x2aa)||(at>=0x8aa&&at<0x8b6)||(at>=0xafc&&at<0xb00)||(at>=0xb08&&at<0xb0c)||
         at==0x172||at==0x173||at==0x289||at==0x28b||at==0x220;};
     for(size_t i=0;i<native.manager_records.size();++i)if(i<3*0xb0c||!known(i-3*0xb0c))check(native.manager_records[i]==before.manager_records[i],"bridge overwrote another manager or unrelated record bytes");
     check(std::equal(before.manager_ratings.begin(),before.manager_ratings.begin()+180,native.manager_ratings.begin()),"bridge changed another manager's ratings");

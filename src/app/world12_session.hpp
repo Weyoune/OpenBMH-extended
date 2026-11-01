@@ -5,6 +5,8 @@
 #include "formats/le.hpp"
 #include "ui/manager.hpp"
 #include "ui/world12_manager_selection.hpp"
+#include "ui/preparation.hpp"
+namespace bmh::ui {struct DeskRequest;}
 namespace bmh::app::world12 {
 struct RuntimeResources {
     bmh::world12::World master;
@@ -22,6 +24,10 @@ public:
     void confirm_manager(const ui::ManagerChoice&,uint64_t expected_revision);
     void prepare_start(uint64_t expected_revision);
     DesktopEntryOutcome begin_first_event(uint64_t expected_revision);
+    void open_preparation(const ui::DeskRequest&);
+    void apply_preparation(const ui::PreparationRequest&);
+    void close_preparation();
+    ui::PreparationState preparation_view(const std::filesystem::path&)const;
     const bmh::world12::CareerSnapshot& snapshot()const{return state_;}
     uint64_t revision()const{return owner_.revision;}
     uint64_t scope()const{return owner_.scope;}
@@ -34,5 +40,6 @@ private:
     RuntimeResources resources_;ui::SetupOptions options_;
     bmh::world12::CareerSnapshot state_;ManagerActionOwner owner_;
     InitialCompetitionOutcome draws_;InitialManagerServicesOutcome services_;
+    std::optional<int> preparation_menu_;
 };
 }

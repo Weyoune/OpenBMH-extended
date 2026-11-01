@@ -128,6 +128,7 @@ public:
     void load_reference(const std::filesystem::path& save, std::optional<bool> indoor = std::nullopt);
     void attach_initialized_career(CareerInitializationResult result);
     void attach_world12_career(DeskState,const LeImage& reference);
+    void show_world12_preparation(PreparationState,int menu_kind);
     void acknowledge_desk(DeskState state);
     void reject_desk_action(std::string reason);
     void acknowledge_desk_notice(const DeskRequest& owner);
@@ -400,6 +401,7 @@ public:
     void acknowledge_unchanged_transfer_market();
     void acknowledge_transfer_market_preview(PreparationState, TransferMarketPreview);
     bool matches_pending_lineup(const LineupRequest&) const;
+    bool matches_pending_preparation(const PreparationRequest&) const;
     bool matches_pending_pitch(const PitchRequest&) const;
     bool matches_pending_stadium(const StadiumRequest&) const;
     bool in_preparation_menu() const { return bool(other_games_ || balance_ || player_card_ || pitch_ || lineup_ || training_ || training_camp_ || bank_ || stadium_ || environment_ || toto_ || transfer_market_ || tactics_ || save_load_ || friendly_match_ || contracts_); }
@@ -420,6 +422,8 @@ private:
     uint64_t join_context_revision_ = 0;
     void acknowledge_contract_mutation(ContractsState, DeskState, PreparationState, ContractActionKind);
     std::filesystem::path data_;
+    std::optional<LeImage> world12_reference_;
+    LeImage render_reference() const;
     std::filesystem::path save_directory_;
     SetupLeagueSymbol setup_symbol_;
     SetupScreen setup_;

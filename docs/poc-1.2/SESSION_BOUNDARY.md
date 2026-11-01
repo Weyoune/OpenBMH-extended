@@ -33,3 +33,7 @@ Validation of this integration checkpoint: all 28 targeted Linux regressions and
 ## Desktop persistence
 
 Prepared sessions now include the [desktop runtime](DESKTOP_STATE.md). Layouts are copied during the same staged preparation commit. An initial DeskDate transaction is available for the future event owner, with checked revision, retained random streams, prestige and autosave state. `serve_startup` now calls the first-event owner before the read-only desktop attachment; that owner prepares its order, initial offer and empty pools before DeskDate. Initial competition/receipt presentation remains pending.
+
+## Preparation ownership
+
+The same staged controller now opens and mutates the Original lineup/pitch, tactics and training menus through [preparation ownership](PREPARATION.md). Local player IDs stay stable across roster rearrangements; all pending requests, actor/revision metadata and global manager identities are checked before publication. Bank, stadium, transfer, remaining desktop commands and later days are still separate integration gates.

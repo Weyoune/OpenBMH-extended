@@ -22,6 +22,7 @@ struct PlayerCardState {
     LineupState lineup;
     int row = -1, badge = -1;
     std::string nationality_name, club_short_name;
+    std::string badge_atlas;
     bool portrait_available = true;
     int money_numerator = 1, money_denominator = 1;
     std::string unsupported_record; // explicit loan/negotiation gate, no invented card
@@ -40,6 +41,7 @@ std::vector<std::pair<int,int>> player_statistics_points(const PlayerCardState&,
 class PlayerCardScreen {
 public:
     PlayerCardScreen(const std::filesystem::path& data, PlayerCardState state, std::optional<Image> parent_frame = std::nullopt);
+    PlayerCardScreen(const std::filesystem::path& data, PlayerCardState state, std::optional<Image> parent_frame,const LeImage& reference);
     Image render() const;
     bool click(int x, int y, bool right = false);
     bool key(std::string_view key);

@@ -130,6 +130,23 @@ AiMatchProjection AiMatchProjection::create_for_humans(const CareerSnapshot& sna
     }
     local.counts.players=uint32_t(local.players.size());return result;
 }
+AiMatchProjection AiMatchProjection::create_for_desktop(const CareerSnapshot& snapshot,const std::vector<ClubId>& clubs,const GameState& reference,HumanProjectionPolicy policy) {
+    auto result=create_for_humans(snapshot,clubs,reference,policy);auto& local=result.state;
+    std::vector<size_t> order;for(size_t i=0;i<result.players_.size();++i)order.push_back(i);
+    std::sort(order.begin(),order.end(),[&](size_t a,size_t b){return result.players_[a]<result.players_[b];});
+    const auto ids=result.players_;const auto originals=result.originals_;const auto players=local.players;const auto cards=local.player_cards;const auto bonuses=local.player_bonus;const auto offsets=local.player_name_offsets;
+    std::vector<uint16_t> remap(order.size());
+    for(size_t i=0;i<order.size();++i){const auto old=order[i];remap[old]=uint16_t(i);result.players_[i]=ids[old];result.originals_[i]=originals[old];local.players[i]=players[old];local.player_cards[i]=cards[old];local.player_bonus[i]=bonuses[old];local.player_name_offsets[i]=offsets[old];}
+    for(auto& slot:local.squad_slots)if((slot&0xfff)!=0xfff)slot=uint16_t((slot&0xf000)|remap.at(slot&0xfff));
+    // Reinstall every known board/record reference from its canonical global ID.
+    // Names and club mappings do not depend on the player ordering.
+    for(size_t i=0;i<result.manager_seats_.size();++i){const auto seat=result.manager_seats_[i];const auto& manager=*std::find_if(snapshot.world.managers.begin(),snapshot.world.managers.end(),[&](const auto& m){return m.seat==seat;});
+        install_manager_tactics(local,int(i),*manager.tactics,result.players_);
+        install_manager_match_state(local,int(i),*manager.match_state,result.manager_reference_clubs_,result.players_);
+        if(manager.career)install_manager_career_state(local,uint8_t(i),*manager.career,result.players_);
+    }
+    return result;
+}
 ClubId AiMatchProjection::global_club(uint32_t local)const{return manager_reference_clubs_.empty()?clubs_.at(local):manager_reference_clubs_.at(local);}
 PlayerId AiMatchProjection::global_player(uint32_t local)const{return players_.at(local);}
 uint32_t AiMatchProjection::local_club(ClubId id)const{auto it=std::find(clubs_.begin(),clubs_.end(),id);if(it==clubs_.end())throw std::out_of_range("world12: club is not projected");return uint32_t(it-clubs_.begin());}

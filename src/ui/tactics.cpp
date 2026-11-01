@@ -102,7 +102,9 @@ std::string tactics_request_json(const TacticsRequest& r) {
 }
 
 TacticsScreen::TacticsScreen(const std::filesystem::path& data, TacticsState state)
-    : state_(std::move(state)), exe_(load_le(asset_path(data, "BMH.exe"))),
+    : TacticsScreen(data,std::move(state),load_le(asset_path(data,"BMH.exe"))) {}
+TacticsScreen::TacticsScreen(const std::filesystem::path& data,TacticsState state,const LeImage& reference)
+    : state_(std::move(state)), exe_(reference),
       texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
       background_(load_vga(asset_path(data / "KB", "129.VGA"))),
       board_(load_vga(asset_path(data / "KB", "11.VGA"))),

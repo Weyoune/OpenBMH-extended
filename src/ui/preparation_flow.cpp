@@ -128,7 +128,7 @@ void StartupFlow::show_strengths(StrengthsState page,PreparationState preparatio
         throw FormatError("strengths: mismatched opening acknowledgement");
     validate_strengths_preparation(page.identity,desktop_->state(),preparation);
     auto screen=std::make_unique<StrengthsScreen>(data_,std::move(page));
-    auto desk=std::make_unique<DesktopScreen>(data_,preparation.desktop);
+    auto desk=std::make_unique<DesktopScreen>(data_,preparation.desktop,render_reference());
     auto next=std::make_unique<PreparationState>(std::move(preparation));
     desktop_->resolve_local_menu();desktop_=std::move(desk);preparation_=std::move(next);strengths_=std::move(screen);
     league_family_identity_=strengths_->state().identity;league_family_child_=3;
@@ -163,7 +163,7 @@ void StartupFlow::show_family_strengths(StrengthsState page,PreparationState pre
         throw FormatError("league family: mismatched Strengths transition");
     validate_strengths_preparation(page.identity,desktop_->state(),preparation);
     auto screen=std::make_unique<StrengthsScreen>(data_,page);
-    auto desk=std::make_unique<DesktopScreen>(data_,preparation.desktop);
+    auto desk=std::make_unique<DesktopScreen>(data_,preparation.desktop,render_reference());
     auto next=std::make_unique<PreparationState>(std::move(preparation));
     replace_family_child();desktop_=std::move(desk);preparation_=std::move(next);
     strengths_=std::move(screen);league_family_identity_=page.identity;league_family_child_=3;
@@ -187,7 +187,7 @@ void StartupFlow::show_top_scorers(TopScorersState page,PreparationState prepara
         throw FormatError("top scorers: opening desk acknowledgement differs beyond revision");
     validate_preparation_context(preparation);
     auto screen=std::make_unique<TopScorersScreen>(data_,std::move(page));
-    auto desk=std::make_unique<DesktopScreen>(data_,preparation.desktop);
+    auto desk=std::make_unique<DesktopScreen>(data_,preparation.desktop,render_reference());
     auto next=std::make_unique<PreparationState>(std::move(preparation));
     desktop_->resolve_local_menu();desktop_=std::move(desk);preparation_=std::move(next);top_scorers_=std::move(screen);
 }
@@ -210,7 +210,7 @@ void StartupFlow::acknowledge_top_scorers(TopScorersState page,PreparationState 
         throw FormatError("top scorers: view action desk acknowledgement differs beyond revision");
     validate_preparation_context(preparation);
     auto screen=std::make_unique<TopScorersScreen>(data_,std::move(page));
-    auto desk=std::make_unique<DesktopScreen>(data_,preparation.desktop);
+    auto desk=std::make_unique<DesktopScreen>(data_,preparation.desktop,render_reference());
     auto next=std::make_unique<PreparationState>(std::move(preparation));
     desktop_=std::move(desk);preparation_=std::move(next);top_scorers_=std::move(screen);
 }
@@ -230,7 +230,7 @@ void StartupFlow::close_top_scorers(TopScorersState page,PreparationState prepar
     if(desk_json(expected)!=desk_json(preparation.desktop))
         throw FormatError("top scorers: close desk acknowledgement differs beyond revision");
     validate_preparation_context(preparation);
-    auto desk=std::make_unique<DesktopScreen>(data_,preparation.desktop);
+    auto desk=std::make_unique<DesktopScreen>(data_,preparation.desktop,render_reference());
     auto next=std::make_unique<PreparationState>(std::move(preparation));
     desktop_=std::move(desk);preparation_=std::move(next);top_scorers_.reset();
 }
@@ -256,7 +256,7 @@ void StartupFlow::show_opportunities(OpportunitiesState page,PreparationState pr
     if(desk_json(expected)!=desk_json(preparation.desktop))throw FormatError("opportunities: opening desk acknowledgement differs beyond revision");
     validate_preparation_context(preparation);
     auto screen=std::make_unique<OpportunitiesScreen>(data_,std::move(page));
-    auto desk=std::make_unique<DesktopScreen>(data_,preparation.desktop);
+    auto desk=std::make_unique<DesktopScreen>(data_,preparation.desktop,render_reference());
     auto next=std::make_unique<PreparationState>(std::move(preparation));
     if(desktop_->pending())desktop_->resolve_local_menu();
     statistics_rankings_.reset();analytics_.reset();minute_statistics_.reset();transfer_history_.reset();
@@ -497,7 +497,7 @@ void StartupFlow::acknowledge_analytics(AnalyticsState state,PreparationState pr
         throw FormatError("analytics: preference acknowledgement changed unrelated desk state");
     validate_preparation_context(preparation);
     auto next_screen=std::make_unique<AnalyticsScreen>(data_,std::move(state));
-    auto next_desk=std::make_unique<DesktopScreen>(data_,preparation.desktop);
+    auto next_desk=std::make_unique<DesktopScreen>(data_,preparation.desktop,render_reference());
     auto next_preparation=std::make_unique<PreparationState>(std::move(preparation));
     statistics_menu_->update_owner(next_screen->state().owner);
     if(national_friendly_picker_) {
@@ -561,7 +561,7 @@ void StartupFlow::acknowledge_opportunities(OpportunitiesState page,PreparationS
     if(desk_json(expected)!=desk_json(preparation.desktop))throw FormatError("opportunities: mode desk acknowledgement differs beyond revision");
     validate_preparation_context(preparation);
     auto screen=std::make_unique<OpportunitiesScreen>(data_,std::move(page));
-    auto desk=std::make_unique<DesktopScreen>(data_,preparation.desktop);
+    auto desk=std::make_unique<DesktopScreen>(data_,preparation.desktop,render_reference());
     auto next=std::make_unique<PreparationState>(std::move(preparation));desktop_=std::move(desk);preparation_=std::move(next);opportunities_=std::move(screen);
     if(statistics_menu_) {
         statistics_menu_->clear_pending();
@@ -578,7 +578,7 @@ void StartupFlow::close_opportunities(OpportunitiesState page,PreparationState p
     if(page.identity.revision!=prior.revision+1||desk_json(expected)!=desk_json(preparation.desktop))
         throw FormatError("opportunities: close changed unrelated desk state");
     validate_preparation_context(preparation);
-    auto desk=std::make_unique<DesktopScreen>(data_,preparation.desktop);
+    auto desk=std::make_unique<DesktopScreen>(data_,preparation.desktop,render_reference());
     auto next=std::make_unique<PreparationState>(std::move(preparation));desktop_=std::move(desk);preparation_=std::move(next);opportunities_.reset();
     if(statistics_menu_) {
         auto parent=statistics_menu_->state();
@@ -600,7 +600,7 @@ void StartupFlow::close_opportunities_for_statistics_parent(OpportunitiesState p
     if(page.identity.revision!=prior.revision+1||desk_json(expected)!=desk_json(preparation.desktop))
         throw FormatError("opportunities: parent-switch close changed unrelated desk state");
     validate_preparation_context(preparation);
-    auto desk=std::make_unique<DesktopScreen>(data_,preparation.desktop);
+    auto desk=std::make_unique<DesktopScreen>(data_,preparation.desktop,render_reference());
     auto next=std::make_unique<PreparationState>(std::move(preparation));
     desktop_=std::move(desk);preparation_=std::move(next);opportunities_.reset();
     statistics_menu_->clear_pending();
@@ -637,7 +637,7 @@ void StartupFlow::acknowledge_strengths(StrengthsState page,PreparationState pre
         throw FormatError("strengths: mismatched page acknowledgement");
     validate_strengths_preparation(page.identity,desktop_->state(),preparation);
     auto screen=std::make_unique<StrengthsScreen>(data_,std::move(page));
-    auto desk=std::make_unique<DesktopScreen>(data_,preparation.desktop);
+    auto desk=std::make_unique<DesktopScreen>(data_,preparation.desktop,render_reference());
     auto next=std::make_unique<PreparationState>(std::move(preparation));
     desktop_=std::move(desk);preparation_=std::move(next);strengths_=std::move(screen);
     if(league_family_identity_)league_family_identity_=strengths_->state().identity;
@@ -649,7 +649,7 @@ void StartupFlow::close_strengths(StrengthsState page,PreparationState preparati
     auto expected=pending->identity;++expected.revision;++expected.sequence;
     if(page.identity!=expected)throw FormatError("strengths: mismatched close acknowledgement");
     validate_strengths_preparation(page.identity,desktop_->state(),preparation);
-    auto desk=std::make_unique<DesktopScreen>(data_,preparation.desktop);
+    auto desk=std::make_unique<DesktopScreen>(data_,preparation.desktop,render_reference());
     auto next=std::make_unique<PreparationState>(std::move(preparation));
     desktop_=std::move(desk);preparation_=std::move(next);strengths_.reset();
 }
@@ -675,7 +675,7 @@ void StartupFlow::show_other_games(OtherGamesState page, PreparationState prepar
         throw FormatError("other games: mismatched opening acknowledgement");
     validate_other_games_preparation(page.identity, desktop_->state(), preparation);
     auto screen = std::make_unique<OtherGamesScreen>(data_, std::move(page));
-    auto desk = std::make_unique<DesktopScreen>(data_, preparation.desktop);
+    auto desk = std::make_unique<DesktopScreen>(data_, preparation.desktop,render_reference());
     auto next = std::make_unique<PreparationState>(std::move(preparation));
     desktop_->resolve_local_menu();
     desktop_ = std::move(desk);
@@ -787,7 +787,7 @@ void StartupFlow::acknowledge_other_games(OtherGamesState page, PreparationState
         throw FormatError("other games: mismatched full view identity acknowledgement");
     validate_other_games_preparation(page.identity, desktop_->state(), preparation);
     auto screen = std::make_unique<OtherGamesScreen>(data_, std::move(page));
-    auto desk = std::make_unique<DesktopScreen>(data_, preparation.desktop);
+    auto desk = std::make_unique<DesktopScreen>(data_, preparation.desktop,render_reference());
     auto next = std::make_unique<PreparationState>(std::move(preparation));
     desktop_ = std::move(desk);
     preparation_ = std::move(next);
@@ -804,7 +804,7 @@ void StartupFlow::close_other_games(OtherGamesState page, PreparationState prepa
     if (page.identity != expected_id || page.identity.expected_view_byte != other_games_->state().identity.expected_view_byte)
         throw FormatError("other games: close acknowledgement changed Source view state");
     validate_other_games_preparation(page.identity, desktop_->state(), preparation);
-    auto desk = std::make_unique<DesktopScreen>(data_, preparation.desktop);
+    auto desk = std::make_unique<DesktopScreen>(data_, preparation.desktop,render_reference());
     auto next = std::make_unique<PreparationState>(std::move(preparation));
     desktop_ = std::move(desk);
     preparation_ = std::move(next);
@@ -1211,7 +1211,7 @@ void StartupFlow::close_balance(BalanceState page,PreparationState preparation) 
        preparation.desktop.options!=desktop_->state().options)
         throw FormatError("balance: mismatched close acknowledgement");
     validate_preparation_context(preparation);
-    auto desk=std::make_unique<DesktopScreen>(data_,preparation.desktop);
+    auto desk=std::make_unique<DesktopScreen>(data_,preparation.desktop,render_reference());
     auto prep=std::make_unique<PreparationState>(std::move(preparation));
     desktop_=std::move(desk);preparation_=std::move(prep);balance_.reset();
 }
@@ -1315,7 +1315,7 @@ void StartupFlow::close_league_pairings(PreparationState state) {
         state.desktop.season_index!=desktop_->state().season_index)
         throw FormatError("pairings: mismatched final family acknowledgement");
     validate_preparation_context(state);
-    auto next_desk=std::make_unique<DesktopScreen>(data_,state.desktop);
+    auto next_desk=std::make_unique<DesktopScreen>(data_,state.desktop,render_reference());
     auto next_preparation=std::make_unique<PreparationState>(std::move(state));
     desktop_=std::move(next_desk);preparation_=std::move(next_preparation);league_pairings_.reset();
 }
@@ -1339,7 +1339,7 @@ void StartupFlow::acknowledge_transfer_market_preview(PreparationState state, Tr
     validate_preparation_context(state);
     auto next_market = std::make_unique<TransferMarketScreen>(*transfer_market_);
     next_market->acknowledge_preview(*state.transfer_market, quote);
-    auto next_desktop = std::make_unique<DesktopScreen>(data_, state.desktop);
+    auto next_desktop = std::make_unique<DesktopScreen>(data_, state.desktop,render_reference());
     auto next_preparation = std::make_unique<PreparationState>(std::move(state));
     transfer_market_ = std::move(next_market);
     desktop_ = std::move(next_desktop);
@@ -1362,7 +1362,7 @@ void StartupFlow::show_transfer_offer(PreparationState preparation, OutgoingTran
     auto next_parent = std::make_unique<TransferMarketScreen>(*transfer_market_);
     next_parent->acknowledge(*preparation.transfer_market);
     auto next_editor = std::make_unique<OutgoingTransferScreen>(data_, std::move(editor));
-    auto next_desktop = std::make_unique<DesktopScreen>(data_, preparation.desktop);
+    auto next_desktop = std::make_unique<DesktopScreen>(data_, preparation.desktop,render_reference());
     auto next_preparation = std::make_unique<PreparationState>(std::move(preparation));
     transfer_market_ = std::move(next_parent); outgoing_transfer_ = std::move(next_editor);
     desktop_ = std::move(next_desktop); preparation_ = std::move(next_preparation);
@@ -1381,7 +1381,7 @@ void StartupFlow::acknowledge_transfer_offer(PreparationState preparation, Outgo
          request->kind != OutgoingTransferRequestKind::player_info && editor.bid_slot != request->identity.bid_slot))
         throw FormatError("transfer offer: stale editor acknowledgement");
     validate_preparation_context(preparation);
-    auto next_desktop = std::make_unique<DesktopScreen>(data_, preparation.desktop);
+    auto next_desktop = std::make_unique<DesktopScreen>(data_, preparation.desktop,render_reference());
     auto next_preparation = std::make_unique<PreparationState>(std::move(preparation));
     auto next_editor = std::make_unique<OutgoingTransferScreen>(*outgoing_transfer_);
     std::unique_ptr<TransferMarketScreen> next_parent;
@@ -1474,7 +1474,7 @@ void StartupFlow::acknowledge_environment(EnvironmentView state, std::optional<P
     std::unique_ptr<PreparationState> next_preparation;
     if (changed) {
         validate_preparation_context(*preparation);
-        next_desktop = std::make_unique<DesktopScreen>(data_, preparation->desktop);
+        next_desktop = std::make_unique<DesktopScreen>(data_, preparation->desktop,render_reference());
         next_preparation = std::make_unique<PreparationState>(std::move(*preparation));
     }
     if (changed) { desktop_ = std::move(next_desktop); preparation_ = std::move(next_preparation); }
@@ -1514,7 +1514,7 @@ void StartupFlow::acknowledge_contract_quote(ContractsState state, DeskState des
         throw FormatError("contracts: mismatched demand acknowledgement context");
     validate_desk_state(desk);
     validate_preparation_context(preparation);
-    auto next_desktop = std::make_unique<DesktopScreen>(data_, desk);
+    auto next_desktop = std::make_unique<DesktopScreen>(data_, desk,render_reference());
     auto next_preparation = std::make_unique<PreparationState>(std::move(preparation));
     auto next_contracts = std::make_unique<ContractsScreen>(*contracts_);
     next_contracts->acknowledge_quote(state);
@@ -1550,7 +1550,7 @@ void StartupFlow::acknowledge_contract_mutation(ContractsState state, DeskState 
         throw FormatError("contracts: mismatched offer acknowledgement context");
     validate_desk_state(desk);
     validate_preparation_context(preparation);
-    auto next_desktop = std::make_unique<DesktopScreen>(data_, desk);
+    auto next_desktop = std::make_unique<DesktopScreen>(data_, desk,render_reference());
     auto next_preparation = std::make_unique<PreparationState>(std::move(preparation));
     auto next_contracts = std::make_unique<ContractsScreen>(*contracts_);
     if (expected == ContractActionKind::submit_offer) next_contracts->acknowledge_offer(state);
@@ -1602,14 +1602,14 @@ FlowResult StartupFlow::route_desk(DeskRequest action) {
     if (action.menu_kind == 3) {
         auto state = preparation_->lineup;
         if (engine_attached_) state.entry_prepared = false;
-        auto screen = std::make_unique<LineupScreen>(data_, std::move(state));
+        auto screen = std::make_unique<LineupScreen>(data_, std::move(state),render_reference());
         if (engine_attached_) { const auto request = screen->initialize(); if (request.kind != LineupRequestKind::none) entry = request; }
         if (!engine_attached_ && (screen->state().saved_display_flags & 8) &&
             preparation_->pitch && preparation_->pitch->indoor.has_value())
-            pitch_ = std::make_unique<PitchScreen>(data_, screen->state(), *preparation_->pitch);
+            pitch_ = std::make_unique<PitchScreen>(data_, screen->state(), *preparation_->pitch,render_reference());
         lineup_ = std::move(screen);
     } else if (action.menu_kind == 16) {
-        auto screen = std::make_unique<TrainingScreen>(data_, *preparation_->training);
+        auto screen = std::make_unique<TrainingScreen>(data_, *preparation_->training,render_reference());
         if (engine_attached_) { const auto request = screen->initialize(); if (request.kind != TrainingRequestKind::none) entry = request; }
         training_ = std::move(screen);
     } else if (action.menu_kind == 15) {
@@ -1638,7 +1638,7 @@ FlowResult StartupFlow::route_desk(DeskRequest action) {
         if (!preparation_->transfer_market) return {true, FlowRequest::desk_action, action};
         transfer_market_ = std::make_unique<TransferMarketScreen>(data_, *preparation_->transfer_market);
     } else {
-        tactics_ = std::make_unique<TacticsScreen>(data_, preparation_->tactics);
+        tactics_ = std::make_unique<TacticsScreen>(data_, preparation_->tactics,render_reference());
     }
     desktop_->resolve_local_menu();
     return {true, std::holds_alternative<std::monostate>(entry) ? FlowRequest::submenu_opened : FlowRequest::submenu_action,
@@ -1655,7 +1655,7 @@ FlowResult StartupFlow::finish_preparation_input(PreparationRequest action, bool
             info && info->kind == PitchRequestKind::open_player_info) {
             for (auto card : preparation_->player_cards) if (card.row == info->row && card.unsupported_record.empty()) {
                 card.lineup = pitch_->state();
-                auto screen = std::make_unique<PlayerCardScreen>(data_, std::move(card), pitch_->render());
+                auto screen = std::make_unique<PlayerCardScreen>(data_, std::move(card), pitch_->render(),render_reference());
                 pitch_->resolve_local_navigation();
                 player_card_ = std::move(screen);
                 return {true, FlowRequest::submenu_opened};
@@ -1667,7 +1667,7 @@ FlowResult StartupFlow::finish_preparation_input(PreparationRequest action, bool
     if (const auto* navigation = std::get_if<LineupRequest>(&action)) {
         if (navigation->kind == LineupRequestKind::open_pitch && preparation_->pitch &&
             preparation_->pitch->indoor.has_value()) {
-            auto screen = std::make_unique<PitchScreen>(data_, lineup_->state(), *preparation_->pitch);
+            auto screen = std::make_unique<PitchScreen>(data_, lineup_->state(), *preparation_->pitch,render_reference());
             auto page = screen->request_page_control(1);
             if (page.kind == PitchRequestKind::none)
                 throw FormatError("pitch entry: Source Team transition could not be prepared");
@@ -1682,8 +1682,8 @@ FlowResult StartupFlow::finish_preparation_input(PreparationRequest action, bool
             for (auto card : preparation_->player_cards) if (card.row == navigation->first_row && card.unsupported_record.empty()) {
                 card.lineup = lineup_->state();
                 // Clear hover/selection in the parent, as the native modal does.
-                LineupScreen parent(data_, card.lineup);
-                auto screen = std::make_unique<PlayerCardScreen>(data_, std::move(card), parent.render());
+                LineupScreen parent(data_, card.lineup,render_reference());
+                auto screen = std::make_unique<PlayerCardScreen>(data_, std::move(card), parent.render(),render_reference());
                 lineup_->resolve_local_navigation(LineupRequestKind::open_player_info);
                 player_card_ = std::move(screen);
                 return {true, FlowRequest::submenu_opened};
@@ -1693,7 +1693,7 @@ FlowResult StartupFlow::finish_preparation_input(PreparationRequest action, bool
     if (pitch_ && pitch_->close_requested()) {
         const bool return_team = pitch_->return_team_requested();
         preparation_->lineup = pitch_->state();
-        auto team = return_team ? std::make_unique<LineupScreen>(data_, preparation_->lineup) : nullptr;
+        auto team = return_team ? std::make_unique<LineupScreen>(data_, preparation_->lineup,render_reference()) : nullptr;
         pitch_.reset(); lineup_ = std::move(team); pitch_entry_pending_=false;
         return {true, FlowRequest::submenu_closed};
     }
@@ -1718,6 +1718,14 @@ FlowResult StartupFlow::finish_preparation_input(PreparationRequest action, bool
             {}, std::move(action)};
 }
 
+bool StartupFlow::matches_pending_preparation(const PreparationRequest& request) const {
+    if(const auto* r=std::get_if<LineupRequest>(&request))return matches_pending_lineup(*r);
+    if(const auto* r=std::get_if<PitchRequest>(&request))return matches_pending_pitch(*r);
+    if(const auto* r=std::get_if<TacticsRequest>(&request))return tactics_&&tactics_->pending()&&tactics_request_json(*tactics_->pending())==tactics_request_json(*r);
+    if(const auto* r=std::get_if<TrainingRequest>(&request))return training_&&training_->pending()&&training_request_json(*training_->pending())==training_request_json(*r);
+    return false;
+}
+
 bool StartupFlow::matches_pending_lineup(const LineupRequest& request) const {
     return lineup_ && lineup_->pending() &&
            lineup_request_json(*lineup_->pending()) == lineup_request_json(request);
@@ -1739,14 +1747,14 @@ void StartupFlow::attach_preparation_context(PreparationState state) {
         throw FormatError("preparation attachment: expected the attached idle desktop at the same revision");
     validate_preparation_context(state);
     // Validate all renderers before exposing any new context.
-    LineupScreen lineup(data_, state.lineup);
-    if (state.training) { TrainingScreen training(data_, *state.training); }
+    LineupScreen lineup(data_, state.lineup,render_reference());
+    if (state.training) { TrainingScreen training(data_, *state.training,render_reference()); }
     if (state.training_camp) { TrainingCampScreen camp(data_, *state.training_camp); }
     if (state.bank) { BankScreen bank(data_, *state.bank); }
     if (state.toto) { TotoScreen toto(data_, *state.toto); }
     if (state.transfer_market) { TransferMarketScreen market(data_, *state.transfer_market); }
-    TacticsScreen tactics(data_, state.tactics);
-    if (state.pitch && state.pitch->indoor.has_value()) { PitchScreen pitch(data_, state.lineup, *state.pitch); }
+    TacticsScreen tactics(data_, state.tactics,render_reference());
+    if (state.pitch && state.pitch->indoor.has_value()) { PitchScreen pitch(data_, state.lineup, *state.pitch,render_reference()); }
     preparation_ = std::make_unique<PreparationState>(std::move(state));
 }
 
@@ -1794,7 +1802,7 @@ void StartupFlow::show_family_league_tables(std::array<LeagueTableState, 9> tabl
     std::unique_ptr<PreparationState> next;
     if(preparation) {
         validate_strengths_preparation(identity,desktop_->state(),*preparation);
-        desk=std::make_unique<DesktopScreen>(data_,preparation->desktop);
+        desk=std::make_unique<DesktopScreen>(data_,preparation->desktop,render_reference());
         next=std::make_unique<PreparationState>(std::move(*preparation));
     } else if(identity.revision!=desktop_->state().revision) {
         throw FormatError("league family: Table acknowledgement requires a fresh desktop projection");
@@ -1965,12 +1973,12 @@ void StartupFlow::show_family_table_dispatch(std::array<LeagueTableState, 9> tab
     std::unique_ptr<DesktopScreen> next_desk;
     std::unique_ptr<PreparationState> next_preparation;
     if(preparation) {
-        next_desk=std::make_unique<DesktopScreen>(data_,preparation->desktop);
+        next_desk=std::make_unique<DesktopScreen>(data_,preparation->desktop,render_reference());
         next_preparation=std::make_unique<PreparationState>(std::move(*preparation));
     } else if(desktop_->pending()) {
         // A replacement built from the state is already idle; the old pending
         // navigation is consumed by the atomic replacement below.
-        next_desk=std::make_unique<DesktopScreen>(data_,desktop_->state());
+        next_desk=std::make_unique<DesktopScreen>(data_,desktop_->state(),render_reference());
     }
     if(league_family_child_)replace_family_child();
     league_table_=std::move(next_table);league_family_child_=1;
@@ -2127,7 +2135,7 @@ void StartupFlow::close_league_family(const LeagueFamilyRequest& pending,Prepara
        state.desktop.season_index!=desktop_->state().season_index)
         throw FormatError("league family: mismatched final close acknowledgement");
     validate_preparation_context(state);
-    auto desk=std::make_unique<DesktopScreen>(data_,state.desktop);
+    auto desk=std::make_unique<DesktopScreen>(data_,state.desktop,render_reference());
     auto next=std::make_unique<PreparationState>(std::move(state));
     strengths_.reset();league_pairings_.reset();league_table_.reset();
     family_table_range_dialog_.reset();family_table_range_profile_.reset();
@@ -2203,7 +2211,7 @@ void StartupFlow::acknowledge_reschedule(CalendarState state, DeskRequest owner,
         desk_json(preparation.desktop) != desk_json(desktop))
         throw FormatError("calendar: reschedule acknowledgement does not match the active request");
     validate_preparation_context(preparation);
-    auto next_desktop = std::make_unique<DesktopScreen>(data_, std::move(desktop));
+    auto next_desktop = std::make_unique<DesktopScreen>(data_, std::move(desktop),render_reference());
     auto next_preparation = std::make_unique<PreparationState>(std::move(preparation));
     calendar_->acknowledge_reschedule(std::move(state), owner);
     desktop_ = std::move(next_desktop);
@@ -2289,7 +2297,7 @@ void StartupFlow::acknowledge_advertising(AdvertisingState state, DeskState desk
         throw FormatError("advertising: mismatched acknowledgement context");
     validate_desk_state(desk);
     validate_preparation_context(preparation);
-    auto next_desktop = std::make_unique<DesktopScreen>(data_, desk);
+    auto next_desktop = std::make_unique<DesktopScreen>(data_, desk,render_reference());
     auto next_preparation = std::make_unique<PreparationState>(std::move(preparation));
     auto next_advertising = std::make_unique<AdvertisingScreen>(data_, std::move(state), advertising_generation_ << 32);
     // Only contract acceptance resumes the next offer. Spending closes its calculator.
@@ -2393,7 +2401,7 @@ void StartupFlow::acknowledge_settings(SettingsState state, DeskState desk, Prep
         throw FormatError("settings: mismatched acknowledgement context");
     validate_desk_state(desk);
     validate_preparation_context(preparation);
-    auto next_desktop = std::make_unique<DesktopScreen>(data_, desk);
+    auto next_desktop = std::make_unique<DesktopScreen>(data_, desk,render_reference());
     auto next_preparation = std::make_unique<PreparationState>(std::move(preparation));
     auto next_settings = std::make_unique<SettingsScreen>(*settings_);
     next_settings->acknowledge(std::move(state));
@@ -2426,7 +2434,7 @@ void StartupFlow::acknowledge_settings_file(SettingsState state, DeskState desk,
     next_settings->acknowledge_file(std::move(state));
     validate_desk_state(desk);
     validate_preparation_context(preparation);
-    desktop_ = std::make_unique<DesktopScreen>(data_, desk);
+    desktop_ = std::make_unique<DesktopScreen>(data_, desk,render_reference());
     preparation_ = std::make_unique<PreparationState>(std::move(preparation));
     settings_desk_owner_.revision = next_settings->state().revision;
     save_load_->acknowledge();
@@ -2455,7 +2463,7 @@ void StartupFlow::acknowledge_settings_closed(SettingsState state, DeskState des
         throw FormatError("settings close acknowledgement does not match active owner");
     validate_desk_state(desk);
     validate_preparation_context(preparation);
-    desktop_ = std::make_unique<DesktopScreen>(data_, std::move(desk));
+    desktop_ = std::make_unique<DesktopScreen>(data_, std::move(desk),render_reference());
     preparation_ = std::make_unique<PreparationState>(std::move(preparation));
     settings_.reset(); settings_owner_sequence_ = 0; settings_desk_owner_ = {};
     settings_release_barrier_ = false; // Main consumes a close release after the screen changed.
@@ -2466,7 +2474,7 @@ void StartupFlow::reject_settings_close(std::string reason) {
 }
 
 void StartupFlow::acknowledge_preparation(PreparationState state, std::string transfer_notice) {
-    if (!engine_attached_ || !preparation_ || !in_preparation_menu() || player_card_ || state.desktop.source != "engine_projection")
+    if (!engine_attached_ || !preparation_ || !in_preparation_menu() || player_card_ || state.desktop.source != preparation_->desktop.source)
         throw FormatError("preparation acknowledgement: requires an attached engine and active menu");
     validate_preparation_context(state);
     const auto& previous = preparation_->desktop;
@@ -2474,14 +2482,14 @@ void StartupFlow::acknowledge_preparation(PreparationState state, std::string tr
         state.desktop.runtime_club != previous.runtime_club || state.desktop.day_counter != previous.day_counter ||
         state.desktop.season_index != previous.season_index || state.desktop.season_day != previous.season_day ||
         state.desktop.manager_name != previous.manager_name || state.desktop.portrait != previous.portrait ||
-        state.desktop.badge != previous.badge || state.desktop.options != previous.options)
+        state.desktop.badge != previous.badge || state.desktop.badge_atlas != previous.badge_atlas || state.desktop.managers != previous.managers || state.desktop.options != previous.options)
         throw FormatError("preparation acknowledgement: stale/mismatched context or unexpected time advance");
     // Prepare replacements before mutation, including dependent views. Rejected
     // acknowledgements must preserve the pending command and every old projection.
-    auto desktop = std::make_unique<DesktopScreen>(data_, state.desktop);
-    LineupScreen validate_lineup(data_, state.lineup);
-    if (state.training) { TrainingScreen validate_training(data_, *state.training); }
-    TacticsScreen validate_tactics(data_, state.tactics);
+    auto desktop = std::make_unique<DesktopScreen>(data_, state.desktop,render_reference());
+    LineupScreen validate_lineup(data_, state.lineup,render_reference());
+    if (state.training) { TrainingScreen validate_training(data_, *state.training,render_reference()); }
+    TacticsScreen validate_tactics(data_, state.tactics,render_reference());
     std::unique_ptr<LineupScreen> lineup;
     std::unique_ptr<TrainingScreen> training;
     std::unique_ptr<TacticsScreen> tactics;
@@ -2495,17 +2503,17 @@ void StartupFlow::acknowledge_preparation(PreparationState state, std::string tr
         if(next_pitch_entry_pending){
             next_pitch_entry_pending=false;
         } else {
-            lineup = std::make_unique<LineupScreen>(data_, state.lineup);
+            lineup = std::make_unique<LineupScreen>(data_, state.lineup,render_reference());
         }
         if(pitch->close_requested()&&pitch->return_team_requested()){
             pitch_team_return_ack=true;
-            lineup=std::make_unique<LineupScreen>(data_,state.lineup);
+            lineup=std::make_unique<LineupScreen>(data_,state.lineup,render_reference());
             pitch.reset();
         }
     } else if (lineup_) { lineup = std::make_unique<LineupScreen>(*lineup_); lineup->acknowledge(state.lineup); state.lineup = lineup->state(); }
     if (!pitch_team_return_ack && !pitch && lineup && (state.lineup.saved_display_flags & 8) && state.pitch &&
         state.pitch->indoor.has_value())
-        pitch = std::make_unique<PitchScreen>(data_, state.lineup, *state.pitch);
+        pitch = std::make_unique<PitchScreen>(data_, state.lineup, *state.pitch,render_reference());
     if (training_) { training = std::make_unique<TrainingScreen>(*training_); training->acknowledge(*state.training); }
     std::unique_ptr<TrainingCampScreen> training_camp;
     if (training_camp_) {
@@ -2560,7 +2568,7 @@ void StartupFlow::reject_preparation_action(std::string reason) {
         pitch_->reject_action(std::move(reason));
         if(pitch_entry_pending_){
             pitch_.reset();
-            lineup_=std::make_unique<LineupScreen>(data_,preparation_->lineup);
+            lineup_=std::make_unique<LineupScreen>(data_,preparation_->lineup,render_reference());
             pitch_entry_pending_=false;
         }
     }

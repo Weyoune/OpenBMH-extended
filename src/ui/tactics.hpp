@@ -38,6 +38,7 @@ std::string tactics_request_json(const TacticsRequest&);
 class TacticsScreen {
 public:
     TacticsScreen(const std::filesystem::path& data, TacticsState state);
+    TacticsScreen(const std::filesystem::path& data, TacticsState state,const LeImage& reference);
     Image render() const;
     TacticsRequest click(int x, int y, bool right = false);
     TacticsRequest key(std::string_view key);

@@ -9,6 +9,7 @@ namespace bmh::world12 {
 struct CalendarCursor {SeasonCalendar schedule;uint16_t next_day=0;uint64_t revision=0;bool operator==(const CalendarCursor&)const=default;};
 struct ManagerDesktop {
     uint8_t seat=0,prestige=0;
+    uint16_t display_word=0;
     std::array<std::array<uint8_t,16>,54> layout{};
     bool operator==(const ManagerDesktop&)const=default;
 };

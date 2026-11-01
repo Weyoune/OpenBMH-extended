@@ -474,6 +474,8 @@ void initialize_career_manager_funds(GameState& g,int manager,int difficulty,int
         throw std::invalid_argument("career: invalid initial manager financial context");
     const auto rec=size_t(manager)*kRecord;const uint32_t money=difficulty==0?50000000u:4000000u-uint32_t(difficulty)*200000u;
     put32(g.manager_records,rec+0x314,money);put32(g.manager_records,rec+0x324,money);
+    // CareerAddManager enables the four supplied outdoor and indoor presets.
+    g.manager_records[rec+0x218]=0x0f;g.manager_records[rec+0x219]=0x0f;
     put32(g.manager_records,rec+0x31c,uint32_t(400000-league*100000));put32(g.manager_records,rec+0x310,1);
 }
 

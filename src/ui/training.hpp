@@ -51,6 +51,7 @@ std::string training_request_json(const TrainingRequest&);
 class TrainingScreen {
 public:
     TrainingScreen(const std::filesystem::path& data, TrainingState state);
+    TrainingScreen(const std::filesystem::path& data, TrainingState state,const LeImage& reference);
     Image render() const;
     TrainingRequest click(int x, int y, bool right = false);
     TrainingRequest key(std::string_view key);
