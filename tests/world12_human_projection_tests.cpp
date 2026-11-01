@@ -66,7 +66,7 @@ void statistics_bridge(const bmh::GameState& base) {
     auto desktop=AiMatchProjection::create_for_desktop(saved,{en,de},reference,{3,6,false,true});
     const auto sorted_key=desktop.local_club(de)<<12|desktop.local_player(player);
     check(desktop.state.player_statistics.at(sorted_key).total==65536,"desktop player sorting lost canonical statistics mapping");
-    auto image=bmh::LeImage::from_bytes(0xa0000,bmh::Bytes(0x20000));
+    auto image=bmh::LeImage::from_bytes(bmh::layout::GermanDataSegmentBegin,bmh::Bytes(0x20000));
     const auto put=[&](uint32_t at,uint16_t value){const uint8_t bytes[]={uint8_t(value),uint8_t(value>>8)};image.patch(at,bytes,2);};
     put(bmh::layout::TeamsWithSquads,32);put(bmh::layout::CareerSession_DispatchLineup_RuntimeField,445);
     desktop.state.memory.add_block(bmh::layout::CareerSession_AnyOf_ExecutableField,8);
