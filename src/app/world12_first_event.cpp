@@ -86,7 +86,8 @@ std::optional<PendingDeskOffer> initial_offer(CareerSnapshot& state,uint8_t seat
         notice=PendingDeskOffer{seat,40,lure,warned};
     }
     // Source retains even a quote which found no bidder; OfferSlots remains free.
-    state.world.transfer_market->rows[40]=listing;return notice;
+    state.world.transfer_market->rows[40]=listing;
+    for(size_t n=0;n<4;++n)state.world.transfer_market->last_entry40_bidders[n]=listing.bids[n].bidder;state.world.transfer_market->entry40_history_known=true;return notice;
 }
 }
 DesktopEntryOutcome prepare_first_desk_event(CareerSnapshot& state,ManagerActionOwner& owner,

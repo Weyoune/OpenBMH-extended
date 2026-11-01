@@ -101,6 +101,9 @@ void weekly_player_updates(GameState&,GameRandom&,WatcomRandom&,MinuteReport&);
 // Source per-manager debts, camp bill, insurance, contracts and weekly statistics.
 void weekly_manager_settlement(GameState&,int manager,WatcomRandom&);
 
+// New-offer phase only; after transfer countdown, before player recovery.
+void new_transfer_bids(GameState&,GameRandom&,WatcomRandom&,MinuteReport&);
+
 void weekly_processing(GameState& g, GameRandom& game, WatcomRandom& rand, MinuteReport& report,
                        TransferAllocatorContext allocator = TransferAllocatorContext::unsupported);
 

@@ -56,6 +56,7 @@ void World::validate(bool complete)const {
         std::set<ClubId> nations;for(auto id:initial_competitions->national_field)if(!clubs.contains(id)||clubs.at(id).kind!=ClubKind::national_team||!nations.insert(id).second)throw std::invalid_argument("world12: invalid initial national identity");
     }
     if(transfer_market){
+        for(auto id:transfer_market->last_entry40_bidders)if(id.valid()&&(!transfer_market->entry40_history_known||!clubs.contains(id)||clubs.at(id).kind!=ClubKind::club))throw std::invalid_argument("world12: unqualified special bid history");
         if(!initial_competitions||!initial_competitions->manager_services_complete||transfer_market->list_toggle>1)throw std::invalid_argument("world12: invalid initial market state");
         std::set<PlayerId> listed;
         for(const auto& row:transfer_market->rows)if(row){if(!players.contains(row->player)||!listed.insert(row->player).second)throw std::invalid_argument("world12: missing or duplicate market player");

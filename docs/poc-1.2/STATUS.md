@@ -328,3 +328,35 @@ GUI presenters still need integration; no time-advance shortcut is enabled.
 Milestone validation: the application builds and all 31 targeted Linux regression
 checks pass. The weekly decision GUI is not wired into time advancement yet;
 controlled phase saves and Source comparison receipts remain private.
+
+
+## Global regular-market computer bidding
+
+[Global bidding](MARKET_BIDS.md) now considers every actual AI club while using
+bounded numeric rating workspaces. It retains regular slot identity, duplicate
+and capacity checks, reserved loan players, late table-based recruitment, price
+and term draws, free-agent behavior and complete weekly new-offer gates. The
+Source shortage and bid-key quirks remain explicit; no local subset is presented
+as a global market.
+
+Schema18 persists qualified special-entry40 bidder history across decisions.
+Initial references are mapped through selected membership; missing old facts are
+marked unknown and rejected when needed. The outer S9 container is unchanged.
+A synthetic >4,095-player fixture finds its sole eligible buyer at the last club.
+The full-Core matrix matches 374 states with 296 bids, including controlled late
+rounds, shortage/history and complete weekly bid phases. Twenty-four complete
+legacy economic weeks and RNG traces remain byteidentical.
+
+Countdown/expiry, human auction presenters, actual movement/settlement, monthly
+renewal and the full daily/event owner remain open. This milestone does not move
+a player or calendar, or certify a playable release.
+
+Milestone validation: the application builds and all 32 targeted Linux regression
+checks pass. The actual-data Source comparisons include regular and high bids,
+five successive calls through full rows, complete weekly gates, late-table needs
+and retained special-row history. Controlled bid-phase snapshots remain private.
+
+Actual-data GUI input tests also pass with schema18 and mapped initial/retained
+bidder history, including startup, management, save/load, pending decisions and
+four-manager loan handoffs. No new bidding screen or playable day advancement is
+claimed; the new phase changes market bids and their Watcom stream only.

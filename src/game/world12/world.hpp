@@ -191,6 +191,8 @@ struct MarketListing {
     bool operator==(const MarketListing&)const=default;
 };
 struct TransferMarket {
+    std::array<ClubId,4> last_entry40_bidders;
+    bool entry40_history_known=true;
     std::array<std::optional<MarketListing>,44> rows;
     uint8_t list_toggle=0;int32_t checkpoint_game_seed=0;
     bool operator==(const TransferMarket&)const=default;

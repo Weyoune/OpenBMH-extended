@@ -57,6 +57,7 @@ PendingOfferResult resolve_initial_offer(CareerSnapshot& state,ManagerActionOwne
     const auto result=process_natural_pending_offers_after_desk(local,request,game,random,hooks,report);
     if(report.unsupported||!result.completed||result.processed!=1||result.transferred>1)throw FormatError(report.reason.empty()?"world12: incomplete pending-offer transaction":report.reason);
     // Remove the resolved quote before validating changed roster ownership.
+    if(notice.row==40){for(size_t n=0;n<4;++n)candidate.world.transfer_market->last_entry40_bidders[n]=listing.bids[n].bidder;candidate.world.transfer_market->entry40_history_known=true;}
     candidate.world.transfer_market->rows[notice.row].reset();candidate.desktop->initial_event->offer.reset();
     projection.commit_transfer_state(candidate.world,listing.player,seller,buyer,result.transferred==1);
     if(!candidate.transfers)candidate.transfers.emplace();auto& transfers=*candidate.transfers;

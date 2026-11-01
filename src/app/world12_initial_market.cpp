@@ -8,7 +8,7 @@
 #include <stdexcept>
 namespace bmh::app::world12 {
 InitialMarketOutcome initialize_first_season_market(bmh::world12::CareerSnapshot& state,
-    ManagerActionOwner& owner,ManagerActionOwner expected) {
+    ManagerActionOwner& owner,ManagerActionOwner expected,const bmh::GameState* initial_reference) {
     using namespace bmh;using namespace bmh::world12;state.validate();
     if(!owner.scope||owner.scope!=expected.scope||owner.revision!=expected.revision||owner.revision==std::numeric_limits<uint64_t>::max()||
         state.date||state.season||!state.calendar||state.calendar->next_day||!state.world.initial_competitions||!state.world.initial_competitions->manager_services_complete||
@@ -45,6 +45,9 @@ InitialMarketOutcome initialize_first_season_market(bmh::world12::CareerSnapshot
             if(!selected)throw std::invalid_argument("world12: no initial club listing candidate");const auto seller=clubs.at(size_t(selected->club));const auto id=candidate.world.clubs.at(seller).roster.at(size_t(selected->row)).player;publish(id,seller);
         }
     }
+    market.entry40_history_known=initial_reference!=nullptr;
+    if(initial_reference)for(size_t n=0;n<4;++n){const auto local=initial_reference->memory.u16(layout::EditorList+40*0x58+uint32_t(n*2));
+        if(local!=0xffff){if(local>=clubs.size())throw std::invalid_argument("world12: initial special bidder is outside selected league scope");market.last_entry40_bidders[n]=clubs[local];}}
     market.list_toggle=uint8_t(toggle);candidate.world.transfer_market=market;candidate.watcom_seed=random.seed();candidate.validate();
     if(state!=before||owner.scope!=expected.scope||owner.revision!=expected.revision)throw std::invalid_argument("world12: initial market owner changed during selection");
     InitialMarketOutcome outcome{random.calls(),0};for(const auto& row:market.rows)outcome.listings+=row.has_value();state=std::move(candidate);++owner.revision;return outcome;

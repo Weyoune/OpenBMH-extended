@@ -574,6 +574,13 @@ static void advertising_offers_impl(GameState& g,int manager,WatcomRandom& rand,
 void advertising_offers(GameState& g,int manager,WatcomRandom& rand,MinuteReport& report){advertising_offers_impl(g,manager,rand,report,nullptr);}
 void advertising_offers(GameState& g,int manager,WatcomRandom& rand,MinuteReport& report,const ClubAttractionTitles& titles){advertising_offers_impl(g,manager,rand,report,&titles);}
 
+int transfer_recruitment_need(int league_class,int table_rank,int club_strength,int player_strength) {
+    if(league_class<0||league_class>=10||table_rank<0||table_rank>=24)
+        throw std::invalid_argument("transfer: invalid recruitment league/rank");
+    const int16_t wanted=int16_t(kLeagueLevel[league_class*2]+kPositionLevel[table_rank]);
+    return club_strength<wanted&&club_strength<int16_t(player_strength)?wanted-club_strength:0;
+}
+
 int transfer_club_score(const TransferClubScoreInput& input,WatcomRandom& rand) {
     if(input.position<0 || input.position>3 || input.entry40_bids<0 || input.entry40_bids>4)
         throw std::invalid_argument("transfer: invalid candidate score input");
@@ -669,8 +676,7 @@ void transfer_bid(GameState& g, int slot, uint32_t list, bool high, int months, 
             int need = 0;  // local_4c
             if (g.league_rounds.at(size_t(league)) > 10) {
                 const int pos = int8_t(table_position(g, team));
-                const int16_t wanted = int16_t(kLeagueLevel[league * 2] + kPositionLevel[pos]);
-                if (strength < wanted && strength < int16_t(half)) need = wanted - strength;
+                need=transfer_recruitment_need(league,pos,strength,half);
             }
             TransferClubScoreInput input;
             std::copy_n(avg,4,input.averages.begin());std::copy_n(count,4,input.counts.begin());
@@ -2892,6 +2898,22 @@ void weekly_manager_settlement(GameState& g,int m,WatcomRandom& rand) {
     weekly_statistics(g, m);
 }
 
+void new_transfer_bids(GameState& g,GameRandom& game,WatcomRandom& rand,MinuteReport& report) {
+    if(report.unsupported)return;
+    // new bids for listed players
+    for (int k = 0; k < 40; k++) {
+        if (rand.range(0, 1) != 0) continue;
+        const uint32_t e = kTransferList + uint32_t(k) * kListEntry;
+        const size_t slot = kPoolSlots + size_t(k);
+        if (g.squad_slots.at(slot) == 0x0FFF || int16_t(g.memory.u16(e + 6)) != -1) continue;
+        if (rand.range(0, 1) == 0) continue;
+        do {
+            transfer_bid(g, int(slot), e, false, -1, game, rand, report);
+            if (report.unsupported) return;
+        } while (rand.range(0, 2) == 0);
+    }
+}
+
 void weekly_processing(GameState& g, GameRandom& game, WatcomRandom& rand, MinuteReport& report,
                        TransferAllocatorContext allocator) {
     const int managers = int(g.manager_teams.size());
@@ -2914,18 +2936,8 @@ void weekly_processing(GameState& g, GameRandom& game, WatcomRandom& rand, Minut
     transfer_list_countdown(g, game, rand, report, false, allocator);
     tr("list countdown");
     if (report.unsupported) return;
-    // new bids for listed players
-    for (int k = 0; k < 40; k++) {
-        if (rand.range(0, 1) != 0) continue;
-        const uint32_t e = kTransferList + uint32_t(k) * kListEntry;
-        const size_t slot = kPoolSlots + size_t(k);
-        if (g.squad_slots.at(slot) == 0x0FFF || int16_t(g.memory.u16(e + 6)) != -1) continue;
-        if (rand.range(0, 1) == 0) continue;
-        do {
-            transfer_bid(g, int(slot), e, false, -1, game, rand, report);
-            if (report.unsupported) return;
-        } while (rand.range(0, 2) == 0);
-    }
+    new_transfer_bids(g,game,rand,report);
+    if(report.unsupported)return;
     tr("bids");
     weekly_player_updates(g,game,rand,report);
     if(report.unsupported)return;

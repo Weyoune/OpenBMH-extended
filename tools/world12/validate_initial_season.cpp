@@ -10,6 +10,8 @@
 #include "game/world12/weekly_players.hpp"
 #include "game/world12/economy.hpp"
 #include "game/world12/weekly_incidents.hpp"
+#include "game/world12/market_bids.hpp"
+#include "game/world12/standings.hpp"
 #include "game/bank_credit.hpp"
 #include "game/pending_offer.hpp"
 #include <algorithm>
@@ -80,7 +82,7 @@ int main(int argc,char** argv)try {
     std::cout<<"Native initial ticket/reset boundary: sales, all advertising offers/contracts, finance/tactics/history and W="<<services.watcom_draws<<" match\n";
     const auto market_before=native_random.calls();std::map<uint16_t,ClubId> identities;for(size_t i=0;i<164;++i)if(!identities.emplace(native.club_ids[i],mapping[i]).second)throw std::runtime_error("ambiguous Native club name identity");
     if(!career_first_steps(native,native_game,native_random,report))throw std::runtime_error(report.reason);
-    const auto initial_market=owner_app::initialize_first_season_market(state,owner,owner);
+    const auto initial_market=owner_app::initialize_first_season_market(state,owner,owner,&reference);
     if(state.game_seed!=native_game.seed()||state.watcom_seed!=native_random.seed()||initial_market.watcom_draws!=native_random.calls()-market_before)throw std::runtime_error("initial shuffle/market RNG differs from Native");
     size_t ordinal=0;for(auto table:{TableGroup::germany,TableGroup::europe})for(auto league:state.world.catalogue.table_leagues(table))for(auto id:state.world.membership[league.value].clubs)if(id!=identities.at(native.club_ids[ordinal++]))throw std::runtime_error("initial shuffled membership differs from Native");
     const auto& market=*state.world.transfer_market;
@@ -91,6 +93,52 @@ int main(int argc,char** argv)try {
     }
     if(read_save(make_save(state))!=state)throw std::runtime_error("initial market snapshot differs");
     std::cout<<initial_market.listings<<" initial market listings and shuffled fixtures, checkpoint/toggle/quotes/snapshot match Native; W="<<initial_market.watcom_draws<<'\n';
+    {
+        size_t checks=0,added=0;
+        const auto compare=[&](const CareerSnapshot& typed,const GameState& core,const GameRandom& g,const WatcomRandom& w){
+            if(typed.game_seed!=g.seed()||typed.watcom_seed!=w.seed())throw std::runtime_error("global market bid RNG differs from full Core");
+            for(size_t row=0;row<40;++row)if(typed.world.transfer_market->rows[row]){const auto& listing=*typed.world.transfer_market->rows[row];const auto at=layout::EditorList+uint32_t(row*0x58);
+                for(size_t bid=0;bid<4;++bid){const auto raw=core.memory.u16(at+uint32_t(bid*2));const auto id=raw==0xffff?ClubId{}:identities.at(core.club_ids.at(raw));const auto& b=listing.bids[bid];
+                    if(b.bidder!=id)throw std::runtime_error("global market bidder differs from full Core");
+                    if(id.valid()&&(b.fee!=core.memory.u32(at+0x1c+uint32_t(bid*4))||b.salary!=core.memory.u32(at+0xc+uint32_t(bid*4))||b.months!=core.memory.u8(at+0x34+uint32_t(bid))))throw std::runtime_error("global bid amount/term differs from full Core");
+                    if(id.valid())for(size_t n=0;n<7;++n)if(b.bonuses[n]!=core.memory.u8(at+0x38+uint32_t(bid*7+n)))throw std::runtime_error("global bid bonus differs");
+                }
+            }
+            if(read_save(make_save(typed))!=typed)throw std::runtime_error("global market snapshot differs");
+        };
+        for(size_t row=0;row<40;++row)if(state.world.transfer_market->rows[row])for(bool high:{false,true})for(uint32_t seed:{1u,91u,703u}){
+            auto typed=state;typed.game_seed=17;typed.watcom_seed=seed;auto core=native;GameRandom g(17);WatcomRandom w(seed);MinuteReport report;
+            for(int n=0;n<5;++n){transfer_bid(core,int(runtime_dimensions.pool_first+row),layout::EditorList+uint32_t(row*0x58),high,-1,g,w,report);if(report.unsupported)throw std::runtime_error(report.reason);
+                const auto result=add_computer_market_bid(typed,uint8_t(row),reference,{true},high);added+=result.added;compare(typed,core,g,w);++checks;}
+        }
+        for(uint32_t seed:{1u,91u,703u,1777u}){auto typed=state;typed.game_seed=17;typed.watcom_seed=seed;auto core=native;GameRandom g(17);WatcomRandom w(seed);MinuteReport report;
+            new_transfer_bids(core,g,w,report);if(report.unsupported)throw std::runtime_error(report.reason);generate_weekly_market_bids(typed,reference,{true});compare(typed,core,g,w);++checks;
+            if(!proof.empty()&&seed==91){const auto file=proof/"global-market-bids.FBM";write_savegame(file,make_save(typed));if(read_save(load_savegame(file))!=typed)throw std::runtime_error("global bids disk snapshot differs");}
+        }
+        for(int variant=0;variant<2;++variant){auto fixture=state;auto source=native;
+            size_t target_team=1;while(target_team<90&&std::any_of(fixture.world.transfer_market->rows.begin(),fixture.world.transfer_market->rows.end(),[&](const auto& row){return row&&row->seller==identities.at(source.club_ids[target_team]);}))++target_team;
+            if(target_team==90)throw std::runtime_error("market fixture found no unlisted domestic club");const auto target=identities.at(source.club_ids[target_team]);
+            if(variant==0){for(size_t row=13;row<24;++row){fixture.world.clubs.at(target).roster[row]={};source.squad_slots[target_team*24+row]=0xfff;}
+                fixture.world.transfer_market->last_entry40_bidders={target,target,ClubId{},ClubId{}};fixture.world.transfer_market->entry40_history_known=true;
+                for(size_t bid=0;bid<4;++bid)source.memory.set16(layout::EditorList+40*0x58+uint32_t(bid*2),bid<2?uint16_t(target_team):0xffff);
+            }else{fixture.calendar.reset();fixture.date=source.date=100;int local_league=0;
+                for(auto table:{TableGroup::germany,TableGroup::europe})for(auto league:fixture.world.catalogue.table_leagues(table)){
+                    fixture.league_rounds[league.value]=12;source.league_rounds.at(size_t(local_league++))=12;
+                    const auto size=fixture.world.catalogue.league(league).clubs;
+                    for(int round=1;round<=12;++round)for(int match=0;match<size/2;++match)fixture.results.result(fixture.world.catalogue,league,round,match)={true,uint8_t((round+match)%3),uint8_t((round*2+match)%2)};
+                    const auto ranks=compute_standings(fixture.world,fixture.results,league,12);
+                    for(const auto& rank:ranks){size_t team=0;while(identities.at(source.club_ids[team])!=rank.club)++team;const size_t at=(team*13+3)*2;const auto old=uint16_t(source.position_history[at]|uint16_t(source.position_history[at+1])<<8);const auto next=uint16_t((old&~uint16_t(31<<10))|uint16_t((rank.rank-1)<<10));source.position_history[at]=uint8_t(next);source.position_history[at+1]=uint8_t(next>>8);}
+                }
+                for(const auto& slot:fixture.world.clubs.at(target).roster)if(!slot.empty()){auto& p=fixture.world.players.at(slot.player).attributes;p.w35c=(p.w35c&~((127u<<7)|(127u<<14)))|(10u<<7)|(10u<<14);source.players[slot.player.value].w35c=p.w35c;}
+            }
+            size_t row=0;while(!fixture.world.transfer_market->rows[row])++row;
+            for(bool high:{false,true})for(uint32_t seed:{91u,703u}){auto typed=fixture;typed.game_seed=17;typed.watcom_seed=seed;auto core=source;GameRandom g(17);WatcomRandom w(seed);MinuteReport report;
+                for(int n=0;n<5;++n){transfer_bid(core,int(runtime_dimensions.pool_first+row),layout::EditorList+uint32_t(row*0x58),high,-1,g,w,report);if(report.unsupported)throw std::runtime_error(report.reason);added+=add_computer_market_bid(typed,uint8_t(row),reference,{true},high).added;compare(typed,core,g,w);++checks;}
+            }
+        }
+        if(!added)throw std::runtime_error("global bid oracle generated no bids");
+        std::cout<<checks<<" full-Core global market bid comparisons, "<<added<<" actual bids: all buyers/fees/salaries/terms/bonuses/RNG/snapshots match\n";
+    }
     {
         auto startup=state,source_start=state;auto initial_template=native;
         // Season setup has already posted its own messages. Compare the numeric
@@ -242,6 +290,7 @@ int main(int argc,char** argv)try {
             if(result.completed!=expected.completed||result.transferred!=expected.transferred||result.salary_accepted!=expected.salary_accepted||resolved.game_seed!=cg.seed()||resolved.watcom_seed!=cw.seed())throw std::runtime_error("pending result/RNG differs at seed "+std::to_string(seed)+" choice "+std::to_string(decision));
             for(const auto& [id,p]:resolved.world.players)if(p.attributes.w35c!=core.players.at(id.value).w35c||p.attributes.w364!=core.players.at(id.value).w364||p.attributes.w368!=core.players.at(id.value).w368||p.cards!=core.player_cards.at(id.value)||p.bonus!=core.player_bonus.at(id.value))throw std::runtime_error("pending player attributes/cards differ");
             for(size_t team=0;team<164;++team){const auto id=identities.at(core.club_ids.at(team));const auto& roster=resolved.world.clubs.at(id).roster;for(size_t r=0;r<24;++r){const auto raw=core.squad_slots.at(team*24+r);if((roster[r].empty()?0xfffu:roster[r].player.value)!=(raw&0xfff))throw std::runtime_error("pending canonical roster differs");}}
+            for(size_t n=0;n<4;++n){const auto local=core.memory.u16(layout::EditorList+40*0x58+uint32_t(n*2));const auto expected=local==0xffff?ClubId{}:identities.at(core.club_ids.at(local));if(!resolved.world.transfer_market->entry40_history_known||resolved.world.transfer_market->last_entry40_bidders[n]!=expected)throw std::runtime_error("resolved offer lost retained special bidder history");}
             if(resolved.world.managers[0].finance!=manager_initial_finance_from_legacy(core,0))throw std::runtime_error("pending paid account differs");
             if(resolved.world.managers[0].tactics!=manager_full_tactics_from_legacy(core,0,players))throw std::runtime_error("pending complete contract/tactics board differs");
             if(!resolved.transfers||uint32_t(resolved.transfers->balance[0])!=uint32_t(core.manager_records[0x330]|uint32_t(core.manager_records[0x331])<<8|uint32_t(core.manager_records[0x332])<<16|uint32_t(core.manager_records[0x333])<<24)||resolved.desktop->initial_event->offer||resolved.world.transfer_market->rows[40])throw std::runtime_error("pending transfer account/cleanup differs");
@@ -307,7 +356,7 @@ int main(int argc,char** argv)try {
         const auto dates=SeasonCalendar::from_sources(scoped.world.catalogue,de,aligned.entries);
         owner_app::prepare_initial_competitions(scoped,session,session,dates,{german,english},reference);
         owner_app::initialize_first_season_manager_services(scoped,session,session,reference);
-        owner_app::initialize_first_season_market(scoped,session,session);
+        owner_app::initialize_first_season_market(scoped,session,session,&reference);
         if(!scope.germany)for(const auto& field:scoped.world.initial_competitions->fields)for(auto id:field)if(scoped.world.clubs.at(id).country==Country::germany)throw std::runtime_error("disabled German club leaked into actual English-only European field");
         if(read_save(make_save(scoped))!=scoped)throw std::runtime_error("actual scoped initial competition snapshot differs");++scopes;
     }

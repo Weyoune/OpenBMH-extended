@@ -19,6 +19,7 @@ struct TransferClubScoreInput {
     uint16_t flags=0;
     bool large_squad=false,domestic_capacity=false;
 };
+int transfer_recruitment_need(int league_class,int table_rank,int club_strength,int player_strength);
 int transfer_club_score(const TransferClubScoreInput&,WatcomRandom&);
 struct ComputerBidAmounts {uint32_t fee=0,salary=0;};
 // Source unsigned arithmetic and random ordering, after contract-term choice.

@@ -58,7 +58,7 @@ void Session::prepare_start(uint64_t revision) {
     calendar=SeasonCalendar::from_sources(candidate.world.catalogue,de,aligned.entries);
     auto draws=prepare_initial_competitions(candidate,staged_owner,staged_owner,calendar,{resources_.german,resources_.english},resources_.reference);
     auto services=initialize_first_season_manager_services(candidate,staged_owner,staged_owner,resources_.reference);
-    initialize_first_season_market(candidate,staged_owner,staged_owner);
+    initialize_first_season_market(candidate,staged_owner,staged_owner,&resources_.reference);
     initialize_career_economy(candidate,resources_.reference);
     initialize_desktops(candidate,resources_.reference);
     if(state_!=before||owner_.scope!=before_owner.scope||owner_.revision!=before_owner.revision)throw FormatError("world12: session changed during preparation");

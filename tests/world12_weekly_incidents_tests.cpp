@@ -84,7 +84,7 @@ int main()try {
     auto& career=(*managers[0].object())["career"];auto& services=(*career.object())["season_services"];
     auto& contracts=std::get<cli::Json::Array>((*services.object())["contracts"].value);
     auto& bytes=std::get<cli::Json::Array>(contracts[16].value);for(size_t b=8;b<12;++b)bytes[b]=7;
-    const auto old_json=cli::dump_json(old);check(decode_world(Bytes(old_json.begin(),old_json.end()))==source.world,"old schema16 did not normalize duplicated taker words");
+    const auto old_json=cli::dump_json(old);auto old_expected=source.world;old_expected.transfer_market->entry40_history_known=false;check(decode_world(Bytes(old_json.begin(),old_json.end()))==old_expected,"old schema16 did not normalize duplicated taker words");
 
     std::map<int,uint32_t> seeds;
     auto sample=AiMatchProjection::create_for_humans(source,{first_club,source.world.managers[1].club},rules,{3,6,false,true});
