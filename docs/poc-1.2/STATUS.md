@@ -438,3 +438,12 @@ Classic default policy. Controlled complete-month and cancellation/full-pool
 checks are described in [monthly services](MONTHLY_SERVICES.md).
 The general day/event owner, GUI presenters and played-career release gates
 remain unfinished.
+
+## Ordered daily services
+
+Finance, weekly processing/training and month changes now share an atomic dated
+service wrapper with authenticated clock/entry policy. A separate post-event
+market tick preserves the Source event-seeking order and stops at the annual
+desk boundary. Seventy dated full-Core fixtures match; they deliberately omit
+match/calendar execution. See [daily services](DAILY_SERVICES.md). Saved event
+ownership and GUI day progression remain the next integration gate.

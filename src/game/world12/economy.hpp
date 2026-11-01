@@ -12,6 +12,7 @@ void append_economy_message(CareerEconomy&,const EconomyMessage&);
 struct EconomyPhaseOutcome {uint64_t game_draws=0,watcom_draws=0;size_t managers=0;};
 // Ordered economic service phases, not the complete daily/calendar transaction.
 enum class DailyEconomyKind {after_event,plain_day};
+EconomyPhaseOutcome update_daily_stock_market(CareerSnapshot&,const GameState& reference);
 EconomyPhaseOutcome daily_finance(CareerSnapshot&,const GameState& reference,DailyEconomyKind);
 EconomyPhaseOutcome settle_weekly_managers(CareerSnapshot&,const GameState& reference);
 }

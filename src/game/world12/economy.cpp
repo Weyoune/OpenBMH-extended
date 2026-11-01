@@ -107,19 +107,20 @@ void append_economy_message(CareerEconomy& economy,const EconomyMessage& message
     post_message_mask(g,message.recipients,Bytes(message.text.begin(),message.text.end()));capture_mailbox(economy,g,identity);
 }
 namespace {
-EconomyPhaseOutcome phase(CareerSnapshot& state,const GameState& reference,bool weekly,bool stocks){
+EconomyPhaseOutcome phase(CareerSnapshot& state,const GameState& reference,bool weekly,bool stocks,bool interest=true){
     state.validate();if(!state.world.economy||!state.world.settings||state.world.managers.empty())throw std::invalid_argument("world12: unavailable economy phase");
     const auto before=state;auto candidate=state;std::vector<ClubId> clubs;for(const auto& m:state.world.managers)clubs.push_back(m.club);
     const auto& s=*state.world.settings;auto p=AiMatchProjection::create_for_humans(candidate,clubs,reference,{s.mode,s.difficulty,s.foreign_rule,true});install_career_economy(p,candidate.world);
     GameRandom game(state.game_seed);WatcomRandom random(state.watcom_seed);
     if(stocks)stock_market(p.state,game);
-    for(size_t m=0;m<p.human_managers();++m){if(weekly)weekly_manager_settlement(p.state,int(m),random);else{p.state.manager_records.at(m*record_size+0x21f)&=0x7f;manager_daily_interest(p.state,int(m),random);}}
+    for(size_t m=0;m<p.human_managers();++m){if(weekly)weekly_manager_settlement(p.state,int(m),random);else if(interest){p.state.manager_records.at(m*record_size+0x21f)&=0x7f;manager_daily_interest(p.state,int(m),random);}}
     p.commit_match_state(candidate.world);capture_career_economy(candidate.world,p);
     if(stocks){auto& stocks=candidate.world.markets->stocks;std::copy(p.state.stocks.begin(),p.state.stocks.end(),stocks.begin());const auto map=seats(p);for(size_t n=0;n<4;++n)for(size_t share=0;share<12;++share)for(size_t b=0;b<2;++b)stocks[share*0x5c+0x50+map[n]*2+b]=p.state.stocks[share*0x5c+0x50+n*2+b];}
     candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();candidate.validate();if(state!=before)throw std::invalid_argument("world12: economy changed during service phase");
     const EconomyPhaseOutcome result{game.calls(),random.calls(),p.human_managers()};state=std::move(candidate);return result;
 }
 }
+EconomyPhaseOutcome update_daily_stock_market(CareerSnapshot& state,const GameState& reference){return phase(state,reference,false,true,false);}
 EconomyPhaseOutcome daily_finance(CareerSnapshot& s,const GameState& r,DailyEconomyKind kind){
     if(kind!=DailyEconomyKind::after_event&&kind!=DailyEconomyKind::plain_day)throw std::invalid_argument("world12: invalid daily economy kind");
     return phase(s,r,false,kind==DailyEconomyKind::plain_day);

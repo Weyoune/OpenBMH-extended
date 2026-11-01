@@ -18,6 +18,7 @@
 #include "game/world12/loan_returns.hpp"
 #include "game/world12/monthly_accounts.hpp"
 #include "game/world12/monthly_services.hpp"
+#include "game/world12/daily_services.hpp"
 #include "game/world12/standings.hpp"
 #include "game/bank_credit.hpp"
 #include "game/pending_offer.hpp"
@@ -260,6 +261,33 @@ int main(int argc,char** argv)try {
             if(!proof.empty()&&variant==2&&seed==91)write_savegame(proof/"complete-month.FBM",make_save(typed));++passes;
         }
         std::cout<<passes<<" full-Core complete monthly transactions: "<<released<<" contract/retirement releases, listings, boards, accounts, rosters, pools, messages, aggregate RNG and snapshots match (per-holder dividend fix enabled)\n";
+    }
+    {
+        size_t passes=0;
+        for(uint32_t seed:{91u,703u}){auto typed=state;auto core=native;core.mailbox.assign(kMailboxEntries*kMailboxEntry,0);core.offer_answer=false;
+            core.memory.add_block(layout::CompetitionSelection,4);core.memory.set32(layout::CompetitionSelection,1u|(typed.world.catalogue.scope.international?2u:0u));
+            for(uint32_t fund=0;fund<6;++fund)for(uint32_t manager=0;manager<4;++manager){const auto at=layout::Advertising_OriginalShareAdjustment_RuntimeField+fund*0x1c+manager*2;core.memory.set16(at,0);typed.world.markets->funds[at-layout::FundBlock]=0;typed.world.markets->funds[at-layout::FundBlock+1]=0;}
+            initialize_career_economy(typed,core);typed.game_seed=17;typed.watcom_seed=seed;GameRandom cg(17);WatcomRandom cw(seed);
+            core.transfer_offer_selector=[](const GameState&,const TransferOfferListView&){return -1;};core.transfer_decision_observer=[](const TransferDecisionEvent&){};core.contract_screen=[](GameState&,int,int){return 0;};
+            DailyServiceHooks hooks;hooks.incidents.answer=[](const GameState&,uint8_t,const WeeklyOfferQuestion&)->std::optional<bool>{return false;};hooks.auctions.active_seat=0;hooks.auctions.allocator=TransferAllocatorContext::zero;hooks.auctions.select=[](const GameState&,const TransferOfferListView&,const AiMatchProjection&)->std::optional<int>{return -1;};hooks.auctions.notice=[](const GameState&,const TransferDecisionEvent&,const AiMatchProjection&){};hooks.contracts.renew=[](GameState&,GameRandom&,WatcomRandom&,uint8_t,PlayerId,int,const AiMatchProjection&)->std::optional<bool>{return false;};
+            for(uint32_t day=1;day<=35;++day){const auto gc=cg.calls(),wc=cw.calls();const auto kind=day%2?DailyEconomyKind::after_event:DailyEconomyKind::plain_day;
+                if(kind==DailyEconomyKind::plain_day)stock_market(core,cg);++core.date;daily_interest(core,cw);typed.date=day;
+                DailyServiceContext context;context.previous_date=day-1;context.season=typed.season;context.epoch=calendar_epoch();context.entry=kind;context.weekly_relations={day,typed.season,{}};
+                WeeklyClubRelations relation;relation.club=typed.world.managers[0].club;const auto team=core.manager_teams[0];
+                for(size_t cup=0;cup<3&&!relation.advertising.european_cup;++cup)for(size_t n=0;n<core.memory.u8(counts[cup]);++n)if(core.memory.u16(lists[cup]+uint32_t(n*2))==team){relation.advertising.european_cup=uint8_t(cup+1);break;}
+                relation.advertising.champion=core.memory.u16(layout::Cup_AdvanceCup_RuntimeField6)==team;const uint32_t entries[]={0,15,19,21};for(size_t k=0;k<4;++k)relation.advertising.holders[k]=core.memory.u16(layout::Season_CareerSeasonSetup_RuntimeField+entries[k]*0x28)==team;context.weekly_relations.clubs.push_back(relation);
+                MinuteReport report;if(!day_step_rest(core,cg,cw,report,uint16_t(day-(kind==DailyEconomyKind::after_event?1:0)),TransferAllocatorContext::zero))throw std::runtime_error(report.reason);
+                const auto result=process_daily_services(typed,reference,texts,context,hooks);
+                if(typed.game_seed!=cg.seed()||typed.watcom_seed!=cw.seed()||result.game_draws!=cg.calls()-gc||result.watcom_draws!=cw.calls()-wc)throw std::runtime_error("daily service RNG differs day="+std::to_string(day)+" source_date="+std::to_string(core.date)+" full="+std::to_string(full_game(core))+" G="+std::to_string(result.game_draws)+"/"+std::to_string(cg.calls()-gc)+" W="+std::to_string(result.watcom_draws)+"/"+std::to_string(cw.calls()-wc));
+                for(const auto& [id,person]:typed.world.players)if(person.attributes.w35c!=core.players[id.value].w35c||person.attributes.w364!=core.players[id.value].w364||person.attributes.w368!=core.players[id.value].w368||person.bonus!=core.player_bonus[id.value]||person.cards!=core.player_cards[id.value])throw std::runtime_error("daily service player differs");
+                for(size_t club=0;club<164;++club){const auto& roster=typed.world.clubs.at(identities.at(core.club_ids[club])).roster;for(size_t row=0;row<24;++row){const auto raw=core.squad_slots[club*24+row];const uint16_t flags=uint16_t(((raw&0x8000)?1:0)|((raw&0x4000)?2:0)|((raw&0x2000)?4:0)|((raw&0x1000)?8:0));if((roster[row].empty()?0xfffu:roster[row].player.value)!=(raw&0xfff)||roster[row].flags!=flags)throw std::runtime_error("daily service roster differs");}}
+                if(typed.world.managers[0].finance!=manager_initial_finance_from_legacy(core,0)||typed.world.managers[0].career!=manager_career_state_from_legacy(core,0,players,true)||typed.world.managers[0].tactics!=manager_full_tactics_from_legacy(core,0,players))throw std::runtime_error("daily service manager differs");
+                auto p=AiMatchProjection::create_for_humans(typed,{typed.world.managers[0].club},reference,{3,3,false,true});install_career_economy(p,typed.world);if(compare_mailbox(p.state.mailbox,core.mailbox)||p.state.stocks!=core.stocks)throw std::runtime_error("daily service mailbox/stocks differ");
+                if(result.post_event_stock_pending){day_stock_market(core,cg);update_daily_stock_market(typed,reference);if(typed.game_seed!=cg.seed()||typed.watcom_seed!=cw.seed())throw std::runtime_error("post-event market tick differs");}
+                if(read_save(make_save(typed))!=typed)throw std::runtime_error("daily service snapshot differs");++passes;
+            }
+        }
+        std::cout<<passes<<" dated full-Core daily-service comparisons: explicit event/plain finance, weekly/training/month transition, separate post-event market tick, rosters/boards/mail/aggregate RNG/snapshots match; fixtures not played\n";
     }
     {
         size_t passes=0;
