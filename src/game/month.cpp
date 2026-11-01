@@ -193,9 +193,9 @@ void new_list_entries(GameState& g, WatcomRandom& rand, MinuteReport& report) {
 }
 
 // Loaned players whose time is up go back to their clubs (part of DayStepRest2).
-void return_loans(GameState& g, WatcomRandom& rand, GameRandom* game, MinuteReport& report) {
+void return_loans_range(GameState& g,WatcomRandom& rand,GameRandom* game,MinuteReport& report,int first,int end) {
     StaticMemory& mem = g.memory;
-    for (int s = 0; s < kPoolFirst && !report.unsupported; s++) {
+    for (int s=first;s<end&&!report.unsupported;++s) {
         const int player = g.squad_slots.at(size_t(s)) & 0xFFF;
         if (player == 0xFFF) continue;
         const int k = bought_entry(g, player) - 1;
@@ -350,8 +350,8 @@ void return_loans(GameState& g, WatcomRandom& rand, GameRandom* game, MinuteRepo
                 post_composed(staged, int64_t(managers), return_notice);
                 auto_lineup(staged, owner, owner_manager >= 0 ? 0xe4 : 100);
                 auto_lineup(staged, club, borrower_manager >= 0 ? 0xe4 : 100);
-            } catch (const std::exception&) {
-                report.fail("month change: human-owner loan cannot be restored safely");
+            } catch (const std::exception& error) {
+                report.fail(std::string("month change: human-owner loan cannot be restored safely: ")+error.what());
                 return;
             }
             g = std::move(staged);
@@ -373,6 +373,8 @@ void return_loans(GameState& g, WatcomRandom& rand, GameRandom* game, MinuteRepo
         lineup_after_transfer(g, club);
     }
 }
+
+void return_loans(GameState& g,WatcomRandom& rand,GameRandom* game,MinuteReport& report){return_loans_range(g,rand,game,report,0,kPoolFirst);}
 
 // OriginalFinancePreview(1): the month's expenses of a human manager: facility maintenance
 // (BMHExeXa), record +0x854/+0x858, the wages of the squad (MonthlyPay with flags
@@ -584,6 +586,11 @@ void shares_and_loans(GameState& g) {
 }
 
 }  // namespace
+
+void return_loan_at(GameState& g,int slot,WatcomRandom& rand,GameRandom* game,MinuteReport& report){
+    if(slot<0||slot>=kPoolFirst){report.fail("month change: return slot outside club rosters");return;}
+    return_loans_range(g,rand,game,report,slot,slot+1);
+}
 
 bool list_transfer_player(GameState& g, int slot, WatcomRandom& rand, MinuteReport& report) {
     return list_player(g, slot, rand, report);

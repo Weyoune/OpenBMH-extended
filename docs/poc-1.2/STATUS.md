@@ -419,3 +419,11 @@ checks pass. Actual-data GUI controller tests also pass for startup, preparation
 save/load, pending decisions and four-manager loan handoffs. Controlled complete-
 weekly/monthly-listing snapshots and comparison receipts stay private; the new
 service sequence is not yet a GUI calendar-advance path.
+
+## Monthly loan lifecycle
+
+The shared return phase now restores AI/human owners, requires owned borrower
+questions and return-offer editors, and preserves physical ledger/board holes
+through schema19/SA snapshots. See [loan return boundaries](LOAN_RETURNS.md).
+The36 actual-data countdown/expiry comparisons are controlled service fixtures;
+general day advancement and the remaining monthly services remain unfinished.

@@ -5,6 +5,11 @@
 #include "game/weekly.hpp"
 #include "formats/textd.hpp"
 namespace bmh::world12 {
+// Shared numeric loan/history workspace, qualified by canonical identities.
+void assign_transfer_loan_slots(CareerSnapshot&);
+void install_transfer_loans(AiMatchProjection&,const CareerSnapshot&);
+void capture_transfer_history(CareerSnapshot&,const AiMatchProjection&);
+void capture_created_loan(CareerSnapshot&,const AiMatchProjection&,PlayerId,ClubId owner,ClubId borrower);
 struct MarketAuctionHooks {
     std::function<std::optional<int>(const GameState&,const TransferOfferListView&,const AiMatchProjection&)> select;
     std::function<void(const GameState&,const TransferDecisionEvent&,const AiMatchProjection&)> notice;

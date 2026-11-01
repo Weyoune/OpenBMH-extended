@@ -43,6 +43,7 @@ struct LoanContract {
     PlayerId player;uint8_t manager=0;
     std::array<uint8_t,0x58> board{};
     PlayerId mark,marked_by;
+    std::optional<uint8_t> source_slot={};
     bool operator==(const LoanContract&)const=default;
 };
 struct TransferRuntime {

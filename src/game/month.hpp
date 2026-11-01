@@ -24,6 +24,9 @@
 #include "game/state.hpp"
 
 namespace bmh {
+// One physical roster slot of the Source monthly return pass.
+void return_loan_at(GameState&,int slot,WatcomRandom&,GameRandom*,MinuteReport&);
+
 
 // `game` is needed when a player leaves at the end of his contract (MonthChange).
 void month_change(GameState& g, WatcomRandom& rand, MinuteReport& report, GameRandom* game = nullptr);

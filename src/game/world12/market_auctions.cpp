@@ -16,6 +16,12 @@ uint32_t word(const Bytes& b,size_t at){return uint32_t(b.at(at))|uint32_t(b.at(
 void put(Bytes& b,size_t at,uint32_t v){for(size_t n=0;n<4;++n)b.at(at+n)=uint8_t(v>>(8*n));}
 bool human(const World& w,ClubId id){return id.valid()&&std::any_of(w.managers.begin(),w.managers.end(),[&](const auto& m){return m.club==id;});}
 uint8_t local_manager(const AiMatchProjection& p,uint8_t seat){for(uint8_t m=0;m<p.human_managers();++m)if(p.global_manager(m)==seat)return m;throw FormatError("world12: loan owner has no projected manager");}
+template<class Rows>std::vector<size_t> source_slots(const Rows& rows,size_t capacity){
+    if(rows.size()>capacity)throw FormatError("world12: physical loan slots exhausted");
+    std::vector<bool> used(capacity);std::vector<size_t> slots;
+    for(const auto& row:rows)if(row.source_slot){if(*row.source_slot>=capacity||used[*row.source_slot])throw FormatError("world12: invalid physical loan slot");used[*row.source_slot]=true;}
+    for(const auto& row:rows){if(row.source_slot)slots.push_back(*row.source_slot);else{const auto free=std::find(used.begin(),used.end(),false);if(free==used.end())throw FormatError("world12: physical loan slots exhausted");slots.push_back(size_t(free-used.begin()));*free=true;}}return slots;
+}
 void install_loans(AiMatchProjection& p,const CareerSnapshot& state){
     std::vector<PlayerId> players;std::vector<ClubId> clubs;
     for(const auto& loan:state.world.loans){players.push_back(loan.player);clubs.push_back(loan.owner);clubs.push_back(loan.borrower);}
@@ -25,11 +31,13 @@ void install_loans(AiMatchProjection& p,const CareerSnapshot& state){
     if(state.world.loans.size()>200)throw FormatError("world12: auction loan ledger exhausted");
     g.memory.add_block(ledger,800);g.memory.add_block(layout::ClubPlayerDetail_InvalidArgument_RuntimeField,200);
     for(size_t n=0;n<200;++n){g.memory.set32(ledger+uint32_t(n*4),0);g.memory.set8(layout::ClubPlayerDetail_InvalidArgument_RuntimeField+uint32_t(n),0);}
-    for(size_t n=0;n<state.world.loans.size();++n){const auto& l=state.world.loans[n];g.memory.set32(ledger+uint32_t(n*4),p.local_player(l.player)+p.local_club_reference(l.owner)*0x1000u+p.local_club_reference(l.borrower)*0x400000u);g.memory.set8(layout::ClubPlayerDetail_InvalidArgument_RuntimeField+uint32_t(n),l.months);}
+    const auto ledger_slots=source_slots(state.world.loans,200);
+    for(size_t i=0;i<state.world.loans.size();++i){const auto& l=state.world.loans[i];const auto n=ledger_slots[i];g.memory.set32(ledger+uint32_t(n*4),p.local_player(l.player)+p.local_club_reference(l.owner)*0x1000u+p.local_club_reference(l.borrower)*0x400000u);g.memory.set8(layout::ClubPlayerDetail_InvalidArgument_RuntimeField+uint32_t(n),l.months);}
     g.memory.add_block(owner_players,24);g.memory.add_block(owner_boards,12*0x58);g.memory.add_block(owner_managers,12);g.memory.add_block(owner_counts,4);
     for(size_t n=0;n<12;++n)g.memory.set16(owner_players+uint32_t(n*2),0xfff);
     for(size_t n=0;n<4;++n)g.memory.set8(owner_counts+uint32_t(n),0);
-    if(state.transfers)for(size_t n=0;n<state.transfers->loans.size();++n){const auto& l=state.transfers->loans[n];const auto m=local_manager(p,l.manager);
+    const auto board_slots=state.transfers?source_slots(state.transfers->loans,12):std::vector<size_t>{};
+    if(state.transfers)for(size_t i=0;i<state.transfers->loans.size();++i){const auto& l=state.transfers->loans[i];const auto n=board_slots[i];const auto m=local_manager(p,l.manager);
         g.memory.set16(owner_players+uint32_t(n*2),uint16_t(p.local_player(l.player)));g.memory.set8(owner_managers+uint32_t(n),m);g.memory.set8(owner_counts+m,uint8_t(g.memory.u8(owner_counts+m)+1));
         for(size_t b=0;b<0x58;++b)g.memory.set8(owner_boards+uint32_t(n*0x58+b),l.board[b]);
         g.memory.set16(owner_boards+uint32_t(n*0x58+0x44),l.mark.valid()?uint16_t(p.local_player(l.mark)):0xfff);g.memory.set16(owner_boards+uint32_t(n*0x58+0x46),l.marked_by.valid()?uint16_t(p.local_player(l.marked_by)):0xfff);
@@ -48,9 +56,9 @@ void capture_new_loan(CareerSnapshot& state,const AiMatchProjection& p,PlayerId 
     const auto& g=p.state;const auto local=p.local_player(player);int found=-1;
     for(int n=0;n<200;++n){const auto raw=g.memory.u32(ledger+uint32_t(n*4));if(raw&&(raw&0xfff)==local){if(p.global_club((raw>>12)&0x3ff)!=seller||p.global_club(raw>>22)!=buyer)throw FormatError("world12: auction loan parties mismatch");found=n;break;}}
     if(found<0)return;
-    state.world.loans.push_back({player,seller,buyer,g.memory.u8(layout::ClubPlayerDetail_InvalidArgument_RuntimeField+uint32_t(found))});
+    state.world.loans.push_back({player,seller,buyer,g.memory.u8(layout::ClubPlayerDetail_InvalidArgument_RuntimeField+uint32_t(found)),uint16_t(found)});
     if(!human(state.world,seller))return;
-    for(size_t n=0;n<12;++n)if(g.memory.u16(owner_players+uint32_t(n*2))==local){LoanContract contract;contract.player=player;contract.manager=p.global_manager(g.memory.u8(owner_managers+uint32_t(n)));
+    for(size_t n=0;n<12;++n)if(g.memory.u16(owner_players+uint32_t(n*2))==local){LoanContract contract;contract.source_slot=uint8_t(n);contract.player=player;contract.manager=p.global_manager(g.memory.u8(owner_managers+uint32_t(n)));
         for(size_t b=0;b<0x58;++b)contract.board[b]=g.memory.u8(owner_boards+uint32_t(n*0x58+b));
         const auto mark=g.memory.u16(owner_boards+uint32_t(n*0x58+0x44)),marked=g.memory.u16(owner_boards+uint32_t(n*0x58+0x46));contract.mark=mark==0xfff?PlayerId{}:p.global_player(mark);contract.marked_by=marked==0xfff?PlayerId{}:p.global_player(marked);for(size_t b=0x44;b<0x48;++b)contract.board[b]=0;
         state.transfers->loans.push_back(contract);return;
@@ -58,9 +66,18 @@ void capture_new_loan(CareerSnapshot& state,const AiMatchProjection& p,PlayerId 
     throw FormatError("world12: auction loan lost its human owner board");
 }
 }
+void assign_transfer_loan_slots(CareerSnapshot& s){
+    const auto ledger_slots=source_slots(s.world.loans,200);for(size_t n=0;n<ledger_slots.size();++n)s.world.loans[n].source_slot=uint16_t(ledger_slots[n]);
+    if(s.transfers){const auto board_slots=source_slots(s.transfers->loans,12);for(size_t n=0;n<board_slots.size();++n)s.transfers->loans[n].source_slot=uint8_t(board_slots[n]);}
+}
+void install_transfer_loans(AiMatchProjection& p,const CareerSnapshot& s){
+    install_loans(p,s);if(s.transfers)for(uint8_t m=0;m<p.human_managers();++m){const auto seat=p.global_manager(m);put(p.state.manager_records,size_t(m)*0xb0c+0x330,uint32_t(s.transfers->balance[seat]));p.state.manager_records[size_t(m)*0xb0c+0x21d]=uint8_t(std::min<size_t>(25,s.transfers->history[seat].size()));}
+}
+void capture_transfer_history(CareerSnapshot& s,const AiMatchProjection& p){capture_transfer_state(s,p);}
+void capture_created_loan(CareerSnapshot& s,const AiMatchProjection& p,PlayerId player,ClubId owner,ClubId borrower){capture_new_loan(s,p,player,owner,borrower);}
 MarketAuctionOutcome process_market_auctions(CareerSnapshot& state,const GameState& reference,const TextDb& texts,const MarketAuctionHooks& hooks,bool season_end){
     state.validate();if(!state.world.settings||!state.world.transfer_market||!state.world.economy||state.world.managers.empty())throw FormatError("world12: auction phase is unavailable");
-    const auto before=state;auto candidate=state;GameRandom game(state.game_seed);WatcomRandom random(state.watcom_seed);MarketAuctionOutcome outcome;
+    const auto before=state;auto candidate=state;assign_transfer_loan_slots(candidate);GameRandom game(state.game_seed);WatcomRandom random(state.watcom_seed);MarketAuctionOutcome outcome;
     for(uint8_t row=0;row<40;++row){if(!candidate.world.transfer_market->rows[row])continue;const auto listing=*candidate.world.transfer_market->rows[row];
         std::vector<ClubId> clubs;for(const auto& m:candidate.world.managers)clubs.push_back(m.club);
         const auto add=[&](ClubId id){if(id.valid()&&std::find(clubs.begin(),clubs.end(),id)==clubs.end())clubs.push_back(id);};add(listing.seller);for(const auto& b:listing.bids)add(b.bidder);

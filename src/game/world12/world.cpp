@@ -65,7 +65,9 @@ void World::validate(bool complete)const {
             for(const auto& bid:row->bids)if(bid.bidder.valid()&&(!clubs.contains(bid.bidder)||clubs.at(bid.bidder).kind!=ClubKind::club))throw std::invalid_argument("world12: missing market bidder");
         }
     }
-    std::set<PlayerId> loaned;for(const auto& loan:loans){if(!players.contains(loan.player)||!clubs.contains(loan.owner)||!clubs.contains(loan.borrower)||loan.owner==loan.borrower||!loan.months||!loaned.insert(loan.player).second)throw std::invalid_argument("world12: invalid loan");bool at_borrower=false;for(const auto& slot:clubs.at(loan.borrower).roster)at_borrower|=slot.player==loan.player;if(!at_borrower)throw std::invalid_argument("world12: loan player is not at borrower");}
+    if(loans.size()>200)throw std::invalid_argument("world12: loan ledger exceeds capacity");
+    std::set<uint16_t> loan_slots;
+    std::set<PlayerId> loaned;for(const auto& loan:loans){if(loan.source_slot&&(*loan.source_slot>=200||!loan_slots.insert(*loan.source_slot).second))throw std::invalid_argument("world12: invalid loan ledger slot");if(!players.contains(loan.player)||!clubs.contains(loan.owner)||!clubs.contains(loan.borrower)||loan.owner==loan.borrower||!loan.months||!loaned.insert(loan.player).second)throw std::invalid_argument("world12: invalid loan");bool at_borrower=false;for(const auto& slot:clubs.at(loan.borrower).roster)at_borrower|=slot.player==loan.player;if(!at_borrower)throw std::invalid_argument("world12: loan player is not at borrower");}
     if(managers.size()>4)throw std::invalid_argument("world12: too many managers");std::set<uint8_t> seats,portraits;std::set<ClubId> owned;
     for(const auto& manager:managers){if(manager.match_state){const auto& m=*manager.match_state;bool ended=false;
 for(size_t i=0;i<12;i+=2){const auto a=m.recent_fixtures[i],b=m.recent_fixtures[i+1];if(a.valid()!=b.valid()||(a.valid()&&(ended||a==b||!clubs.contains(a)||!clubs.contains(b))))throw std::invalid_argument("world12: invalid recent manager fixture");if(!a.valid())ended=true;}

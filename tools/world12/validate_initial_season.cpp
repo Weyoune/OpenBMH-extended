@@ -15,6 +15,7 @@
 #include "game/world12/market_auctions.hpp"
 #include "game/world12/weekly_services.hpp"
 #include "game/world12/monthly_market.hpp"
+#include "game/world12/loan_returns.hpp"
 #include "game/world12/standings.hpp"
 #include "game/bank_credit.hpp"
 #include "game/pending_offer.hpp"
@@ -177,7 +178,7 @@ int main(int argc,char** argv)try {
                 const auto identity=read32(0x7d8);const auto& history=typed.transfers->history[m];
                 if(identity){if(history.size()!=1||history[0].player!=player||history[0].other!=((read32(0x760)&1)?seller:buyer)||history[0].source_word!=read32(0x760))throw std::runtime_error("auction qualified history differs");}else if(!history.empty())throw std::runtime_error("auction invented Source transfer history");
             }
-            std::vector<Loan> expected_loans;for(uint32_t n=0;n<200;++n){const auto raw=core.memory.u32(layout::Career_RemoveJoinLoans_RuntimeField+n*4);if(raw)expected_loans.push_back({{raw&0xfff},identities.at(core.club_ids[(raw>>12)&0x3ff]),identities.at(core.club_ids[raw>>22]),core.memory.u8(layout::ClubPlayerDetail_InvalidArgument_RuntimeField+n)});}
+            std::vector<Loan> expected_loans;for(uint32_t n=0;n<200;++n){const auto raw=core.memory.u32(layout::Career_RemoveJoinLoans_RuntimeField+n*4);if(raw)expected_loans.push_back({{raw&0xfff},identities.at(core.club_ids[(raw>>12)&0x3ff]),identities.at(core.club_ids[raw>>22]),core.memory.u8(layout::ClubPlayerDetail_InvalidArgument_RuntimeField+n),uint16_t(n)});}
             if(typed.world.loans!=expected_loans)throw std::runtime_error("auction global loan parties/months differ");
             if(result.moved&&loan&&seller_human){if(typed.transfers->loans.size()!=1)throw std::runtime_error("auction owner snapshot count="+std::to_string(typed.transfers->loans.size())+" kind="+std::to_string(kind)+" seed="+std::to_string(seed)+" answer="+std::to_string(accept)+" global loans="+std::to_string(typed.world.loans.size()));const auto& contract=typed.transfers->loans[0];int slot=-1;for(int n=0;n<12;++n)if(core.memory.u16(layout::Career_CareerManagersEnd_RuntimeField+uint32_t(n*2))==player.value){slot=n;break;}
                 if(slot<0||contract.player!=player||contract.manager!=0)throw std::runtime_error("auction owner snapshot identity differs");const auto at=layout::ClubInfo_FormatError_RuntimeField+uint32_t(slot*0x58);
@@ -189,10 +190,26 @@ int main(int argc,char** argv)try {
             auto projection=AiMatchProjection::create_for_humans(typed,human_clubs,reference,{3,3,false,true});install_career_economy(projection,typed.world);if(compare_mailbox(projection.state.mailbox,core.mailbox))throw std::runtime_error("auction mailbox differs");
             if(read_save(make_save(typed))!=typed)throw std::runtime_error("auction snapshot differs");
             if(!proof.empty()&&kind==7&&seed==91&&accept){const auto file=proof/"free-agent-auction.FBM";write_savegame(file,make_save(typed));if(read_save(load_savegame(file))!=typed)throw std::runtime_error("auction disk snapshot differs");}
+            if(result.loans){
+                // Compare actual Source roster traversal, including human return notices.
+                for(int pass=0;pass<2;++pass){
+                    typed.world.loans[0].months=uint8_t(pass?1:2);const auto ledger_slot=*typed.world.loans[0].source_slot;core.memory.set8(layout::ClubPlayerDetail_InvalidArgument_RuntimeField+ledger_slot,uint8_t(pass?1:2));
+                    core.loan_return_screen=[](GameState&,int,const std::string&){return 0;};
+                    for(int slot=0;slot<runtime_dimensions.pool_first&&!report.unsupported;++slot)return_loan_at(core,slot,w,&g,report);
+                    if(report.unsupported)throw std::runtime_error(report.reason);
+                    LoanReturnHooks returns;returns.active_seat=0;returns.keep=[](const GameState&,uint8_t,const std::string&,const AiMatchProjection&)->std::optional<bool>{return false;};return_monthly_loans(typed,reference,texts,returns);
+                    if(typed.game_seed!=g.seed()||typed.watcom_seed!=w.seed())throw std::runtime_error("loan-return RNG differs");
+                    for(size_t team=0;team<164;++team){const auto& roster=typed.world.clubs.at(identities.at(core.club_ids[team])).roster;for(size_t row=0;row<24;++row){const auto raw=core.squad_slots[team*24+row];const uint16_t flags=uint16_t(((raw&0x8000)?1:0)|((raw&0x4000)?2:0)|((raw&0x2000)?4:0)|((raw&0x1000)?8:0));if((roster[row].empty()?0xfffu:roster[row].player.value)!=(raw&0xfff)||roster[row].flags!=flags)throw std::runtime_error("loan-return roster differs");}}
+                    for(size_t m=0;m<typed.world.managers.size();++m)if(typed.world.managers[m].finance!=manager_initial_finance_from_legacy(core,int(m))||typed.world.managers[m].tactics!=manager_full_tactics_from_legacy(core,int(m),players)||typed.world.managers[m].career!=manager_career_state_from_legacy(core,uint8_t(m),players,true))throw std::runtime_error("loan-return human state differs");
+                    auto returned=AiMatchProjection::create_for_humans(typed,human_clubs,reference,{3,3,false,true});install_career_economy(returned,typed.world);if(compare_mailbox(returned.state.mailbox,core.mailbox))throw std::runtime_error("loan-return mailbox differs");
+                    if(pass&&(typed.world.loans.size()||typed.transfers->loans.size()))throw std::runtime_error("expired Source loan retained");
+                    if(read_save(make_save(typed))!=typed)throw std::runtime_error("loan-return snapshot differs");
+                }
+            }
             ++auctions;
         }
         if(!moves||!loans)throw std::runtime_error("auction oracle exercised no movement/loans");
-        std::cout<<auctions<<" full-Core auction comparisons, "<<moves<<" actual moves and "<<loans<<" loans: AI/human/free-agent rosters/accounts/boards/pool slots/mail/RNG/snapshots match\n";
+        std::cout<<auctions<<" full-Core auction comparisons, "<<moves<<" actual moves and "<<loans<<" loans: AI/human/free-agent rosters/accounts/boards/pool slots/mail/RNG/snapshots match; 36 loan countdown/expiry comparisons match\n";
     }
     {
         size_t passes=0;

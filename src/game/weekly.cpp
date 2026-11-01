@@ -952,7 +952,13 @@ TransferBidRating rate_transfer_bid_source(GameState& g, const TransferBidRating
         // Void5 mode4 has real divisions by each recent table's games.
         // Keep that native error boundary instead of accepting per_game's
         // generic zero fallback on an incomplete controlled/malformed season.
-        if (manager >= 0) {
+        if (manager >= 0 && !g.projected_match_clubs.empty()) {
+            if (size_t(bidder)>=g.projected_match_clubs.size())return fail("missing projected bidder prediction club");
+            const auto& context=g.projected_match_clubs.at(size_t(bidder));
+            if(context.round_cursor<0||context.league_size<2||context.league_size>20||
+               std::none_of(context.predictions.begin(),context.predictions.end(),[](const auto& p){return p.mode==4;}))
+                return fail("missing projected bidder prediction league");
+        } else if (manager >= 0) {
             const int league = team_league(bidder);
             if (league >= kLeagueCount || size_t(league) >= g.league_rounds.size())
                 return fail("missing bidder prediction league");

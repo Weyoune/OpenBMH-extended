@@ -51,6 +51,8 @@ void transfer_snapshot_tests(CareerSnapshot state) {
     contract.mark=seller[0].player;contract.marked_by=seller[1].player;
     runtime.loans.push_back(contract);
     check(read_save(make_save(state))==state,"S9 lost global loan/history refs, signed balance or owner board");
+    auto old_contract=make_save(state);old_contract.stream.pop_back();old_contract.stream[7]='9';
+    check(read_save(old_contract)==state,"previous S9 contract layout ceased to load");
     auto invalid=state;invalid.transfers->loans[0].board[0x44]=1;
     rejects([&]{make_save(invalid);},"packed local player reference leaked into S9 backing");
     invalid=state;invalid.transfers->loans[0].mark={0xfffffffeu};

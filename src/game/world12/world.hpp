@@ -27,6 +27,7 @@ struct ClubRecord {
 struct LeagueMembers {LeagueId league;std::vector<ClubId> clubs;bool operator==(const LeagueMembers&)const=default;};
 struct Loan {
     PlayerId player;ClubId owner,borrower;uint8_t months=0;
+    std::optional<uint16_t> source_slot={};
     bool operator==(const Loan&)const=default;
 };
 struct ManagerFinanceBaseline {
