@@ -106,3 +106,9 @@ for8k and37weeks for18k. That was original data, not a mistaken timer. Expanded
 limits/time policy is an intentional improvement. The UI now validates quotes
 against the actual edition and this shared policy rather than hardcoded Diamond
 prices and sizes. Existing eight capacity/construction bytes and saves are retained.
+
+Bank finance-overview totals and gains use 64-bit read-only projections and
+currency formatting, including values beyond a signed native account word.
+Saved cash, deposits, loan fields and holdings retain their original widths.
+This prevents a positive combined portfolio from appearing negative; it does
+not recover amounts that have already overflowed inside a native saved field.
