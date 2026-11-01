@@ -147,6 +147,7 @@ struct ManagerMonthlyEconomy {
 };
 struct ManagerEconomy {
     uint32_t deposit=0,interest_income=0,overdraft_interest=0;
+    std::optional<uint32_t> bank_robbery_month; // First day of the last blocked source month.
     std::optional<ManagerMonthlyEconomy> monthly={};
     // bank, then four global human lender seats; principal,total,payment,term,
     // elapsed months,payments made (bank_credit.hpp).

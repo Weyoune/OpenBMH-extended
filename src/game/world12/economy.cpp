@@ -2,6 +2,7 @@
 #include "game/world12/economy.hpp"
 #include "game/messages.hpp"
 #include "game/week.hpp"
+#include "game/bank_robbery.hpp"
 #include "game/weekly.hpp"
 #include <algorithm>
 #include <stdexcept>
@@ -21,6 +22,7 @@ std::array<uint8_t,4> seats(const AiMatchProjection& p){
 }
 ManagerEconomy read_manager(const GameState& g,size_t local,const std::array<uint8_t,4>& map){
     ManagerEconomy m;const auto rec=local*record_size;
+    m.bank_robbery_month=bank_robbery_guard_month(g,int(local));
     auto& monthly=m.monthly.emplace();monthly.history_count=g.manager_records.at(rec+0x286);
     for(size_t n=0;n<2;++n)monthly.expenses[n]=word(g.manager_records,rec+0x854+n*4);
     for(size_t n=0;n<15;++n)monthly.counters[n]=word(g.manager_records,rec+monthly_offsets[n]);
@@ -38,6 +40,7 @@ ManagerEconomy read_manager(const GameState& g,size_t local,const std::array<uin
 }
 void write_manager(GameState& g,size_t local,const ManagerEconomy& m,const std::array<uint8_t,4>& map){
     const auto rec=local*record_size;
+    set_bank_robbery_guard_month(g,int(local),m.bank_robbery_month);
     if(m.monthly){g.manager_records.at(rec+0x286)=m.monthly->history_count;
         for(size_t n=0;n<2;++n)put(g.manager_records,rec+0x854+n*4,m.monthly->expenses[n]);
         for(size_t n=0;n<15;++n)put(g.manager_records,rec+monthly_offsets[n],m.monthly->counters[n]);}

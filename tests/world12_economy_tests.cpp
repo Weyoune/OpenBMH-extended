@@ -4,6 +4,8 @@
 #include "game/world12/manager_tactics.hpp"
 #include "game/world12/codec.hpp"
 #include "game/messages.hpp"
+#include "game/bank_robbery.hpp"
+#include "cli/json.hpp"
 #include <iostream>
 #include <algorithm>
 namespace {
@@ -82,6 +84,39 @@ int main()try {
         check(state.world.markets->stocks[share*0x5c+0x50+seat*2]==seat+1,"daily stock update moved another manager's holdings");
     auto event=initial;const auto event_phase=daily_finance(event,rules,DailyEconomyKind::after_event);
     check(!event_phase.game_draws&&event.world.markets==initial.world.markets,"post-event interest moved stock prices a second time");
+    {
+        auto guarded=initial;
+        for(auto& manager:guarded.world.managers)manager.finance->balance=250000000;
+        const auto grace=daily_finance(guarded,rules,DailyEconomyKind::after_event);
+        check(grace.watcom_draws==0&&guarded.world.economy->managers[1].bank_robbery_month==31&&
+              guarded.world.economy->managers[3].bank_robbery_month==31&&
+              !guarded.world.economy->managers[0].bank_robbery_month,
+              "typed unknown histories lose money/draw RNG or sparse manager month keys are misrouted");
+        guarded=read_save(make_save(guarded));
+        check(daily_finance(guarded,rules,DailyEconomyKind::after_event).watcom_draws==0,
+              "typed snapshot load resets the grace-month guard");
+        guarded.date=62;
+        check(daily_finance(guarded,rules,DailyEconomyKind::after_event).watcom_draws==2&&
+              guarded.world.economy->managers[1].bank_robbery_month==62&&
+              guarded.world.economy->managers[3].bank_robbery_month==62,
+              "typed next-month losses do not process exactly the two sparse human managers");
+        const auto charged=guarded;
+        guarded=read_save(make_save(guarded));
+        check(daily_finance(guarded,rules,DailyEconomyKind::after_event).watcom_draws==0,
+              "typed charged-month save/load consumes another robbery draw");
+        const auto current=encode_world(charged.world);
+        auto previous=cli::parse_json(std::string(current.begin(),current.end()));
+        auto& object=*previous.object();object["version"]=21;
+        auto& managers=std::get<cli::Json::Array>(object.at("economy").object()->at("managers").value);
+        for(auto& manager:managers)manager.object()->erase("bank_robbery_month");
+        const auto text=cli::dump_json(previous);auto old_world=decode_world(Bytes(text.begin(),text.end()));
+        for(const auto& manager:old_world.economy->managers)
+            check(!manager.bank_robbery_month,"schema21 invents a past robbery month");
+        auto old_snapshot=charged;old_snapshot.world=std::move(old_world);
+        check(daily_finance(old_snapshot,rules,DailyEconomyKind::after_event).watcom_draws==0,
+              "schema21 upgrade causes an immediate new loss or RNG draw");
+        check(read_save(make_save(old_snapshot))==old_snapshot,"upgraded typed month guard is not saved");
+    }
     auto& bank=state.world.economy->managers[1];bank.camp_weeks=1;bank.camp_bill=100000;bank.offers[2]=3;bank.weekly_count=52;
     for(size_t n=0;n<52;++n)bank.financial_history[0][n]=uint32_t(n+100);
     const auto before=state;const auto settled=settle_weekly_managers(state,rules);
@@ -104,7 +139,7 @@ int main()try {
     rejects([&]{daily_finance(missing,rules,DailyEconomyKind::plain_day);},"missing economy was silently initialized");check(missing==untouched,"invalid phase changed state");
     auto invalid=state;invalid.world.economy->messages[0].recipients=1u<<8;rejects([&]{make_save(invalid);},"unknown mailbox manager accepted");
     invalid=state;invalid.world.economy->managers[1].weekly_count=53;rejects([&]{make_save(invalid);},"oversized weekly history accepted");
-    auto raw=encode_world(initial.world);std::string legacy(raw.begin(),raw.end());const auto version=legacy.find("\"version\":21");check(version!=std::string::npos,"new economy schema version missing");legacy.replace(version,12,"\"version\":15");
+    auto raw=encode_world(initial.world);std::string legacy(raw.begin(),raw.end());const auto version=legacy.find("\"version\":22");check(version!=std::string::npos,"new economy schema version missing");legacy.replace(version,12,"\"version\":15");
     auto legacy_world=initial.world;legacy_world.economy.reset();check(decode_world(Bytes(legacy.begin(),legacy.end()))==legacy_world,"previous world schema15 ceased to load");
     {
         auto sparse=initial;auto& economy=*sparse.world.economy;economy.messages.clear();economy.recipient_mask=0;
@@ -113,7 +148,7 @@ int main()try {
         check(edit_career_message(economy,1,0,first,MailboxEditKind::delete_for_manager)==MailboxEditFailure::none,"canonical mailbox deletion refused");
         check(economy.messages.size()==3&&economy.messages[0].recipients==0&&economy.messages[0].text[0]=='A'&&economy.messages[2].text[0]=='C',"canonical mailbox lost physical hole or following message");
         check(read_save(make_save(sparse))==sparse,"sparse mailbox snapshot failed");
-        const auto encoded=encode_world(sparse.world);std::string old(encoded.begin(),encoded.end());const auto version=old.find("\"version\":21");check(version!=std::string::npos,"sparse mailbox schema version missing");old.replace(version,12,"\"version\":20");rejects([&]{decode_world(Bytes(old.begin(),old.end()));},"older schema admitted unrepresentable physical mail holes");
+        const auto encoded=encode_world(sparse.world);std::string old(encoded.begin(),encoded.end());const auto version=old.find("\"version\":22");check(version!=std::string::npos,"sparse mailbox schema version missing");old.replace(version,12,"\"version\":20");rejects([&]{decode_world(Bytes(old.begin(),old.end()));},"older schema admitted unrepresentable physical mail holes");
 
         EconomyMessage next;next.recipients=2;next.date=20;next.text[0]='D';append_economy_message(economy,next);check(economy.messages.size()==3&&economy.messages[0].text[0]=='D'&&economy.messages[1].text[0]=='B',"new mail did not refill first Original hole");
     }
