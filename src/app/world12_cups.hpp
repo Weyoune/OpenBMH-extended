@@ -2,6 +2,8 @@
 #pragma once
 #include "game/world12/cup_draw.hpp"
 #include "game/world12/progression.hpp"
+#include "game/world12/cup_match.hpp"
+#include "app/world12_manager.hpp"
 
 namespace bmh::app::world12 {
 struct CupSources {const LeImage& german;const LeImage& english;};
@@ -19,4 +21,22 @@ struct CupScores {
 bmh::world12::DayPresentation commit_day_with_domestic_draws(bmh::world12::CareerSnapshot&,
     const bmh::world12::DayTicket&,const std::vector<bmh::world12::CompletedLeagueRound>&,
     const std::vector<CupScores>&,const CupSources&);
+struct CupDayConditions {
+    bmh::world12::DomesticCup cup=bmh::world12::DomesticCup::german_cup;
+    uint8_t source_entry=0;uint64_t revision=0;
+    std::vector<bmh::world12::AiLeagueConditions> matches;
+};
+struct CupDayOutcome {
+    std::vector<bmh::world12::CupRoundOutcome> cups;
+    bmh::world12::DayPresentation presentation;
+    uint64_t game_draws=0,watcom_draws=0;
+};
+// Complete calculation/stage transaction for a domestic-cup-only date. Each
+// country leg uses its shared Core minute clock in canonical calendar order.
+// Event preparation, gate income, trophies/premiums and visible live ownership
+// remain the higher-level career owner's responsibility.
+CupDayOutcome play_domestic_cup_day(bmh::world12::CareerSnapshot&,ManagerActionOwner&,
+    ManagerActionOwner expected,const bmh::world12::DayTicket&,const GameState&,
+    const CupSources&,const std::vector<CupDayConditions>&,
+    bmh::world12::HumanProjectionPolicy,const bmh::world12::HumanRoundHooks&);
 }

@@ -5,6 +5,16 @@ The application is **not yet a playable shared-career Beta**. Development is on 
 
 ## Latest integrated career work
 
+The next match calculation milestone is described in
+[domestic matches](DOMESTIC_MATCHES.md): both fixed country finals are initialized;
+the shared Core runner calculates actual knockout legs, extra time/shootouts,
+human effects and return legs. Complete cup days and league days publish a single
+calendar advance with saved daily services. The real four-manager probe now
+calculates both finals on day 17 and twelve full league rounds on day 24, saving
+and resuming between each step. Fixed QA weather/crowd/referee data is explicit;
+pre-match/live UI, gate/premium ownership and whole-season integration are not
+claimed complete.
+
 National nomination uses global player identities and the shared Original
 selection, contract-board and automatic-lineup calculations. German and English
 squads have their own saved tactical records; nomination does not transfer a

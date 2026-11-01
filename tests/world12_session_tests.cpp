@@ -16,6 +16,7 @@
 #include "game/world12/economy.hpp"
 #include "game/world12/desktop_projection.hpp"
 #include <fstream>
+#include "game/week.hpp"
 #include <algorithm>
 #include <chrono>
 #include <set>
@@ -377,8 +378,47 @@ void actual_four_managers(const std::filesystem::path& data,const std::filesyste
         const auto next=resumed.seek_saved_event(resumed.revision(),data,hooks);
         check(next.phase==ProgressPhase::scheduled_event&&resumed.snapshot().date>before.date+1,
               "actual completed nomination did not resume daily services to its next appointment");
+        const auto upcoming=prepare_day(resumed.snapshot());
+        check(upcoming&&upcoming->cups.size()==2,"actual aligned Super-Cup/Charity Shield fields are incomplete");
+        for(auto cup:{DomesticCup::german_supercup,DomesticCup::english_supercup}) {
+            const auto field=std::find_if(upcoming->cups.begin(),upcoming->cups.end(),[&](const auto& stage){return stage.cup==cup;});
+            check(field!=upcoming->cups.end()&&field->matches.size()==1,"actual country Super-Cup has no initialized fixture");
+        }
         if(!output.empty())write_savegame(output/"after-national-next-event.FBM",make_save(resumed.snapshot()));
-        std::cout<<"Actual four-manager national nomination: two global squads, saved replay guard, Source empty setup/option cycle/order shuffle, resumed daily processing to day "<<resumed.snapshot().date<<" passed\n";
+        std::vector<session_app::CupDayConditions> cup_inputs;
+        for(const auto& stage:upcoming->cups) {
+            AiLeagueConditions match;match.date=resumed.snapshot().date;match.month=month_code(match.date);
+            match.temperature=20;match.rain=0;match.spectators=20000;match.referee_properties={24};match.presentation_buttons.assign(0xb4,1);
+            cup_inputs.push_back({stage.cup,stage.source_entry,stage.revision,std::vector<AiLeagueConditions>(stage.matches.size(),match)});
+        }
+        HumanRoundHooks match_hooks;match_hooks.decline_unpresented_events=true;
+        const auto cup_date=resumed.snapshot().date;const auto played=resumed.play_scheduled_domestic_cups(resumed.revision(),cup_inputs,match_hooks);
+        check(played.cups.size()==2&&resumed.snapshot().date==cup_date+1&&resumed.snapshot().progress->phase==ProgressPhase::daily_services,
+              "actual country cup calculations did not retain pending daily continuation");
+        for(auto cup:{DomesticCup::german_supercup,DomesticCup::english_supercup}) {
+            const auto stage=std::find_if(resumed.snapshot().cups.begin(),resumed.snapshot().cups.end(),[&](const auto& s){return s.cup==cup;});
+            check(stage!=resumed.snapshot().cups.end()&&stage->complete()&&stage->qualifiers().size()==1,"actual computed Super-Cup/Charity Shield unresolved");
+        }
+        saved=read_save(make_save(resumed.snapshot()));resumed=session_app::Session::resume(resources,std::move(saved),92,resumed.revision());
+        if(!output.empty())write_savegame(output/"computed-supercups.FBM",make_save(resumed.snapshot()));
+        std::cout<<"Actual data country finals: real scoring, extra-time/shootout resolution, player/manager effects, both country stages and saved calendar closure passed (fixed QA weather/crowd; gate/premiums/live owner not exercised)\n";
+        resumed.seek_saved_event(resumed.revision(),data,hooks);
+        const auto league_ticket=prepare_day(resumed.snapshot());
+        check(league_ticket&&!league_ticket->leagues.empty()&&league_ticket->others.empty(),"actual next league calculation has unresolved non-league appointments");
+        std::vector<session_app::AiDayLeagueConditions> league_inputs;
+        for(const auto& round:league_ticket->leagues) {
+            AiLeagueConditions match;match.date=resumed.snapshot().date;match.month=month_code(match.date);
+            match.temperature=20;match.rain=0;match.spectators=20000;match.referee_properties={24};match.presentation_buttons.assign(0xb4,1);
+            league_inputs.push_back({round.appointment,std::vector<AiLeagueConditions>(round.matches.size(),match)});
+        }
+        const auto league_date=resumed.snapshot().date;
+        const auto league_result=resumed.play_scheduled_leagues(resumed.revision(),league_inputs,match_hooks);
+        check(league_result.leagues.size()==league_ticket->leagues.size()&&resumed.snapshot().date==league_date+1&&
+              resumed.snapshot().progress->phase==ProgressPhase::daily_services,"actual league calculations lost their saved service boundary");
+        saved=read_save(make_save(resumed.snapshot()));resumed=session_app::Session::resume(resources,std::move(saved),92,resumed.revision());
+        if(!output.empty())write_savegame(output/"computed-first-leagues.FBM",make_save(resumed.snapshot()));
+        std::cout<<"Actual first league calculations: "<<league_result.leagues.size()<<" complete country/European rounds at day "<<league_date<<", real scores, human/AI effects and saved continuation passed (fixed QA weather/crowd)\n";
+        std::cout<<"Actual four-manager national nomination: two global squads, saved replay guard, Source empty setup/option cycle/order shuffle, resumed daily processing to day "<<cup_date<<" passed\n";
     }
 
 

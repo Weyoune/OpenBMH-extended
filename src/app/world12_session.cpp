@@ -101,5 +101,28 @@ NationalAppointmentOutcome Session::finish_uncoached_national_day(uint64_t revis
     if(preparation_menu_)throw FormatError("world12: an open menu owns the current career");
     return finish_uncoached_national_appointment(state_,owner_,{owner_.scope,revision},resources_.reference);
 }
+CupDayOutcome Session::play_scheduled_domestic_cups(uint64_t revision,
+    const std::vector<CupDayConditions>& conditions,const HumanRoundHooks& hooks) {
+    if(preparation_menu_||!state_.progress||state_.progress->phase!=ProgressPhase::scheduled_event||!state_.world.settings)
+        throw FormatError("world12: no scheduled cup calculation owner");
+    const auto ticket=prepare_day(state_);if(!ticket)throw FormatError("world12: no scheduled cup appointment");
+    const auto& settings=*state_.world.settings;
+    return play_domestic_cup_day(state_,owner_,{owner_.scope,revision},*ticket,resources_.reference,
+        {resources_.german,resources_.english},conditions,
+        {settings.mode,settings.difficulty,settings.foreign_rule,true},hooks);
+}
+AiDayOutcome Session::play_scheduled_leagues(uint64_t revision,
+    const std::vector<AiDayLeagueConditions>& conditions,const HumanRoundHooks& hooks) {
+    if(preparation_menu_||revision!=owner_.revision||!state_.progress||
+       state_.progress->phase!=ProgressPhase::scheduled_event||!state_.world.settings)
+        throw FormatError("world12: occupied or stale league-day owner");
+    const auto ticket=prepare_day(state_);if(!ticket)throw FormatError("world12: no scheduled league appointment");
+    const auto before=state_;auto candidate=state_;AiDayOwner staged_owner{owner_.scope,revision};
+    const auto& settings=*candidate.world.settings;
+    const auto outcome=play_league_day(candidate,staged_owner,{owner_.scope,revision},*ticket,resources_.reference,
+        conditions,{settings.mode,settings.difficulty,settings.foreign_rule,true},hooks);
+    if(state_!=before||owner_.revision!=revision)throw FormatError("world12: league session changed during calculation");
+    state_=std::move(candidate);owner_.revision=staged_owner.revision;return outcome;
+}
 
 }

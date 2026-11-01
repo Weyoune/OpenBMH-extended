@@ -24,6 +24,8 @@ bool show_domestic_draw(const World& world,DomesticCup cup) {
 }
 std::optional<CupDrawNotice> cup_draw_notice(const World& world,const KnockoutStage& stage) {
     stage.validate(world);
+    // These fixed champion/cup-holder pairings have no draw presentation.
+    if(stage.cup==DomesticCup::german_supercup||stage.cup==DomesticCup::english_supercup)return std::nullopt;
     if(!show_domestic_draw(world,stage.cup) || stage.complete() || stage.next_leg()!=1) return std::nullopt;
     return CupDrawNotice{stage.cup,stage.source_entry,uint8_t(stage.rounds.size()),stage.next_fixtures()};
 }

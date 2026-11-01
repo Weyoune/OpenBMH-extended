@@ -40,6 +40,18 @@ InitialCompetitionOutcome prepare_initial_competitions(CareerSnapshot& state,Man
         (country==Country::germany?germany:england)[local]=candidate.world.membership[candidate.world.catalogue.starting_league(country,local).value].clubs;
     if(candidate.world.catalogue.scope.germany)candidate.cups=initial_domestic_cup_fields(candidate.world,Country::germany,germany,sources.german,game);
     if(candidate.world.catalogue.scope.england){auto fields=initial_domestic_cup_fields(candidate.world,Country::england,england,sources.english,game);candidate.cups.insert(candidate.cups.end(),fields.begin(),fields.end());}
+    // Source starts both fixed finals from the reigning champion and national
+    // cup holder. They have their own country owners despite sharing UI space.
+    const auto& titles=*candidate.world.initial_competitions;
+    for(auto country:{Country::germany,Country::england})if(candidate.world.catalogue.selectable(country)) {
+        const auto champion=std::find_if(titles.champions.begin(),titles.champions.end(),[&](const auto& row){return row.first==country;});
+        const auto holder=std::find_if(titles.domestic_holders.begin(),titles.domestic_holders.end(),[&](const auto& row){return row.first==country;});
+        if(champion==titles.champions.end()||holder==titles.domestic_holders.end()||champion->second==holder->second)
+            throw std::invalid_argument("world12: initial Super-Cup needs distinct verified title holders");
+        const auto cup=country==Country::germany?DomesticCup::german_supercup:DomesticCup::english_supercup;
+        candidate.cups.push_back(KnockoutStage::from_source(cup,country==Country::germany?sources.german:sources.english,
+            23,{{champion->second,holder->second}},candidate.world));
+    }
     candidate.game_seed=game.seed();std::vector<CupDrawNotice> notices;
     for(const auto& cup:candidate.cups)if(auto notice=cup_draw_notice(candidate.world,cup))notices.push_back(std::move(*notice));
     for(auto& manager:candidate.world.managers)for(const auto& cup:candidate.cups)if(cup.cup==DomesticCup::german_cup||cup.cup==DomesticCup::fa_cup){

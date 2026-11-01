@@ -92,6 +92,7 @@ bool matchday_needs_manager_desks(const GameState&, uint16_t calendar_entry,
 // CycleManagerOptions: option byte 0 of every human manager moves on to the next setting that
 // is enabled in the manager record (+0x218, a bit mask of settings 1-8).
 void cycle_manager_options(GameState& g);
+uint8_t match_competition_class(uint8_t descriptor_type);
 
 // MatchModeBits plus the flags added by BuildSideRecords: the "mode bits" passed to the
 // attendance. Bits 0-4 a crowd interest value (per competition type, rising towards the

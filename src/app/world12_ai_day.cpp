@@ -19,6 +19,8 @@ static AiDayOutcome play_league_day_impl(CareerSnapshot& state,AiDayOwner& owner
         throw std::invalid_argument("world12: stale or incomplete AI day request");
     if(!ticket.others.empty() || !ticket.cups.empty())
         throw std::invalid_argument("world12: non-league day requires its competition owner");
+    if(state.progress&&state.progress->phase!=ProgressPhase::scheduled_event)
+        throw std::invalid_argument("world12: league day cannot skip pending calendar services");
     // Reject the entire batch before scoring when a human owns any participant.
     // Unrelated managers remain valid; an AI fixture must never replace them.
     for(size_t i=0;i<ticket.leagues.size();++i) {
@@ -44,7 +46,11 @@ static AiDayOutcome play_league_day_impl(CareerSnapshot& state,AiDayOwner& owner
         scores.push_back(std::move(completed));outcome.leagues.push_back(std::move(round));
     }
     candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();
-    commit_league_day(candidate,ticket,scores);candidate.validate();
+    const auto clock=candidate.progress;candidate.progress.reset();
+    commit_league_day(candidate,ticket,scores);
+    if(clock){candidate.progress=clock;candidate.progress->previous_date=before.date;
+        candidate.progress->entry=DayEntry::after_event;candidate.progress->phase=ProgressPhase::daily_services;}
+    candidate.validate();
     // Hooks/frontends may have changed the actual session while scoring. Never
     // replace that external state or rewind its independently consumed RNG.
     if(state!=before || owner!=old_owner)

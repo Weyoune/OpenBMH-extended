@@ -64,6 +64,15 @@ int main()try {
         check(entrants.size()==120&&fields.national_field.size()==(scope.international?4u:0u),"European/national field dimensions differ");
         if(!scope.germany)for(auto id:entrants)check(state.world.clubs.at(id).country!=Country::germany,"disabled German clubs leaked into Europe");
         check(outcome.domestic_draws.size()==size_t(scope.germany+2*scope.england),"country-owned initial draw notices missing");
+        size_t supercups=0;
+        for(const auto& cup:state.cups)if(cup.cup==DomesticCup::german_supercup||cup.cup==DomesticCup::english_supercup) {
+            ++supercups;const auto country=cup_country(cup.cup);
+            const auto champion=std::find_if(fields.champions.begin(),fields.champions.end(),[&](const auto& row){return row.first==country;});
+            const auto holder=std::find_if(fields.domestic_holders.begin(),fields.domestic_holders.end(),[&](const auto& row){return row.first==country;});
+            check(cup.source_entry==23&&cup.next_fixtures()==std::vector<Fixture>{{champion->second,holder->second}}&&
+                  !cup_draw_notice(state.world,cup),"fixed country Super-Cup pairing missing or shown as a draw");
+        }
+        check(supercups==size_t(scope.germany+scope.england),"enabled country Super-Cup field missing");
         check(read_save(make_save(state))==state,"initial competition snapshot lost fields/history/calendar/RNG");
         const auto prepared=state;rejects([&]{owner_app::prepare_initial_competitions(state,owner,{71,1},schedule,{de,en},ref);},"initial competition setup replay accepted");check(state==prepared&&owner.revision==1,"replay mutated prepared season");
         auto broken=before;auto bad_ref=ref;bad_ref.memory.set_pointer(layout::Career_CompetitionPointersEnglish_ExecutableField5,layout::Career_CompetitionPointersEnglish_RuntimeField14);owner={71,0};

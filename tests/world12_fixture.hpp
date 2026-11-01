@@ -34,6 +34,8 @@ inline LeImage country_rules(bool english) {
     const uint8_t size=english?20:18;image.patch(layout::LeagueSizes,&size,1);
     const auto stage=[&](uint8_t entry,uint8_t type,uint8_t teams,uint8_t rounds,uint8_t flags,uint8_t next,uint8_t seeds){
         const auto at=cup_entry_address(entry);
+        const uint8_t previous=entry==28?0:entry==26?25:entry==27?26:255;
+        image.patch(at+0x15,&previous,1);
         image.patch(at+0x14,&flags,1);image.patch(at+0x16,&next,1);image.patch(at+0x18,&type,1);
         image.patch(at+0x1a,&teams,1);image.patch(at+0x1b,&rounds,1);image.patch(at+0x20,&seeds,1);
     };

@@ -4,6 +4,7 @@
 #include "app/world12_first_event.hpp"
 #include "app/world12_clock.hpp"
 #include "app/world12_national.hpp"
+#include "app/world12_ai_day.hpp"
 #include "formats/le.hpp"
 #include "ui/manager.hpp"
 #include "ui/world12_manager_selection.hpp"
@@ -38,6 +39,10 @@ public:
     ClockStepOutcome seek_saved_event(uint64_t expected_revision,const std::filesystem::path&,const ClockHooks&);
     NationalAppointmentOutcome prepare_national_day(uint64_t expected_revision);
     NationalAppointmentOutcome finish_uncoached_national_day(uint64_t expected_revision);
+    CupDayOutcome play_scheduled_domestic_cups(uint64_t expected_revision,
+        const std::vector<CupDayConditions>&,const bmh::world12::HumanRoundHooks&);
+    AiDayOutcome play_scheduled_leagues(uint64_t expected_revision,
+        const std::vector<AiDayLeagueConditions>&,const bmh::world12::HumanRoundHooks&);
 
     PendingOfferResult resolve_pending(const std::filesystem::path&,const ui::DeskRequest&,const PendingOfferHooks&);
     void open_mailbox(const ui::DeskRequest&);

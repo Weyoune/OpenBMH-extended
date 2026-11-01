@@ -972,6 +972,9 @@ void reset_match_played_flags(GameState& g) {
         if((slot&0xfff)!=0xfff)g.players.at(slot&0xfff).w364&=~0x1000u;
     }
 }
+uint8_t match_competition_class(uint8_t type) {
+    return type<24?kCompetitionClass[type]:255;
+}
 void kick_off(GameState& g, std::vector<MatchGroup>& groups, const MatchdayContext& ctx, WatcomRandom& rand,
               GameRandom& game, MinuteReport& report, bool select_sportschau, uint16_t club_threshold) {
     // LiveSceneVisible = 1 - CareerSession_DispatchLiveTactic_RuntimeField3, set by the caller of DayCompetitions2 right after the

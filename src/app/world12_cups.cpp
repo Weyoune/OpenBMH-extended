@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <stdexcept>
 #include <type_traits>
+#include <limits>
+#include <set>
 
 namespace bmh::app::world12 {
 using namespace bmh::world12;
@@ -40,6 +42,50 @@ DayPresentation commit_day_with_domestic_draws(CareerSnapshot& state,const DayTi
         completed.push_back(draw_after_cup_leg(candidate.world,*cup,score.scores,source,random));
     }
     auto notices=commit_day(candidate,ticket,leagues,completed);
+    notices.watcom_draws=random.calls();
     candidate.watcom_seed=random.seed();candidate.validate();state=std::move(candidate);return notices;
+}
+
+CupDayOutcome play_domestic_cup_day(CareerSnapshot& state,ManagerActionOwner& owner,
+    ManagerActionOwner expected,const DayTicket& ticket,const GameState& reference,
+    const CupSources& sources,const std::vector<CupDayConditions>& conditions,
+    HumanProjectionPolicy policy,const HumanRoundHooks& hooks) {
+    state.validate();
+    if(!owner.scope||owner.scope!=expected.scope||owner.revision!=expected.revision||
+       owner.revision==std::numeric_limits<uint64_t>::max())throw FormatError("world12: stale domestic match-day owner");
+    const auto scheduled=prepare_day(state);
+    if(!scheduled||*scheduled!=ticket||!ticket.leagues.empty()||ticket.cups.empty()||conditions.size()!=ticket.cups.size()||
+       (state.progress&&state.progress->phase!=ProgressPhase::scheduled_event))
+        throw FormatError("world12: incomplete or non-domestic-only match date");
+    for(const auto& other:ticket.others)if(!domestic_cups_on(other))
+        throw FormatError("world12: a shared/national appointment needs its separate owner");
+    std::set<ClubId> participants;
+    for(size_t i=0;i<ticket.cups.size();++i) {
+        const auto& plan=ticket.cups[i];const auto& input=conditions[i];
+        if(input.cup!=plan.cup||input.source_entry!=plan.source_entry||input.revision!=plan.revision||input.matches.size()!=plan.matches.size())
+            throw FormatError("world12: cup match conditions belong to another stage");
+        for(const auto& match:input.matches)if(match.date!=state.date)throw FormatError("world12: cup match conditions use another date");
+        for(const auto& match:plan.matches)for(auto club:{match.home,match.away})
+            if(!participants.insert(club).second)throw FormatError("world12: simultaneous cup fixtures repeat a participant");
+    }
+    const auto before=state;auto candidate=state;GameRandom game(state.game_seed);WatcomRandom random(state.watcom_seed);
+    CupDayOutcome out;std::vector<CupScores> scores;
+    for(size_t i=0;i<ticket.cups.size();++i) {
+        const auto& plan=ticket.cups[i];
+        const auto stage=std::find_if(candidate.cups.rbegin(),candidate.cups.rend(),[&](const auto& cup){return cup.cup==plan.cup;});
+        const auto& rules=cup_country(plan.cup)==Country::germany?sources.german:sources.english;
+        auto result=simulate_and_settle_domestic_cup_round(candidate,reference,*stage,rules,conditions[i].matches,policy,game,random,hooks);
+        scores.push_back({plan.cup,plan.source_entry,plan.revision,result.scores});out.cups.push_back(std::move(result));
+    }
+    candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();
+    const auto clock=candidate.progress;candidate.progress.reset();
+    out.presentation=commit_day_with_domestic_draws(candidate,ticket,{},scores,sources);
+    if(clock){candidate.progress=clock;candidate.progress->previous_date=before.date;
+        candidate.progress->entry=DayEntry::after_event;candidate.progress->phase=ProgressPhase::daily_services;}
+    candidate.validate();
+    if(state!=before||owner.scope!=expected.scope||owner.revision!=expected.revision)
+        throw FormatError("world12: domestic match-day state changed during calculation");
+    out.game_draws=game.calls();out.watcom_draws=random.calls()+out.presentation.watcom_draws;
+    state=std::move(candidate);++owner.revision;return out;
 }
 }
