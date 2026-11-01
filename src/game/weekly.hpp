@@ -91,6 +91,13 @@ struct TransferDecisionEvent {
 // performs the Source-ranked selection and ProjectTransferOfferList post-selection check.
 TransferOfferListView project_transfer_offer_list(const GameState& g, int list_entry);
 
+// One physical roster slot of the weekly injury/recovery pass. The explicit
+// foreign-squad policy replaces the original absolute 0x870 boundary only for
+// typed country-aware callers; the ordinary full pass keeps that boundary.
+void weekly_player_update(GameState&,size_t slot,bool foreign_squad,
+    GameRandom&,WatcomRandom&,MinuteReport&);
+void weekly_player_updates(GameState&,GameRandom&,WatcomRandom&,MinuteReport&);
+
 void weekly_processing(GameState& g, GameRandom& game, WatcomRandom& rand, MinuteReport& report,
                        TransferAllocatorContext allocator = TransferAllocatorContext::unsupported);
 

@@ -247,3 +247,27 @@ careers exactly match controller settlement plus the four manual-save draws.
 This stronger check found and fixed a dialog-release click-through into training.
 Classic desktop/preparation/file/pending-dialog suites pass. Original-derived
 screenshots, test saves and receipts remain in the private QA repository.
+
+
+## Weekly player and training phases
+
+[Player recovery/injuries and human training](WEEKLY_PLAYERS.md) now operate on
+the entire typed world through checked bounded workspaces. The ordinary Core
+weekly path shares the extracted per-slot routine and retains its behavior.
+Country policy and training round cursors use actual league context, including
+England's playable-versus-AI-fallback distinction. Returned messages retain raw
+Source text and globally qualified recipients. Career/RNG staging rejects late
+external changes and existing snapshot fields retain the resulting state.
+
+A 4,680-player synthetic test and ten actual-data full-Core comparisons cover
+injuries, recoveries, retirement, doctor effects, assistant lineup changes,
+training, complete tactical boards, messages and both random streams. Twenty-four
+complete pre-change/current Core weekly-and-training outputs are byteidentical.
+The final daily/weekly owner remains incomplete: manager incidents and settlement,
+market evolution and persistent news still need integration before the GUI may
+advance. No calendar/service shortcut or playable release is enabled here.
+
+Milestone validation: the application builds and all 29 targeted Linux regression
+checks pass. Representative typed weekly/training phase snapshots and the
+pre-change/current Core comparison receipts remain private. These phase fixtures
+precede desktop ownership and are not claimed as GUI-resumable played careers.

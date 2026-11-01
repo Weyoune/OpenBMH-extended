@@ -5,6 +5,9 @@
 #include "game/turn.hpp"
 #include "game/matchday_setup.hpp"
 #include "game/weekly.hpp"
+#include "game/week.hpp"
+#include "game/save.hpp"
+#include "game/world12/weekly_players.hpp"
 #include "game/pending_offer.hpp"
 #include <algorithm>
 #include "game/world12/codec.hpp"
@@ -22,7 +25,9 @@
 namespace {struct DrawBoundary {};}
 int main(int argc,char** argv)try {
     using namespace bmh;using namespace bmh::world12;namespace owner_app=bmh::app::world12;
-    if(argc!=4)throw std::runtime_error("usage: world12_initial_season_validate WORLD12.JSON German-reference FLTD.EXE");
+    if(argc!=4&&argc!=5)throw std::runtime_error("usage: world12_initial_season_validate WORLD12.JSON German-reference FLTD.EXE [proof-directory]");
+    const std::filesystem::path proof=argc==5?argv[4]:std::filesystem::path{};
+    if(!proof.empty())std::filesystem::create_directories(proof);
     const auto master=decode_world(read_file(argv[1]));const std::filesystem::path data=argv[2];const auto profile=load_data_profile(data);install_runtime_profile(profile);
     const auto german=load_le(data/"BMH.exe"),english=bmh::launch::translate_fltd(argv[3]);install_career_rules(german);install_fixture_tables(german);uint8_t sizes[kLeagueCount];for(size_t i=0;i<kLeagueCount;++i)sizes[i]=profile.leagues[i];set_league_sizes(sizes);
     const auto db=load_database(data/"M3D.MAN",profile.counts);auto native=startup_state(german,db,read_file(data/"M3.MEN"),read_file(data/"M3.DAT"));const auto reference=native;const auto texts=load_textd(data/"TEXTD.BLK");native.texts=&texts;
@@ -83,6 +88,54 @@ int main(int argc,char** argv)try {
     }
     if(read_save(make_save(state))!=state)throw std::runtime_error("initial market snapshot differs");
     std::cout<<initial_market.listings<<" initial market listings and shuffled fixtures, checkpoint/toggle/quotes/snapshot match Native; W="<<initial_market.watcom_draws<<'\n';
+    {
+        size_t passes=0;size_t injuries=0,recoveries=0,retirements=0;
+        std::vector<uint32_t> weekly_seeds{1u,91u,703u,1777u};
+        const int doctor=int16_t(uint16_t(native.manager_records[0x8ae])|uint16_t(native.manager_records[0x8af])<<8);
+        for(uint32_t seed=1;;++seed){WatcomRandom probe(seed);probe.range(0,6-doctor/0x113);if(!probe.range(0,0x25)){weekly_seeds.push_back(seed);break;}}
+        for(int mode:{1,3})for(uint32_t seed:weekly_seeds) {
+            auto classic=native;auto typed=state;typed.world.settings->mode=uint8_t(mode);
+            typed.game_seed=17;typed.watcom_seed=seed;classic.memory.set8(layout::GameMode,uint8_t(mode));
+            classic.mailbox.assign(kMailboxEntries*kMailboxEntry,0);
+            // Include a known final-week absence and a severe injury. They
+            // exercise recovery, physician odds, retirement and resulting mail.
+            for(size_t r:{0u,7u}) {
+                const auto player=classic.squad_slots[r]&0xfff;
+                classic.players[player].w35c=(classic.players[player].w35c&0x07ffffffu)|(5u<<27);
+                classic.players[player].w364=(classic.players[player].w364&0xffe0ffffu)|(uint32_t(r?30:1)<<16);
+                auto& typed_player=typed.world.players.at({uint32_t(player)}).attributes;
+                typed_player.w35c=classic.players[player].w35c;typed_player.w364=classic.players[player].w364;
+            }
+            GameRandom cg(17);WatcomRandom cw(seed);MinuteReport report;
+            weekly_player_updates(classic,cg,cw,report);if(report.unsupported)throw std::runtime_error(report.reason);
+            const auto result=update_weekly_players(typed,reference,texts);
+            injuries+=result.injured;recoveries+=result.recovered;retirements+=result.retired;
+            const auto compare=[&] {
+                if(typed.game_seed!=cg.seed()||typed.watcom_seed!=cw.seed())throw std::runtime_error("weekly/training RNG differs from full Core");
+                for(const auto& [id,p]:typed.world.players)if(p.attributes.w35c!=classic.players.at(id.value).w35c||p.attributes.w364!=classic.players.at(id.value).w364||p.attributes.w368!=classic.players.at(id.value).w368||p.cards!=classic.player_cards.at(id.value))throw std::runtime_error("weekly/training player differs from full Core");
+                for(size_t team=0;team<164;++team){const auto id=identities.at(classic.club_ids.at(team));const auto& roster=typed.world.clubs.at(id).roster;
+                    for(size_t r=0;r<24;++r){const auto raw=classic.squad_slots.at(team*24+r);const auto flags=uint16_t(((raw&0x8000)?1:0)|((raw&0x4000)?2:0)|((raw&0x2000)?4:0)|((raw&0x1000)?8:0));
+                        if((roster[r].empty()?0xfffu:roster[r].player.value)!=(raw&0xfff)||roster[r].flags!=flags)throw std::runtime_error("weekly canonical roster differs from full Core");}
+                }
+                if(typed.world.managers[0].tactics!=manager_full_tactics_from_legacy(classic,0,players))throw std::runtime_error("weekly/training full board differs from Core");
+                if(read_save(make_save(typed))!=typed)throw std::runtime_error("weekly/training snapshot differs");
+            };
+            compare();
+            if(!proof.empty()&&mode==3&&seed==91){const auto path=proof/"weekly-players.FBM";write_savegame(path,make_save(typed));if(read_save(load_savegame(path))!=typed)throw std::runtime_error("weekly player disk snapshot differs");}
+            for(size_t row=0;row<result.notices.size();++row){const auto at=row*kMailboxEntry;const auto& note=result.notices[row];
+                if(classic.mailbox.at(at)!=note.recipients||note.date!=typed.date||!std::equal(note.text.begin(),note.text.end(),classic.mailbox.begin()+ptrdiff_t(at+10)))throw std::runtime_error("weekly notice differs from full Core");
+            }
+            if(result.notices.size()<kMailboxEntries&&classic.mailbox.at(result.notices.size()*kMailboxEntry))throw std::runtime_error("typed weekly lost a Core notice");
+            familiarity_decay(classic,cg,cw);train_squad(classic,0,cg,cw);
+            const auto trained=train_manager_squads(typed,reference);
+            if(trained.managers!=1)throw std::runtime_error("weekly training skipped human manager");
+            compare();
+            if(!proof.empty()&&mode==3&&seed==91){const auto path=proof/"weekly-training.FBM";write_savegame(path,make_save(typed));if(read_save(load_savegame(path))!=typed)throw std::runtime_error("weekly training disk snapshot differs");}
+            ++passes;
+        }
+        if(!injuries||!recoveries||!retirements)throw std::runtime_error("weekly oracle did not exercise injury, recovery and retirement");
+        std::cout<<passes<<" full-Core weekly-player/training comparisons: "<<injuries<<" injuries, "<<recoveries<<" recoveries, "<<retirements<<" retirements; full boards/rosters/news/RNG/snapshots match\n";
+    }
     owner_app::initialize_desktops(state,reference);
     size_t events=0,offers=0,loans=0,lures=0,settlements=0,moved_sales=0,moved_loans=0;
     for(uint32_t seed=1;seed<30000&&(offers<16||!loans||!lures);++seed){

@@ -1219,6 +1219,7 @@ add_library(bmhworld12 STATIC
     src/game/world12/european.cpp
     src/game/world12/initialization.cpp
     src/game/world12/prediction.cpp
+    src/game/world12/weekly_players.cpp
     src/cli/json.cpp)
 target_include_directories(bmhworld12 PUBLIC src)
 target_link_libraries(bmhworld12 PUBLIC bmhcore)
@@ -1232,6 +1233,9 @@ if(TARGET openbmh_play)
     target_link_libraries(openbmh_play PRIVATE bmhworld12_session)
 endif()
 
+add_executable(world12_weekly_players_tests tests/world12_weekly_players_tests.cpp)
+target_link_libraries(world12_weekly_players_tests PRIVATE bmhworld12)
+add_test(NAME world12_weekly_players_tests COMMAND world12_weekly_players_tests)
 add_executable(world12_session_tests tests/world12_session_tests.cpp)
 target_link_libraries(world12_session_tests PRIVATE bmhworld12_session)
 add_test(NAME world12_session_tests COMMAND world12_session_tests)

@@ -2757,6 +2757,67 @@ void weekly_statistics(GameState& g, int manager) {
     rec.set32(0x578 + size_t(week) * 4, uint32_t(rec.i32(0x314)));
 }
 
+// The caller owns the physical-slot iteration. Recovery can reorder a human
+// lineup, so later slots must observe that changed roster rather than a copy.
+void weekly_player_update(GameState& g, size_t slot, bool foreign_squad,
+                          GameRandom& game, WatcomRandom& rand, MinuteReport& report) {
+    if(report.unsupported)return;
+    const bool quiet = g.memory.u8(::bmh::layout::GameMode) == 1;
+    const int player = g.squad_slots.at(slot) & 0x0FFF;
+    if (player == 0x0FFF) return;
+    Player& p = g.players.at(size_t(player));
+    const uint32_t out = p.w35c >> 27;
+    const uint32_t w364 = p.w364;
+    int injury = int((w364 >> 16) & 0x1F);
+    if (!quiet && game.range(0, 0xb4 - g.level * 2) == 0 && injury == 0 && out == 0) {
+        if (foreign_squad && rand.range(0, 1) == 0) return;
+        int type = rand.range(0, 0x1e);
+        const int team = slot_team(int(slot));
+        const int manager = g.manager_of(team);
+        type = injure_player(g, int(slot), type, false, manager, rand);  // (unless MatchEventsDisabled, off)
+        if (manager >= 0) {
+            // "Ihr Spieler X faellt ... aus. Der Grund: <injury>."
+            post_composed(g, manager, message_text(g, ::bmh::layout::Weekly_WeeklyProcessing_TextPointer2) + g.player_name(player) +
+                                          message_text(g, type < 6 ? ::bmh::layout::Weekly_WeeklyProcessing_TextPointer3 : ::bmh::layout::Weekly_WeeklyProcessing_TextPointer4) + message_text(g, ::bmh::layout::Weekly_WeeklyProcessing_TextPointer5) +
+                                          message_text(g, ::bmh::layout::Weekly_WeeklyProcessing_TextPointer + uint32_t(type) * 4) + ".");
+        }
+        return;
+    }
+    if (out == 0 || out == 0x1F) return;
+    if (injury > 0x18 && rand.range(0, 0x25) == 0) {
+        // the career is over
+        p.w35c = (p.w35c & 0x07FFFFFFu) | 0xF8000000u;
+        p.w364 |= 0x1Fu << 16;
+        if (const int m = g.manager_of(slot_team(int(slot))); m >= 0)
+            post_composed(g, m, message_text(g, ::bmh::layout::Weekly_WeeklyProcessing_TextPointer2) + g.player_name(player) + message_text(g, ::bmh::layout::Weekly_WeeklyProcessing_TextPointer6) + ".");
+        return;
+    }
+    const bool last = injury == 1;
+    const int team = slot_team(int(slot));
+    const int manager = g.manager_of(team);
+    int odds = 4;
+    if (manager >= 0) odds = 6 - record(g, manager).i16(0x8ae) / 0x113;
+    if (injury != 0 && injury != 0x1F) {
+        if (injury < 4 && rand.range(0, int16_t(odds)) == 0) injury = 1;
+        p.w364 = (w364 & 0xFFE0FFFFu) | uint32_t(injury - 1) << 16;
+    }
+    if (last || (rand.range(0, int16_t(odds)) == 0 && injury == 0)) {
+        p.w35c &= 0x07FFFFFFu;
+        // Int2(team, 100); human teams: the assistant's line-up (option byte 0)
+        try {
+            auto_lineup(g, team, 100);
+        } catch (const std::exception& ex) {
+            report.fail(std::string("line-up after an injury: ") + ex.what());
+            return;
+        }
+    }
+}
+
+void weekly_player_updates(GameState& g, GameRandom& game, WatcomRandom& rand, MinuteReport& report) {
+    for(size_t slot=0;slot<size_t(kPoolSlots)&&!report.unsupported;++slot)
+        weekly_player_update(g,slot,slot>=0x870,game,rand,report);
+}
+
 void weekly_processing(GameState& g, GameRandom& game, WatcomRandom& rand, MinuteReport& report,
                        TransferAllocatorContext allocator) {
     const int managers = int(g.manager_teams.size());
@@ -2792,59 +2853,10 @@ void weekly_processing(GameState& g, GameRandom& game, WatcomRandom& rand, Minut
         } while (rand.range(0, 2) == 0);
     }
     tr("bids");
-    // every player: injuries in training, players out coming back
-    const bool quiet = g.memory.u8(::bmh::layout::GameMode) == 1;
-    for (size_t slot = 0; slot < kPoolSlots; slot++) {
-        const int player = g.squad_slots.at(slot) & 0x0FFF;
-        if (player == 0x0FFF) continue;
-        Player& p = g.players.at(size_t(player));
-        const uint32_t out = p.w35c >> 27;
-        const uint32_t w364 = p.w364;
-        int injury = int((w364 >> 16) & 0x1F);
-        if (!quiet && game.range(0, 0xb4 - g.level * 2) == 0 && injury == 0 && out == 0) {
-            if (slot >= 0x870 && rand.range(0, 1) == 0) continue;
-            int type = rand.range(0, 0x1e);
-            const int team = slot_team(int(slot));
-            const int manager = g.manager_of(team);
-            type = injure_player(g, int(slot), type, false, manager, rand);  // (unless MatchEventsDisabled, off)
-            if (manager >= 0) {
-                // "Ihr Spieler X faellt ... aus. Der Grund: <injury>."
-                post_composed(g, manager, message_text(g, ::bmh::layout::Weekly_WeeklyProcessing_TextPointer2) + g.player_name(player) +
-                                              message_text(g, type < 6 ? ::bmh::layout::Weekly_WeeklyProcessing_TextPointer3 : ::bmh::layout::Weekly_WeeklyProcessing_TextPointer4) + message_text(g, ::bmh::layout::Weekly_WeeklyProcessing_TextPointer5) +
-                                              message_text(g, ::bmh::layout::Weekly_WeeklyProcessing_TextPointer + uint32_t(type) * 4) + ".");
-            }
-            continue;
-        }
-        if (out == 0 || out == 0x1F) continue;
-        if (injury > 0x18 && rand.range(0, 0x25) == 0) {
-            // the career is over
-            p.w35c = (p.w35c & 0x07FFFFFFu) | 0xF8000000u;
-            p.w364 |= 0x1Fu << 16;
-            if (const int m = g.manager_of(slot_team(int(slot))); m >= 0)
-                post_composed(g, m, message_text(g, ::bmh::layout::Weekly_WeeklyProcessing_TextPointer2) + g.player_name(player) + message_text(g, ::bmh::layout::Weekly_WeeklyProcessing_TextPointer6) + ".");
-            continue;
-        }
-        const bool last = injury == 1;
-        const int team = slot_team(int(slot));
-        const int manager = g.manager_of(team);
-        int odds = 4;
-        if (manager >= 0) odds = 6 - record(g, manager).i16(0x8ae) / 0x113;
-        if (injury != 0 && injury != 0x1F) {
-            if (injury < 4 && rand.range(0, int16_t(odds)) == 0) injury = 1;
-            p.w364 = (w364 & 0xFFE0FFFFu) | uint32_t(injury - 1) << 16;
-        }
-        if (last || (rand.range(0, int16_t(odds)) == 0 && injury == 0)) {
-            p.w35c &= 0x07FFFFFFu;
-            // Int2(team, 100); human teams: the assistant's line-up (option byte 0)
-            try {
-                auto_lineup(g, team, 100);
-            } catch (const std::exception& ex) {
-                report.fail(std::string("line-up after an injury: ") + ex.what());
-                return;
-            }
-        }
-    }
+    weekly_player_updates(g,game,rand,report);
+    if(report.unsupported)return;
     tr("injuries and line-ups");
+    const bool quiet = g.memory.u8(::bmh::layout::GameMode) == 1;
     // per human manager
     for (int m = 0; m < managers; m++) {
         Record rec = record(g, m);

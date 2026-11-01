@@ -8,6 +8,7 @@
 #include "game/schedule.hpp"
 
 #include <algorithm>
+#include <stdexcept>
 
 namespace bmh {
 
@@ -130,7 +131,12 @@ void train_squad(GameState& g, int manager, GameRandom& game, WatcomRandom& rand
                                     kIntensityValue[int8_t(g.manager_records.at(rec + 0xc9 + a))]);
     const int team = int16_t(rd16w(g.manager_records, rec + 0x290));
     const SquadRange range = squad_range(team);
-    const int league = team_league(team);
+    // Two countries may share a division class while being on different rounds.
+    // A bounded workspace's team number is not a league/calendar identity.
+    const int round = g.projected_match_clubs.empty()
+        ? g.league_rounds.at(size_t(team_league(team)))
+        : g.projected_match_clubs.at(size_t(team)).round_cursor;
+    if(round<0||round>255)throw std::invalid_argument("training: missing projected league round");
     const int16_t quality = int16_t(rd16w(g.manager_records, rec + 0x8ac));
     uint8_t max_value[9] = {99, 99, 3, 3, 3, 3, 3, 3, 3};  // WeekRuntimeField5
     for (size_t s = range.first; s < range.first + range.count; s++) {
@@ -180,7 +186,7 @@ void train_squad(GameState& g, int manager, GameRandom& game, WatcomRandom& rand
             if (focus == a) reg |= 0x10000;
             if (sign == 1) {
                 edi = 3;
-                if (g.league_rounds.at(league) / 3 > games) {
+                if (round / 3 > games) {
                     reg = 0;  // no match practice yet: no progress
                 } else {
                     edi = (w364 >> 21) & 0x1F;                   // age - 16
