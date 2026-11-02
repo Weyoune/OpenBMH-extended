@@ -51,9 +51,9 @@ no randomness; failures cannot partially publish membership or player changes.
 A non-protected amateur exchange marks `requires_amateur_roster_renewal`.
 Original's club/amateur swap retains the league slot's squad rather than moving
 a nonexistent amateur squad into it. Typed worlds currently forbid a roster on
-a non-league club. Consequently this module deliberately exposes no World or
-Session application API: copying membership alone would break squad ownership
-and validation.
+a non-league club. Copying membership alone would break squad ownership and validation. The
+unpublished membership stage described below now owns that lineage; there is
+still no Session season-publication API.
 
 Full annual publication additionally needs settled transfer obligations,
 licence evaluation, roster renewal and loan/statistics lineage, awards and annual
@@ -62,3 +62,56 @@ calendar rebuilding, seasonal resets and the closing/new desk owners. They must
 be staged and committed together with the two random streams and session
 revision. Plan tests establish ordering and rejection behavior; they establish
 neither a completed season transition nor a playable Beta.
+
+## Saved decision and membership stages
+
+`evaluate_annual_promotion_decisions` now evaluates real Source licence finances
+from the canonical account, deposit, fund/share holdings, remaining loans,
+creditworthiness, existing sanction and transfer balance. It retains Source's
+human-manager eligibility marker across group exchanges. AI withdrawals use the
+same chance draw and rejection sampling over actual draw positions as Original;
+newcomers use the shared named-club/duplicate rejection kernel. Both random
+streams remain staged in an immutable input-bound receipt.
+
+The Source human withdrawal loop can exceed the nominal quota when more human
+clubs lose their licences. Those extra human departures are retained. Source's
+AI branch decrements a zero remaining quota without a guard; this unsupported
+negative-count case is rejected explicitly. No extra balanced exchange is
+invented for it.
+
+World schema36 adds optional canonical physical amateur slot order for Germany
+and England. Fresh player initialization captures the initial master order,
+manager placement updates an affected amateur slot, and annual membership
+staging replaces each sampled newcomer with the relegated identity in that
+same physical slot. Disabled country pools are empty. Older active careers keep
+this order unknown and cannot infer it by sorting current stable IDs.
+
+Schema36 also adds the optional eighteenth promotion contract flag byte in
+`ManagerSeasonServices`. Source marks seventeen ordinary contract rows and the
+separate manager tail byte; adjacent designated-player references remain
+untouched. Initial services capture the Source byte. Older unknown values remain
+unknown and reject a promoted-human membership stage requiring that byte.
+
+`stage_annual_membership` validates the full decision receipt and a known settled
+transfer market, then returns an **unpublished** canonical World. At the amateur
+edge, the newcomer inherits the actual league-slot roster, the outgoing club
+becomes rosterless, and loan parties retain their Source league-slot lineage.
+Player identities, historical player/club statistics and stored opponent
+identities remain stable. Discipline counters retain league-slot ownership
+until the later seasonal reset. Licence and promoted-manager mail follows Source
+group order; promoted contracts retain the exact flag effects.
+
+This stage has no Session commit API. It does not execute annual accounts,
+academy donor selection, awards, final qualification, player ageing/retirement,
+seasonal resets, calendar renewal or closing/new desks. The complete outer annual
+transaction must own those prerequisites before publishing the staged World,
+new seeds and saved next-season calendar together. Repeated synthetic stage tests
+verify physical pool persistence and lineage; they are not played seasons.
+
+Player-facing English management exposes four divisions while the catalogue
+retains its fifth internal group. Annual planning still follows that internal
+catalogue; it does not decide the unresolved Source four-division human boundary
+by silently exposing a fifth division. Membership staging rejects a manager
+newly entering a hidden division until the full annual player-ladder owner
+settles that policy. Existing/synthetic hidden-division managers remain valid
+for read-only world/save inspection. No internal membership or roster is dropped.

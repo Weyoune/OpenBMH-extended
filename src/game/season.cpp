@@ -550,6 +550,17 @@ void season_event(GameState& g, int m, GameRandom& game, WatcomRandom& rand, Min
 
 }  // namespace
 
+void mark_promoted_manager(GameState& g,int manager) {
+    for(size_t row=0;row<0x12;++row)rec8(g,manager,0xa3a+row*0xc)|=0x80;
+    post_text(g,manager,text_id(layout::Season_Promotion_TextPointer));
+}
+
+SeasonLicenceAccount season_licence_account(const GameState& g,int manager) {
+    return {g.manager_records.at(size_t(manager)*0xb0c+0x26f),
+        g.manager_records.at(size_t(manager)*0xb0c+0x220),assets(g,manager,0xf),
+        assets(g,manager,0x10),rec32(g,manager,0x330)};
+}
+
 int32_t season_profit_tax(int32_t profit) {
     // GameEndTaxAnimationScreen/SeasonProfitTax: six progressive bands. The original rounds the
     // annual result to 100 EU before this point, divides each band by ten first,
@@ -1342,9 +1353,7 @@ void licence_withdrawals(GameState& g, int league, std::vector<uint16_t>& down, 
         if (team < first || team >= first + kLeagueSizes[league] || ranks[team - first] <= 5) continue;
         static const uint8_t kDownPlaces[kLeagueCount] = {3, 4, 2, 2, 3, 0, 0, 0, 0};  // CareerSession_InstallLeagueSizes_RuntimeField2
         if (kDownPlaces[league] == 0) continue;
-        const uint8_t cut = rec8(g, int(m), 0x220);
-        const int32_t total = int32_t(rec8(g, int(m), 0x26f)) * 80000 + (assets(g, int(m), 0xf) - assets(g, int(m), 0x10));
-        const bool broke = total < -6000000 || ((cut >> 5) == 2 && int32_t(cut & 0x1f) * 100000 <= rec32(g, int(m), 0x330));
+        const bool broke = season_licence_broke(season_licence_account(g,int(m)));
         if (broke && rec8(g, int(m), 0x210) == 0x1e) {
             rec8(g, int(m), 0x210) = 0;
             post_text(g, int(m), text_id(::bmh::layout::Season_LicenceWithdrawals_TextPointer));
@@ -1352,14 +1361,11 @@ void licence_withdrawals(GameState& g, int league, std::vector<uint16_t>& down, 
             if (places != 0) places--;
         }
     }
-    if (g.manager_teams.size() < 6 && league < 2 && game.range(0, 12 - 7 * league) == 0) {
-        int t = 0, r = 0;
-        do {
-            do {
-                r = rand.range(0, kLeagueSizes[league] - 1);
-                t = first + r;
-            } while (g.manager_of(t) >= 0);
-        } while (ranks[r] < 10 || ranks[r] > 15);
+    const auto selected=select_ai_licence_withdrawal(league,g.manager_teams.size(),
+        std::vector<uint8_t>(ranks,ranks+kLeagueSizes[league]),
+        [&](size_t position){return g.manager_of(first+int(position))>=0;},game,rand);
+    if(selected) {
+        const auto t=first+int(*selected);
         down.push_back(uint16_t(t));
         post_composed(g, -1, message_text(g, ::bmh::layout::Season_LicenceWithdrawals_TextPointer2) + g.club_name(t) + message_text(g, ::bmh::layout::Season_LicenceWithdrawals_TextPointer3));
         places--;
@@ -1439,16 +1445,10 @@ void promotion(GameState& g, GameRandom& game, WatcomRandom& rand, MinuteReport&
             count = candidates.count;
             up = std::move(candidates.clubs);
         } else {
-            // into the fourth division come amateur clubs (ids 138-167) at random
-            for (size_t i = 0; i < count; i++) {
-                uint16_t t;
-                do t = uint16_t(rand.range(newcomer_first, newcomer_first + newcomer_count - 1));
-                // (never a club without a name: the English range has gaps; German draws are
-                // unchanged, all thirty amateur clubs have names)
-                while (std::find(up.begin(), up.end(), t) != up.end() ||
-                       !club_has_name(g.club_name(t)));
-                up.push_back(t);
-            }
+            std::vector<uint16_t> pool;
+            for(int n=0;n<newcomer_count;++n)pool.push_back(uint16_t(newcomer_first+n));
+            up=draw_season_newcomers(count,std::move(pool),
+                [&](uint16_t club){return club_has_name(g.club_name(club));},rand);
         }
         static const char* kScreen[4] = {"promotion and relegation of the first division (SeasonPromotionScreen)",
                                          "promotion and relegation of the second division (SeasonPromotionScreen)",
@@ -1468,8 +1468,7 @@ void promotion(GameState& g, GameRandom& game, WatcomRandom& rand, MinuteReport&
             const int m = g.manager_of(up[i]);
             if (m >= 0) {
                 // a promoted human club: its advertising contracts are marked, and a message
-                for (size_t k = 0; k < 0x12; k++) rec8(g, m, 0xa3a + k * 0xc) |= 0x80;
-                post_text(g, m, text_id(::bmh::layout::Season_Promotion_TextPointer));
+                mark_promoted_manager(g,m);
             }
             change_places(g, up[i], down[i]);
         }

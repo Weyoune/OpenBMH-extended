@@ -100,8 +100,8 @@ void rejection_tests(const bmh::GameState& base) {
     state.world.managers={{3,"Human",last,state.world.clubs.at(last).league,3}};const auto human=state;
     draws=0;bmh::draw_hook=count_draw;rejects([&]{run(ticket,conditions);},"human participant simulated as AI");bmh::draw_hook=nullptr;
     check(draws==0&&state==human&&owner==initial_owner,"human preflight did not block entire day before scoring");
-    state=before;state.calendar->schedule.others.push_back({20,CalendarDomain::shared,0x40});ticket=*prepare_day(state);const auto shared=state;
-    rejects([&]{run(ticket,conditions);},"shared competition day silently advanced");check(state==shared,"blocked competition mutated state");
+    state=before;state.calendar->schedule.others.push_back({20,CalendarDomain::shared,0x40});const auto shared=state;
+    rejects([&]{ticket=*prepare_day(state);run(ticket,conditions);},"shared competition day silently advanced");check(state==shared,"blocked competition mutated state");
     state=before;ticket=*prepare_day(state);actual_state=&state;actual_owner=&owner;bmh::draw_hook=change_state;
     rejects([&]{run(ticket,conditions);},"externally changed career overwritten");bmh::draw_hook=nullptr;
     auto external=before;++external.world.clubs.begin()->second.morale;

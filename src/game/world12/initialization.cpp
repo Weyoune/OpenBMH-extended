@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "game/world12/initialization.hpp"
+#include "game/world12/season_transition.hpp"
 #include "game/career.hpp"
 #include "game/season.hpp"
 #include "game/week.hpp"
@@ -75,6 +76,11 @@ PlayerInitializationOutcome initialize_career_players(World& world,const PlayerI
     }
     if(seen.size()!=world.players.size())throw std::invalid_argument("world12: initial plan omits world players");
     const auto before=world;auto candidate=world;auto staged_game=game;auto staged_random=random;
+    if(!candidate.amateur_slots) {
+        candidate.amateur_slots.emplace();
+        if(candidate.catalogue.scope.germany)(*candidate.amateur_slots)[0]=initial_annual_amateur_pool(world,Country::germany).slots;
+        if(candidate.catalogue.scope.england)(*candidate.amateur_slots)[1]=initial_annual_amateur_pool(world,Country::england).slots;
+    }
     const auto g_seed=game.seed();const auto w_seed=random.seed();const auto g_calls=game.calls(),w_calls=random.calls();
     GameState local;local.players.resize(1);
     const auto generate=[&](PlayerId id,int level){auto& player=candidate.players.at(id);local.players[0]=player.attributes;

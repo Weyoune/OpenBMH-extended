@@ -41,7 +41,7 @@ ManagerCareerState manager_career_state_from_legacy(const GameState& state,uint8
     const auto youth=layout::EnvironmentYouthTeams+uint32_t(seat)*0x24;
     for(size_t i=0;i<3;++i)result.environment.youth[i]={state.memory.u8(youth+uint32_t(i)),state.memory.u8(youth+3+uint32_t(i)),state.memory.u8(youth+6+uint32_t(i))};
     for(size_t i=0;i<6;++i)result.environment.monthly[i]=std::bit_cast<int32_t>(state.memory.u32(layout::Spending+uint32_t(seat)*0x24+uint32_t(i)*4));
-    if(season_services){auto& services=result.season_services.emplace();services.tickets_sold=uint16_t(state.manager_records.at(at+0x2ac)|uint16_t(state.manager_records.at(at+0x2ad))<<8);
+    if(season_services){auto& services=result.season_services.emplace();if(!previous||!previous->season_services||previous->season_services->promotion_tail_flags)services.promotion_tail_flags=state.manager_records.at(at+0xb06);services.tickets_sold=uint16_t(state.manager_records.at(at+0x2ac)|uint16_t(state.manager_records.at(at+0x2ad))<<8);
         services.ticket_income=word32(state.manager_records,at+0x754);services.total_ticket_income=word32(state.manager_records,at+0x868);
         for(size_t i=0;i<30;++i)copy(0x8cc+i*12,services.advertising_offers[i]);
         for(size_t i=0;i<17;++i)copy(0xa34+i*12,services.advertising_contracts[i]);
@@ -78,7 +78,7 @@ void install_manager_career_state(GameState& state,uint8_t seat,const ManagerCar
     if(!state.memory.has(youth+0x23))throw std::invalid_argument("world12: incomplete manager environment storage");
     for(size_t i=0;i<3;++i){const auto& value=input.environment.youth[i];state.memory.set8(youth+uint32_t(i),value.strength);state.memory.set8(youth+3+uint32_t(i),value.position);state.memory.set8(youth+6+uint32_t(i),value.league);}
     for(size_t i=0;i<6;++i)state.memory.set32(layout::Spending+uint32_t(seat)*0x24+uint32_t(i)*4,uint32_t(input.environment.monthly[i]));
-    if(input.season_services){const auto& services=*input.season_services;state.manager_records.at(at+0x2ac)=uint8_t(services.tickets_sold);state.manager_records.at(at+0x2ad)=uint8_t(services.tickets_sold>>8);
+    if(input.season_services){const auto& services=*input.season_services;if(services.promotion_tail_flags)state.manager_records.at(at+0xb06)=*services.promotion_tail_flags;state.manager_records.at(at+0x2ac)=uint8_t(services.tickets_sold);state.manager_records.at(at+0x2ad)=uint8_t(services.tickets_sold>>8);
         put32(state.manager_records,at+0x754,services.ticket_income);put32(state.manager_records,at+0x868,services.total_ticket_income);
         for(size_t i=0;i<30;++i)copy(0x8cc+i*12,services.advertising_offers[i]);
         const bool takers=(uint16_t(state.manager_records.at(at+0xb0a))|uint16_t(state.manager_records.at(at+0xb0b))<<8)==0x3253;
@@ -123,7 +123,8 @@ PlayerInitializationOutcome add_initial_manager(World& world,const InitialManage
         auto& destination=candidate.membership[next.value].clubs;
         if(old==next)std::iter_swap(std::find(destination.begin(),destination.end(),other),std::find(destination.begin(),destination.end(),choice.club));
         else if(old.valid()){auto& previous=candidate.membership[old.value].clubs;*std::find(previous.begin(),previous.end(),choice.club)=other;*std::find(destination.begin(),destination.end(),other)=choice.club;}
-        else {club.roster=donor.roster;donor.roster={};*std::find(destination.begin(),destination.end(),other)=choice.club;}
+        else {club.roster=donor.roster;donor.roster={};*std::find(destination.begin(),destination.end(),other)=choice.club;
+            if(candidate.amateur_slots){auto& slots=(*candidate.amateur_slots)[country==Country::germany?0:1];const auto slot=std::find(slots.begin(),slots.end(),choice.club);if(slot==slots.end())throw std::invalid_argument("world12: initial manager lost amateur slot lineage");*slot=other;}}
         club.league=next;donor.league=old;};
     const auto first_league=candidate.catalogue.starting_league(country,0);auto& first=candidate.membership[first_league.value].clubs;
     size_t place=(settings.duration<=1?1:9)+choice.seat;

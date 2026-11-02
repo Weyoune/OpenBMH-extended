@@ -14,6 +14,16 @@ namespace {
 using namespace bmh;using namespace bmh::world12;namespace owner_app=bmh::app::world12;
 void check(bool value,const char* message){if(!value)throw std::runtime_error(message);}
 template<class Function>void rejects(Function f,const char* message){bool bad=false;try{f();}catch(const std::exception&){bad=true;}check(bad,message);}
+// Preserve the boundary preference under test while omitting unrelated fields
+// that no version26/28 writer could have emitted.
+void omit_later_records(cli::Json& root) {
+    root.object()->erase("amateur_slots");root.object()->erase("european_campaigns");
+    for(auto& manager:std::get<cli::Json::Array>(root.object()->at("managers").value)) {
+        auto* career=manager.object()->at("career").object();
+        for(const char* name:{"cup_titles","strengths_display_word","pairings_display_byte","table_display_word","other_games_view"})career->erase(name);
+        const auto services=career->find("season_services");if(services!=career->end()&&services->second.object())services->second.object()->erase("promotion_tail_flags");
+    }
+}
 World fresh() {
     auto w=bmh::test::world12::complete_world();uint32_t player=1000000;
     for(auto& [id,c]:w.clubs){for(size_t r=0;r<20;++r){if(r>=11){PlayerRecord p;p.id={player++};p.attributes={"Reserve",55u|(65u<<7)|(75u<<14),uint32_t(c.country)<<27,1};w.players[p.id]=p;c.roster[r]={p.id,uint16_t(r<17?2:0)};}
@@ -89,7 +99,7 @@ int main()try {
         check(decode_world(encode_world(focused.world))==focused.world,"nonzero camp focus failed current codec/projection roundtrip");
         auto invalid=focused.world;(*invalid.managers[0].career->camp_focus)[0]=16;
         rejects([&]{encode_world(invalid);},"invalid camp focus byte accepted");
-        const auto bytes=encode_world(focused.world);auto old=cli::parse_json(std::string(bytes.begin(),bytes.end()));old.object()->at("version")=26;
+        const auto bytes=encode_world(focused.world);auto old=cli::parse_json(std::string(bytes.begin(),bytes.end()));old.object()->at("version")=26;omit_later_records(old);
         for(auto& manager:std::get<cli::Json::Array>(old.object()->at("managers").value)){auto* career=manager.object()->at("career").object();career->erase("stadium_curve_flags");}
         auto text=cli::dump_json(old);rejects([&]{decode_world(Bytes(text.begin(),text.end()));},"schema26 silently discarded saved camp focus");
         for(auto& manager:std::get<cli::Json::Array>(old.object()->at("managers").value))manager.object()->at("career").object()->erase("camp_focus");
@@ -104,7 +114,7 @@ int main()try {
         check(p.state.memory.u8(layout::Flags+1)==0x9f&&uint16_t(p.state.manager_records[0x8b4]|uint16_t(p.state.manager_records[0x8b5])<<8)==uint16_t(int16_t(-120)),"stadium curve flags/discount input lost canonical seat or signed word");
         p.state.memory.set8(layout::Flags+1,0x25);p.state.manager_records[0x8b4]=0x40;p.state.manager_records[0x8b5]=6;p.commit_match_state(extended.world);
         check(extended.world.managers[0].career->stadium_curve_flags==0x25&&extended.world.managers[0].match_state->staff_ratings[5]==1600&&decode_world(encode_world(extended.world))==extended.world,"stadium preferences/discount failed capture and codec roundtrip");
-        const auto bytes=encode_world(extended.world);auto old=cli::parse_json(std::string(bytes.begin(),bytes.end()));old.object()->at("version")=28;auto text=cli::dump_json(old);
+        const auto bytes=encode_world(extended.world);auto old=cli::parse_json(std::string(bytes.begin(),bytes.end()));old.object()->at("version")=28;omit_later_records(old);auto text=cli::dump_json(old);
         rejects([&]{decode_world(Bytes(text.begin(),text.end()));},"schema28 silently discarded known stadium preferences");
         for(auto& manager:std::get<cli::Json::Array>(old.object()->at("managers").value)){auto* c=manager.object()->at("career").object();c->erase("stadium_curve_flags");}
         text=cli::dump_json(old);extended.world=decode_world(Bytes(text.begin(),text.end()));

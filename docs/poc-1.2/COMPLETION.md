@@ -16,5 +16,7 @@ No gate is complete merely because its data model or a bounded Core test passes.
 
 The country-bound [annual promotion planner](ANNUAL_PROMOTION.md) now shares
 Original ordering kernels and validates completed result tables. It requires
-settled licence/play-off/newcomer inputs; annual roster renewal and transactional
-season publication remain open. This planning foundation does not close a gate.
+completed play-off inputs. Source licence/newcomer decisions and unpublished
+amateur membership/loan/statistics stages are implemented with schema36 pool/tail
+ownership. Annual accounts/academy/player renewal and transactional season
+publication remain open. These stages do not close a completion gate.

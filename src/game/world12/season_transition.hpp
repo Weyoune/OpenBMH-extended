@@ -55,3 +55,56 @@ AnnualPromotionPlan plan_annual_promotions(const World&,const SeasonResults&,
 void validate_annual_promotion_plan(const World&,const SeasonResults&,
     const std::array<uint8_t,kLeagueSlots>& rounds,const AnnualPromotionPlan&);
 }
+
+#include "game/world12/save.hpp"
+#include "game/season_exchange.hpp"
+#include "formats/textd.hpp"
+namespace bmh::world12 {
+struct AnnualAmateurPool {
+    Country country=Country::germany;
+    std::vector<ClubId> slots;
+    bool operator==(const AnnualAmateurPool&)const=default;
+};
+// Only the immutable, undeveloped master can establish the initial physical
+// order. Later annual passes must retain the preceding stage's returned order.
+AnnualAmateurPool initial_annual_amateur_pool(const World&,Country);
+struct AnnualDecisionContext {
+    AnnualAmateurPool amateurs;
+    RegionalPromotion regional=RegionalPromotion::not_applicable;
+    std::array<ClubId,2> regional_winners;
+};
+struct AnnualLicenceNotice {
+    ClubId club;
+    std::optional<uint8_t> manager; // Absent means the Source general AI message.
+    LeagueId league;
+    bool operator==(const AnnualLicenceNotice&)const=default;
+};
+struct AnnualPromotionOutcome {
+    World source_world;
+    AnnualPromotionPlan plan;
+    AnnualAmateurPool pool_before,pool_after;
+    std::vector<AnnualLicenceNotice> licence_notices;
+    uint32_t date=0,season=0,watcom_seed_before=0,watcom_seed_after=0;
+    int32_t game_seed_before=0,game_seed_after=0;
+    uint64_t game_draws=0,watcom_draws=0;
+};
+// Real post-account licence evaluation and newcomer draws, in Source group
+// order. Seeds remain staged in the returned outcome. No human choice exists
+// in this phase; annual accounts/transfer decisions must precede this service.
+AnnualPromotionOutcome evaluate_annual_promotion_decisions(const CareerSnapshot&,
+    const AnnualDecisionContext&);
+SeasonLicenceAccount annual_licence_account(const CareerSnapshot&,uint8_t seat);
+struct AnnualMembershipStage {
+    World world;
+    AnnualAmateurPool amateurs;
+    int32_t game_seed=0;
+    uint32_t watcom_seed=0;
+};
+// Build an unpublished canonical World: exact roster inheritance, Source loan
+// party lineage, stable club/statistics identities, promotion flags and mail.
+// This is not a Session commit or a saved next season. Final awards/accounts,
+// qualification, player renewal, resets and calendar publication remain owned
+// prerequisites of the outer annual transaction.
+AnnualMembershipStage stage_annual_membership(const CareerSnapshot&,
+    const AnnualPromotionOutcome&,const TextDb&);
+}

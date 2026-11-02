@@ -56,6 +56,7 @@ int main()try {
         bmh::GameRandom game(17),repeat_game(17);bmh::WatcomRandom random(91),repeat_random(91);
         const auto outcome=initialize_career_players(world,plan,game,random);
         initialize_career_players(repeat,plan,repeat_game,repeat_random);
+        check(world.amateur_slots.has_value(),"fresh initialization did not capture canonical amateur slots");
         check(world.players_initialized && world==repeat && game.seed()==repeat_game.seed() && random.seed()==repeat_random.seed(),"initial player generation changed across repeat");
         check(outcome.players==world.players.size() && outcome.game_draws==game.calls() && outcome.watcom_draws==random.calls(),"initial generation omitted players or lost draw counts");
         for(const auto& [id,p]:world.players) {
@@ -89,7 +90,7 @@ int main()try {
         malformed.object()->at("markets").object()->at("stocks")=std::move(short_stocks);
         const auto invalid=bmh::cli::dump_json(malformed);
         rejects([&]{decode_world(bmh::Bytes(invalid.begin(),invalid.end()));},"truncated saved stock history accepted");
-        json.object()->at("version")=9;json.object()->erase("markets");const auto old=bmh::cli::dump_json(json);
+        json.object()->at("version")=9;json.object()->erase("amateur_slots");json.object()->erase("markets");const auto old=bmh::cli::dump_json(json);
         check(!decode_world(bmh::Bytes(old.begin(),old.end())).markets,"older world invented market history");
         rejects([&]{initialize_career_markets_and_moods(initialized,reference,mg,mw);},"market initialization ran twice");
         check(initialized==again&&mg.calls()==rg.calls()&&mw.calls()==rw.calls(),"duplicate market initialization changed state");

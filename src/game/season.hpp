@@ -26,8 +26,12 @@
 #include "game/random.hpp"
 #include "game/state.hpp"
 #include "game/transfer_allocator.hpp"
+#include "game/season_exchange.hpp"
 
 namespace bmh {
+
+SeasonLicenceAccount season_licence_account(const GameState&,int manager);
+void mark_promoted_manager(GameState&,int manager);
 
 enum class SeasonTaxEventKind { notice, question, animation, outcome };
 struct SeasonTaxEvent {

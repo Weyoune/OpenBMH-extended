@@ -24,6 +24,10 @@ World select_world_scope(const World& source,GameScope scope) {
     if(scope.club_play())for(auto id:removed_players)if(!retained_players.contains(id))selected.players.erase(id);
     std::set<CrestId> crests;for(const auto& [id,club]:selected.clubs)crests.insert(club.crest);
     for(auto it=selected.crests.begin();it!=selected.crests.end();)if(!crests.contains(it->first))it=selected.crests.erase(it);else ++it;
+    if(selected.amateur_slots) {
+        if(!scope.germany)(*selected.amateur_slots)[0].clear();
+        if(!scope.england)(*selected.amateur_slots)[1].clear();
+    }
     selected.validate();return selected;
 }
 }

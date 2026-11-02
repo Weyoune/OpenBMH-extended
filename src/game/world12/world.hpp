@@ -116,6 +116,7 @@ struct ManagerSponsorContract {
     bool operator==(const ManagerSponsorContract&)const=default;
 };
 struct ManagerSeasonServices {
+    std::optional<uint8_t> promotion_tail_flags; // Source eighteenth promotion-mark byte; unknown before schema36.
     uint16_t tickets_sold=0;
     uint32_t ticket_income=0,total_ticket_income=0;
     std::array<std::array<uint8_t,12>,30> advertising_offers{};
@@ -260,6 +261,7 @@ struct TransferMarket {
 };
 using GlobalPlayerStatistics = std::map<std::pair<ClubId,PlayerId>,PlayerClubStatistics>;
 struct World {
+    std::optional<std::array<std::vector<ClubId>,2>> amateur_slots; // Source physical DE/EN newcomer order; unknown before schema36.
     std::vector<NationalSquad> national_squads;
     GlobalPlayerStatistics player_statistics;
     std::optional<CareerEconomy> economy;
