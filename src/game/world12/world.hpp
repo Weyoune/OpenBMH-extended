@@ -126,6 +126,8 @@ struct ManagerSeasonServices {
     bool operator==(const ManagerSeasonServices&)const=default;
 };
 struct ManagerCareerState {
+    std::optional<uint16_t> strengths_display_word; // Original per-seat UI word, unknown before schema34.
+    std::optional<uint8_t> pairings_display_byte; // Original per-seat UI list mode, unknown before schema34.
     std::optional<uint16_t> table_display_word; // Original per-seat Table preferences, unknown before schema 33.
     std::optional<uint8_t> other_games_view; // Source per-seat saved display byte; unknown in older worlds.
     std::optional<uint8_t> stadium_curve_flags; // Source Flags byte 1, unknown in older worlds.
