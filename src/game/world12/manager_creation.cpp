@@ -100,7 +100,11 @@ PlayerInitializationOutcome add_initial_manager(World& world,const InitialManage
     const auto selected=world.clubs.find(choice.club);
     if(selected==world.clubs.end()||selected->second.kind!=ClubKind::club||!world.catalogue.selectable(selected->second.country))throw std::invalid_argument("world12: unavailable manager club/country");
     const auto& target=world.catalogue.league(choice.start_league);const auto country=selected->second.country;
-    if(!target.active||!target.playable||target.country!=country)throw std::invalid_argument("world12: manager placement crosses country/scope");
+    const auto visible=world.catalogue.player_leagues(country);
+    const auto exposed=[&](LeagueId id){return std::find(visible.begin(),visible.end(),id)!=visible.end();};
+    if(!target.active||!target.playable||target.country!=country||!exposed(target.id)||
+        (selected->second.league.valid()&&!exposed(selected->second.league)))
+        throw std::invalid_argument("world12: manager club/placement is outside player-visible leagues");
     for(const auto& [id,c]:world.clubs)if(c.season_stats!=ClubSeasonStats{})throw std::invalid_argument("world12: initial manager cannot enter played career");
     const auto before=world;auto candidate=world;candidate.settings=settings;auto staged_game=game;auto staged_random=random;
     const auto g_seed=game.seed();const auto w_seed=random.seed();const auto g_calls=game.calls(),w_calls=random.calls();

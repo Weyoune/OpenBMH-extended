@@ -1,7 +1,7 @@
 # Owned country league tables
 
 Desktop menu 0 now opens the existing Original `LeagueTableScreen` through the
-typed Session. It displays the actual 18-, 20- and 10-team leagues with fixed
+typed Session. It displays the player-visible 18- and 20-team leagues with fixed
 Original row spacing, saved results, current/previous ranks, form and human-team
 colours. No separate table renderer or gameplay calculation is introduced.
 
@@ -10,13 +10,13 @@ colours. No separate table renderer or gameplay calculation is introduced.
 The right selector cycles the available Germany, England and Europe groups.
 Its artwork reuses the supplied Original Germany/England/globe setup symbols.
 The left selector retains Germany's four-level map with both Regionalligen on
-one level; England has five levels. Markers are centred against the actual
+one level; England has four player-visible levels. Markers are centred against the actual
 Original selector height. Hitboxes use the same positions. The subtitle contains
 an explicit German ordinal separator, for example `1. Spieltag`, including older
 data-only runtime packages that do not contain its original punctuation string.
 
 `Catalogue::table_leagues` is the sole membership policy. Disabled Germany has no
-tables. With England enabled, its five leagues belong to England. With England
+tables. With England enabled, its four visible leagues belong to England. With England
 disabled, only its Premier League remains as AI opposition under Europe. It is
 not duplicated across groups. Spain, France and Italy remain in Europe.
 
@@ -73,14 +73,14 @@ remains unchanged.
 Data-free model tests compare 224 typed query/control projections with the existing
 Original table calculation for 18/20 teams. They also check the ten-team shape,
 country scopes, Premier-League fallback, global identities above 65535 and schema33
-roundtrips/older-schema rejection. Actual-input GUI checks cover all thirteen
-leagues, both mixed-country actors, same/changed selectors, controls, numeric
+roundtrips/older-schema rejection. The earlier GUI checks covered all thirteen internal
+leagues before the visibility correction below, both mixed-country actors, same/changed selectors, controls, numeric
 range acceptance/cancellation/refusal, roster return, saved preferences, stale
 windows, visible frameless folders, blocked saves and process-timer close.
 
 Additional rendered tables use real Core-computed first-round results for all
 thirteen leagues, including the unplayed ten-team round. No score is invented.
-These are result-view checks, not a claim of a new post-match GUI owner or a played
+These historical captures predate the visibility correction below. They are result-view checks, not a claim of a new post-match GUI owner or a played
 season. Native SDL screenshots/state comparisons and matching FBMs are private at
 `bmh_4k_ui/docs/qa/extended-league-tables`. Native Windows/macOS GUI operation and
 full Beta/season qualification remain separate gates.
@@ -126,12 +126,29 @@ stir; its navigation and close consume neither random stream.
 The focused regression suite has nine passing targets and one expected external
 fixture skip. It includes a data-free strengths projection/control test, codec
 backward-compatibility checks and the existing Original pairings/table render
-checks. Actual shared-world GUI checks visit all thirteen leagues for a single
+checks. Earlier shared-world GUI checks visited all thirteen internal leagues for a single
 English manager and both actors of a mixed-country career. Separate immutable
 projections render all three children from the real Core-computed result
-snapshot, checking 112 played scores without constructing a desktop owner.
+snapshot, checking 112 played scores without constructing a desktop owner. That evidence
+predates the player-visible league correction below.
 Native Linux SDL input produces 46 exact frame comparisons (apart from the
 process-timer row) and a complete save equal to the checked snapshot plus the
 Original four manual-save Watcom draws. Native Windows/macOS GUI operation,
 qualified forecast/live overlays and Beta/season completion remain separate
 gates.
+
+## Original English league visibility
+
+The Original English FLTD exposes four league levels to players.
+`Catalogue::player_leagues(England)` therefore returns IDs 5–8. The ten-team
+league (ID 9, local index 4) remains in the internal thirteen-league catalogue,
+fixtures, cups, rankings and annual model; it appears in no country or Europe
+selector. England's four markers are centred using the actual child frame
+height. The Premier League fallback policy is unchanged.
+
+Fresh manager selection leaves English picker group 4 empty and cycles four
+starting levels. Additional club pages 5 and 6 remain separate. The server
+rejects both a hidden target league and a selected hidden-league club before
+placement or RNG consumption. Existing synthetic/read-only managers in ID 9
+remain valid model data; opening their league-family view reports the explicit
+hidden-league boundary. No club is silently moved or replaced.

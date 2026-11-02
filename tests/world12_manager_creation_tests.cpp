@@ -42,19 +42,17 @@ void interrupt(int){draw_hook=nullptr;++live_owner->revision;}
 }
 int main()try {
     const auto master=fresh();const auto ref=reference();const auto rules=image();const auto strengths=ranges();size_t cases=0;
-    for(bool english:{false,true})for(uint32_t tier=0;tier<5;++tier)for(uint8_t duration:{0,1,5})for(uint8_t level:{0,1,2}) {
+    for(bool english:{false,true})for(uint32_t tier=0;tier<(english?4u:5u);++tier)for(uint8_t duration:{0,1,5})for(uint8_t level:{0,1,2}) {
         auto w=master;const auto country=english?Country::england:Country::germany;const LeagueId target{(english?5u:0u)+tier};
         const auto chosen=w.membership[english?5:0].clubs[0];const auto original_players=w.players;auto country_rules=rules;
-        // Force a reserved top position and exercise bounded ten-team selection.
+        // Force a reserved top position in a player-visible initial league.
         reserve(country_rules,duration<=1?1:9);
-        if(english&&tier==4)for(size_t i=0;i<9;++i)reserve(country_rules,80+i);
         CareerSettings settings{3,3,duration,1,false};InitialManagerChoice choice{0,chosen,target,"Manager",0,level};
         GameRandom game(17);WatcomRandom random(91);owner_app::ManagerActionOwner owner{71,2};
         owner_app::add_initial_manager(w,owner,{71,2},choice,settings,strengths,ref,country_rules,game,random);
         check(w.managers.size()==1&&w.managers[0].career&&w.managers[0].finance&&w.managers[0].tactics&&w.settings==settings&&owner.revision==3,"manager confirmation omitted initialized state/revision");
         check(w.clubs.at(chosen).league==target&&w.managers[0].club==chosen,"manager lost stable club identity during placement");
         if(tier==0)check(w.membership[target.value].clubs[duration<=1?2:10]==chosen,"reserved top place was not skipped");
-        if(english&&tier==4)check(w.membership[9].clubs[9]==chosen&&game.calls()==1,"ten-team lower placement escaped group or changed draw count");
         for(const auto& [id,p]:w.players)check(p.attributes.name==original_players.at(id).attributes.name&&p.id==id,"manager strength/placement changed player identity");
         const auto& state=*w.managers[0].career;int normalized=int(tier);if(normalized>2)--normalized;
         check(state.stadium.stand_capacity[0]==5+normalized+(duration==1)&&state.stadium.capacity_sum==8*state.stadium.stand_capacity[0],"stadium capacity did not use supplied source tables/duration");
@@ -66,9 +64,11 @@ int main()try {
         auto repeated=w;auto changed=choice;changed.seat=1;rejects([&]{owner_app::add_initial_manager(repeated,owner,{71,3},changed,settings,strengths,ref,country_rules,game,random);},"manager confirmation replay accepted");
         ++cases;
     }
+    for(bool hidden_club:{false,true}){auto world=master;const auto before=world;GameRandom game(17);WatcomRandom random(91);const auto club=world.membership[hidden_club?9:5].clubs[0];InitialManagerChoice choice{0,club,{hidden_club?5u:9u},"Hidden",0,1};
+        rejects([&]{add_initial_manager(world,choice,{3,2,5,1,false},strengths,ref,rules,game,random);},"fresh human manager entered the hidden English fifth league");check(world==before&&game.calls()==0&&random.calls()==0,"hidden league refusal changed world/RNG");}
     auto mixed=master;GameRandom mg(17);WatcomRandom mw(91);owner_app::ManagerActionOwner owner{72,0};CareerSettings settings{1,6,1,4,false};
     const ClubId extra{0xf0000000};const auto donated=master.clubs.at(master.membership[0].clubs[1]).roster;
-    for(uint8_t seat=0;seat<4;++seat){const LeagueId league{seat==0?0u:seat==1?5u:seat==2?3u:9u};const auto club=seat==0?extra:mixed.membership[seat==2?0:5].clubs[0];
+    for(uint8_t seat=0;seat<4;++seat){const LeagueId league{seat==0?0u:seat==1?5u:seat==2?3u:8u};const auto club=seat==0?extra:mixed.membership[seat==2?0:5].clubs[0];
         InitialManagerChoice choice{seat,club,league,"Manager "+std::to_string(seat),seat,uint8_t(seat%3)};
         owner_app::add_initial_manager(mixed,owner,{72,seat},choice,settings,strengths,ref,rules,mg,mw);}
     check(mixed.managers.size()==4&&owner.revision==4&&mixed.clubs.at(extra).roster[0].player.valid(),"mixed-country manager creation lost extra club/squad");
@@ -121,5 +121,5 @@ int main()try {
     owner={73,5};auto short_rules=LeImage::from_bytes(layout::GermanDataSegmentBegin,Bytes(0x3000));
     rejects([&]{owner_app::add_initial_manager(fresh_world,owner,{73,5},first,{3,2,5,1,false},strengths,ref,short_rules,game,random);},"missing facility rules accepted");
     check(fresh_world==before&&game.calls()==0&&random.calls()==0&&owner.revision==5,"late facility failure leaked creation state");
-    std::cout<<cases<<" German/English full manager confirmations, reserved/ten-team placements, four mixed seats, extra-club squads, numeric bridges, wide poaching refs and atomic rollback passed\n";
+    std::cout<<cases<<" German/English full manager confirmations, reserved visible-league placements and hidden-fifth refusals, four mixed seats, extra-club squads, numeric bridges, wide poaching refs and atomic rollback passed\n";
 }catch(const std::exception& error){draw_hook=nullptr;std::cerr<<error.what()<<'\n';return 1;}

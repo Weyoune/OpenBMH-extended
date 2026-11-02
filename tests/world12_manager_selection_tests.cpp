@@ -19,7 +19,8 @@ World fixture() {
 }
 void builder_tests() {
     const auto world=fixture();const auto context=world12_manager_selection_context(world,71);
-    check(context.world&&context.world->germany[0].clubs.size()==18&&context.world->england[0].clubs.size()==20&&context.world->england[4].clubs.size()==10,"country groups lost native league capacities");
+    check(context.world&&context.world->germany[0].clubs.size()==18&&context.world->england[0].clubs.size()==20&&context.world->england[4].clubs.empty(),"country groups lost native league capacities");
+    check(context.world->england[4].label.empty()&&world.catalogue.starting_league(Country::england,4)==LeagueId{9}&&world.membership[9].clubs.size()==10,"hidden English group lost internal identity/membership");
     check(context.world->england[0].clubs[0].id.value==0xf0000100u,"picker narrowed global club IDs to signed legacy IDs");
     const auto fallback=select_world_scope(world,{true,false,true});const auto view=world12_manager_selection_context(fallback,72);
     check(!view.world->scope.england&&view.world->england[0].clubs.empty(),"fallback Premier League leaked into manager country choices");
@@ -33,12 +34,16 @@ void ui_tests(const std::filesystem::path& data,const World& world,const std::fi
     const auto context=world12_manager_selection_context(world,71);ManagerScreen screen(data,0,{},context);
     const auto initial=screen.choice();check(initial.country==Country::germany&&initial.world_club==world.membership[0].clubs[0]&&initial.master_club==-1,"typed German initial club mismatch");
     const auto german=screen.render();check(screen.click(200,95),"country flag did not switch to England");
+    const auto runtime=load_reference_le(asset_path(data,"BMH.exe"),DataProfile{});
+    const int level_x=runtime.u16(layout::Manager_FormatError_RuntimeField3+2)+2;
+    const int level_y=runtime.u8(layout::Manager_FormatError_RuntimeField6+1)+2;
+    for(int cycle=1;cycle<=8;++cycle){check(screen.click(level_x,level_y)&&screen.choice().start_league==cycle%4,"English initial league cycle exposed a fifth level");}
     const auto english=screen.render();check(screen.choice().country==Country::england&&screen.choice().world_club==world.membership[5].clubs[0]&&screen.choice().start_league==0,"England switch did not select first Premier League club");
     check(manager_json(screen.choice()).find(std::to_string(screen.choice().world_club.value))!=std::string::npos,"typed selection JSON lost wide club identity");
     check(screen.choice().name==initial.name&&screen.choice().portrait==initial.portrait&&screen.choice().strength==initial.strength,"country switch reset unrelated choices");
     rejects([&]{screen.master_of(0);},"typed club exposed as legacy selection ID");
     check(screen.click(252,95)&&screen.view()==ManagerView::club_picker,"new right-hand club logo did not open Original picker");
-    const auto picker=screen.render();check(screen.group_last(0)-screen.group_first(0)+1==20,"English picker omitted clubs");
+    const auto picker=screen.render();check(screen.group_last(4)<screen.group_first(4),"hidden English fifth picker group stayed selectable");const auto selected=screen.choice();check(!screen.click(180,180)&&screen.choice()==selected,"hidden fifth picker hit changed selection");check(screen.group_last(0)-screen.group_first(0)+1==20,"English picker omitted clubs");
     check(screen.click(239,154)&&screen.choice().world_club==world.membership[5].clubs[19],"last English first-division logo is not selectable");
     screen.click(10,10,true);check(screen.view()==ManagerView::selection,"right click did not close club picker");
     check(screen.click(200,95)&&screen.choice().country==Country::germany&&screen.choice().world_club==world.membership[0].clubs[0],"country switch did not reset first German club");
@@ -50,6 +55,7 @@ void ui_tests(const std::filesystem::path& data,const World& world,const std::fi
     check(!de_only.click(200,95)&&de_only.render().pixels==locked.pixels,"disabled English scope became manager-playable via flag");
     const auto en_world=select_world_scope(world,{false,true,true});ManagerScreen en_only(data,0,{},world12_manager_selection_context(en_world,73));
     check(en_only.choice().country==Country::england&&en_only.choice().world_club==world.membership[5].clubs[0]&&!en_only.click(200,95),"English-only setup offered disabled Germany");
+    auto extra=std::make_shared<ManagerWorldSelection>(*context.world);extra->england[5]={"Extra A",{{ClubId{0xef000001u},"Extra A","W/0.VGA",0}}};extra->england[6]={"Extra B",{{ClubId{0xef000002u},"Extra B","W/0.VGA",0}}};auto extras=context;extras.world=extra;ManagerScreen extra_picker(data,0,{},extras);extra_picker.click(200,95);check(extra_picker.group_last(4)<extra_picker.group_first(4)&&extra_picker.group_last(5)==extra_picker.group_first(5)&&extra_picker.group_last(6)==extra_picker.group_first(6),"hidden fifth group removed extra picker pages");
     auto bad=std::make_shared<ManagerWorldSelection>(*context.world);bad->england[0].clubs[0].crest_path="../bad.VGA";
     auto corrupt=context;corrupt.world=bad;ManagerScreen safe(data,0,{},corrupt);const auto safe_choice=safe.choice();const auto safe_frame=safe.render();
     rejects([&]{safe.click(200,95);},"bad country asset accepted");check(safe.choice()==safe_choice&&safe.render().pixels==safe_frame.pixels,"failed country switch partially changed visible selection");

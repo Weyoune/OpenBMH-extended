@@ -40,7 +40,7 @@ int main()try {
         const size_t league_clubs=scope.club_play()?54+90*scope.germany+(scope.england?90:20):0;
         check(world.catalogue.league_clubs()==league_clubs,"scoped league club count wrong");
         check(world.catalogue.table_leagues(TableGroup::germany).size()==size_t(scope.germany?5:0) &&
-            world.catalogue.table_leagues(TableGroup::england).size()==size_t(scope.england?5:0),"disabled country still has table pages");
+            world.catalogue.table_leagues(TableGroup::england).size()==size_t(scope.england?4:0),"disabled country still has table pages");
         const auto europe=world.catalogue.table_leagues(TableGroup::europe);
         const std::vector<LeagueId> expected_europe=scope.club_play()?
             (scope.england?std::vector<LeagueId>{{10},{11},{12}}:std::vector<LeagueId>{{10},{5},{11},{12}}):std::vector<LeagueId>{};

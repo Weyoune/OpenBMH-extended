@@ -28,6 +28,8 @@ struct Catalogue {
     static Catalogue dual_classic(GameScope scope={});
     const League& league(LeagueId)const;
     const CountryRules& rules(Country)const;
+    // Domestic leagues exposed for fresh human management; internal ladders retain all groups.
+    std::vector<LeagueId> player_leagues(Country)const;
     std::vector<LeagueId> table_leagues(TableGroup)const;
     LeagueId starting_league(Country,uint8_t local)const;
     bool selectable(Country)const;

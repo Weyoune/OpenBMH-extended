@@ -11,6 +11,12 @@ At least one scope must remain enabled. International-only selection retains the
 | England only | England | Spain, France, Italy | 144 |
 | International only | None | None | 0 |
 
+England exposes only its four Original player-visible league levels (IDs 5–8)
+for fresh managers and league-family selectors. ID 9 remains internal for the
+existing fixtures, cups, rankings and annual model. Additional club picker
+pages 5/6 remain separate. This visibility rule does not remove the internal
+fifth league or change `starting_league(England, 4)`.
+
 International may additionally be enabled or disabled in each club-career combination. European club competitions remain part of club play.
 
 ## Actual removal, not a display filter

@@ -18,11 +18,17 @@ const League& Catalogue::league(LeagueId id)const {if(!id.valid()||id.value>=lea
 const CountryRules& Catalogue::rules(Country country)const {for(const auto& r:playable_countries)if(r.country==country)return r;throw std::invalid_argument("world12: country is AI-only");}
 bool Catalogue::selectable(Country country)const{return scope.domestic_enabled(country);}
 LeagueId Catalogue::starting_league(Country country,uint8_t local)const {if(!selectable(country))throw std::invalid_argument("world12: unsupported manager country");for(const auto& l:leagues)if(l.country==country&&l.local_index==local)return l.id;throw std::out_of_range("world12: invalid starting league");}
+std::vector<LeagueId> Catalogue::player_leagues(Country country)const {
+    std::vector<LeagueId> ids;
+    for(const auto& league:leagues)if(league.active&&league.playable&&league.country==country&&
+        (country!=Country::england||league.local_index<4))ids.push_back(league.id);
+    return ids;
+}
 std::vector<LeagueId> Catalogue::table_leagues(TableGroup group)const {
     std::vector<LeagueId> ids;
     if(group==TableGroup::europe){for(uint32_t id:{10u,5u,11u,12u})if(leagues[id].active&&!leagues[id].playable)ids.push_back({id});return ids;}
     const auto country=group==TableGroup::germany?Country::germany:Country::england;
-    for(const auto& league:leagues)if(league.active&&league.playable&&league.country==country)ids.push_back(league.id);return ids;
+    return player_leagues(country);
 }
 uint32_t Catalogue::league_clubs()const{uint32_t n=0;for(const auto&l:leagues)if(l.active)n+=l.clubs;return n;}
 void Catalogue::validate()const{
