@@ -849,6 +849,60 @@ void actual_mailbox(const std::filesystem::path& data,const CareerSnapshot& base
     if(!output.empty())std::filesystem::copy_file(file,output/"after.FBM",std::filesystem::copy_options::overwrite_existing);
     std::cout<<"Actual Original mailbox shortcut, shared/private recipients, keep/refusal/delete, physical holes, actor-only close, RNG-neutral snapshots and stale rollback passed\n";
 }
+void actual_desktop_actions(const std::filesystem::path& data,const CareerSnapshot& fixture,const std::filesystem::path& output) {
+    const auto directory=std::filesystem::temp_directory_path()/("openbmh-desktop-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);
+    struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code ignored;std::filesystem::remove_all(path,ignored);}} cleanup{directory};
+    write_savegame(directory/"Desk.FBM",make_save(fixture));ui::StartupFlow flow(data,directory,ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> session;
+    const auto send=[&](const ui::FlowResult& action){const auto result=session_app::serve_startup(flow,action,session,data,91,99);if(!result.error.empty())throw std::runtime_error("desktop GUI: "+result.error);};
+    flow.click(60,215);send(flow.click(240,215));send(flow.send_key("ENTER"));const auto initial=session->snapshot();const auto actor=*initial.desktop->active_seat;
+    const auto capture=[&](const char* name){if(output.empty())return;std::filesystem::create_directories(output);const auto frame=flow.render();const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));std::ofstream image(output/(std::string(name)+".ppm"),std::ios::binary);image<<"P6\n320 240\n255\n";for(auto pixel:frame.pixels){const auto color=palette.argb[pixel];image.put(char(color>>16));image.put(char(color>>8));image.put(char(color));}write_savegame(output/(std::string(name)+".FBM"),make_save(session->snapshot()));};
+    const auto item=[&](int kind){const auto& items=flow.desktop()->state().items;const auto found=std::find_if(items.begin(),items.end(),[&](const auto& i){return i.kind==kind;});if(found==items.end())throw std::runtime_error("desktop item absent: "+std::to_string(kind));return *found;};
+    const auto toggle=[&](int kind){if(flow.desktop()->state_json().find("\"shortcut_bar_visible\":false")!=std::string::npos)flow.move(1,239);const auto action=flow.click(22+(kind-50)*12+6,220);check(action.request==ui::FlowRequest::desk_action&&action.desk_action.layout_operation==ui::DeskLayoutOperation::toggle_quickbar_drawer,"Source quickbar did not toggle its drawer");send(action);return action;};
+    const auto ensure=[&](int kind){const auto& items=flow.desktop()->state().items;if(std::none_of(items.begin(),items.end(),[&](const auto& i){return i.kind==kind;}))toggle(kind);return item(kind);};
+    const auto unchanged=[&]{check(session->snapshot().date==initial.date&&session->snapshot().game_seed==initial.game_seed&&session->snapshot().watcom_seed==initial.watcom_seed&&read_save(make_save(session->snapshot()))==session->snapshot(),"desktop mutation advanced time/RNG or lost saved state");for(const auto& previous:initial.world.managers)if(previous.seat!=actor){const auto peer=std::find_if(session->snapshot().world.managers.begin(),session->snapshot().world.managers.end(),[&](const auto& m){return m.seat==previous.seat;});check(peer!=session->snapshot().world.managers.end()&&*peer==previous,"desktop edit changed another manager's options or finances");}};
+    capture("desktop-before");
+    {
+        auto icon=item(19);send(flow.pointer_down(icon.x+8,icon.y+8,true));check(flow.move(93,113),"Source icon drag did not move");capture("desktop-icon-drag");const auto action=flow.click(93,113,true);
+        check(action.request==ui::FlowRequest::desk_action&&action.desk_action.layout_operation==ui::DeskLayoutOperation::move_item,"Source drag did not emit its layout transaction");send(action);unchanged();capture("desktop-icon-moved");
+        const auto accepted=session->snapshot();const auto revision=session->revision();rejects([&]{session->apply_desktop(action.desk_action,data);},"desktop drag replay accepted");check(session->snapshot()==accepted&&session->revision()==revision,"drag replay changed state");
+        auto malformed=action.desk_action;malformed.revision=revision;malformed.layout_before=malformed.layout_after;malformed.layout_after[12]^=1;rejects([&]{session->apply_desktop(malformed,data);},"layout changed an unrelated source byte");check(session->snapshot()==accepted,"malformed layout changed accepted snapshot");
+    }
+    {
+        auto widget=ensure(68);int target_x=-1,target_y=-1;
+        for(int y=20;y<239-widget.height&&target_x<0;y+=5)for(int x=5;x<319-widget.width;x+=5){if(x==widget.x&&y==widget.y)continue;const bool covered=std::any_of(flow.desktop()->state().items.begin(),flow.desktop()->state().items.end(),[&](const auto& other){return other.id!=widget.id&&x+1>=other.x&&y+1>=other.y&&x+1<other.x+other.width&&y+1<other.y+other.height;});if(!covered){target_x=x;target_y=y;break;}}
+        check(target_x>=0,"desktop has no visible destination corner");send(flow.pointer_down(widget.x+5,widget.y+5,true));flow.move(target_x+5,target_y+5);capture("desktop-widget-drag");send(flow.click(target_x+5,target_y+5,true));unchanged();widget=item(68);capture("desktop-widget-moved");
+        const auto down=flow.pointer_down(widget.x+1,widget.y+1);check(down.request==ui::FlowRequest::desk_action&&down.desk_action.layout_operation==ui::DeskLayoutOperation::toggle_quickbar_drawer,"widget corner started movement instead of removal");send(down);
+        const auto release=flow.click(widget.x+1,widget.y+1);check(release.request==ui::FlowRequest::none,"widget removal release activated the item beneath");send(release);check(std::none_of(flow.desktop()->state().items.begin(),flow.desktop()->state().items.end(),[](const auto& i){return i.kind==68;}),"widget was not removed");capture("desktop-widget-removed");toggle(68);check(item(68).open,"quickbar did not restore removed widget");unchanged();capture("desktop-widget-restored");
+    }
+    {
+        auto widget=ensure(64);
+        for(int index=0;index<5;++index){widget=item(64);const auto before=session->snapshot();const auto& previous=*std::find_if(before.world.managers.begin(),before.world.managers.end(),[&](const auto& m){return m.seat==actor;});
+            const auto action=flow.click(widget.x+4+index*33+5,widget.y+16);check(action.request==ui::FlowRequest::desk_action&&action.desk_action.kind==ui::DeskRequestKind::change_option&&action.desk_action.value==index,"automation monitor did not emit its index");send(action);
+            const auto& next=*std::find_if(session->snapshot().world.managers.begin(),session->snapshot().world.managers.end(),[&](const auto& m){return m.seat==actor;});
+            if(index==0){int expected=previous.tactics->automatic_formation;const auto mask=previous.tactics->backing->enabled_formations[0];do{expected=(expected+1)%9;}while(expected&&!(mask&(1u<<(expected-1))));check(next.tactics->automatic_formation==expected,"formation monitor ignored the saved formation mask");}
+            else check(next.tactics->backing->automation[size_t(index-1)]==uint8_t(previous.tactics->backing->automation[size_t(index-1)]^1),"automation toggle lost high bits or toggled another option");
+            check(next.finance==previous.finance,"automation charged cash");unchanged();}
+        capture("desktop-automation");
+    }
+    {
+        const auto widget=ensure(55);const auto& manager=*std::find_if(session->snapshot().world.managers.begin(),session->snapshot().world.managers.end(),[&](const auto& m){return m.seat==actor;});const auto finance=manager.finance;const auto price=manager.career->training_plan==12?13:12;
+        const auto action=flow.click(widget.x+4+35+(price-8)*3+1,widget.y+15);check(action.request==ui::FlowRequest::desk_action&&action.desk_action.kind==ui::DeskRequestKind::change_ticket_price&&action.desk_action.value==price,"ticket scale did not emit its chosen price");send(action);
+        const auto& next=*std::find_if(session->snapshot().world.managers.begin(),session->snapshot().world.managers.end(),[&](const auto& m){return m.seat==actor;});check(next.career->training_plan==price&&next.finance==finance,"ticket price lost its manager or charged money immediately");unchanged();capture("desktop-ticket-price");
+    }
+    {
+        auto icon=item(19);const int folder_id=flow.desktop()->state().layout_records[size_t(icon.id)][13]&0x7f;
+        check(folder_id<3,"ordinary icon has no Original folder");
+        if(flow.desktop()->state_json().find("\"shortcut_bar_visible\":false")!=std::string::npos)flow.move(1,239);
+        send(flow.click(10,220));send(flow.pointer_down(icon.x+8,icon.y+8,true));const auto removed=flow.click(icon.x+8,icon.y+8,true);
+        check(removed.request==ui::FlowRequest::desk_action&&removed.desk_action.layout_operation==ui::DeskLayoutOperation::send_to_folder,"Original bin mode did not send an icon to its folder");send(removed);unchanged();capture("desktop-icon-in-folder");
+        auto folder=ensure(50+folder_id);const auto& children=flow.desktop()->state().folder_icon_slots[size_t(folder_id)];
+        int x=folder.x+9,y=folder.y+8;bool located=false;for(auto id:children){if(x+32>folder.x+folder.width-4){x=folder.x+9;y+=27;}if(id==icon.id){located=true;break;}x+=34;}
+        check(located,"sent icon absent from the visible folder");capture("desktop-folder-open");send(flow.pointer_down(x+1,y+1,true));const auto restored=flow.click(x+1,y+1,true);
+        check(restored.request==ui::FlowRequest::desk_action&&restored.desk_action.layout_operation==ui::DeskLayoutOperation::restore_folder_child,"bin mode did not restore its exact folder child");send(restored);check(item(19).id==icon.id,"folder restore changed icon identity");unchanged();capture("desktop-icon-restored");
+        if(flow.desktop()->state_json().find("\"shortcut_bar_visible\":false")!=std::string::npos)flow.move(1,239);send(flow.click(10,220));
+    }
+    std::cout<<"Actual desktop GUI: icon/widget moves, close corner/release, quickbar restore, all five automation controls, ticket scale, byte/replay rejection and saved RNG-neutral state passed\n";
+}
 void actual_toto_fixture(const std::filesystem::path& data,const CareerSnapshot& fixture,const std::filesystem::path& output) {
     const auto directory=std::filesystem::temp_directory_path()/("openbmh-toto-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);
     struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code ignored;std::filesystem::remove_all(path,ignored);}} cleanup{directory};
@@ -1323,6 +1377,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     actual_advertising_renewals(data,session->snapshot(),output.empty()?output:output/"advertising-renewals");
     actual_stadium(flow,session,data,output.empty()?output:output/"stadium-single");
     actual_stadium_financial_notices(data,session->snapshot(),output.empty()?output:output/"stadium-notices");
+    actual_desktop_actions(data,session->snapshot(),output.empty()?output:output/"desktop-single");
     actual_toto_fixture(data,session->snapshot(),output.empty()?output:output/"toto-empty");
     actual_save_load(flow,session,data,output);
     ui::StartupFlow mixed(data,{},ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> multi;
@@ -1343,6 +1398,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     actual_environment(mixed,multi,data,output.empty()?output:output/"environment-mixed");
     actual_contracts(mixed,multi,data,output.empty()?output:output/"contracts-mixed");
     actual_advertising(mixed,multi,data,output.empty()?output:output/"advertising-mixed");
+    actual_desktop_actions(data,multi->snapshot(),output.empty()?output:output/"desktop-mixed");
     actual_stadium(mixed,multi,data,output.empty()?output:output/"stadium-mixed");
     actual_mailbox(data,multi->snapshot(),output.empty()?output:output/"mailbox");
     {
@@ -1353,6 +1409,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
         check(result.error.empty()&&multi->snapshot().world.manager_country(*multi->snapshot().desktop->active_seat)==Country::germany,"mixed contract handoff did not reach German manager");
         actual_contracts(mixed,multi,data,output.empty()?output:output/"contracts-german");
         actual_advertising(mixed,multi,data,output.empty()?output:output/"advertising-german");
+        actual_desktop_actions(data,multi->snapshot(),output.empty()?output:output/"desktop-german");
         actual_stadium(mixed,multi,data,output.empty()?output:output/"stadium-german");
     }
     actual_four_managers(data,output);
@@ -1362,6 +1419,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
 }
 }
 int main(int argc,char** argv)try {
+    if(argc==5&&std::string(argv[3])=="--desktop-only"){actual_desktop_actions(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--stadium-only"){actual_stadium_saved(argv[1],argv[4],argv[2]);return 0;}
     const auto resources=synthetic();
     for(int mask=1;mask<8;++mask){const GameScope scope{bool(mask&1),bool(mask&2),bool(mask&4)};if(!scope.club_play())continue;

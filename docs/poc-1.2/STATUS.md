@@ -603,3 +603,11 @@ Actual Core regulation receipts from supported league/cup programmes feed the
 Original end-of-event charge and quota settlement. GUI/save, replay protection,
 same-seed real scoring and financial checks accompany the implementation. See
 [Toto ownership](TOTO.md). The general visible turn and release gates remain open.
+
+## Desktop editing and widgets
+
+The typed desktop now owns its Original layout, quickbar/folder, automation and
+ticket-price mutations. Shared byte-level validation preserves unrelated records,
+canonical manager ownership, Source bounds and masks. Existing layout/tactics/
+career fields retain changes through saves without new gameplay schema. Widget
+removal retains the physical-release barrier. See [desktop actions](DESKTOP_ACTIONS.md).

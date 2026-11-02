@@ -69,6 +69,11 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
     }
     if(action.request==ui::FlowRequest::desk_action){
         if(!session||!flow.desktop()||!flow.desktop()->pending()||*flow.desktop()->pending()!=action.desk_action)throw FormatError("world12: desktop command has no matching view owner");
+        if(action.desk_action.kind==ui::DeskRequestKind::change_layout||action.desk_action.kind==ui::DeskRequestKind::change_option||action.desk_action.kind==ui::DeskRequestKind::change_ticket_price){
+            auto staged=std::make_unique<Session>(*session);staged->apply_desktop(action.desk_action,data);
+            auto desk=ui::world12_initial_desktop(data,staged->snapshot(),staged->reference(),staged->rules(),staged->options(),staged->revision());
+            flow.acknowledge_desk(std::move(desk));session.swap(staged);return {};
+        }
         if(action.desk_action.kind==ui::DeskRequestKind::open_menu&&action.desk_action.menu_kind==63){
             auto staged=std::make_unique<Session>(*session);staged->open_mailbox(action.desk_action);flow.show_mailbox(staged->mailbox_view());session.swap(staged);return {};
         }

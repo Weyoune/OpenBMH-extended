@@ -764,6 +764,14 @@ void StartupFlow::finish_world12_desktop(World12DesktopView view) noexcept {
 }
 
 void StartupFlow::acknowledge_desk(DeskState state) {
+    if(desktop_&&desktop_->state().source=="world12") {
+        const auto& previous=desktop_->state();const auto& request=desktop_->pending();
+        if(!world12_reference_||!engine_attached_||in_preparation_menu()||in_readonly_view()||!request||
+           (request->kind!=DeskRequestKind::change_layout&&request->kind!=DeskRequestKind::change_option&&request->kind!=DeskRequestKind::change_ticket_price)||
+           state.source!="world12"||state.revision!=previous.revision+1||state.manager_slot!=previous.manager_slot||state.managers!=previous.managers||state.options!=previous.options||state.day_counter!=previous.day_counter||state.badge_atlas!=previous.badge_atlas)
+            throw FormatError("world12: desktop acknowledgement changed its owner");
+        validate_desk_state(state);auto next=std::make_unique<DesktopScreen>(*desktop_);next->acknowledge(std::move(state));desktop_=std::move(next);preparation_.reset();return;
+    }
     if (!desktop_ || !engine_attached_ || in_preparation_menu() || in_readonly_view() || state.source != "engine_projection")
         throw FormatError("desk acknowledgement requires an attached engine projection");
     const bool turn_handoff = desktop_->pending() && desktop_->pending()->kind == DeskRequestKind::advance_turn;

@@ -1739,6 +1739,7 @@ int main(int argc, char** argv) {
         auto handle = [&](const ui::FlowResult& r) {
             pitch_pointer.show({}, renderer);
             if(world12_development){
+                if(const auto* desk=flow.desktop())for(const auto id:desk->take_sound_ids())app::original_audio_command(playback,id);
                 if(r.request==ui::FlowRequest::end_session){if(quit_confirmation.confirm())running=false;else flow.reject_desk_action("Beenden abgebrochen.");dirty=true;return;}
                 const app::world12::AdvertisingRenewalPresenter advertising=[&](const GameState& staged,const AdvertisingRenewal& renewal) {
                     using Answer=app::world12::AdvertisingRenewalAnswer;

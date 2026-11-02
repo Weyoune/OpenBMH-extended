@@ -81,6 +81,7 @@ public:
     ui::ContractsState contracts_view(const std::filesystem::path& data)const;
     ui::ContractActionResult apply_contract(const std::filesystem::path& data,const ui::ContractRequest&);
     void close_contracts();
+    void apply_desktop(const ui::DeskRequest&,const std::filesystem::path& data);
     void open_toto(const ui::DeskRequest&,const std::filesystem::path& data);
     ui::TotoState toto_view(const std::filesystem::path& data)const;
     void apply_toto(const ui::TotoRequest&);
