@@ -4014,7 +4014,7 @@ std::optional<TransferActionResult> CareerSession::dispatch_transfer_market(
     }
     if (request.kind == ui::TransferMarketRequestKind::review_offers) {
         if (!review || request.bid.manager != request.manager_slot || request.bid.list_entry < 0 ||
-            request.bid.list_entry >= 40 || request.bid.source_slot != 0xb70 + request.bid.list_entry ||
+            request.bid.list_entry >= 40 || request.bid.source_slot != runtime_dimensions.pool_first + request.bid.list_entry ||
             request.squad_row != -1 || !request.selected_players.empty()) {
             error = "transfer market: invalid offer review"; return std::nullopt;
         }

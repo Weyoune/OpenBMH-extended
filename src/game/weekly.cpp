@@ -1275,6 +1275,8 @@ bool preflight_human_owner_loan(const GameState& g, int seller, size_t pool_slot
     return true;
 }
 
+void record_transfer_history_source(GameState&,int manager,int other_team,int player,uint32_t fee,bool loan,bool buyer_direction);
+
 // The weekly transfer itself (Void2): news for the interested human
 // managers (all of them with the option Weekly_ExecuteTransfer_RuntimeField off), then the move.
 void execute_transfer(GameState& g, int k, uint32_t list, int bid, WatcomRandom& rand, MinuteReport& report,
@@ -1344,10 +1346,19 @@ void execute_transfer(GameState& g, int k, uint32_t list, int bid, WatcomRandom&
                           message_text(g, term > 0x7F ? ::bmh::layout::Weekly_ExecuteTransfer_TextPointer3 : ::bmh::layout::Weekly_ExecuteTransfer_TextPointer4);
         post_composed(g, int64_t(mask | interested), msg);
     }
+    const int player=g.squad_slots.at(pool_slot)&0xfff;
+    const uint32_t fee=mem.u32(list+0x1c+uint32_t(bid)*4);
     move_player(g, seller, pool_slot, buyer, list, bid, rand, report, allocator);
+    if(report.unsupported)return;
+    const auto destination=squad_range(buyer);
+    const bool moved=std::any_of(g.squad_slots.begin()+ptrdiff_t(destination.first),g.squad_slots.begin()+ptrdiff_t(destination.first+destination.count),[&](auto slot){return (slot&0xfff)==player;});
     const int seller_manager = g.manager_of(seller);
-    if (seller_manager >= 0)
-        book_money(g, seller_manager, -int32_t(mem.u32(list + 0x1c + uint32_t(bid) * 4)), true, true);
+    if (moved&&seller_manager >= 0) {
+        book_money(g, seller_manager, -int32_t(fee), true, true);
+        auto owner=record(g,seller_manager);
+        owner.set32(0x330,uint32_t(owner.i32(0x330))-fee);
+        record_transfer_history_source(g,seller_manager,buyer,player,fee,term>0x7f,false);
+    }
 }
 
 // The bids of an expiring list entry (TransferListCountdown when the countdown reaches 0): every bid

@@ -66,9 +66,19 @@ void ordinary_list_guards() {
     require(rejected.status == TransferActionStatus::invalid_request && g.squad_slots == native && rand.calls() == 0,
             "unowned listing cannot be settled through seller action");
 }
+void shifted_pool_coordinates(){
+    const auto saved=runtime_dimensions;struct Restore{RuntimeDimensions value;~Restore(){runtime_dimensions=value;}} restore{saved};
+    runtime_dimensions.pool_first=0xf60;auto g=fixture();g.memory.add_block(layout::Career_RemoveJoinLoans_RuntimeField,800);g.squad_slots.resize(size_t(runtime_dimensions.pool_first)+44,0xfff);
+    // An occupied old-layout coordinate must not masquerade as a current listing.
+    for(size_t n=0;n<40;++n)g.squad_slots[0xb70+n]=0;
+    WatcomRandom random(713);MinuteReport report;const auto result=list_manager_player(g,0,0,random,report);
+    require(result.status==TransferActionStatus::accepted&&result.list_entry==0&&!report.unsupported,"expanded pool coordinate was replaced by the Classic literal");
+    require(g.squad_slots[size_t(runtime_dimensions.pool_first)]==0&&g.squad_slots[0xb70]==0,"listing changed an old-layout decoy slot");
+}
+
 }
 int main() try {
-    fresh_arrivals(); ordinary_list_guards();
+    fresh_arrivals(); ordinary_list_guards(); shifted_pool_coordinates();
     std::cout << "PASS fresh-arrival contract flags, tenure boundaries and ordinary listing guards\n";
     return 0;
 } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }

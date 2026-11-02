@@ -540,7 +540,7 @@ TransferActionResult list_manager_player(GameState& g, int manager, int squad_ro
     }
     bool free_entry = false;
     for (size_t entry = 0; entry < 40; ++entry) {
-        const int listed = g.squad_slots.at(0xb70 + entry) & 0xfff;
+        const int listed = g.squad_slots.at(size_t(runtime_dimensions.pool_first) + entry) & 0xfff;
         if (listed == player) { out.status = TransferActionStatus::pending; out.player = player; out.list_entry = int(entry); return out; }
         free_entry = free_entry || listed == 0xfff;
     }
@@ -554,7 +554,7 @@ TransferActionResult list_manager_player(GameState& g, int manager, int squad_ro
     // The transfer-list slot follows the new pool slot. The engine uses 40 entries
     // for the normal list; entries 40-43 are reserved for matchday approaches.
     for (int i = 0; i < 40; ++i)
-        if ((g.squad_slots.at(0xb70u + size_t(i)) & 0xfff) == player) { out.list_entry = i; break; }
+        if ((g.squad_slots.at(size_t(runtime_dimensions.pool_first) + size_t(i)) & 0xfff) == player) { out.list_entry = i; break; }
     return out;
 }
 
@@ -574,7 +574,7 @@ TransferActionResult submit_transfer_bid_impl(GameState& g, const TransferBidReq
     if (request.list_entry < 0 || request.list_entry >= 40 || request.player < 0 || request.fee <= 0 || request.annual_salary <= 0 ||
         request.contract_years < 1 || request.contract_years > 4) return out;
     const uint32_t entry = ::bmh::layout::EditorListUnsigned + uint32_t(request.list_entry) * 0x58;
-    const int player = g.squad_slots.at(0xb70u + size_t(request.list_entry)) & 0xfff;
+    const int player = g.squad_slots.at(size_t(runtime_dimensions.pool_first) + size_t(request.list_entry)) & 0xfff;
     if (player == 0xfff) {
         out.status = TransferActionStatus::invalid_player;
         return out;
@@ -671,7 +671,7 @@ TransferActionResult submit_transfer_bid_impl(GameState& g, const TransferBidReq
             sale.list_entry = request.list_entry;
             sale.bid_slot = bid;
             sale.list_address = entry;
-            sale.source_pool_slot = 0xb70u + size_t(request.list_entry);
+            sale.source_pool_slot = size_t(runtime_dimensions.pool_first) + size_t(request.list_entry);
             sale.expected_seller = seller;
             sale.expected_buyer = buyer;
             sale.expected_active_manager = request.manager;
@@ -769,13 +769,13 @@ TransferActionResult submit_transfer_bid_source_impl(GameState& g, const Transfe
         return unsupported("unsupported ordinary human-buyer record or 24-slot squad");
 
     const uint32_t list = ::bmh::layout::EditorListUnsigned + uint32_t(request.list_entry) * 0x58;
-    const size_t expected_pool_slot = 0xb70u + size_t(request.list_entry);
+    const size_t expected_pool_slot = size_t(runtime_dimensions.pool_first) + size_t(request.list_entry);
     if (!g.memory.has(list + 0x57) || request.source_slot < 0 ||
         size_t(request.source_slot) != expected_pool_slot || size_t(request.source_slot) >= g.squad_slots.size())
         return unsupported("missing or mismatched explicit ordinary Source pool slot");
     const int player = int(g.squad_slots[size_t(request.source_slot)] & 0x0fff);
     if (player == 0x0fff || player != request.player ||
-        int(g.squad_slots[0xb70u + size_t(request.list_entry)] & 0x0fff) != player)
+        int(g.squad_slots[size_t(runtime_dimensions.pool_first) + size_t(request.list_entry)] & 0x0fff) != player)
         return unsupported("ordinary Source list/player identity mismatch");
 
     if (!g.memory.has(::bmh::layout::ActiveManager) || g.memory.u8(::bmh::layout::ActiveManager) != request.manager ||
