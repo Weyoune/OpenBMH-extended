@@ -14,6 +14,8 @@ struct WeeklyIncidentContext {
     // qualified relation record for every active human club is required.
     std::vector<WeeklyClubRelations> clubs;
 };
+// Actual current campaign participation and latest completed title ownership.
+WeeklyIncidentContext current_weekly_club_relations(const CareerSnapshot&);
 struct WeeklyIncidentHooks {
     std::function<std::optional<bool>(const GameState&,uint8_t global_seat,const WeeklyOfferQuestion&)> answer;
 };

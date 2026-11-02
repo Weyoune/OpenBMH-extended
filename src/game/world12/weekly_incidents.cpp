@@ -1,10 +1,27 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "game/world12/weekly_incidents.hpp"
+#include "game/world12/european_campaign.hpp"
 #include <algorithm>
 #include <bit>
 #include <set>
 #include <stdexcept>
 namespace bmh::world12 {
+WeeklyIncidentContext current_weekly_club_relations(const CareerSnapshot& state){
+    state.validate();const auto& world=state.world;
+    if(!world.initial_competitions||!world.european_campaigns)throw FormatError("world12: current weekly titles/campaign ownership is unknown");
+    const auto& fields=*world.initial_competitions;WeeklyIncidentContext out{state.date,state.season,{}};
+    const auto country_title=[](const auto& rows,Country country){const auto at=std::find_if(rows.begin(),rows.end(),[&](const auto& row){return row.first==country;});if(at==rows.end()||!at->second.valid())throw FormatError("world12: current country title ownership is unknown");return at->second;};
+    for(const auto& manager:world.managers){WeeklyClubRelations row;row.club=manager.club;const auto country=world.manager_country(manager.seat);
+        row.advertising.champion=country_title(fields.champions,country)==manager.club;
+        auto domestic=country_title(fields.domestic_holders,country);const auto kind=country==Country::germany?DomesticCup::german_cup:DomesticCup::fa_cup;
+        for(auto stage=state.cups.rbegin();stage!=state.cups.rend();++stage)if(stage->cup==kind&&!stage->next_entry&&stage->complete()){const auto winners=stage->qualifiers();if(winners.size()!=1)throw FormatError("world12: completed domestic title has no unique owner");domestic=winners[0];break;}
+        row.advertising.holders[0]=domestic==manager.club;
+        if(const auto status=european_club_status(world,manager.club);status&&status->active)row.advertising.european_cup=uint8_t(status->competition);
+        for(size_t cup=0;cup<3;++cup){const auto& campaign=(*world.european_campaigns)[cup];const auto holder=campaign.complete?campaign.winner:fields.holders[cup];if(!holder.valid())throw FormatError("world12: current European title ownership is unknown");row.advertising.holders[cup+1]=holder==manager.club;}
+        out.clubs.push_back(row);
+    }
+    return out;
+}
 WeeklyIncidentOutcome begin_weekly_managers(CareerSnapshot& state,const GameState& reference,
     const TextDb& texts,const WeeklyIncidentContext& context,const WeeklyIncidentHooks& hooks) {
     state.validate();

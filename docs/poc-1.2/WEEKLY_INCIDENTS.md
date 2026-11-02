@@ -53,3 +53,10 @@ complete economic-week outputs and RNG traces remain byteidentical.
 The complete daily owner, global market countdown/bids/settlement, monthly
 services, general saved events and weekly decision GUI remain open. This is not
 a playable 1.2 release, nor a new recording of original DOS execution.
+
+`current_weekly_club_relations` supplies the GUI clock's attraction context from
+the saved campaign owners. Domestic finals replace the previous domestic holder;
+completed European campaigns replace their previous holders. Current active
+participation is queried separately, so a previous cup winner may now play in
+another competition. Unknown initial title/campaign ownership remains an explicit
+error. The lookup changes neither state nor randomness.

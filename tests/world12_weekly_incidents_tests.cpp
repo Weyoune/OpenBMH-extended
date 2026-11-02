@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "world12_fixture.hpp"
+#include "fixture_tables.hpp"
 #include "game/world12/weekly_incidents.hpp"
+#include "game/world12/european_campaign.hpp"
 #include "game/messages.hpp"
 #include "game/world12/manager_tactics.hpp"
 #include "game/world12/codec.hpp"
@@ -66,9 +68,48 @@ CareerSnapshot prepared(GameState& rules) {
     }
     state.date=40;state.validate();return state;
 }
+void current_title_relations(const CareerSnapshot& initial) {
+    auto state=initial;const auto de=state.world.managers[0].club,en=state.world.managers[1].club;
+    for(auto& manager:state.world.managers)manager.career->cup_titles=std::array<uint16_t,2>{};
+    auto& fields=*state.world.initial_competitions;
+    fields.champions={{Country::germany,de},{Country::england,state.world.membership[5].clubs[0]}};
+    fields.domestic_holders={{Country::germany,de},{Country::england,en}};
+    for(const auto club:{de,en}){bool present=false;for(const auto& field:fields.fields)present|=std::find(field.begin(),field.end(),club)!=field.end();
+        if(!present)fields.fields[club==de?1:2].back()=club;}
+    fields.holders[0]=en;fields.holders[2]=de;
+    const auto rules=bmh::test::world12::country_rules(false);
+    state.world.european_campaigns=initial_european_campaigns(state.world,rules);state.validate();
+    const auto before=state;const auto relations=current_weekly_club_relations(state);
+    check(state==before&&relations.date==state.date&&relations.season==state.season&&relations.clubs.size()==2,
+          "weekly title lookup mutated its snapshot or lost ownership");
+    check(relations.clubs[0].club==de&&relations.clubs[0].advertising.champion&&
+          relations.clubs[0].advertising.holders[0]&&relations.clubs[0].advertising.holders[3]&&
+          relations.clubs[1].club==en&&!relations.clubs[1].advertising.champion&&
+          relations.clubs[1].advertising.holders[0]&&relations.clubs[1].advertising.holders[1],
+          "weekly attraction used a local seat or wrong country/title");
+    for(const auto& row:relations.clubs){const auto status=european_club_status(state.world,row.club);
+        check(row.advertising.european_cup==(status&&status->active?uint8_t(status->competition):0),
+              "weekly attraction lost actual active European competition");}
+    // The old holder can enter another competition. Once a real campaign is
+    // complete, its winner owns attraction even though the starting field stays.
+    WatcomRandom random(91);
+    while(!(*state.world.european_campaigns)[0].complete){
+        const auto& campaign=(*state.world.european_campaigns)[0];EuropeanResults result;
+        result.competition=campaign.competition;result.revision=campaign.revision;
+        for(const auto& group:prepare_european_groups(campaign))result.groups.push_back({group.source_entry,group.played,
+            std::vector<uint16_t>(group.matches.size(),group.leg==2?uint16_t(1):uint16_t(2<<5))});
+        commit_european_results(state.world,result,rules,random);
+    }
+    const auto completed=current_weekly_club_relations(state);const auto winner=(*state.world.european_campaigns)[0].winner;
+    for(const auto& row:completed.clubs)check(row.advertising.holders[1]==(row.club==winner),
+        "weekly attraction retained the previous European holder after the final");
+    auto unknown=initial;rejects([&]{current_weekly_club_relations(unknown);},"unknown campaigns invented weekly titles");
+    std::cout<<"Weekly title context: country champions, domestic/prior European holders, current membership and completed final ownership passed\n";
+}
 }
 int main()try {
-    auto rules=reference();const auto initial=prepared(rules);
+    bmh::set_fixture_tables(bmh::test::authored_fixture_tables());
+    auto rules=reference();const auto initial=prepared(rules);current_title_relations(initial);
     TextDb texts;texts.strings.resize(TEXT_COUNT,"Synthetic weekly event ");texts.offsets.resize(TEXT_COUNT);texts.blob.assign(200,0);
     WeeklyIncidentContext context{initial.date,initial.season,{}};
     for(const auto& m:initial.world.managers)context.clubs.push_back({m.club,{}});
