@@ -15,7 +15,7 @@ InitialMarketOutcome initialize_first_season_market(bmh::world12::CareerSnapshot
         state.world.transfer_market||!state.world.free_players||!state.world.loans.empty())throw std::invalid_argument("world12: invalid initial market phase/owner");
     const auto before=state;auto candidate=state;WatcomRandom random(state.watcom_seed);TransferMarket market;market.checkpoint_game_seed=state.game_seed;
     std::vector<ClubId> clubs;int first=0;
-    for(auto group:{TableGroup::germany,TableGroup::england,TableGroup::europe})for(auto league:candidate.world.catalogue.table_leagues(group)) {
+    for(auto group:{TableGroup::germany,TableGroup::england,TableGroup::europe})for(auto league:candidate.world.catalogue.simulation_leagues(group)) {
         auto& members=candidate.world.membership[league.value].clubs;
         shuffle_initial_positions(first,int(members.size()),random,[&](int a,int b){std::swap(members.at(size_t(a)),members.at(size_t(b)));});
         first+=int(members.size());clubs.insert(clubs.end(),members.begin(),members.end());

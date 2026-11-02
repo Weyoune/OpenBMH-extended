@@ -41,7 +41,7 @@ WeeklyPlayerOutcome update_weekly_players(CareerSnapshot& state,const GameState&
     GameRandom game(state.game_seed);WatcomRandom random(state.watcom_seed);
     std::vector<ClubId> clubs;
     for(auto table:{TableGroup::germany,TableGroup::england,TableGroup::europe})
-        for(auto league:state.world.catalogue.table_leagues(table)) {
+        for(auto league:state.world.catalogue.simulation_leagues(table)) {
             const auto& membership=state.world.membership[league.value].clubs;
             clubs.insert(clubs.end(),membership.begin(),membership.end());
         }

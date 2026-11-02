@@ -46,6 +46,13 @@ int main()try {
         const GameScope scope{bool(mask&1),bool(mask&2),bool(mask&4)};
         auto world=select_world_scope(master,scope),repeat=world;
         const auto plan=make_player_initialization_plan(master,scope,ranges());
+        // This is the pre-visibility service order, independent of the UI selector.
+        std::vector<LeagueId> expected_order;
+        if(!scope.club_play()||scope.germany)for(uint32_t id=0;id<5;++id)expected_order.push_back({id});
+        if(!scope.club_play()||scope.england)for(uint32_t id=5;id<10;++id)expected_order.push_back({id});
+        expected_order.push_back({10});if(scope.club_play()&&!scope.england)expected_order.push_back({5});expected_order.push_back({11});expected_order.push_back({12});
+        size_t group=0;for(auto league:expected_order)for(size_t rank=0;rank<master.membership[league.value].clubs.size();++rank){check(group<plan.groups.size()&&plan.groups[group].league==league&&plan.groups[group].rank==rank,"player visibility changed the Core initialization/RNG iteration order");++group;}
+        check(group==plan.groups.size(),"Core initialization lost an internal league group");
         bmh::GameRandom game(17),repeat_game(17);bmh::WatcomRandom random(91),repeat_random(91);
         const auto outcome=initialize_career_players(world,plan,game,random);
         initialize_career_players(repeat,plan,repeat_game,repeat_random);

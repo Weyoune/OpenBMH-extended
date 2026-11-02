@@ -30,6 +30,8 @@ struct Catalogue {
     const CountryRules& rules(Country)const;
     // Domestic leagues exposed for fresh human management; internal ladders retain all groups.
     std::vector<LeagueId> player_leagues(Country)const;
+    // Numeric service/RNG iteration order, including internal English league9.
+    std::vector<LeagueId> simulation_leagues(TableGroup)const;
     std::vector<LeagueId> table_leagues(TableGroup)const;
     LeagueId starting_league(Country,uint8_t local)const;
     bool selectable(Country)const;

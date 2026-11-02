@@ -51,7 +51,7 @@ std::optional<PendingDeskOffer> initial_offer(CareerSnapshot& state,uint8_t seat
     const bool lure=random.range(0,1)!=0;
     std::vector<ClubId> clubs;
     for(auto group:{TableGroup::germany,TableGroup::england,TableGroup::europe})
-        for(auto league:world.catalogue.table_leagues(group)){
+        for(auto league:world.catalogue.simulation_leagues(group)){
             const auto& members=world.membership[league.value].clubs;clubs.insert(clubs.end(),members.begin(),members.end());}
     std::vector<int16_t> order;std::vector<uint32_t> keys;uint8_t foreign_skip=0;
     const int nationality=person.attributes.nationality()+((person.bonus&128)?32:0);

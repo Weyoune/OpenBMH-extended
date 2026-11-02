@@ -73,7 +73,7 @@ void opening_rounds() {
         auto state=fixture(country,human,base);const auto source=bmh::test::world12::country_rules(country==Country::england);
         const size_t count=country==Country::germany?64:48;
         std::vector<ClubId> clubs;
-        for(auto league:state.world.catalogue.table_leagues(country==Country::germany?TableGroup::germany:TableGroup::england))
+        for(auto league:state.world.catalogue.simulation_leagues(country==Country::germany?TableGroup::germany:TableGroup::england))
             if(country!=Country::england||league.value!=5)
             for(auto club:state.world.membership[league.value].clubs)if(clubs.size()<count)clubs.push_back(club);
         std::vector<bmh::world12::Fixture> fixtures;

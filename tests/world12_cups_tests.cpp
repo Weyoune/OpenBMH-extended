@@ -48,7 +48,7 @@ KnockoutStage seeded_stage(const World& world,DomesticCup cup,uint8_t entry,int 
     const auto count=uint8_t(seed_count);source.patch(bmh::cup_entry_address(entry)+0x20,&count,1);
     // Larger fields span the country ladder, not just its top division.
     std::vector<ClubId> pool;
-    for(auto id:world.catalogue.table_leagues(cup_country(cup)==Country::germany?TableGroup::germany:TableGroup::england))
+    for(auto id:world.catalogue.simulation_leagues(cup_country(cup)==Country::germany?TableGroup::germany:TableGroup::england))
         pool.insert(pool.end(),world.membership[id.value].clubs.begin(),world.membership[id.value].clubs.end());
     std::vector<Fixture> fixtures;
     for(int i=0;i<teams;i+=2)fixtures.push_back({pool[size_t(i)],pool[size_t(i+1)]});

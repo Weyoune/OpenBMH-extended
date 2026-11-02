@@ -13,7 +13,7 @@ uint8_t manager(const AiMatchProjection& p,uint8_t seat){for(uint8_t m=0;m<p.hum
 LoanReturnOutcome return_monthly_loans(CareerSnapshot& state,const GameState& reference,const TextDb& texts,const LoanReturnHooks& hooks){
     state.validate();if(!state.world.economy||!state.world.settings||!state.world.transfer_market||state.world.managers.empty())throw FormatError("world12: monthly loan owner is unavailable");
     const auto before=state;auto candidate=state;assign_transfer_loan_slots(candidate);GameRandom game(state.game_seed);WatcomRandom random(state.watcom_seed);LoanReturnOutcome result;
-    std::vector<ClubId> order;for(auto table:{TableGroup::germany,TableGroup::england,TableGroup::europe})for(auto league:state.world.catalogue.table_leagues(table))for(auto id:state.world.membership[league.value].clubs)order.push_back(id);
+    std::vector<ClubId> order;for(auto table:{TableGroup::germany,TableGroup::england,TableGroup::europe})for(auto league:state.world.catalogue.simulation_leagues(table))for(auto id:state.world.membership[league.value].clubs)order.push_back(id);
     // Source scans physical roster slots, not the loan ledger. A return closes
     // the borrower's gap; the next physical slot observes that shifted roster.
     for(auto club:order)for(size_t row=0;row<24;++row){const auto player=candidate.world.clubs.at(club).roster[row].player;if(!player.valid())continue;

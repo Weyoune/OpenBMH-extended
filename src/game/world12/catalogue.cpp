@@ -24,11 +24,16 @@ std::vector<LeagueId> Catalogue::player_leagues(Country country)const {
         (country!=Country::england||league.local_index<4))ids.push_back(league.id);
     return ids;
 }
-std::vector<LeagueId> Catalogue::table_leagues(TableGroup group)const {
+std::vector<LeagueId> Catalogue::simulation_leagues(TableGroup group)const {
     std::vector<LeagueId> ids;
     if(group==TableGroup::europe){for(uint32_t id:{10u,5u,11u,12u})if(leagues[id].active&&!leagues[id].playable)ids.push_back({id});return ids;}
     const auto country=group==TableGroup::germany?Country::germany:Country::england;
-    return player_leagues(country);
+    for(const auto& league:leagues)if(league.active&&league.playable&&league.country==country)ids.push_back(league.id);
+    return ids;
+}
+std::vector<LeagueId> Catalogue::table_leagues(TableGroup group)const {
+    if(group==TableGroup::europe)return simulation_leagues(group);
+    return player_leagues(group==TableGroup::germany?Country::germany:Country::england);
 }
 uint32_t Catalogue::league_clubs()const{uint32_t n=0;for(const auto&l:leagues)if(l.active)n+=l.clubs;return n;}
 void Catalogue::validate()const{

@@ -38,7 +38,7 @@ PlayerInitializationPlan make_player_initialization_plan(const World& master,Gam
     const auto selected=Catalogue::dual_classic(scope.club_play()?scope:GameScope{});
     std::vector<LeagueId> order;
     for(auto group:{TableGroup::germany,TableGroup::england,TableGroup::europe}) {
-        const auto leagues=selected.table_leagues(group);order.insert(order.end(),leagues.begin(),leagues.end());
+        const auto leagues=selected.simulation_leagues(group);order.insert(order.end(),leagues.begin(),leagues.end());
     }
     for(auto league:order) {
         if(strengths[league.value][0]>strengths[league.value][1] || strengths[league.value][1]>99)
@@ -118,7 +118,7 @@ PlayerInitializationOutcome initialize_career_markets_and_moods(World& world,
     std::vector<ClubId> order;std::set<ClubId> seen;
     const auto append=[&](ClubId id){if(seen.insert(id).second)order.push_back(id);};
     for(auto group:{TableGroup::germany,TableGroup::england,TableGroup::europe})
-        for(auto league:world.catalogue.table_leagues(group))for(auto id:world.membership[league.value].clubs)append(id);
+        for(auto league:world.catalogue.simulation_leagues(group))for(auto id:world.membership[league.value].clubs)append(id);
     for(auto country:{Country::germany,Country::england})if(world.catalogue.scope.domestic_enabled(country))
         for(const auto& [id,club]:world.clubs)if(club.country==country && club.kind==ClubKind::club && !club.league.valid())append(id);
     for(const auto& [id,club]:world.clubs)if(club.kind==ClubKind::club)append(id);
@@ -168,7 +168,7 @@ PlayerInitializationOutcome initialize_career_player_pools(World& world,const Pl
     for(const auto& [id,p]:world.players)if(p.cards)throw std::invalid_argument("world12: played player cannot initialize free players");
     std::vector<ClubId> clubs;std::set<PlayerId> seen;size_t group_index=0;
     for(auto table:{TableGroup::germany,TableGroup::england,TableGroup::europe})
-        for(auto league:world.catalogue.table_leagues(table)) {
+        for(auto league:world.catalogue.simulation_leagues(table)) {
             const auto& members=world.membership[league.value].clubs;
             for(size_t rank=0;rank<members.size();++rank) {
                 if(group_index>=plan.groups.size())throw std::invalid_argument("world12: missing initial player group");

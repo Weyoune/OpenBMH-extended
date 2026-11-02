@@ -144,7 +144,7 @@ void original_nomination_equivalence() {
         // that cannot affect selection. The English numeric oracle uses the
         // Original home nationality zero without changing any football skill.
         for(auto group:{TableGroup::germany,TableGroup::england,TableGroup::europe})
-            for(auto league:w.catalogue.table_leagues(group))for(auto id:w.membership[league.value].clubs) {
+            for(auto league:w.catalogue.simulation_leagues(group))for(auto id:w.membership[league.value].clubs) {
                 const auto& club=w.clubs.at(id);
                 for(const auto& row:club.roster)if(!row.empty()) {
                     const auto& p=w.players.at(row.player);

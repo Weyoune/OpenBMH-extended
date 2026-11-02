@@ -19,7 +19,7 @@ MonthlyMarketOutcome renew_monthly_market(CareerSnapshot& state,const GameState&
     const auto adds=allocate_market_entries(counts,random);
     std::vector<ClubId> clubs;
     for(auto table:{TableGroup::germany,TableGroup::england,TableGroup::europe}) {
-        for(auto league:candidate.world.catalogue.table_leagues(table))for(auto id:candidate.world.membership[league.value].clubs)clubs.push_back(id);
+        for(auto league:candidate.world.catalogue.simulation_leagues(table))for(auto id:candidate.world.membership[league.value].clubs)clubs.push_back(id);
 
     }
     const auto human=[&](int team){return std::any_of(candidate.world.managers.begin(),candidate.world.managers.end(),[&](const auto& m){return m.club==clubs.at(size_t(team));});};

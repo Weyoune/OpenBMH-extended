@@ -21,7 +21,7 @@ struct Candidate {
 std::vector<Candidate> candidates(const CareerSnapshot& state,const GameState& reference,MarketBidPolicy policy) {
     std::vector<Candidate> result;std::vector<ClubId> ai;size_t ordinal=0;
     for(auto table:{TableGroup::germany,TableGroup::england,TableGroup::europe})
-        for(auto league_id:state.world.catalogue.table_leagues(table)) {
+        for(auto league_id:state.world.catalogue.simulation_leagues(table)) {
             const auto& league=state.world.catalogue.league(league_id);
             std::map<ClubId,int> ranks;
             if(state.league_rounds[league_id.value]>10) {

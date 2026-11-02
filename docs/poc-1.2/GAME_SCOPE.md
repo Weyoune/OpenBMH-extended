@@ -15,7 +15,9 @@ England exposes only its four Original player-visible league levels (IDs 5–8)
 for fresh managers and league-family selectors. ID 9 remains internal for the
 existing fixtures, cups, rankings and annual model. Additional club picker
 pages 5/6 remain separate. This visibility rule does not remove the internal
-fifth league or change `starting_league(England, 4)`.
+fifth league or change `starting_league(England, 4)`. Numeric services use
+`simulation_leagues(TableGroup)`, retaining the previous full ordered club/RNG
+traversal. `table_leagues` is exclusively the player-facing view policy.
 
 International may additionally be enabled or disabled in each club-career combination. European club competitions remain part of club play.
 

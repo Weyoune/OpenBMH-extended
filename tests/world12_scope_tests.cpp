@@ -41,6 +41,11 @@ int main()try {
         check(world.catalogue.league_clubs()==league_clubs,"scoped league club count wrong");
         check(world.catalogue.table_leagues(TableGroup::germany).size()==size_t(scope.germany?5:0) &&
             world.catalogue.table_leagues(TableGroup::england).size()==size_t(scope.england?4:0),"disabled country still has table pages");
+        std::vector<LeagueId> simulation,visible;size_t simulation_clubs=0,visible_clubs=0;
+        for(auto group:{TableGroup::germany,TableGroup::england,TableGroup::europe}){for(auto id:world.catalogue.simulation_leagues(group)){simulation.push_back(id);simulation_clubs+=world.catalogue.league(id).clubs;}for(auto id:world.catalogue.table_leagues(group)){visible.push_back(id);visible_clubs+=world.catalogue.league(id).clubs;}}
+        check(simulation_clubs==league_clubs&&visible_clubs==league_clubs-(scope.england?10:0),"player visibility changed internal simulation membership");
+        check((std::find(simulation.begin(),simulation.end(),LeagueId{9})!=simulation.end())==scope.england&&std::find(visible.begin(),visible.end(),LeagueId{9})==visible.end(),"hidden English group was simulated incorrectly or exposed");
+        if(scope.germany&&scope.england){check(simulation==std::vector<LeagueId>{{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12}}&&simulation_clubs==234&&visible.size()==12&&visible_clubs==224,"full internal loop order/count differs from the pre-visibility model");}
         const auto europe=world.catalogue.table_leagues(TableGroup::europe);
         const std::vector<LeagueId> expected_europe=scope.club_play()?
             (scope.england?std::vector<LeagueId>{{10},{11},{12}}:std::vector<LeagueId>{{10},{5},{11},{12}}):std::vector<LeagueId>{};

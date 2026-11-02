@@ -41,7 +41,7 @@ std::array<NationalCandidate,20> national_nomination(const World& world,Country 
     NationalSquadSelection selection;
     for(bool abroad:{false,true})
       for(auto group:{TableGroup::germany,TableGroup::england,TableGroup::europe})
-        for(auto league:world.catalogue.table_leagues(group))
+        for(auto league:world.catalogue.simulation_leagues(group))
             for(auto id:world.membership[league.value].clubs) {
                 const auto& club=world.clubs.at(id);
                 if((club.country!=country)!=abroad)continue;
