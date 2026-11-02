@@ -99,7 +99,10 @@ std::vector<EuropeanGroup> prepare_european_groups(const EuropeanCampaign& c){
         groups.push_back(std::move(g));entry=r.parallel;
     }while(entry);return groups;
 }
-std::vector<ClubId> current_european_members(const EuropeanCampaign& c){if(c.complete)return {c.winner};std::vector<ClubId> ids;for(const auto& g:prepare_european_groups(c))for(const auto& f:g.matches){ids.push_back(f.home);ids.push_back(f.away);}const auto& active=stage(c,c.active_entry);for(auto id:active.seeds)if(id.valid())ids.push_back(id);return ids;}
+std::vector<ClubId> current_european_members(const EuropeanCampaign& c){
+    if(c.complete)return {c.winner};std::vector<ClubId> ids;uint8_t entry=c.active_entry;std::set<uint8_t> seen;
+    do{require(seen.insert(entry).second,"parallel membership cycle");const auto& s=stage(c,entry);require(started(s),"current membership has no field");const auto start=s.rules.knockout()?offset(s):0u;const auto count=s.rules.knockout()?size_t(s.rules.teams)>>(s.played/((s.rules.flags&1)+1)):size_t(s.rules.teams);require(start+count<=s.teams.size()&&count>=2,"current membership cursor is past the stage");ids.insert(ids.end(),s.teams.begin()+ptrdiff_t(start),s.teams.begin()+ptrdiff_t(start+count));for(auto id:s.seeds)if(id.valid())ids.push_back(id);entry=s.rules.parallel;}while(entry);return ids;
+}
 std::optional<EuropeanClubStatus> european_club_status(const World& world,ClubId club){
     require(world.clubs.contains(club),"club identity is missing");if(!world.european_campaigns)return std::nullopt;
     EuropeanClubStatus result;for(size_t k=0;k<3;++k){result.held_titles[k]=world.initial_competitions&&world.initial_competitions->holders[k]==club;result.holder|=result.held_titles[k];}
