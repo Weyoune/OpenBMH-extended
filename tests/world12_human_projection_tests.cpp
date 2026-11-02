@@ -101,7 +101,7 @@ void statistics_bridge(const bmh::GameState& base) {
     const auto bad=bmh::cli::dump_json(json);rejects([&]{decode_world(bmh::Bytes(bad.begin(),bad.end()));},"overflowing decimal statistics accepted");
     json=bmh::cli::parse_json(raw);json.object()->at("version")=22;const auto downgraded=bmh::cli::dump_json(json);
     rejects([&]{decode_world(bmh::Bytes(downgraded.begin(),downgraded.end()));},"schema22 silently discarded nonempty statistics");
-    auto old=source.world;old.player_statistics.clear();bmh::test::world12::omit_attendance_records(old);const auto old_encoded=encode_world(old);json=bmh::cli::parse_json(std::string(old_encoded.begin(),old_encoded.end()));
+    auto old=source.world;old.player_statistics.clear();bmh::test::world12::omit_recent_manager_records(old);const auto old_encoded=encode_world(old);json=bmh::cli::parse_json(std::string(old_encoded.begin(),old_encoded.end()));
     json.object()->at("version")=22;json.object()->erase("player_statistics");const auto legacy=bmh::cli::dump_json(json);
     check(decode_world(bmh::Bytes(legacy.begin(),legacy.end()))==old,"schema22 without known wide counters failed migration");
     auto migrated=source;migrated.world=decode_world(bmh::Bytes(legacy.begin(),legacy.end()));

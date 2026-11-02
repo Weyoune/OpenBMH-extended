@@ -359,6 +359,89 @@ void actual_management(ui::StartupFlow& flow,std::unique_ptr<session_app::Sessio
     if(!output.empty())write_savegame(output/"management.FBM",make_save(session->snapshot()));
     std::cout<<"Actual lineup swap/player card/pitch/tactics/training GUI commands, stable IDs, no RNG/time advance and saved display state passed\n";
 }
+void actual_bank(ui::StartupFlow& flow,std::unique_ptr<session_app::Session>& session,const std::filesystem::path& data,const std::filesystem::path& output) {
+    const auto date=session->snapshot().date;
+    const auto send=[&](const ui::FlowResult& action){const auto result=session_app::serve_startup(flow,action,session,data,91,session->scope());if(!result.error.empty())throw std::runtime_error("bank GUI: "+result.error);};
+    const auto capture=[&](const char* name){if(output.empty())return;std::filesystem::create_directories(output);
+        const auto frame=flow.render();const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));std::ofstream image(output/(std::string(name)+".ppm"),std::ios::binary);image<<"P6\n320 240\n255\n";
+        for(auto pixel:frame.pixels){const auto color=palette.argb[pixel];image.put(char(color>>16));image.put(char(color>>8));image.put(char(color));}
+        write_savegame(output/(std::string(name)+".FBM"),make_save(session->snapshot()));};
+    const auto& items=flow.desktop()->state().items;const auto item=std::find_if(items.begin(),items.end(),[](const auto& i){return i.kind==14&&!i.disabled;});
+    check(item!=items.end(),"actual bank icon unavailable");send(flow.click(item->x+item->width/2,item->y+item->height/2));
+    check(flow.screen_name()=="bank"&&session->preparation_open(),"typed bank menu did not open");capture("bank-before");
+    auto view=*session->preparation_view(data).bank;const auto actor=*session->snapshot().desktop->active_seat;
+    const auto manager=*std::find_if(session->snapshot().world.managers.begin(),session->snapshot().world.managers.end(),[&](const auto& m){return m.seat==actor;});
+    const auto& crest=session->snapshot().world.crests.at(session->snapshot().world.clubs.at(manager.club).crest);
+    check(view.badge_sprite==crest.cell&&view.badge_atlas==crest.path,"bank lost actual club crest resource");
+    const auto before=session->snapshot();const auto g=before.game_seed;const auto w=before.watcom_seed;
+    send(flow.click(250,80));send(flow.click(80,178));flow.text("1000");const auto deposit=flow.send_key("ENTER");
+    check(deposit.request==ui::FlowRequest::submenu_action&&std::holds_alternative<ui::BankRequest>(deposit.submenu_action),"cashier did not emit a bank request");send(deposit);
+    check(session->snapshot().world.managers.at(size_t(actor)).finance->balance==manager.finance->balance-1000&&
+          session->snapshot().world.economy->managers[actor].deposit==before.world.economy->managers[actor].deposit+1000&&
+          session->snapshot().game_seed==g&&session->snapshot().watcom_seed==w,"bank transfer lost money, actor or RNG");
+    const auto deposited=session->snapshot();const auto revision=session->revision();
+    rejects([&]{session->apply_bank(data,std::get<ui::BankRequest>(deposit.submenu_action));},"accepted bank request was replayed");
+    check(session->snapshot()==deposited&&session->revision()==revision,"stale bank request leaked state");capture("cashier-after");
+    send(flow.send_key("BACKSPACE"));send(flow.send_key("B"));view=*session->preparation_view(data).bank;
+    int stock=-1;for(size_t n=0;n<view.stocks.size();++n)if(view.stocks[n].price&&view.stocks[n].max_to_buy>0&&view.stocks[n].price<view.balance/20){stock=int(n);break;}
+    check(stock>=0,"actual bank has no buyable stock");const auto count=view.stocks[size_t(stock)].owned;
+    send(flow.click(55,64+stock*8));send(flow.click(80,178));flow.text("1");const auto buy=flow.send_key("ENTER");send(buy);
+    view=*session->preparation_view(data).bank;check(view.stocks[size_t(stock)].owned==count+1&&view.stocks[size_t(stock)].paid>0,"stock holding/paid amount not retained");capture("stock-after");
+    const auto tip_before=session->snapshot();WatcomRandom tip_random(tip_before.watcom_seed);auto oracle=project_manager_desktop(tip_before,session->reference());
+    const auto tip=stock_tip(oracle.state,view.manager_slot,stock,tip_random);send(flow.click(80,165));
+    check(session->snapshot().watcom_seed==tip_random.seed()&&session->preparation_view(data).bank->last_tip==tip&&
+          session->snapshot().game_seed==tip_before.game_seed,"bank tip lost charged Core result or random stream");
+    send(flow.send_key("BACKSPACE"));send(flow.send_key("I"));view=*session->preparation_view(data).bank;
+    int fund=-1;for(size_t n=0;n<view.funds.size();++n)if(view.funds[n].price&&view.funds[n].max_to_buy>0){fund=int(n);if(n>=1)break;}
+    check(fund>=0,"actual bank has no buyable fund/property");const auto owned=view.funds[size_t(fund)].owned;
+    const auto depreciation=*session->snapshot().world.economy->managers[actor].depreciation;
+    const auto fund_before=session->snapshot();auto fund_oracle=project_manager_desktop(fund_before,session->reference());GameRandom fund_random(fund_before.game_seed);
+    const auto surcharge=buy_fund_units(fund_oracle.state,view.manager_slot,fund,1,fund_random);
+    for(int n=0;n<fund;++n)send(flow.click(205,130));send(flow.click(80,178));flow.text("1");send(flow.send_key("ENTER"));
+    view=*session->preparation_view(data).bank;
+    check(view.funds[size_t(fund)].owned==owned+1&&view.funds[size_t(fund)].paid>0&&
+          *session->snapshot().world.economy->managers[actor].depreciation>depreciation,"fund purchase lost holdings, paid total or depreciation");
+    check(session->snapshot().game_seed==fund_random.seed()&&session->snapshot().watcom_seed==fund_before.watcom_seed,
+          "property surcharge consumed the wrong Source random stream");
+    if(fund>0) {
+        check(view.property_notice&&view.property_notice->additional_cost==surcharge,"property renovation notice lost its actual booked surcharge");
+        capture("fund-notice");const auto booked=session->snapshot();send(flow.send_key("ENTER"));
+        check(session->snapshot()==booked,"acknowledging property costs charged them twice");
+    }
+    capture("fund-after");
+    send(flow.click(205,178));flow.text("1");send(flow.send_key("ENTER"));
+    check(session->preparation_view(data).bank->funds[size_t(fund)].owned==owned,"fund sale did not restore held count");
+    view=*session->preparation_view(data).bank;
+    std::vector<BankCreditContext> credits{view.credit};if(!view.credit_lenders.empty())credits.push_back(view.credit_lenders.front().credit);
+    for(const auto& context:credits) {
+        auto credit_session=*session;auto draft=bank_credit_draft(context);
+        check(context.available&&edit_bank_credit(context,draft,0,100000),"actual bank/lender has no editable credit context");
+        ui::BankRequest loan;loan.kind=ui::BankRequestKind::bank_credit;loan.manager_slot=view.manager_slot;loan.runtime_club=view.runtime_club;
+        loan.revision=credit_session.revision();loan.expected_credit=context.saved;loan.credit_edits=draft.edits;loan.credit_counterparty=context.counterparty;
+        const auto intact=credit_session.snapshot();
+        if(context.counterparty==0&&draft.fees) {
+            rejects([&]{credit_session.apply_bank(data,loan);},"bank fees were accepted without confirmation");
+            check(credit_session.snapshot()==intact&&credit_session.revision()==loan.revision,"unconfirmed credit changed the career");
+        }
+        auto expected=project_manager_desktop(intact,session->reference());loan.accept_credit_fees=context.counterparty==0;
+        const auto result=commit_bank_credit(expected.state,session->rules(),view.manager_slot,context.saved,draft.edits,loan.accept_credit_fees,context.counterparty);
+        check(result.status==BankCreditStatus::accepted,"direct actual Core credit unavailable");credit_session.apply_bank(data,loan);
+        const auto& records=credit_session.snapshot().world.economy->managers[actor].loans[size_t(context.counterparty)];
+        for(size_t n=0;n<6;++n)check(records[n]==expected.state.memory.u32(layout::Loans+uint32_t(view.manager_slot*0x78+context.counterparty*0x18+n*4)),"typed credit terms lost their source/global lender identity");
+        for(size_t n=0;n<expected.human_managers();++n) {
+            const auto global=expected.global_manager(uint8_t(n));const auto person=std::find_if(credit_session.snapshot().world.managers.begin(),credit_session.snapshot().world.managers.end(),[&](const auto& m){return m.seat==global;});
+            check(person->finance->balance==manager_finance_from_legacy(expected.state,int(n)).balance,"credit did not mirror its actual borrower/lender cash");
+        }
+        check(read_save(make_save(credit_session.snapshot()))==credit_session.snapshot(),"bank/lender credit failed save roundtrip");
+        if(!output.empty())write_savegame(output/("credit-"+std::to_string(context.counterparty)+".FBM"),make_save(credit_session.snapshot()));
+    }
+    send(flow.click(0,0,true));
+    check(flow.screen_name()=="bank"&&session->preparation_open(),"first bank right-click did not restore the Original room");
+    send(flow.click(0,0,true));
+    check(flow.screen_name()=="desktop"&&!session->preparation_open()&&session->snapshot().date==date&&
+          read_save(make_save(session->snapshot()))==session->snapshot(),"bank close/save lost its persistent financial state");
+    std::cout<<"Actual bank GUI: cashier, share purchase, charged stock tip, fund/property buy/sell, paid totals/depreciation, stale rejection, crest and saved actors passed\n";
+}
 void actual_save_load(ui::StartupFlow& flow,std::unique_ptr<session_app::Session>& session,const std::filesystem::path& data,const std::filesystem::path& output) {
     const auto directory=flow.save_directory();const auto path=directory/"Resume.FBM";
     const auto send=[&](ui::StartupFlow& ui,const ui::FlowResult& action,std::unique_ptr<session_app::Session>& owner){const auto result=session_app::serve_startup(ui,action,owner,data,91,owner?owner->scope():71);if(!result.error.empty())throw std::runtime_error("file input: "+result.error);};
@@ -842,6 +925,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     const auto declined=session_app::serve_startup(flow,unsupported,session,data,91,71);
     check(!declined.error.empty()&&session->snapshot()==untouched&&session->revision()==live_revision&&!flow.desktop()->pending(),"unsupported next day fell through to legacy or left a stuck command");
     actual_management(flow,session,data,output);
+    actual_bank(flow,session,data,output.empty()?output:output/"bank-single");
     actual_save_load(flow,session,data,output);
     ui::StartupFlow mixed(data,{},ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> multi;
     mixed.click(resources.german.u16(layout::Setup_FormatError_RuntimeField3+6*2)+10,resources.german.u8(layout::Setup_FormatError_RuntimeField4+6)+10);
@@ -856,6 +940,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     check(read_save(make_save(multi->snapshot()))==multi->snapshot(),"mixed initial event did not survive save");
     if(!output.empty())write_savegame(output/"first-event.FBM",make_save(multi->snapshot()));
     actual_management(mixed,multi,data,output.empty()?output:output/"mixed-management");
+    actual_bank(mixed,multi,data,output.empty()?output:output/"bank-mixed");
     actual_mailbox(data,multi->snapshot(),output.empty()?output:output/"mailbox");
     actual_four_managers(data,output);
     actual_pending(data,output.empty()?output:output/"pending");

@@ -26,7 +26,7 @@ ManagerEconomy read_manager(const GameState& g,size_t local,const std::array<uin
     auto& monthly=m.monthly.emplace();monthly.history_count=g.manager_records.at(rec+0x286);
     for(size_t n=0;n<2;++n)monthly.expenses[n]=word(g.manager_records,rec+0x854+n*4);
     for(size_t n=0;n<15;++n)monthly.counters[n]=word(g.manager_records,rec+monthly_offsets[n]);
-    m.deposit=word(g.manager_records,rec+0x318);m.interest_income=word(g.manager_records,rec+0x870);m.overdraft_interest=word(g.manager_records,rec+0x89c);
+    m.deposit=word(g.manager_records,rec+0x318);m.interest_income=word(g.manager_records,rec+0x870);m.overdraft_interest=word(g.manager_records,rec+0x89c);m.depreciation=word(g.manager_records,rec+0x30c);
     m.submitted_balance_plan=word(g.manager_records,rec+0x320);
     std::copy_n(g.manager_records.begin()+ptrdiff_t(rec+0x54),8,m.planned_stand_capacity.begin());
     std::copy_n(g.manager_records.begin()+ptrdiff_t(rec+0x44),8,m.stand_flags.begin());
@@ -40,6 +40,7 @@ ManagerEconomy read_manager(const GameState& g,size_t local,const std::array<uin
 }
 void write_manager(GameState& g,size_t local,const ManagerEconomy& m,const std::array<uint8_t,4>& map){
     const auto rec=local*record_size;
+    if(m.depreciation)put(g.manager_records,rec+0x30c,*m.depreciation);
     set_bank_robbery_guard_month(g,int(local),m.bank_robbery_month);
     if(m.monthly){g.manager_records.at(rec+0x286)=m.monthly->history_count;
         for(size_t n=0;n<2;++n)put(g.manager_records,rec+0x854+n*4,m.monthly->expenses[n]);
@@ -92,8 +93,11 @@ void install_career_economy(AiMatchProjection& projection,const World& world){
     for(size_t n=0;n<world.markets->funds.size();++n)g.memory.set8(layout::FundBlock+uint32_t(n),world.markets->funds[n]);
     for(size_t local=0;local<4;++local){const auto global=map[local];
         for(size_t share=0;share<12;++share)for(size_t b=0;b<2;++b)g.stocks[share*0x5c+0x50+local*2+b]=world.markets->stocks[share*0x5c+0x50+global*2+b];
+        for(size_t share=0;share<12;++share)for(size_t b=0;b<4;++b)g.stocks[share*0x5c+4+local*4+b]=world.markets->stocks[share*0x5c+4+global*4+b];
         for(size_t fund=0;fund<6;++fund){const auto address=layout::Advertising_OriginalShareAdjustment_RuntimeField+uint32_t(fund*0x1c);const size_t offset=address-layout::FundBlock;
             const auto& bytes=world.markets->funds;const auto value=uint16_t(bytes.at(offset+global*2)|uint16_t(bytes.at(offset+global*2+1))<<8);g.memory.set16(address+uint32_t(local*2),value);}
+        for(size_t fund=0;fund<6;++fund)for(size_t b=0;b<4;++b)
+            g.memory.set8(layout::FundBlock+uint32_t(fund*0x1c+4+local*4+b),world.markets->funds[fund*0x1c+4+global*4+b]);
     }
     for(uint8_t n=0;n<projection.human_managers();++n)write_manager(g,n,e.managers[map[n]],map);
     install_mailbox(g,e,map);
@@ -102,8 +106,26 @@ void capture_career_economy(World& world,const AiMatchProjection& projection){
     if(!world.economy||!world.markets)throw std::invalid_argument("world12: career economy/market is missing");
     const auto map=seats(projection);const auto& g=projection.state;auto& e=*world.economy;
     e.week=g.memory.u8(layout::Savestate_Layout_ExecutableField);
-    for(uint8_t n=0;n<projection.human_managers();++n){const auto had_monthly=e.managers[map[n]].monthly.has_value();e.managers[map[n]]=read_manager(g,n,map);if(!had_monthly)e.managers[map[n]].monthly.reset();}
+    for(uint8_t n=0;n<projection.human_managers();++n){const auto had_monthly=e.managers[map[n]].monthly.has_value();const auto had_depreciation=e.managers[map[n]].depreciation.has_value();e.managers[map[n]]=read_manager(g,n,map);if(!had_monthly)e.managers[map[n]].monthly.reset();if(!had_depreciation)e.managers[map[n]].depreciation.reset();}
     capture_mailbox(e,g,map);
+}
+void capture_career_portfolios(World& world,const AiMatchProjection& projection) {
+    if(!world.markets||projection.state.stocks.size()!=world.markets->stocks.size())
+        throw FormatError("world12: portfolio workspace is incomplete");
+    const auto& g=projection.state;const auto map=seats(projection);auto stocks=world.markets->stocks;auto funds=world.markets->funds;
+    std::copy(g.stocks.begin(),g.stocks.end(),stocks.begin());
+    for(size_t n=0;n<funds.size();++n)funds[n]=g.memory.u8(layout::FundBlock+uint32_t(n));
+    for(size_t local=0;local<4;++local){const auto global=map[local];
+        for(size_t share=0;share<12;++share) {
+            for(size_t b=0;b<2;++b)stocks[share*0x5c+0x50+global*2+b]=g.stocks[share*0x5c+0x50+local*2+b];
+            for(size_t b=0;b<4;++b)stocks[share*0x5c+4+global*4+b]=g.stocks[share*0x5c+4+local*4+b];
+        }
+        for(size_t fund=0;fund<6;++fund) {
+            for(size_t b=0;b<2;++b)funds[fund*0x1c+0x14+global*2+b]=g.memory.u8(layout::FundBlock+uint32_t(fund*0x1c+0x14+local*2+b));
+            for(size_t b=0;b<4;++b)funds[fund*0x1c+4+global*4+b]=g.memory.u8(layout::FundBlock+uint32_t(fund*0x1c+4+local*4+b));
+        }
+    }
+    world.markets->stocks=stocks;world.markets->funds=funds;
 }
 Bytes career_mailbox_bytes(const CareerEconomy& economy){GameState g;const std::array<uint8_t,4> identity{0,1,2,3};install_mailbox(g,economy,identity);return g.mailbox;}
 MailboxEditFailure edit_career_message(CareerEconomy& economy,int actor,int row,const std::array<uint8_t,0xa0>& expected,MailboxEditKind kind){
@@ -125,7 +147,7 @@ EconomyPhaseOutcome phase(CareerSnapshot& state,const GameState& reference,bool 
     if(stocks)stock_market(p.state,game);
     for(size_t m=0;m<p.human_managers();++m){if(weekly)weekly_manager_settlement(p.state,int(m),random);else if(interest){p.state.manager_records.at(m*record_size+0x21f)&=0x7f;manager_daily_interest(p.state,int(m),random);}}
     p.commit_match_state(candidate.world);capture_career_economy(candidate.world,p);
-    if(stocks){auto& stocks=candidate.world.markets->stocks;std::copy(p.state.stocks.begin(),p.state.stocks.end(),stocks.begin());const auto map=seats(p);for(size_t n=0;n<4;++n)for(size_t share=0;share<12;++share)for(size_t b=0;b<2;++b)stocks[share*0x5c+0x50+map[n]*2+b]=p.state.stocks[share*0x5c+0x50+n*2+b];}
+    if(stocks)capture_career_portfolios(candidate.world,p);
     candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();candidate.validate();if(state!=before)throw std::invalid_argument("world12: economy changed during service phase");
     const EconomyPhaseOutcome result{game.calls(),random.calls(),p.human_managers()};state=std::move(candidate);return result;
 }

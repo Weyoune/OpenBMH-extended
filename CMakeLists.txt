@@ -1252,7 +1252,7 @@ add_library(bmhworld12_app STATIC src/app/world12_event.cpp src/app/world12_atte
 target_link_libraries(bmhworld12_app PUBLIC bmhworld12)
 add_library(bmhworld12_ui STATIC src/ui/world12_other_games.cpp src/ui/world12_manager_selection.cpp src/ui/world12_desktop.cpp src/ui/world12_preparation.cpp)
 target_link_libraries(bmhworld12_ui PUBLIC bmhui bmhworld12)
-add_library(bmhworld12_session STATIC src/app/world12_session.cpp src/app/world12_session_event.cpp src/app/world12_startup.cpp src/app/world12_preparation.cpp
+add_library(bmhworld12_session STATIC src/app/world12_session.cpp src/app/world12_session_event.cpp src/app/world12_startup.cpp src/app/world12_preparation.cpp src/app/world12_bank.cpp
     src/app/world12_mailbox.cpp src/app/world12_save_load.cpp)
 target_link_libraries(bmhworld12_session PUBLIC bmhworld12_app bmhworld12_ui)
 if(TARGET openbmh_play)
@@ -1264,6 +1264,9 @@ add_executable(world12_national_tests tests/world12_national_tests.cpp)
 add_executable(world12_cup_match_tests tests/world12_cup_match_tests.cpp)
 add_executable(match_weather_tests tests/match_weather_tests.cpp)
 add_executable(world12_weather_tests tests/world12_weather_tests.cpp)
+add_executable(bank_request_source_tests tests/bank_request_source_tests.cpp)
+target_link_libraries(bank_request_source_tests PRIVATE bmhui)
+add_test(NAME bank_request_source_tests COMMAND bank_request_source_tests)
 add_executable(world12_attendance_records_tests tests/world12_attendance_records_tests.cpp)
 target_link_libraries(world12_attendance_records_tests PRIVATE bmhworld12)
 add_test(NAME world12_attendance_records_tests COMMAND world12_attendance_records_tests)

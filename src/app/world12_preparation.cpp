@@ -81,7 +81,7 @@ void capture_display(CareerSnapshot& candidate,const AiMatchProjection& projecti
 }
 }
 void Session::open_preparation(const ui::DeskRequest& request) {
-    if(preparation_menu_||request.kind!=ui::DeskRequestKind::open_menu||(request.menu_kind!=3&&request.menu_kind!=18&&request.menu_kind!=16)||owner_.revision==std::numeric_limits<uint64_t>::max())throw FormatError("world12: unsupported or occupied preparation menu");
+    if(preparation_menu_||request.kind!=ui::DeskRequestKind::open_menu||(request.menu_kind!=3&&request.menu_kind!=18&&request.menu_kind!=16&&request.menu_kind!=14)||owner_.revision==std::numeric_limits<uint64_t>::max())throw FormatError("world12: unsupported or occupied preparation menu");
     const auto before=state_;auto candidate=state_;auto projection=project_manager_desktop(candidate,resources_.reference);auto& local=projection.state;
     actor(local,request.manager_slot,request.manager_slot>=0&&size_t(request.manager_slot)<local.manager_teams.size()?local.manager_teams[size_t(request.manager_slot)]:-1,request.revision,owner_.revision);
     const auto team=local.manager_teams.at(size_t(request.manager_slot));
@@ -114,6 +114,8 @@ void Session::apply_preparation(const ui::PreparationRequest& request) {
 }
 void Session::close_preparation(){if(preparation_menu_&&*preparation_menu_==63)throw FormatError("world12: mailbox requires its owned close request");if(!preparation_menu_)throw FormatError("world12: no preparation menu to close");preparation_menu_.reset();}
 ui::PreparationState Session::preparation_view(const std::filesystem::path& data)const {
-    return ui::world12_preparation(data,state_,resources_.reference,resources_.german,options_,owner_.revision);
+    auto view=ui::world12_preparation(data,state_,resources_.reference,resources_.german,options_,owner_.revision);
+    if(view.bank){view.bank->last_tip=bank_tip_;view.bank->property_notice=bank_property_notice_;view.bank->credit_notice=bank_credit_notice_;}
+    return view;
 }
 }

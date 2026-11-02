@@ -533,3 +533,13 @@ hand its receipt to gate calculation and real score publication. See
 evidence, plus the remaining Toto stakes and live/frontend work. Full German and
 English opening-cup fields now fit the bounded workspace and pass complete-round
 calculation and successor-draw tests. The public Beta is still unfinished.
+
+## Bank
+
+The Original bank now has a typed menu/action owner: cashier, shares, funds and
+property, charged tips and bank/human-lender credit reuse the shared Core request
+handler. All portfolio cost bases/holdings map by global seat, and schema26 keeps
+the verified depreciation account for property transactions. Private single and
+mixed-country GUI/save probes accompany the bank implementation. See
+[bank ownership and scope](BANK.md). Other menus and complete live/annual flows
+remain release work.

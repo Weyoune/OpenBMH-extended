@@ -80,7 +80,9 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
     }
     if(action.request==ui::FlowRequest::submenu_action){
         if(!session||!flow.matches_pending_preparation(action.submenu_action))throw FormatError("world12: preparation command has no matching view owner");
-        auto staged=std::make_unique<Session>(*session);staged->apply_preparation(action.submenu_action);
+        auto staged=std::make_unique<Session>(*session);
+        if(const auto* bank=std::get_if<ui::BankRequest>(&action.submenu_action))staged->apply_bank(data,*bank);
+        else staged->apply_preparation(action.submenu_action);
         auto view=staged->preparation_view(data);flow.acknowledge_preparation(std::move(view));session.swap(staged);return {};
     }
     if(action.request==ui::FlowRequest::submenu_closed&&session&&!flow.in_preparation_menu()){if(session->preparation_open())session->close_preparation();return {};}

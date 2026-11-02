@@ -8,15 +8,19 @@
 
 namespace bmh::test::world12 {
 // Older-schema fixtures must actually omit fields their writer did not know.
-inline void omit_attendance_records(bmh::cli::Json& root) {
+inline void omit_recent_manager_records(bmh::cli::Json& root) {
     auto& managers=std::get<bmh::cli::Json::Array>(root.object()->at("managers").value);
     for(auto& manager:managers) {
         auto& match=manager.object()->at("match_state");
         if(match.object())match.object()->erase("attendance");
     }
+    const auto economy=root.object()->find("economy");
+    if(economy!=root.object()->end()&&economy->second.object())
+        for(auto& manager:std::get<bmh::cli::Json::Array>(economy->second.object()->at("managers").value))manager.object()->erase("depreciation");
 }
-inline void omit_attendance_records(bmh::world12::World& world) {
+inline void omit_recent_manager_records(bmh::world12::World& world) {
     for(auto& manager:world.managers)if(manager.match_state)manager.match_state->attendance.reset();
+    if(world.economy)for(auto& manager:world.economy->managers)manager.depreciation.reset();
 }
 inline bmh::world12::World complete_world() {
     using namespace bmh::world12;

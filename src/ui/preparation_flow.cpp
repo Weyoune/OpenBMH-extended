@@ -1723,6 +1723,7 @@ bool StartupFlow::matches_pending_preparation(const PreparationRequest& request)
     if(const auto* r=std::get_if<PitchRequest>(&request))return matches_pending_pitch(*r);
     if(const auto* r=std::get_if<TacticsRequest>(&request))return tactics_&&tactics_->pending()&&tactics_request_json(*tactics_->pending())==tactics_request_json(*r);
     if(const auto* r=std::get_if<TrainingRequest>(&request))return training_&&training_->pending()&&training_request_json(*training_->pending())==training_request_json(*r);
+    if(const auto* r=std::get_if<BankRequest>(&request))return bank_&&bank_->pending()&&*bank_->pending()==*r;
     return false;
 }
 

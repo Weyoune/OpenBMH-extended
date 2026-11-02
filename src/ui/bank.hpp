@@ -27,6 +27,7 @@ struct BankState {
     std::string balance_text, deposit_text, account_text;
     std::string investment_limit_text;
     int manager_portrait = 0, badge_sprite = 0;
+    std::string badge_atlas; // Explicit typed crest resource; empty keeps the Original selector.
     // MaxSharesToBuy case 1: the seven read-only values shown in the finance view.
     std::array<int64_t, 7> finance_values{};
     std::array<int64_t, 2> finance_gains{};
@@ -105,6 +106,7 @@ std::string bank_request_json(const BankRequest&);
 class BankScreen {
 public:
     BankScreen(const std::filesystem::path&, BankState);
+    BankScreen(const std::filesystem::path&, BankState,const LeImage& reference);
     Image render() const;
     BankRequest click(int x, int y, bool right = false);
     BankRequest key(std::string_view);

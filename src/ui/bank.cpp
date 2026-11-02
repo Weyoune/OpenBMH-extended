@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "formats/executable_layout.hpp"
+#include "formats/badge_policy.hpp"
 #include "ui/bank.hpp"
 #include "ui/game_end.hpp"
 
@@ -331,6 +332,8 @@ std::string bank_request_json(const BankRequest& r) {
 }
 
 BankScreen::BankScreen(const std::filesystem::path& data, BankState state)
+    : BankScreen(data,std::move(state),load_le(asset_path(data,"BMH.exe"))) {}
+BankScreen::BankScreen(const std::filesystem::path& data, BankState state,const LeImage& reference)
     : state_(std::move(state)), background_(load_vga(asset_path(data / "KB", "23.VGA"))),
       deposit_frame_(load_vga(asset_path(data / "KB", "65.VGA"))),
       finance_frame_(load_vga(asset_path(data / "KB", "5.VGA"))),
@@ -339,9 +342,10 @@ BankScreen::BankScreen(const std::filesystem::path& data, BankState state)
       calculator_art_(load_vga(asset_path(data / "KB", "6.VGA"))),
       widgets_(load_vga(asset_path(data / "KB", "0.VGA"))),
       faces_(load_vga(asset_path(data / "KB", "26.VGA"))),
-      exe_(load_le(asset_path(data, "BMH.exe"))), texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
+      exe_(reference), texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
       font_(load_font(asset_path(data / "F", "BMH3.FNT"))),
-      large_font_(load_font(asset_path(data / "F", "BMH2.FNT"))), sprite_font_(data) {
+      large_font_(load_font(asset_path(data / "F", "BMH2.FNT"))), sprite_font_(data,reference) {
+    install_original_badge_policy(exe_);
     if (background_.width != 320 || background_.height != 240 || state_.manager_slot < 0 || state_.manager_slot > 3)
         throw FormatError("bank: unsupported background or state");
     if (state_.credit_counterparty != 0 || state_.credit_lenders.size() > 3)
@@ -375,7 +379,8 @@ BankScreen::BankScreen(const std::filesystem::path& data, BankState state)
     bank_credit_ = state_.credit;
     if (state_.manager_portrait < 0 || state_.manager_portrait > 11 || state_.badge_sprite < 0 || state_.badge_sprite > 0x1ff)
         throw FormatError("bank: invalid manager portrait or badge");
-    if (source_badge_fallback(state_.runtime_club)) badge_atlas_ = widgets_;
+    if (!state_.badge_atlas.empty()) badge_atlas_=load_vga(asset_path(data,state_.badge_atlas));
+    else if (source_badge_fallback(state_.runtime_club)) badge_atlas_ = widgets_;
     else badge_atlas_ = load_vga(asset_path(data / "W", std::to_string(state_.badge_sprite >> 3) + ".VGA"));
     // A retained notice belongs to the last transaction checkpoint; only the
     // matching buy_fund ACK may surface it in this screen instance.

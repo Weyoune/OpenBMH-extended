@@ -65,6 +65,7 @@ public:
     void close_mailbox(const ui::MailboxCloseRequest&);
     void open_preparation(const ui::DeskRequest&);
     void apply_preparation(const ui::PreparationRequest&);
+    void apply_bank(const std::filesystem::path& data,const ui::BankRequest&);
     void close_preparation();
     ui::PreparationState preparation_view(const std::filesystem::path&)const;
     const bmh::world12::CareerSnapshot& snapshot()const{return state_;}
@@ -82,5 +83,8 @@ private:
     bmh::world12::CareerSnapshot state_;ManagerActionOwner owner_;
     InitialCompetitionOutcome draws_;InitialManagerServicesOutcome services_;
     std::optional<int> preparation_menu_;
+    std::optional<int> bank_tip_;
+    std::optional<ui::BankState::PropertyNotice> bank_property_notice_;
+    std::optional<ui::BankState::CreditNotice> bank_credit_notice_;
 };
 }

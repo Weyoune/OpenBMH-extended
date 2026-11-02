@@ -181,7 +181,7 @@ J encode_economy(const std::optional<CareerEconomy>& input) {
     A managers,messages;
     for(const auto& m:input->managers){A loans,history;for(const auto& row:m.loans)loans.emplace_back(numbers(row));for(const auto& row:m.financial_history)history.emplace_back(numbers(row));
         J monthly=nullptr;if(m.monthly)monthly=O{{"history_count",int(m.monthly->history_count)},{"expenses",numbers(m.monthly->expenses)},{"counters",numbers(m.monthly->counters)}};
-        managers.emplace_back(O{{"bank_robbery_month",m.bank_robbery_month?id(*m.bank_robbery_month):J(nullptr)},{"monthly",std::move(monthly)},{"deposit",id(m.deposit)},{"interest_income",id(m.interest_income)},{"overdraft_interest",id(m.overdraft_interest)},
+        managers.emplace_back(O{{"depreciation",m.depreciation?id(*m.depreciation):J(nullptr)},{"bank_robbery_month",m.bank_robbery_month?id(*m.bank_robbery_month):J(nullptr)},{"monthly",std::move(monthly)},{"deposit",id(m.deposit)},{"interest_income",id(m.interest_income)},{"overdraft_interest",id(m.overdraft_interest)},
             {"loans",std::move(loans)},{"stand_flags",numbers(m.stand_flags)},{"planned_stand_capacity",numbers(m.planned_stand_capacity)},{"submitted_balance_plan",id(m.submitted_balance_plan)},{"construction_weeks",numbers(m.construction_weeks)},{"offers",numbers(m.offers)},
             {"camp_weeks",int(m.camp_weeks)},{"camp_flags",int(m.camp_flags)},{"camp_bill",id(m.camp_bill)},{"weekly_count",int(m.weekly_count)},
             {"facility_history",numbers(m.facility_history)},{"financial_history",std::move(history)}});
@@ -196,6 +196,9 @@ std::optional<CareerEconomy> decode_economy(const J& input,uint32_t version) {
         using T=typename std::remove_reference_t<decltype(output)>::value_type;for(size_t i=0;i<a.size();++i)output[i]=T(number(a[i],std::numeric_limits<T>::max()));};
     const auto& managers=array(field(input,"managers"));if(managers.size()!=4)throw FormatError("world12: invalid economy manager count");
     for(size_t i=0;i<4;++i){const auto& j=managers[i];auto& m=result.managers[i];
+        if(!j.object())throw FormatError("world12: invalid economy manager record");
+        if(version>=26){const auto& value=field(j,"depreciation");if(value.integer())m.depreciation=number(value,4294967295u);else if(!std::holds_alternative<std::nullptr_t>(value.value))throw FormatError("world12: invalid depreciation account");}
+        else if(const auto found=j.object()->find("depreciation");found!=j.object()->end()&&!std::holds_alternative<std::nullptr_t>(found->second.value))throw FormatError("world12: older schema cannot restore depreciation");
         if(version>=22){const auto& month=field(j,"bank_robbery_month");if(month.integer())m.bank_robbery_month=number(month);else if(!std::holds_alternative<std::nullptr_t>(month.value))throw FormatError("world12: invalid bank robbery month guard");}
         if(version>=20){const auto& monthly=field(j,"monthly");if(monthly.object()){auto& value=m.monthly.emplace();value.history_count=uint8_t(number(field(monthly,"history_count"),12));numbers(field(monthly,"expenses"),value.expenses);numbers(field(monthly,"counters"),value.counters);}else if(!std::holds_alternative<std::nullptr_t>(monthly.value))throw FormatError("world12: invalid monthly economy");}
         m.deposit=number(field(j,"deposit"),4294967295u);m.interest_income=number(field(j,"interest_income"),4294967295u);m.overdraft_interest=number(field(j,"overdraft_interest"),4294967295u);

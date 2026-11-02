@@ -79,12 +79,12 @@ int main()try {
     for(size_t n=0;n<2;++n){const size_t at=n?0xafe:0xafc;const auto raw=uint16_t(desktop.state.manager_records[at]|uint16_t(desktop.state.manager_records[at+1])<<8);
         check(raw&&desktop.global_player(raw-1)==first.match_state->takers[n],"sponsor row overwrote remapped designated taker");}
     desktop.commit_match_state(source.world);check(read_save(make_save(source))==source,"designated takers and masked sponsor backing failed snapshot");
-    auto blob=encode_world(source.world);auto old=cli::parse_json(std::string(blob.begin(),blob.end()));(*old.object())["version"]=16;bmh::test::world12::omit_attendance_records(old);
+    auto blob=encode_world(source.world);auto old=cli::parse_json(std::string(blob.begin(),blob.end()));(*old.object())["version"]=16;bmh::test::world12::omit_recent_manager_records(old);
     auto& managers=std::get<cli::Json::Array>((*old.object())["managers"].value);
     auto& career=(*managers[0].object())["career"];auto& services=(*career.object())["season_services"];
     auto& contracts=std::get<cli::Json::Array>((*services.object())["contracts"].value);
     auto& bytes=std::get<cli::Json::Array>(contracts[16].value);for(size_t b=8;b<12;++b)bytes[b]=7;
-    const auto old_json=cli::dump_json(old);auto old_expected=source.world;bmh::test::world12::omit_attendance_records(old_expected);for(auto& manager:old_expected.economy->managers)manager.monthly.reset();old_expected.transfer_market->entry40_history_known=false;check(decode_world(Bytes(old_json.begin(),old_json.end()))==old_expected,"old schema16 did not normalize duplicated taker words");
+    const auto old_json=cli::dump_json(old);auto old_expected=source.world;bmh::test::world12::omit_recent_manager_records(old_expected);for(auto& manager:old_expected.economy->managers)manager.monthly.reset();old_expected.transfer_market->entry40_history_known=false;check(decode_world(Bytes(old_json.begin(),old_json.end()))==old_expected,"old schema16 did not normalize duplicated taker words");
 
     std::map<int,uint32_t> seeds;
     auto sample=AiMatchProjection::create_for_humans(source,{first_club,source.world.managers[1].club},rules,{3,6,false,true});
@@ -108,7 +108,7 @@ int main()try {
     }
     auto build=source;auto& economy=build.world.economy->managers[1];economy.construction_weeks[22]=1;economy.planned_stand_capacity[0]=5;economy.stand_flags[0]=0x33;
     check(read_save(make_save(build))==build,"unfinished stand targets/flags did not survive snapshot");
-    const auto building_raw=encode_world(build.world);auto old_build=cli::parse_json(std::string(building_raw.begin(),building_raw.end()));(*old_build.object())["version"]=16;bmh::test::world12::omit_attendance_records(old_build);
+    const auto building_raw=encode_world(build.world);auto old_build=cli::parse_json(std::string(building_raw.begin(),building_raw.end()));(*old_build.object())["version"]=16;bmh::test::world12::omit_recent_manager_records(old_build);
     const auto old_build_json=cli::dump_json(old_build);
     rejects([&]{decode_world(Bytes(old_build_json.begin(),old_build_json.end()));},"schema16 guessed missing unfinished stand targets");
     for(int32_t seed=1;;++seed){GameRandom probe(seed);if(probe.range(0,175)>=6&&probe.range(0,175)>=6){build.game_seed=seed;break;}}

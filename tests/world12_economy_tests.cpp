@@ -48,12 +48,59 @@ CareerSnapshot fixture(const GameState& rules) {
 }
 CareerSnapshot* interrupted=nullptr;
 void interrupt(int){if(interrupted){++interrupted->watcom_seed;interrupted=nullptr;}}
+void portfolios(CareerSnapshot state,const GameState& rules) {
+    auto& markets=*state.world.markets;
+    const auto put=[](auto& bytes,size_t offset,uint32_t value,size_t width){for(size_t b=0;b<width;++b)bytes[offset+b]=uint8_t(value>>(b*8));};
+    const auto read=[](const auto& bytes,size_t offset,size_t width){uint32_t value=0;for(size_t b=0;b<width;++b)value|=uint32_t(bytes[offset+b])<<(b*8);return value;};
+    for(size_t n=0;n<4;++n) {
+        for(size_t share=0;share<12;++share){put(markets.stocks,share*0x5c+4+n*4,100000+share*1000+n*111,4);put(markets.stocks,share*0x5c+0x50+n*2,share*10+n+1,2);}
+        for(size_t fund=0;fund<6;++fund){put(markets.funds,fund*0x1c+4+n*4,200000+fund*1000+n*222,4);put(markets.funds,fund*0x1c+0x14+n*2,fund*10+n+1,2);}
+    }
+    const auto original=markets;
+    auto p=AiMatchProjection::create_for_humans(state,{state.world.managers[0].club,state.world.managers[1].club},rules,{1,3,false,true});
+    install_career_economy(p,state.world);
+    check(read(p.state.stocks,4,4)==read(original.stocks,8,4)&&read(p.state.stocks,8,4)==read(original.stocks,16,4)&&
+          p.state.memory.u32(layout::FundBlock+4)==read(original.funds,8,4)&&p.state.memory.u32(layout::FundBlock+8)==read(original.funds,16,4),
+          "sparse managers borrowed another seat's paid investment totals");
+    capture_career_portfolios(state.world,p);check(markets==original,"unchanged sparse portfolios failed exact roundtrip");
+    put(p.state.stocks,4,87654321,4);put(p.state.stocks,0x50,321,2);
+    p.state.memory.set32(layout::FundBlock+8,76543210);p.state.memory.set16(layout::FundBlock+0x16,123);
+    capture_career_portfolios(state.world,p);
+    auto expected=original;put(expected.stocks,8,87654321,4);put(expected.stocks,0x52,321,2);
+    put(expected.funds,16,76543210,4);put(expected.funds,0x1a,123,2);
+    check(markets==expected&&decode_world(encode_world(state.world))==state.world,
+          "portfolio commit lost paid/holding identities, untouched seats, market history or save data");
+}
+void depreciation(CareerSnapshot state,const GameState& rules) {
+    state.world.economy->managers[1].depreciation=0x87654321u;
+    state.world.economy->managers[3].depreciation=7654321;
+    auto p=AiMatchProjection::create_for_humans(state,{state.world.managers[0].club,state.world.managers[1].club},rules,{1,3,false,true});
+    install_career_economy(p,state.world);
+    const auto read=[](const Bytes& bytes,size_t at){uint32_t value=0;for(size_t b=0;b<4;++b)value|=uint32_t(bytes.at(at+b))<<(b*8);return value;};
+    check(read(p.state.manager_records,0x30c)==0x87654321u&&read(p.state.manager_records,0xb0c+0x30c)==7654321,
+          "sparse depreciation accounts lost high words or actor identity");
+    capture_career_economy(state.world,p);
+    const auto encoded=encode_world(state.world);check(decode_world(encoded)==state.world,"depreciation failed current schema roundtrip");
+    auto old=cli::parse_json(std::string(encoded.begin(),encoded.end()));old.object()->at("version")=25;
+    auto text=cli::dump_json(old);rejects([&]{decode_world(Bytes(text.begin(),text.end()));},"schema25 silently discarded known depreciation");
+    auto& managers=std::get<cli::Json::Array>(old.object()->at("economy").object()->at("managers").value);
+    for(auto& manager:managers)manager.object()->erase("depreciation");
+    text=cli::dump_json(old);state.world=decode_world(Bytes(text.begin(),text.end()));
+    check(!state.world.economy->managers[1].depreciation&&!state.world.economy->managers[3].depreciation,
+          "schema25 invented a known depreciation balance");
+    auto unknown=AiMatchProjection::create_for_humans(state,{state.world.managers[0].club,state.world.managers[1].club},rules,{1,3,false,true});
+    install_career_economy(unknown,state.world);capture_career_economy(state.world,unknown);
+    check(!state.world.economy->managers[1].depreciation&&!state.world.economy->managers[3].depreciation,
+          "ordinary projection silently initialized unknown old depreciation");
+}
 }
 int main()try {
     auto rules=reference();rules.memory.add_block(layout::Savestate_Layout_ExecutableField,1);
     rules.memory.add_block(layout::Loans,4*0x78);rules.mailbox.assign(kMailboxEntries*kMailboxEntry,0);
     auto state=fixture(rules);state.date=0;state.world.settings->difficulty=3;
     initialize_career_economy(state,rules);state.date=40;
+    portfolios(state,rules);
+    depreciation(state,rules);
     auto& economy=*state.world.economy;auto& de=economy.managers[1];auto& en=economy.managers[3];
     de.deposit=2000000;de.interest_income=123;de.overdraft_interest=456;
     de.loans[4]={100,120,12,10,2,24};de.loans[3]={200,240,24,10,2,48};
@@ -106,7 +153,7 @@ int main()try {
               "typed charged-month save/load consumes another robbery draw");
         const auto current=encode_world(charged.world);
         auto previous=cli::parse_json(std::string(current.begin(),current.end()));
-        auto& object=*previous.object();object["version"]=21;bmh::test::world12::omit_attendance_records(previous);
+        auto& object=*previous.object();object["version"]=21;bmh::test::world12::omit_recent_manager_records(previous);
         auto& managers=std::get<cli::Json::Array>(object.at("economy").object()->at("managers").value);
         for(auto& manager:managers)manager.object()->erase("bank_robbery_month");
         const auto text=cli::dump_json(previous);auto old_world=decode_world(Bytes(text.begin(),text.end()));
@@ -139,7 +186,7 @@ int main()try {
     rejects([&]{daily_finance(missing,rules,DailyEconomyKind::plain_day);},"missing economy was silently initialized");check(missing==untouched,"invalid phase changed state");
     auto invalid=state;invalid.world.economy->messages[0].recipients=1u<<8;rejects([&]{make_save(invalid);},"unknown mailbox manager accepted");
     invalid=state;invalid.world.economy->managers[1].weekly_count=53;rejects([&]{make_save(invalid);},"oversized weekly history accepted");
-    auto legacy_input=initial.world;bmh::test::world12::omit_attendance_records(legacy_input);auto raw=encode_world(legacy_input);std::string legacy(raw.begin(),raw.end());const auto version=legacy.find("\"version\":"+std::to_string(kWorldSchemaVersion));check(version!=std::string::npos,"new economy schema version missing");legacy.replace(version,std::string("\"version\":"+std::to_string(kWorldSchemaVersion)).size(),"\"version\":15");
+    auto legacy_input=initial.world;bmh::test::world12::omit_recent_manager_records(legacy_input);auto raw=encode_world(legacy_input);std::string legacy(raw.begin(),raw.end());const auto version=legacy.find("\"version\":"+std::to_string(kWorldSchemaVersion));check(version!=std::string::npos,"new economy schema version missing");legacy.replace(version,std::string("\"version\":"+std::to_string(kWorldSchemaVersion)).size(),"\"version\":15");
     auto legacy_world=legacy_input;legacy_world.economy.reset();check(decode_world(Bytes(legacy.begin(),legacy.end()))==legacy_world,"previous world schema15 ceased to load");
     {
         auto sparse=initial;auto& economy=*sparse.world.economy;economy.messages.clear();economy.recipient_mask=0;
@@ -148,7 +195,7 @@ int main()try {
         check(edit_career_message(economy,1,0,first,MailboxEditKind::delete_for_manager)==MailboxEditFailure::none,"canonical mailbox deletion refused");
         check(economy.messages.size()==3&&economy.messages[0].recipients==0&&economy.messages[0].text[0]=='A'&&economy.messages[2].text[0]=='C',"canonical mailbox lost physical hole or following message");
         check(read_save(make_save(sparse))==sparse,"sparse mailbox snapshot failed");
-        auto sparse_legacy=sparse.world;bmh::test::world12::omit_attendance_records(sparse_legacy);const auto encoded=encode_world(sparse_legacy);std::string old(encoded.begin(),encoded.end());const auto version=old.find("\"version\":"+std::to_string(kWorldSchemaVersion));check(version!=std::string::npos,"sparse mailbox schema version missing");old.replace(version,std::string("\"version\":"+std::to_string(kWorldSchemaVersion)).size(),"\"version\":20");rejects([&]{decode_world(Bytes(old.begin(),old.end()));},"older schema admitted unrepresentable physical mail holes");
+        auto sparse_legacy=sparse.world;bmh::test::world12::omit_recent_manager_records(sparse_legacy);const auto encoded=encode_world(sparse_legacy);std::string old(encoded.begin(),encoded.end());const auto version=old.find("\"version\":"+std::to_string(kWorldSchemaVersion));check(version!=std::string::npos,"sparse mailbox schema version missing");old.replace(version,std::string("\"version\":"+std::to_string(kWorldSchemaVersion)).size(),"\"version\":20");rejects([&]{decode_world(Bytes(old.begin(),old.end()));},"older schema admitted unrepresentable physical mail holes");
 
         EconomyMessage next;next.recipients=2;next.date=20;next.text[0]='D';append_economy_message(economy,next);check(economy.messages.size()==3&&economy.messages[0].text[0]=='D'&&economy.messages[1].text[0]=='B',"new mail did not refill first Original hole");
     }
