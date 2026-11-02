@@ -1489,15 +1489,18 @@ void StartupFlow::reject_environment_action(std::string reason) {
     environment_->reject_action(std::move(reason));
 }
 
-void StartupFlow::show_contracts(ContractsState state) {
+void StartupFlow::show_contracts(ContractsState state,std::optional<PreparationState> parent) {
+    if(parent){validate_preparation_context(*parent);if(!desktop_||parent->desktop.source!="world12"||desk_json(parent->desktop)!=desk_json(desktop_->state()))throw FormatError("world12: contract parent differs from its desktop");}
     if (!desktop_ || !engine_attached_ || in_preparation_menu() || in_readonly_view() || matchday_results_ ||
         !desktop_->pending() || desktop_->pending()->kind != DeskRequestKind::open_menu ||
         desktop_->pending()->menu_kind != 27 || state.manager_slot != desktop_->state().manager_slot ||
         state.runtime_club != desktop_->state().runtime_club || state.revision != desktop_->state().revision)
         throw FormatError("contracts: expected active desk menu 27 and matching projection");
-    state.request_id_base = contracts_generation_++ << 32;
-    auto screen = std::make_unique<ContractsScreen>(data_, std::move(state));
+    if(!parent)state.request_id_base = contracts_generation_++ << 32;
+    auto screen = std::make_unique<ContractsScreen>(data_, std::move(state),render_reference());
+    auto next_parent=parent?std::make_unique<PreparationState>(std::move(*parent)):nullptr;
     desktop_->resolve_local_menu();
+    if(next_parent)preparation_=std::move(next_parent);
     contracts_ = std::move(screen);
 }
 
@@ -1505,13 +1508,13 @@ void StartupFlow::acknowledge_contract_quote(ContractsState state, DeskState des
     if (!contracts_ || !contracts_->pending() ||
         contracts_->pending()->kind != ContractActionKind::request_demands || !desktop_ || !engine_attached_ ||
         state.manager_slot != desktop_->state().manager_slot || state.revision != desktop_->state().revision + 1 ||
-        contracts_->pending()->revision != desktop_->state().revision || desk.source != "engine_projection" ||
+        contracts_->pending()->revision != desktop_->state().revision || desk.source != desktop_->state().source ||
         desk.revision != state.revision || preparation.desktop.revision != state.revision ||
         preparation.desktop.manager_slot != state.manager_slot || desk_json(preparation.desktop) != desk_json(desk) ||
         desk.manager_teams != desktop_->state().manager_teams || desk.runtime_club != desktop_->state().runtime_club ||
         desk.day_counter != desktop_->state().day_counter || desk.season_index != desktop_->state().season_index ||
         desk.season_day != desktop_->state().season_day || desk.manager_name != desktop_->state().manager_name ||
-        desk.portrait != desktop_->state().portrait || desk.badge != desktop_->state().badge ||
+        desk.portrait != desktop_->state().portrait || desk.badge != desktop_->state().badge || desk.badge_atlas != desktop_->state().badge_atlas ||
         desk.options != desktop_->state().options)
         throw FormatError("contracts: mismatched demand acknowledgement context");
     validate_desk_state(desk);
@@ -1541,13 +1544,13 @@ void StartupFlow::acknowledge_contract_mutation(ContractsState state, DeskState 
                                                 ContractActionKind expected) {
     if (!contracts_ || !contracts_->pending() || contracts_->pending()->kind != expected || !desktop_ || !engine_attached_ ||
         state.manager_slot != desktop_->state().manager_slot || state.revision != desktop_->state().revision + 1 ||
-        contracts_->pending()->revision != desktop_->state().revision || desk.source != "engine_projection" ||
+        contracts_->pending()->revision != desktop_->state().revision || desk.source != desktop_->state().source ||
         desk.revision != state.revision || preparation.desktop.revision != state.revision ||
         preparation.desktop.manager_slot != state.manager_slot || desk_json(preparation.desktop) != desk_json(desk) ||
         desk.manager_teams != desktop_->state().manager_teams || desk.runtime_club != desktop_->state().runtime_club ||
         desk.day_counter != desktop_->state().day_counter || desk.season_index != desktop_->state().season_index ||
         desk.season_day != desktop_->state().season_day || desk.manager_name != desktop_->state().manager_name ||
-        desk.portrait != desktop_->state().portrait || desk.badge != desktop_->state().badge ||
+        desk.portrait != desktop_->state().portrait || desk.badge != desktop_->state().badge || desk.badge_atlas != desktop_->state().badge_atlas ||
         desk.options != desktop_->state().options)
         throw FormatError("contracts: mismatched offer acknowledgement context");
     validate_desk_state(desk);

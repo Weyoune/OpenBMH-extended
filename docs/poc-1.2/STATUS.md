@@ -559,3 +559,20 @@ the verified depreciation account for property transactions. Private single and
 mixed-country GUI/save probes accompany the bank implementation. See
 [bank ownership and scope](BANK.md). Other menus and complete live/annual flows
 remain release work.
+
+## Training camps, environment and contracts
+
+The Original eight-resort camp and six environment budget controls now have
+typed menu/action owners. Camp booking retains immediate player, tactical,
+morale, fee and visit effects; schema27 retains its focus controls. Environment
+changes retain monthly budgets without charging cash immediately. Both paths
+reuse Core and reject stale input. See [camps](TRAINING_CAMP.md) and
+[environment](ENVIRONMENT.md).
+
+The Original contract roster now owns salary demands, accepted/refused offers,
+insurance, individual premiums and team premiums. Quotes retain canonical
+manager/club/player ownership and are remapped before each Core operation;
+world and RNG changes publish after the visible request is acknowledged.
+Private single-English and mixed-country input tests include save/reload and
+retired-window guards. See [contract ownership](CONTRACTS.md). These management
+packets do not complete the normal SDL turn driver or the Beta release gates.

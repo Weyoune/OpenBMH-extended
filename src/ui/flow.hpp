@@ -398,7 +398,7 @@ public:
     bool acknowledge_friendly_booking(FriendlyBookingAck ack);
     bool acknowledge_friendly_booking(FriendlyBookingAck ack, DeskState desk, PreparationState preparation);
     void reject_friendly_action(std::string reason);
-    void show_contracts(ContractsState state);
+    void show_contracts(ContractsState state,std::optional<PreparationState> parent={});
     const ContractRequest* pending_contract_action() const { return contracts_ ? contracts_->pending() : nullptr; }
     void acknowledge_contract_quote(ContractsState state, DeskState desk, PreparationState preparation);
     void acknowledge_contract_offer(ContractsState state, DeskState desk, PreparationState preparation);

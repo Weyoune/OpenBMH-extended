@@ -8,6 +8,7 @@
 #include "app/preparation_actions.hpp"
 #include "app/training_camp_request_source.hpp"
 #include "app/bank_request_source.hpp"
+#include "app/contract_request_source.hpp"
 
 #include <stdexcept>
 #include <system_error>
@@ -5376,135 +5377,9 @@ bool CareerSession::dispatch_contract(const ui::ContractRequest& request, uint64
                                       ui::ContractActionResult& result, std::string& error) {
     if (balance_draft_ || balance_dispatch_active_ || strengths_owner_ || strengths_dispatch_active_ ||
         top_scorers_owner_ || top_scorers_dispatch_active_ || stadium_.block_expansion || other_games_owner_ || other_games_dispatch_active_) { error = "strengths_active"; return false; }
-    const auto reject = [&](std::string message) { error = std::move(message); return false; };
-    const auto original_text = [&](uint32_t address) {
-        return ui::original_to_utf8(texts_[(address - ::bmh::layout::TextPointerTable) / 4]);
-    };
-    const int active = g_.memory.has(::bmh::layout::ActiveManager) ? int(g_.memory.u8(::bmh::layout::ActiveManager)) : -1;
-    if (request.request_id == 0 || request.request_id <= last_contract_request_id_ ||
-        request.revision != revision || revision == std::numeric_limits<uint64_t>::max() ||
-        request.manager_slot != active || active < 0 || active > 3 ||
-        size_t(active) >= g_.manager_teams.size() || request.runtime_club != g_.manager_teams[size_t(active)] ||
-        request.runtime_club == kNoTeam)
-        return reject("Der Vertragsauftrag gehört zu einem veralteten Manager oder Stand.");
-    const bool team_bonuses = request.kind == ui::ContractActionKind::submit_bonuses && request.row == -1;
-    const SquadRange range = squad_range(request.runtime_club);
-    int player = -1;
-    size_t board = 0;
-    if (team_bonuses) {
-        if (request.player_id != -1 || request.quote_id != 0)
-            return reject("Der Teamprämienauftrag enthält eine fremde Spieleridentität.");
-    } else {
-        if (request.row < 0 || size_t(request.row) >= range.count || request.row >= 24 ||
-            range.first + size_t(request.row) >= g_.squad_slots.size())
-            return reject("Der ausgewählte Kaderplatz ist nicht mehr gültig.");
-        player = g_.squad_slots[range.first + size_t(request.row)] & 0x0fff;
-        if (player == 0x0fff || player != request.player_id || size_t(player) >= g_.players.size())
-            return reject("Der Spieler gehört nicht mehr zu diesem Kaderplatz.");
-        board = size_t(active) * 0x840 + size_t(request.row) * 0x58;
-        if (board + 0x58 > g_.tactics.size()) return reject("Der Vertragsdatensatz ist unvollständig.");
-    }
-    if (request.kind == ui::ContractActionKind::request_demands) {
-        if (request.quote_id != 0 || request.term_column != 0 || request.demand != 0 || request.monthly_salary != 0 ||
-            request.insurance_months != 0 || std::any_of(request.proposed_bonuses.begin(),
-                request.proposed_bonuses.end(), [](uint8_t b) { return b != 0; }))
-            return reject("Der Forderungsauftrag enthält ungültige Angebotsdaten.");
-        GameState staged_game = g_;
-        WatcomRandom staged_rand = rand_;
-        std::array<uint32_t, 4> demands{};
-        try { demands = contract_demands(staged_game, active, request.row, true, staged_rand); }
-        catch (const std::exception&) { return reject("Die Gehaltsforderungen konnten nicht ermittelt werden."); }
-        if (save_stream(staged_game) != save_stream(g_))
-            return reject("Die Forderungsabfrage hat unerwartet den Spielstand verändert.");
-        rand_ = staged_rand;
-        ++revision;
-        ContractQuoteRecord quote;
-        quote.quote_id = next_contract_quote_id_++;
-        quote.request_id = request.request_id;
-        quote.revision = revision;
-        quote.manager_slot = active;
-        quote.runtime_club = request.runtime_club;
-        quote.row = request.row;
-        quote.player_id = player;
-        quote.demands = demands;
-        contract_quote_ = quote;
-        last_contract_request_id_ = request.request_id;
-        result.success = true;
-        result.quote_id = quote.quote_id;
-        result.demands = demands;
-        return true;
-    }
-    if (!team_bonuses && (!contract_quote_ || request.quote_id != contract_quote_->quote_id ||
-        request.request_id <= contract_quote_->request_id || request.revision != contract_quote_->revision ||
-        request.manager_slot != contract_quote_->manager_slot || request.runtime_club != contract_quote_->runtime_club ||
-        request.row != contract_quote_->row || player != contract_quote_->player_id))
-        return reject("Dieser Auftrag ist nicht mehr an die aktuelle Verhandlung gebunden.");
-    const bool full_mode = g_.memory.u8(::bmh::layout::GameMode) == 3;
-    if (request.kind == ui::ContractActionKind::insure_player) {
-        if (!full_mode || request.term_column >= 4 || request.insurance_months < 1 || request.insurance_months > 60 ||
-            request.demand != 0 || request.monthly_salary != 0 ||
-            std::any_of(request.proposed_bonuses.begin(), request.proposed_bonuses.end(), [](uint8_t b) { return b != 0; }))
-            return reject("Der Versicherungsauftrag enthält ungültige Daten.");
-        // ContractBonuses checks these in this order and uses the corresponding Original dialog.
-        if (g_.tactics[board + 0x0b] & 0x20) return reject(original_text(::bmh::layout::CareerSession_Reject_TextPointer));
-        if (g_.tactics[board + 0x0b] & 0x40) return reject(original_text(::bmh::layout::CareerSession_Reject_TextPointer2));
-        if (g_.tactics[board + 0x43] != 0) return reject(original_text(::bmh::layout::CareerSession_Reject_TextPointer3));
-        if (g_.players[size_t(player)].w35c >> 27) return reject(original_text(::bmh::layout::CareerSession_Reject_TextPointer4));
-        GameState staged_game = g_;
-        if (!contract_insurance(staged_game, active, request.row, request.term_column, request.insurance_months).accepted)
-            return reject("Die Versicherung konnte nicht bestätigt werden.");
-        g_ = std::move(staged_game);
-        ++revision;
-        last_contract_request_id_ = request.request_id;
-        contract_quote_->revision = revision;
-        result.success = result.accepted = true;
-        result.quote_id = contract_quote_->quote_id;
-        result.demands = contract_quote_->demands;
-        return true;
-    }
-    for (size_t i = 0; i < request.proposed_bonuses.size(); ++i)
-        if (request.proposed_bonuses[i] > (i < 3 ? 20 : 200))
-            return reject("Die Prämie liegt über dem Originalmaximum.");
-    if (request.kind == ui::ContractActionKind::submit_bonuses) {
-        if (!full_mode || request.term_column != 0 || request.demand != 0 || request.monthly_salary != 0 ||
-            request.insurance_months != 0) return reject("Der Prämienauftrag enthält ungültige Daten.");
-        GameState staged_game = g_;
-        const bool accepted = contract_bonuses(staged_game, active, request.row, request.proposed_bonuses);
-        g_ = std::move(staged_game);
-        ++revision;
-        last_contract_request_id_ = request.request_id;
-        contract_quote_.reset();
-        result.success = true;
-        result.accepted = accepted;
-        result.feedback = accepted ? original_text(team_bonuses ? ::bmh::layout::CareerSession_Reject_TextPointer8 : ::bmh::layout::CareerSession_Reject_TextPointer9) :
-            team_bonuses ? original_text(::bmh::layout::CareerSession_Reject_TextPointer7) : std::string{};
-        return true;
-    }
-    if (request.kind != ui::ContractActionKind::submit_offer || request.term_column >= 4 || request.insurance_months != 0 ||
-        request.demand != contract_quote_->demands[request.term_column] || request.demand == 0 ||
-        request.demand == std::numeric_limits<uint32_t>::max() || request.monthly_salary > 200000 ||
-        (g_.tactics[board + 0x4f] & 0x80) || (g_.tactics[board + 0x0b] & 0x60))
-        return reject("Dieses Angebot ist im Original nicht mehr verhandelbar.");
-    if (!full_mode && !std::equal(request.proposed_bonuses.begin(), request.proposed_bonuses.end(),
-                                  g_.tactics.begin() + long(board + 0x12)))
-        return reject("Prämienänderungen sind nur in Spielmodus III verfügbar.");
-    GameState staged_game = g_;
-    WatcomRandom staged_rand = rand_;
-    bool accepted = false;
-    try {
-        accepted = contract_offer(staged_game, active, request.row, request.term_column,
-                                 request.monthly_salary, request.demand, false, false, staged_rand,
-                                 &request.proposed_bonuses);
-    } catch (const std::exception&) { return reject("Der Vertrag konnte nicht verhandelt werden."); }
-    g_ = std::move(staged_game);
-    rand_ = staged_rand;
-    ++revision;
-    last_contract_request_id_ = request.request_id;
-    contract_quote_.reset();
-    result.success = true;
-    result.accepted = accepted;
-    result.feedback = original_text(accepted ? ::bmh::layout::CareerSession_Reject_TextPointer5 : ::bmh::layout::CareerSession_Reject_TextPointer6);
-    return true;
+    return apply_contract_request_source(g_,texts_,rand_,request,revision,contract_quote_,
+        next_contract_quote_id_,last_contract_request_id_,result,error,
+        [](const GameState& a,const GameState& b){return save_stream(a)==save_stream(b);});
 }
 
 bool CareerSession::validate_desk_setting_owner(const DeskSettingIdentity& identity, uint64_t revision,

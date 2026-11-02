@@ -47,6 +47,7 @@ struct ContractsState {
     std::string manager_name;
     int manager_portrait = 0;
     int badge_sprite = 0;
+    std::string badge_atlas;
     std::vector<ContractPlayer> players;
     std::array<uint8_t, 7> team_premiums{};
     int selected_row = -1;
@@ -89,6 +90,7 @@ std::string contracts_state_json(const ContractsState&);
 class ContractsScreen {
 public:
     ContractsScreen(const std::filesystem::path&, ContractsState);
+    ContractsScreen(const std::filesystem::path&, ContractsState,const LeImage& reference);
     Image render() const;
     bool click(int x, int y, bool right = false);
     bool process_timer_expired(int pointer_x, int pointer_y);

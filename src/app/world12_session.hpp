@@ -8,11 +8,13 @@
 #include "app/world12_weather.hpp"
 #include "app/world12_attendance.hpp"
 #include "app/world12_event.hpp"
+#include "app/contract_source_types.hpp"
 #include "formats/le.hpp"
 #include "ui/manager.hpp"
 #include "ui/world12_manager_selection.hpp"
 #include "ui/preparation.hpp"
 #include "ui/environment.hpp"
+#include "ui/contracts.hpp"
 #include "game/pending_offer.hpp"
 namespace bmh::ui {struct DeskRequest;struct SaveLoadRequest;struct MailboxState;struct MailboxActionRequest;struct MailboxCloseRequest;}
 namespace bmh::app::world12 {
@@ -67,6 +69,10 @@ public:
     ui::EnvironmentView open_environment(const ui::DeskRequest&,const std::filesystem::path& data);
     ui::EnvironmentView environment_view(const std::filesystem::path& data)const;
     bool apply_environment(const ui::EnvironmentRequest&);
+    ui::ContractsState open_contracts(const ui::DeskRequest&,const std::filesystem::path& data);
+    ui::ContractsState contracts_view(const std::filesystem::path& data)const;
+    ui::ContractActionResult apply_contract(const std::filesystem::path& data,const ui::ContractRequest&);
+    void close_contracts();
     void open_preparation(const ui::DeskRequest&);
     void apply_preparation(const ui::PreparationRequest&);
     void apply_bank(const std::filesystem::path& data,const ui::BankRequest&);
@@ -93,5 +99,10 @@ private:
     std::optional<ui::DeskRequest> environment_owner_;
     uint64_t environment_request_=0;
     uint64_t environment_generation_=0;
+    std::optional<ContractSourceQuote> contract_quote_;
+    bmh::world12::PlayerId contract_player_;
+    bmh::world12::ClubId contract_club_;
+    std::optional<uint8_t> contract_seat_;
+    uint64_t contract_generation_=0,contract_request_=0,next_contract_quote_=1;
 };
 }

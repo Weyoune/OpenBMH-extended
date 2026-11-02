@@ -75,6 +75,10 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
             auto staged=std::make_unique<Session>(*session);auto view=staged->open_environment(action.desk_action,data);
             auto parent=staged->preparation_view(data);flow.show_environment(std::move(view),action.desk_action,std::move(parent));session.swap(staged);return {};
         }
+        if(action.desk_action.kind==ui::DeskRequestKind::open_menu&&action.desk_action.menu_kind==27){
+            auto staged=std::make_unique<Session>(*session);auto view=staged->open_contracts(action.desk_action,data);auto parent=staged->preparation_view(data);
+            flow.show_contracts(std::move(view),std::move(parent));session.swap(staged);return {};
+        }
         if(action.desk_action.kind==ui::DeskRequestKind::open_menu&&(action.desk_action.menu_kind==10||action.desk_action.menu_kind==11)){
             session->validate_file_owner(action.desk_action.manager_slot,action.desk_action.revision);
             flow.open_world12_file_dialog(action.desk_action.menu_kind==10?ui::SaveLoadMode::load:ui::SaveLoadMode::save,session->rules(),save_info_reader(session->rules()));return {};
@@ -97,8 +101,23 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
         if(changed)parent=staged->preparation_view(data);
         flow.acknowledge_environment(std::move(view),std::move(parent));session.swap(staged);return {};
     }
+    if(action.request==ui::FlowRequest::contract_action){
+        if(!session||!flow.pending_contract_action()||*flow.pending_contract_action()!=action.contract_action)
+            throw FormatError("world12: contract command has no matching view owner");
+        auto staged=std::make_unique<Session>(*session);const auto result=staged->apply_contract(data,action.contract_action);
+        auto view=staged->contracts_view(data);auto parent=staged->preparation_view(data);auto desk=parent.desktop;
+        view.selected_row=action.contract_action.row;view.feedback=result.feedback;
+        switch(action.contract_action.kind){
+        case ui::ContractActionKind::request_demands:flow.acknowledge_contract_quote(std::move(view),std::move(desk),std::move(parent));break;
+        case ui::ContractActionKind::submit_offer:flow.acknowledge_contract_offer(std::move(view),std::move(desk),std::move(parent));break;
+        case ui::ContractActionKind::submit_bonuses:flow.acknowledge_contract_bonuses(std::move(view),std::move(desk),std::move(parent));break;
+        case ui::ContractActionKind::insure_player:flow.acknowledge_contract_insurance(std::move(view),std::move(desk),std::move(parent));break;
+        }
+        session.swap(staged);return {};
+    }
+    if(action.request==ui::FlowRequest::contracts_closed&&session&&!flow.in_preparation_menu()){session->close_contracts();return {};}
     if(action.request==ui::FlowRequest::submenu_closed&&session&&!flow.in_preparation_menu()){if(session->preparation_open())session->close_preparation();return {};}
     if(action.request!=ui::FlowRequest::none&&action.request!=ui::FlowRequest::submenu_opened&&action.request!=ui::FlowRequest::submenu_closed)throw FormatError("world12: this frontend action has no typed owner yet");
     return {};
-}catch(const std::exception& error){if(action.request==ui::FlowRequest::environment_action&&flow.pending_environment())flow.reject_environment_action(error.what());if(action.request==ui::FlowRequest::mailbox_action&&flow.pending_mailbox())flow.reject_mailbox(error.what());if(action.request==ui::FlowRequest::mailbox_closed&&flow.pending_mailbox_close())flow.reject_mailbox_close(error.what());if(action.request==ui::FlowRequest::file_action&&flow.pending_file()&&*flow.pending_file()==action.file_action)flow.reject_file_action(error.what());if(action.request==ui::FlowRequest::desk_action||action.request==ui::FlowRequest::kickoff)flow.reject_desk_action(error.what());else if(action.request==ui::FlowRequest::submenu_action&&flow.matches_pending_preparation(action.submenu_action))flow.reject_preparation_action(error.what());return {StartupProgress::idle,error.what()};}
+}catch(const std::exception& error){if(action.request==ui::FlowRequest::contract_action&&flow.pending_contract_action())flow.reject_contract_action(error.what());if(action.request==ui::FlowRequest::environment_action&&flow.pending_environment())flow.reject_environment_action(error.what());if(action.request==ui::FlowRequest::mailbox_action&&flow.pending_mailbox())flow.reject_mailbox(error.what());if(action.request==ui::FlowRequest::mailbox_closed&&flow.pending_mailbox_close())flow.reject_mailbox_close(error.what());if(action.request==ui::FlowRequest::file_action&&flow.pending_file()&&*flow.pending_file()==action.file_action)flow.reject_file_action(error.what());if(action.request==ui::FlowRequest::desk_action||action.request==ui::FlowRequest::kickoff)flow.reject_desk_action(error.what());else if(action.request==ui::FlowRequest::submenu_action&&flow.matches_pending_preparation(action.submenu_action))flow.reject_preparation_action(error.what());return {StartupProgress::idle,error.what()};}
 }

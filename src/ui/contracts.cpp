@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "formats/executable_layout.hpp"
+#include "formats/badge_policy.hpp"
 #include "ui/contracts.hpp"
 #include "ui/game_end.hpp"
 
@@ -208,9 +209,11 @@ std::string contracts_state_json(const ContractsState& s) {
 }
 
 ContractsScreen::ContractsScreen(const std::filesystem::path& data, ContractsState state)
-    : state_(std::move(state)), exe_(load_le(asset_path(data, "BMH.exe"))),
+    : ContractsScreen(data,std::move(state),load_le(asset_path(data,"BMH.exe"))) {}
+ContractsScreen::ContractsScreen(const std::filesystem::path& data, ContractsState state,const LeImage& reference)
+    : state_(std::move(state)), exe_(reference),
       font_(load_font(asset_path(data / "F", "BMH3.FNT"))),
-      large_font_(load_font(asset_path(data / "F", "BMH2.FNT"))), sprite_font_(data),
+      large_font_(load_font(asset_path(data / "F", "BMH2.FNT"))), sprite_font_(data,reference),
       texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
       atlas_(load_vga(asset_path(data / "KB", "2.VGA"))),
       flags_(load_vga(asset_path(data / "KB", "24.VGA"))),
@@ -218,13 +221,15 @@ ContractsScreen::ContractsScreen(const std::filesystem::path& data, ContractsSta
       widgets_(load_vga(asset_path(data / "KB", "0.VGA"))),
       calculator_(load_vga(asset_path(data / "KB", "6.VGA"))),
       faces_(load_vga(asset_path(data / "KB", "26.VGA"))) {
+    install_original_badge_policy(exe_);
     if (atlas_.width == 314) { Image padded(320, atlas_.height, 0); padded.blit(atlas_,0,0); atlas_ = std::move(padded); }
     if (state_.manager_slot < 0 || state_.manager_slot > 3 || state_.runtime_club < 0 ||
         state_.players.size() > 24 || background_.width != 320 || background_.height != 240)
         throw FormatError("contracts: invalid state");
     if (state_.manager_portrait < 0 || state_.manager_portrait > 11 || state_.badge_sprite < 0 || state_.badge_sprite > 0x1ff)
         throw FormatError("contracts: invalid manager identity");
-    if (source_badge_fallback(state_.runtime_club)) badge_atlas_ = widgets_;
+    if (!state_.badge_atlas.empty())badge_atlas_=load_vga(asset_path(data,state_.badge_atlas));
+    else if (source_badge_fallback(state_.runtime_club)) badge_atlas_ = widgets_;
     else badge_atlas_ = load_vga(asset_path(data / "W", std::to_string(state_.badge_sprite >> 3) + ".VGA"));
 }
 

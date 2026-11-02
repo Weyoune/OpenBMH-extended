@@ -20,6 +20,7 @@
 #include "game/world12/desktop_projection.hpp"
 #include <fstream>
 #include "game/week.hpp"
+#include "game/month.hpp"
 #include "game/matchday_setup.hpp"
 #include "fixture_tables.hpp"
 #include <algorithm>
@@ -521,6 +522,72 @@ void actual_environment(ui::StartupFlow& flow,std::unique_ptr<session_app::Sessi
     send(flow.send_key("ESC"));
     std::cout<<"Actual environment GUI: all six Original level controls, Core monthly budgets, no immediate cash/RNG/date change, save/reload and retired-window replay guard passed\n";
 }
+void actual_contracts(ui::StartupFlow& flow,std::unique_ptr<session_app::Session>& session,const std::filesystem::path& data,const std::filesystem::path& output) {
+    const auto initial=session->snapshot();
+    const auto send=[&](const ui::FlowResult& action){const auto result=session_app::serve_startup(flow,action,session,data,91,session->scope());if(!result.error.empty())throw std::runtime_error("contracts GUI: "+result.error);};
+    const auto capture=[&](const char* name){if(output.empty())return;std::filesystem::create_directories(output);const auto frame=flow.render();
+        const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));std::ofstream image(output/(std::string(name)+".ppm"),std::ios::binary);image<<"P6\n320 240\n255\n";
+        for(auto pixel:frame.pixels){const auto color=palette.argb[pixel];image.put(char(color>>16));image.put(char(color>>8));image.put(char(color));}
+        write_savegame(output/(std::string(name)+".FBM"),make_save(session->snapshot()));};
+    const auto open=[&]{const auto& items=flow.desktop()->state().items;const auto icon=std::find_if(items.begin(),items.end(),[](const auto& item){return item.kind==27&&!item.disabled;});check(icon!=items.end(),"Original contracts icon unavailable");send(flow.click(icon->x+icon->width/2,icon->y+icon->height/2));};
+    open();check(flow.screen_name()=="contracts"&&session->preparation_open()&&session->snapshot()==initial,"contracts opening changed gameplay");capture("contracts-before");
+    const auto roster=session->contracts_view(data);
+    const auto y_for=[&](int row){int baseline=36;for(size_t i=0;i<roster.players.size();++i){if(i&&(roster.players[i].source.slot&0xc000)!=(roster.players[i-1].source.slot&0xc000))baseline+=2;if(roster.players[i].row==row)return baseline-3;baseline+=7;}throw std::runtime_error("contract row disappeared");};
+    check(!roster.players.empty(),"contracts roster empty");send(flow.click(20,y_for(roster.players.front().row)));
+    check(flow.screen_name()=="player_card","contract roster did not open its player child");send(flow.send_key("ESC"));
+    check(flow.screen_name()=="contracts"&&session->snapshot()==initial,"player child changed gameplay or lost its contracts parent");
+    int row=-1;for(const auto& player:roster.players){auto p=project_manager_desktop(session->snapshot(),session->reference());WatcomRandom random(session->snapshot().watcom_seed);const auto demands=contract_demands(p.state,roster.manager_slot,player.row,true,random);
+        if(player.insurance_available&&!player.offer_blocked&&!(player.board_flags&0x60)&&demands[0]>100&&demands[0]<200000){row=player.row;break;}}
+    check(row>=0,"actual roster has no insurable/negotiable player");const int top=row<13?130:22;
+    const auto verify_core=[&](const CareerSnapshot& before,auto& expected,const WatcomRandom& random){auto world=before.world;expected.commit_match_state(world);capture_career_economy(world,expected);
+        check(session->snapshot().world==world&&session->snapshot().watcom_seed==random.seed()&&session->snapshot().game_seed==before.game_seed&&session->snapshot().date==before.date,"contract action diverged from Core player/board/economy/RNG state");
+        check(read_save(make_save(session->snapshot()))==session->snapshot(),"contract state failed typed save roundtrip");};
+    const auto talk=[&]{const auto before=session->snapshot();const auto revision=session->revision();auto p=project_manager_desktop(before,session->reference());WatcomRandom random(before.watcom_seed);const auto expected=contract_demands(p.state,roster.manager_slot,row,true,random);
+        const auto action=flow.click(20,y_for(row),true);check(action.request==ui::FlowRequest::contract_action&&action.contract_action.kind==ui::ContractActionKind::request_demands,"Original right-click did not request demands");send(action);
+        check(session->contracts_view(data).demands==expected&&session->snapshot().world==before.world&&session->revision()==revision+1&&session->snapshot().watcom_seed==random.seed(),"quote lost Original demands, revision or RNG");return action.contract_action;};
+    const auto calculator=[&](uint32_t value){check(flow.click(76,132).changed,"contract calculator did not clear");if(value)check(flow.text(std::to_string(value)),"contract calculator rejected digits");return flow.click(94,132);};
+    const auto quote_request=talk();capture("contracts-demands");
+    {
+        const auto before=session->snapshot();auto p=project_manager_desktop(before,session->reference());WatcomRandom random(before.watcom_seed);
+        check(contract_insurance(p.state,roster.manager_slot,row,2,12).accepted,"Core insurance unavailable");
+        check(flow.click(220,top+67).changed,"insurance cell did not open its calculator");const auto action=calculator(12);
+        check(action.request==ui::FlowRequest::contract_action&&action.contract_action.kind==ui::ContractActionKind::insure_player,"insurance calculator did not emit its request");send(action);verify_core(before,p,random);capture("contracts-insured");
+        auto replay=action.contract_action;replay.revision=session->revision();const auto accepted=session->snapshot();rejects([&]{session->apply_contract(data,replay);},"insurance request replay accepted");check(session->snapshot()==accepted,"insurance replay changed gameplay");
+    }
+    ui::ContractRequest accepted_offer;
+    {
+        const auto quote=session->contracts_view(data);const auto before=session->snapshot();const auto revision=session->revision();auto p=project_manager_desktop(before,session->reference());WatcomRandom random(before.watcom_seed);
+        const auto player=std::find_if(quote.players.begin(),quote.players.end(),[&](const auto& item){return item.row==row;});check(player!=quote.players.end(),"quoted player unavailable");
+        auto forged=quote_request;forged.kind=ui::ContractActionKind::submit_offer;forged.request_id+=100;forged.revision=revision;forged.quote_id=quote.quote_id;forged.demand=(*quote.demands)[0]+1;forged.monthly_salary=(*quote.demands)[0];forged.proposed_bonuses=player->team_premiums;
+        rejects([&]{session->apply_contract(data,forged);},"changed salary demand accepted");check(session->snapshot()==before&&session->revision()==revision,"forged demand changed state");
+        check(contract_offer(p.state,roster.manager_slot,row,0,(*quote.demands)[0],(*quote.demands)[0],false,false,random,&player->team_premiums),"Core full salary offer declined");
+        check(flow.click(100,top+52).changed&&calculator((*quote.demands)[0]).changed,"salary calculator did not confirm its draft");const auto action=flow.click(125,top+80);
+        check(action.request==ui::FlowRequest::contract_action&&action.contract_action.kind==ui::ContractActionKind::submit_offer,"salary OK did not submit");accepted_offer=action.contract_action;send(action);verify_core(before,p,random);capture("contracts-accepted");
+        const auto accepted=session->snapshot();rejects([&]{session->apply_contract(data,accepted_offer);},"accepted offer replayed");check(session->snapshot()==accepted,"accepted offer replay changed state");send(flow.send_key("ESC"));
+    }
+    {
+        talk();const auto before=session->snapshot();auto p=project_manager_desktop(before,session->reference());WatcomRandom random(before.watcom_seed);
+        auto bonuses=session->contracts_view(data).players;const auto player=std::find_if(bonuses.begin(),bonuses.end(),[&](const auto& item){return item.row==row;});auto proposed=player->team_premiums;proposed[0]=proposed[0]==1?2:1;
+        check(contract_bonuses(p.state,roster.manager_slot,row,proposed),"Core personal bonus declined");
+        check(flow.click(285,top+80).changed&&flow.click(30,top+27).changed&&calculator(proposed[0]).changed,"personal premium calculator unavailable");const auto action=flow.click(125,top+80);
+        check(action.request==ui::FlowRequest::contract_action&&action.contract_action.kind==ui::ContractActionKind::submit_bonuses,"personal premium did not submit");send(action);verify_core(before,p,random);capture("contracts-personal-premium");send(flow.send_key("ESC"));
+    }
+    {
+        const auto before=session->snapshot();auto p=project_manager_desktop(before,session->reference());WatcomRandom random(before.watcom_seed);auto proposed=session->contracts_view(data).team_premiums;proposed[0]=proposed[0]==1?2:1;
+        check(contract_bonuses(p.state,roster.manager_slot,-1,proposed),"Core team premium declined");
+        check(flow.click(220,218).changed&&flow.click(30,49).changed&&calculator(proposed[0]).changed,"team premium calculator unavailable");const auto action=flow.click(125,102);
+        check(action.request==ui::FlowRequest::contract_action&&action.contract_action.row==-1,"team premium did not submit without a player quote");send(action);verify_core(before,p,random);capture("contracts-team-premium");send(flow.send_key("ESC"));
+    }
+    {
+        talk();const auto quote=session->contracts_view(data);const auto before=session->snapshot();auto p=project_manager_desktop(before,session->reference());WatcomRandom random(before.watcom_seed);
+        const auto player=std::find_if(quote.players.begin(),quote.players.end(),[&](const auto& item){return item.row==row;});
+        check(!contract_offer(p.state,roster.manager_slot,row,0,1,(*quote.demands)[0],false,false,random,&player->team_premiums),"Core low salary offer unexpectedly accepted");
+        check(flow.click(100,top+52).changed&&calculator(1).changed,"refusal salary draft unavailable");send(flow.click(125,top+80));verify_core(before,p,random);capture("contracts-refused");send(flow.send_key("ESC"));
+    }
+    send(flow.send_key("ESC"));check(flow.screen_name()=="desktop"&&!session->preparation_open(),"contracts did not release their menu owner");
+    open();const auto reopened=session->snapshot();auto retired=quote_request;retired.revision=session->revision();rejects([&]{session->apply_contract(data,retired);},"closed contracts window request replayed after reopening");check(session->snapshot()==reopened,"retired contracts request changed state");capture("contracts-reopened");send(flow.send_key("ESC"));
+    std::cout<<"Actual contracts GUI: player child, Core demands/insurance/salary/personal and team bonuses, global identities, save roundtrips and quote/replay/window guards passed\n";
+}
 void actual_save_load(ui::StartupFlow& flow,std::unique_ptr<session_app::Session>& session,const std::filesystem::path& data,const std::filesystem::path& output) {
     const auto directory=flow.save_directory();const auto path=directory/"Resume.FBM";
     const auto send=[&](ui::StartupFlow& ui,const ui::FlowResult& action,std::unique_ptr<session_app::Session>& owner){const auto result=session_app::serve_startup(ui,action,owner,data,91,owner?owner->scope():71);if(!result.error.empty())throw std::runtime_error("file input: "+result.error);};
@@ -1007,6 +1074,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     actual_bank(flow,session,data,output.empty()?output:output/"bank-single");
     actual_camp(flow,session,data,output.empty()?output:output/"camp-single");
     actual_environment(flow,session,data,output.empty()?output:output/"environment-single");
+    actual_contracts(flow,session,data,output.empty()?output:output/"contracts-single");
     actual_save_load(flow,session,data,output);
     ui::StartupFlow mixed(data,{},ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> multi;
     mixed.click(resources.german.u16(layout::Setup_FormatError_RuntimeField3+6*2)+10,resources.german.u8(layout::Setup_FormatError_RuntimeField4+6)+10);
@@ -1024,7 +1092,16 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     actual_bank(mixed,multi,data,output.empty()?output:output/"bank-mixed");
     actual_camp(mixed,multi,data,output.empty()?output:output/"camp-mixed");
     actual_environment(mixed,multi,data,output.empty()?output:output/"environment-mixed");
+    actual_contracts(mixed,multi,data,output.empty()?output:output/"contracts-mixed");
     actual_mailbox(data,multi->snapshot(),output.empty()?output:output/"mailbox");
+    {
+        PendingOfferHooks decline;decline.answer=[](const GameState&,const PendingOfferQuestion&){return PendingOfferAnswer::yes;};
+        decline.select_transfer=[](const GameState&,const TransferOfferListView&){return PendingOfferTransferChoice{PendingOfferTransferChoiceKind::decline,-1};};
+        const auto& items=mixed.desktop()->state().items;const auto icon=std::find_if(items.begin(),items.end(),[](const auto& item){return item.kind==12;});
+        const auto result=session_app::serve_startup(mixed,mixed.click(icon->x+icon->width/2,icon->y+icon->height/2),multi,data,91,72,decline);
+        check(result.error.empty()&&multi->snapshot().world.manager_country(*multi->snapshot().desktop->active_seat)==Country::germany,"mixed contract handoff did not reach German manager");
+        actual_contracts(mixed,multi,data,output.empty()?output:output/"contracts-german");
+    }
     actual_four_managers(data,output);
     actual_pending(data,output.empty()?output:output/"pending");
     actual_pending_multiplayer(data,output.empty()?output:output/"pending");
