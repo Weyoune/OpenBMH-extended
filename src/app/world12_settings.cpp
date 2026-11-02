@@ -8,9 +8,9 @@
 namespace bmh::app::world12 {
 namespace {
 bool deferred(size_t index) {
-    // H8 is the wall-clock desktop deadline; Q5/R5 alter calendar admission.
+    // H8 is the wall-clock deadline; R5 changes secondary-league admission.
     // Their typed runtime owners are separate from presentation preferences.
-    return index==7*9+7||index==16*9+4||index==17*9+4;
+    return index==7*9+7||index==17*9+4;
 }
 void refresh(GameState& g,const LeImage& rules) {
     std::array<uint8_t,180> raw{};
@@ -32,7 +32,7 @@ ui::SettingsState Session::settings_view()const {
     auto view=ui::settings_from_game(p.state,settings_owner_->manager_slot,owner_.revision,resources_.german,settings_sound_);
     if(!view.display_cells)view.display_cells=view.cells;
     (*view.display_cells)[7*9+7]=200;
-    for(auto index:{16*9+4,17*9+4})(*view.display_cells)[index]|=0x80;
+    (*view.display_cells)[17*9+4]|=0x80;
     return view;
 }
 ui::SettingsState Session::open_settings(const ui::DeskRequest& request,std::optional<ui::SettingsSoundCapabilities> sound) {
@@ -48,6 +48,13 @@ ui::SettingsState Session::open_settings(const ui::DeskRequest& request,std::opt
     candidate.preparation_menu_=19;candidate.settings_owner_=request;candidate.settings_sound_=sound;
     ++candidate.owner_.revision;++candidate.settings_generation_;
     auto view=candidate.settings_view();candidate.state_.validate();*this=std::move(candidate);return view;
+}
+std::optional<Session::SettingsRefusal> Session::settings_refusal(const ui::SettingsWriteRequest& request,uint64_t sequence)const {
+    validate_settings_owner(sequence,request.revision);
+    if(request.manager_slot!=settings_owner_->manager_slot||request.row!=16||request.column!=4)return {};
+    auto p=bmh::world12::project_manager_desktop(state_,resources_.reference);
+    if(const auto notice=ui::settings_source_refusal(p.state,request,owner_.revision))return SettingsRefusal{std::move(p.state),*notice};
+    return {};
 }
 void Session::apply_settings(const ui::SettingsWriteRequest& request,uint64_t sequence) {
     validate_settings_owner(sequence,request.revision);
@@ -66,6 +73,14 @@ Bytes Session::prepare_settings_file(const ui::SaveLoadRequest& request,uint64_t
         if(!incoming||incoming->size()!=180)throw FormatError("world12: EIN must contain exactly 180 bytes");
         for(size_t i=0;i<180;++i)if(deferred(i)&&(*incoming)[i]!=raw[i])throw FormatError("world12: EIN changes a setting with a separate runtime owner");
         bytes=*incoming;auto p=bmh::world12::project_manager_desktop(candidate,resources_.reference);
+        // OpenBMH deviates from the original: typed EIN import also honors the
+        // indoor-date refusal, so a file cannot invalidate owned event receipts.
+        if((bytes[16*9+4]&0x7f)!=(raw[16*9+4]&0x7f)) {
+            if((bytes[16*9+4]&0x7f)>1)throw FormatError("world12: EIN indoor setting is not a Source switch");
+            ui::SettingsWriteRequest write{settings_owner_->manager_slot,owner_.revision,raw,16,4,ui::SettingsEdit::toggle_binary};
+            auto revision=owner_.revision;std::string error;
+            if(!apply_settings_request_source(p.state,resources_.german,settings_sound_,true,write,revision,error))throw FormatError(error);
+        }
         for(uint32_t i=0;i<180;++i)p.state.memory.set8(layout::LeaguePresentationOptions+i,bytes[i]);
         refresh(p.state,resources_.german);bmh::world12::capture_career_economy(candidate.world,p);
     }else if(incoming)throw FormatError("world12: settings save has unexpected payload");

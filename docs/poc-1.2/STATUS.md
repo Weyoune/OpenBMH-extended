@@ -628,3 +628,16 @@ them into desktop/match projections and retain them in FBM. EIN load/save uses
 confined paths, confirmed overwrite and verified atomic publication. Retired
 windows and failed imports cannot change live state. H8/Q5/R5 and live-match
 settings ownership remain explicit boundaries; this does not qualify a Beta.
+
+
+## Indoor calendar switch and seasonal settings refusal
+
+Q5 now uses the shared settings kernel and actually suppresses German indoor
+appointments in day tickets. English League Cup appointments remain enabled.
+The saved source calendar is immutable; the clock only crosses a suppressed
+indoor-only date, retaining daily services and real other competition stops.
+Core projections now use the saved season origin. Inclusive 110–230 refusals
+use the Original timed manager notice in SDL, with interrupted/reentrant-owner
+protection. EIN import cannot bypass that calendar ownership. World31 is
+unchanged. H8/R5, enabled indoor simulation, the remaining management/live/annual
+owners and full Beta qualification are still open.

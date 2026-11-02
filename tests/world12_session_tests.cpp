@@ -10,6 +10,7 @@
 #include "game/world12/manager_finance.hpp"
 #include "game/world12/manager_tactics.hpp"
 #include "game/desk.hpp"
+#include "game/messages.hpp"
 #include "game/world12/codec.hpp"
 #include "game/save.hpp"
 #include "formats/data_profile.hpp"
@@ -904,6 +905,59 @@ void actual_settings_fixture(const std::filesystem::path& data,const CareerSnaps
     action=flow.send_key("ENTER");result=session_app::serve_startup(flow,action,loaded,data,91,99);check(result.error.empty()&&loaded,"settings fixture did not restore typed career");
     actual_settings(flow,loaded,data,output);
 }
+void actual_indoor_settings(const std::filesystem::path& data,const CareerSnapshot& base,const std::filesystem::path& output,int day=-1) {
+    const auto resources=session_app::load_runtime_resources(data);auto fixture=base;fixture.world.settings->mode=3;(*fixture.world.economy->presentation_options)[16*9+4]=0;
+    if(day>=0) {
+        // Controlled calendar, actual club/player/artwork data. No played
+        // scores are invented: the first synthetic round is on this day.
+        fixture.date=365+uint32_t(day);fixture.season=1;fixture.calendar->next_day=uint16_t(day);
+        fixture.calendar->schedule.others.clear();fixture.calendar->schedule.leagues.clear();
+        for(const auto& league:fixture.world.catalogue.leagues)for(int round=1;round<=league.rounds();++round)
+            fixture.calendar->schedule.leagues.push_back({uint16_t(round==1?day:240+round*3),league.id,uint8_t(round)});
+        fixture.desktop->initial_event.reset();fixture.desktop->active_seat.reset();fixture.desktop->autosave_pending=false;
+        const auto epoch=calendar_epoch_from_executable(resources.german);fixture.progress=CareerProgress{ProgressPhase::scheduled_event,DayEntry::plain_day,fixture.date-1,365,uint16_t(epoch.year),uint8_t(epoch.weekday),fixture.world.managers.front().seat};
+        auto prepared=session_app::Session::resume(resources,std::move(fixture),101,20);prepared.prepare_scheduled_weather(prepared.revision());prepared.begin_scheduled_desks(prepared.revision());fixture=prepared.snapshot();
+    }
+    const auto directory=std::filesystem::temp_directory_path()/("openbmh-indoor-settings-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);
+    struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code e;std::filesystem::remove_all(path,e);}} cleanup{directory};
+    write_savegame(directory/"Fixture.FBM",make_save(fixture));ui::StartupFlow flow(data,directory,ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> session;
+    const auto send=[&](const ui::FlowResult& action,const session_app::SettingsNoticePresenter& notice=session_app::SettingsNoticePresenter{}){const auto result=session_app::serve_startup(flow,action,session,data,91,101,{},nullptr,{},{},{},std::nullopt,notice);if(!result.error.empty())throw std::runtime_error("indoor settings GUI: "+result.error);};
+    const auto capture=[&](const char* name,std::optional<Image> frame=std::nullopt){if(output.empty())return;std::filesystem::create_directories(output);const auto image=frame?*frame:flow.render();const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));std::ofstream file(output/(std::string(name)+".ppm"),std::ios::binary);file<<"P6\n320 240\n255\n";for(auto pixel:image.pixels){const auto c=palette.argb[pixel];file.put(char(c>>16));file.put(char(c>>8));file.put(char(c));}write_savegame(output/(std::string(name)+".FBM"),make_save(session->snapshot()));};
+    flow.click(60,215);send(flow.click(240,215));send(flow.send_key("ENTER"));
+    const auto& items=flow.desktop()->state().items;const auto icon=std::find_if(items.begin(),items.end(),[](const auto& item){return item.kind==19&&!item.disabled;});check(icon!=items.end(),"indoor settings icon unavailable");send(flow.click(icon->x+icon->width/2,icon->y+icon->height/2));
+    capture("before");const auto before=session->snapshot();const auto revision=session->revision();
+    const auto click=[&]{return flow.pointer_down(68+4*24,27+16*10,false);};
+    if(day>=110&&day<=230) {
+        int shown=0;const auto notice=[&](const GameState& staged,uint32_t address){
+            ++shown;check(staged.season==1&&staged.season_start==365&&staged.season_day()==day&&address==layout::CareerSession_DispatchSettings_TextPointer,"later-season Source refusal used wrong date/text");
+            const auto manager=staged.memory.u8(layout::ActiveManager);auto view=ui::environment_notice_dialog(staged,manager,message_text(staged,address));
+            check((view.source_manager_flags&0xc0)==0x40,"Source indoor refusal lost timed notice");
+            view.badge_sprite=flow.desktop()->state().badge;view.badge_atlas=flow.desktop()->state().badge_atlas;view.badge_fallback=false;
+            ui::GameEndTaxDialog dialog(data,std::move(view),{},flow.render(),session->rules());capture("refusal-notice",dialog.render());return true;
+        };
+        send(click(),notice);check(shown==1&&session->snapshot()==before&&session->revision()==revision&&!flow.pending_settings(),"Source indoor refusal changed live state or kept pending input");
+        // The Source timed-notice wait consumes the opening UP; the SDL
+        // presenter flushes it before acknowledging this view.
+        capture("refusal-returned");
+        const auto aborted=click();const auto result=session_app::serve_startup(flow,aborted,session,data,91,101,{},nullptr,{},{},{},std::nullopt,[](const GameState&,uint32_t){return false;});
+        check(!result.error.empty()&&session->snapshot()==before&&session->revision()==revision,"aborted indoor notice changed gameplay");flow.click(164,187);
+        auto incoming=Bytes(before.world.economy->presentation_options->begin(),before.world.economy->presentation_options->end());incoming[16*9+4]=1;
+        {std::ofstream file(directory/"Probe.EIN",std::ios::binary);file.write(reinterpret_cast<const char*>(incoming.data()),std::streamsize(incoming.size()));}
+        send(flow.click(20,205));const auto file=flow.send_key("ENTER");const auto rejected=session_app::serve_startup(flow,file,session,data,91,101);
+        check(!rejected.error.empty()&&session->snapshot()==before&&session->revision()==revision,"EIN bypassed current indoor/calendar ownership");send(flow.send_key("ESC"));
+        const auto reentrant=click();const auto sequence=session->settings_sequence();const auto changed=session_app::serve_startup(flow,reentrant,session,data,91,101,{},nullptr,{},{},{},std::nullopt,[&](const GameState&,uint32_t){session->close_settings(sequence,revision);return true;});
+        check(!changed.error.empty()&&session->snapshot()==before&&session->revision()==revision+1&&!session->preparation_open(),"indoor presenter resurrected retired settings owner");
+    }else {
+        send(click());auto expected=before;expected.world.economy->presentation_options=session->snapshot().world.economy->presentation_options;
+        check(session->snapshot()==expected&&session->revision()==revision+1&&(*session->snapshot().world.economy->presentation_options)[16*9+4]==1,"enabled indoor switch changed unrelated gameplay");flow.click(164,187);capture("disabled");
+        if(day<0){int german=0,english=0;for(const auto& appointment:before.calendar->schedule.others)if(appointment.source_entry==0x4002){const auto after=admitted_other_appointments(session->snapshot(),appointment.day);if(appointment.domain==CalendarDomain::germany){++german;check(std::find(after.begin(),after.end(),appointment)==after.end(),"actual German indoor date still admitted");}else if(appointment.domain==CalendarDomain::england){++english;check(std::find(after.begin(),after.end(),appointment)!=after.end(),"actual English League Cup removed");}}
+            check((german>0)==before.world.catalogue.scope.germany&&english>0,"actual source indoor/League Cup dates were not checked");std::cout<<"Actual calendar policy checked "<<german<<" German indoor dates and "<<english<<" English League Cup dates\n";}
+        const auto disabled=session->snapshot();send(flow.click(20,218));flow.text("Indoor");send(flow.send_key("ENTER"));send(click());flow.click(164,187);send(flow.click(20,205));send(flow.send_key("ENTER"));check(session->snapshot()==disabled,"EIN indoor restore did not preserve source state");capture("ein-restored");
+        if(!output.empty())std::filesystem::copy_file(directory/"Indoor.EIN",output/"Indoor.EIN",std::filesystem::copy_options::overwrite_existing);
+        send(flow.click(0,0,true));capture("desktop");
+    }
+    std::cout<<"Original indoor settings day "<<day<<": controlled later-season boundary/notice, current EIN ownership, unchanged streams/finances and English League Cup retained\n";
+}
 void actual_layout_files(const std::filesystem::path& data,const CareerSnapshot& fixture,const std::filesystem::path& output) {
     const auto directory=std::filesystem::temp_directory_path()/("openbmh-menu-files-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);
     struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code ignored;std::filesystem::remove_all(path,ignored);}} cleanup{directory};
@@ -1460,6 +1514,8 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     actual_desktop_actions(data,session->snapshot(),output.empty()?output:output/"desktop-single");
     actual_layout_files(data,session->snapshot(),output.empty()?output:output/"layout-single");
     actual_settings_fixture(data,session->snapshot(),output.empty()?output:output/"settings-single");
+    actual_indoor_settings(data,session->snapshot(),output.empty()?output:output/"indoor-single");
+    for(int day:{109,110,230,231})actual_indoor_settings(data,session->snapshot(),output.empty()?output:output/("indoor-boundary-"+std::to_string(day)),day);
     actual_toto_fixture(data,session->snapshot(),output.empty()?output:output/"toto-empty");
     actual_save_load(flow,session,data,output);
     ui::StartupFlow mixed(data,{},ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> multi;
@@ -1483,6 +1539,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     actual_desktop_actions(data,multi->snapshot(),output.empty()?output:output/"desktop-mixed");
     actual_layout_files(data,multi->snapshot(),output.empty()?output:output/"layout-mixed");
     actual_settings_fixture(data,multi->snapshot(),output.empty()?output:output/"settings-mixed");
+    actual_indoor_settings(data,multi->snapshot(),output.empty()?output:output/"indoor-mixed");
     actual_stadium(mixed,multi,data,output.empty()?output:output/"stadium-mixed");
     actual_mailbox(data,multi->snapshot(),output.empty()?output:output/"mailbox");
     {
@@ -1496,6 +1553,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
         actual_desktop_actions(data,multi->snapshot(),output.empty()?output:output/"desktop-german");
         actual_layout_files(data,multi->snapshot(),output.empty()?output:output/"layout-german");
         actual_settings_fixture(data,multi->snapshot(),output.empty()?output:output/"settings-german");
+        actual_indoor_settings(data,multi->snapshot(),output.empty()?output:output/"indoor-german");
         actual_stadium(mixed,multi,data,output.empty()?output:output/"stadium-german");
     }
     actual_four_managers(data,output);
@@ -1505,6 +1563,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
 }
 }
 int main(int argc,char** argv)try {
+    if(argc==5&&std::string(argv[3])=="--indoor-settings-only"){const auto resources=session_app::load_runtime_resources(argv[1]);const auto fixture=read_save(load_savegame(argv[4]));actual_indoor_settings(argv[1],fixture,std::filesystem::path(argv[2])/"initial");for(int day:{109,110,230,231})actual_indoor_settings(argv[1],fixture,std::filesystem::path(argv[2])/("boundary-"+std::to_string(day)),day);return 0;}
     if(argc==5&&std::string(argv[3])=="--settings-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_settings_fixture(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--layout-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_layout_files(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--desktop-only"){actual_desktop_actions(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}

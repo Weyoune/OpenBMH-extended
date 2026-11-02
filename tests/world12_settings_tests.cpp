@@ -30,6 +30,15 @@ int main()try {
     check(app::apply_settings_request_source(g,rules,std::nullopt,true,odd,revision,error)&&g.memory.u8(layout::LeaguePresentationOptions+8)==1,"odd numeric speed was normalized");
     odd=request(0,8,ui::SettingsEdit::decrement);check(!app::apply_settings_request_source(g,rules,std::nullopt,true,odd,revision,error),"numeric minimum underflow accepted");
     g.memory.set8(layout::LeaguePresentationOptions+7,5);auto max=request(0,7,ui::SettingsEdit::increment);check(!app::apply_settings_request_source(g,rules,std::nullopt,true,max,revision,error),"Source numeric limit bypassed");
+    TextDb texts;texts.strings.resize(TEXT_COUNT,"Synthetic calendar refusal");g.texts=&texts;g.season_start=365;
+    for(uint32_t day:{109,110,230,231}) {
+        g.date=365+day;g.memory.set8(layout::LeaguePresentationOptions+16*9+4,0);const auto before_revision=revision;
+        auto indoor=request(16,4,ui::SettingsEdit::toggle_binary);
+        const bool changed=app::apply_settings_request_source(g,rules,std::nullopt,true,indoor,revision,error);
+        check(changed==(day<110||day>230),"Source indoor date window lost inclusive seasonal limits");
+        check(revision==before_revision+unsigned(changed)&&g.memory.u8(layout::LeaguePresentationOptions+16*9+4)==unsigned(changed),"refused Source date changed settings/revision");
+    }
+    g.texts=nullptr;
     auto world=bmh::test::world12::complete_world();world.players_initialized=true;world.markets.emplace();world.free_players.emplace();world.settings=bmh::world12::CareerSettings{3,3,5,1,false};world.economy.emplace();
     auto& matrix=world.economy->presentation_options.emplace();for(size_t i=0;i<180;++i)matrix[i]=uint8_t(i*17);
     check(bmh::world12::decode_world(bmh::world12::encode_world(world))==world,"presentation options lost raw bits in codec roundtrip");

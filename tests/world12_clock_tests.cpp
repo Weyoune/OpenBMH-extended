@@ -92,6 +92,23 @@ int main()try {
     app::ClockHooks hooks;hooks.services.auctions=::hooks();hooks.services.auctions.active_seat.reset();hooks.services.incidents.answer=[](const GameState&,uint8_t,const WeeklyOfferQuestion&)->std::optional<bool>{return false;};hooks.services.contracts.renew=[](GameState&,GameRandom&,WatcomRandom&,uint8_t,PlayerId,int,const AiMatchProjection&)->std::optional<bool>{return false;};
     hooks.relations=[](const CareerSnapshot& current){WeeklyIncidentContext context{current.date,current.season,{}};for(const auto& m:current.world.managers)context.clubs.push_back({m.club,{}});return context;};
     auto missing=state;app::ManagerActionOwner absent{51,8};rejects([&]{app::advance_clock_step(missing,absent,absent,rules,texts,{});},"missing first weekly context was inferred");check(missing==pending&&absent.revision==8,"failed weekly clock leaked date/finance/RNG/revision");
+    {
+        auto indoor=pending;indoor.progress->phase=ProgressPhase::inspect_calendar;
+        indoor.calendar->schedule.others.insert(indoor.calendar->schedule.others.begin(),{uint16_t(indoor.date),CalendarDomain::germany,0x4002});
+        indoor.world.economy->presentation_options.emplace();(*indoor.world.economy->presentation_options)[16*9+4]=1;
+        indoor.validate();const auto before=indoor;app::ManagerActionOwner clock_owner{51,8};
+        const auto step=app::advance_clock_step(indoor,clock_owner,clock_owner,rules,texts,hooks);
+        check(indoor.date==before.date+1&&step.date_advanced&&step.game_draws==0&&step.watcom_draws==0&&
+            indoor.game_seed==before.game_seed&&indoor.watcom_seed==before.watcom_seed,"saved clock did not skip exactly the disabled indoor date");
+        check(read_save(make_save(indoor))==indoor,"quiet indoor transition did not resume from saved daily phase");
+        auto blocked=before;blocked.calendar->schedule.others.insert(blocked.calendar->schedule.others.begin()+1,{uint16_t(blocked.date),CalendarDomain::england,0x4002});
+        clock_owner={51,8};const auto stopped=app::advance_clock_step(blocked,clock_owner,clock_owner,rules,texts,hooks);
+        check(!stopped.date_advanced&&blocked.date==before.date&&stopped.phase==ProgressPhase::scheduled_event,"disabled German indoors skipped English League Cup");
+        auto invalid=before;invalid.progress->phase=ProgressPhase::scheduled_event;rejects([&]{invalid.validate();},"saved event owner admitted a disabled indoor-only day");
+        auto unknown=before;unknown.world.economy->presentation_options.reset();clock_owner={51,8};const auto unchanged=unknown;
+        rejects([&]{app::advance_clock_step(unknown,clock_owner,clock_owner,rules,texts,hooks);},"clock guessed an unknown saved indoor policy");
+        check(unknown==unchanged&&clock_owner.revision==8,"unknown indoor policy changed clock/RNG");
+    }
     auto atomic=state;app::ManagerActionOwner atomic_owner=owner;const auto sought=app::seek_next_event(atomic,atomic_owner,atomic_owner,rules,texts,hooks);check(atomic.date==35&&atomic.calendar->next_day==35&&sought.phase==ProgressPhase::scheduled_event&&atomic_owner.revision==9,"event search skipped appointment or failed to reach it");
     size_t steps=0;while(state.progress->phase!=ProgressPhase::scheduled_event){
         auto resumed=read_save(make_save(state));app::ManagerActionOwner reloaded{91,0};const auto expected=app::advance_clock_step(resumed,reloaded,reloaded,rules,texts,hooks);

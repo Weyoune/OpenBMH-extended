@@ -81,7 +81,11 @@ AiMatchProjection AiMatchProjection::create_for_humans(const CareerSnapshot& sna
     if(managers.empty())throw std::invalid_argument("world12: human projection has no participating manager");
     auto ai_world=world;ai_world.managers.clear();auto result=create(ai_world,requested,base);auto& local=result.state;
     result.original_managers_=world.managers;result.manager_reference_clubs_=requested;
-    local.level=policy.difficulty;local.projected_foreign_rule=policy.foreign_rule;local.date=snapshot.date;
+    local.level=policy.difficulty;local.projected_foreign_rule=policy.foreign_rule;local.date=snapshot.date;local.season=int(snapshot.season);
+    if(snapshot.calendar){
+        if(snapshot.date<snapshot.calendar->next_day)throw FormatError("world12: calendar date precedes its saved cursor");
+        local.season_start=snapshot.date-snapshot.calendar->next_day;
+    }
     local.projected_ai_formations.emplace();std::copy_n(base.formations.begin(),0x160,local.projected_ai_formations->begin());
     local.manager_records.assign(managers.size()*0xb0c,0);local.manager_options.assign(managers.size()*5,0);
     local.manager_ratings.assign(managers.size()*60,0);local.manager_results.assign(managers.size()*size_t(runtime_dimensions.record_teams)*10,255);

@@ -119,6 +119,13 @@ int main()try {
     const auto de=world.membership[4].clubs[0],en=world.membership[9].clubs[0],de_other=world.membership[4].clubs[1],en_other=world.membership[9].clubs[1];
     const std::vector<ClubId> requested{de,de_other,en,en_other};
     rejects([&]{AiMatchProjection::create(world,requested,base);},"AI-only guard allowed a human participant");
+    for(uint16_t day:{109,110,230,231}) {
+        auto later=source;later.season=1;later.date=365+day;later.calendar.emplace();later.calendar->next_day=day;
+        for(const auto& league:later.world.catalogue.leagues)for(int round=1;round<=league.rounds();++round)
+            later.calendar->schedule.leagues.push_back({uint16_t((league.id.value==4||league.id.value==9)&&round<=2?round*10:240+round*3),league.id,uint8_t(round)});
+        later.validate();const auto projected=AiMatchProjection::create_for_humans(later,requested,base,{3,6,false,true});
+        check(projected.state.season==1&&projected.state.season_start==365&&projected.state.season_day()==day,"later-season Source date borrowed the reference epoch");
+    }
     auto projection=AiMatchProjection::create_for_humans(source,requested,base,{3,6,false,true});
     check(projection.human_managers()==2&&projection.global_manager(0)==0&&projection.global_manager(1)==3,"sparse global manager seats lost in projection");
     check(projection.state.projected_match_clubs[0].league_size==18&&projection.state.projected_match_clubs[2].league_size==10,"same local league class mixed German/English sizes");

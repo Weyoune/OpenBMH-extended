@@ -86,6 +86,8 @@ public:
     ui::SettingsState open_settings(const ui::DeskRequest&,std::optional<ui::SettingsSoundCapabilities> sound=std::nullopt);
     ui::SettingsState settings_view()const;
     uint64_t settings_sequence()const{return settings_generation_;}
+    struct SettingsRefusal {GameState state;uint32_t message_address;};
+    std::optional<SettingsRefusal> settings_refusal(const ui::SettingsWriteRequest&,uint64_t sequence)const;
     void apply_settings(const ui::SettingsWriteRequest&,uint64_t sequence);
     Bytes prepare_settings_file(const ui::SaveLoadRequest&,uint64_t sequence,const std::optional<Bytes>& incoming=std::nullopt);
     void close_settings(uint64_t sequence,uint64_t revision);

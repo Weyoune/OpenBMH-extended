@@ -184,3 +184,13 @@ Release-driven incoming-transfer presenters require a matching press observed
 inside that modal. An orphan or repeated release from the preceding result table
 cannot decline an offer or dismiss its confirmation. Repeated presses while a
 button is held still form one gesture; fresh left/right clicks keep their actions.
+
+## Extended indoor option and EIN import
+
+OpenBMH deviates from the original: Extended's typed-career EIN importer applies
+the same seasonal refusal to a changed Q5 indoor option as a mouse edit. The
+Original bulk settings loader could bypass that check. Extended must not let a
+file invalidate an already owned calendar/weather/match receipt during the
+inclusive season-day 110–230 interval. The native Classic career's bulk-loader
+behavior is unchanged. EIN remains the original 180-byte format; no assets,
+source calendar dates, competition scores or random states are synthesized.

@@ -24,6 +24,9 @@ struct DayTicket {
 struct CompletedLeagueRound {LeagueId league;uint8_t round=0;std::vector<LeagueResult> results;};
 // Scores come from the match layer. This coordinator never manufactures match
 // outcomes or consumes either gameplay RNG to satisfy a calendar transition.
+// Runtime admission never removes source appointments from the saved calendar.
+// German indoor dates honor the saved option; English 0x4002 is League Cup.
+std::vector<OtherAppointment> admitted_other_appointments(const CareerSnapshot&,uint16_t day);
 std::optional<DayTicket> prepare_day(const CareerSnapshot&);
 void commit_league_day(CareerSnapshot&,const DayTicket&,const std::vector<CompletedLeagueRound>&);
 struct DayPresentation {std::vector<CupDrawNotice> cup_draws;uint64_t watcom_draws=0;};

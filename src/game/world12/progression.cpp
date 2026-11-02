@@ -7,11 +7,22 @@
 #include <type_traits>
 namespace bmh::world12 {
 static_assert(std::is_nothrow_move_assignable_v<CareerSnapshot>);
+std::vector<OtherAppointment> admitted_other_appointments(const CareerSnapshot& state,uint16_t day) {
+    if(!state.calendar)throw FormatError("world12: country calendar is not installed");
+    auto appointments=state.calendar->schedule.others_on(day);
+    std::erase_if(appointments,[&](const OtherAppointment& appointment){
+        if(appointment.domain!=CalendarDomain::germany||appointment.source_entry!=0x4002)return false;
+        if(!state.world.economy||!state.world.economy->presentation_options)
+            throw FormatError("world12: German indoor calendar admission needs saved presentation options");
+        return (*state.world.economy->presentation_options)[16*9+4]!=0;
+    });
+    return appointments;
+}
 std::optional<DayTicket> prepare_day(const CareerSnapshot& state){
     if(!state.calendar)throw std::invalid_argument("world12: country calendar is not installed");const auto& cursor=*state.calendar;
     if(cursor.next_day==cursor.schedule.days)return std::nullopt;
     if(cursor.next_day>cursor.schedule.days)throw std::invalid_argument("world12: invalid calendar cursor");
-    DayTicket ticket;ticket.day=cursor.next_day;ticket.revision=cursor.revision;ticket.others=cursor.schedule.others_on(ticket.day);
+    DayTicket ticket;ticket.day=cursor.next_day;ticket.revision=cursor.revision;ticket.others=admitted_other_appointments(state,ticket.day);
     for(const auto&a:cursor.schedule.leagues_on(ticket.day)){if(state.league_rounds.at(a.league.value)+1!=a.round)throw std::invalid_argument("world12: league cursor disagrees with calendar");ticket.leagues.push_back({a,league_fixtures(state.world,a.league,a.round)});}
     std::set<DomesticCup> scheduled;
     for(const auto& appointment:ticket.others) if(const auto required=domestic_cups_on(appointment))
