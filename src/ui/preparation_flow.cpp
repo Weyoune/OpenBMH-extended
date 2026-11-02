@@ -1729,6 +1729,7 @@ FlowResult StartupFlow::route_desk(DeskRequest action) {
 }
 
 FlowResult StartupFlow::finish_preparation_input(PreparationRequest action, bool changed) {
+    if(world12_market_identity_)return finish_world12_market_input(std::move(action),changed);
     if (player_card_) {
         if (player_card_->close_requested()) { player_card_.reset(); return {true, FlowRequest::submenu_closed}; }
         return {changed};

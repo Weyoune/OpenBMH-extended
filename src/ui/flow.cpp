@@ -35,7 +35,7 @@ FlowResult StartupFlow::move_action(int x, int y) {
     if(advertising_)return {advertising_->move(x,y)};
     if(environment_)return {};
     if (outgoing_transfer_) return {};
-    if (transfer_market_ && !player_card_) {
+    if (transfer_market_ && !player_card_ && !outgoing_transfer_) {
         const auto before = transfer_market_->state_json();
         const auto request = transfer_market_->move(x, y);
         if (request.kind != TransferMarketRequestKind::none)

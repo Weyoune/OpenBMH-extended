@@ -139,14 +139,16 @@ std::string outgoing_transfer_request_json(const OutgoingTransferRequest& reques
 
 OutgoingTransferScreen::OutgoingTransferScreen(const std::filesystem::path& data,
                                                OutgoingTransferEditorState state)
+    :OutgoingTransferScreen(data,std::move(state),load_le(asset_path(data,"BMH.exe"))) {}
+OutgoingTransferScreen::OutgoingTransferScreen(const std::filesystem::path& data,OutgoingTransferEditorState state,const LeImage& reference)
     : state_(with_source_title(std::move(state))), confirmed_state_(state_), data_(data),
-      panel_(data_, state_.panel, state_.gradient_text),
-      exe_(load_le(asset_path(data, "BMH.exe"))),
+      panel_(data_, state_.panel, state_.gradient_text,reference),
+      exe_(reference),
       texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
       body_(load_font(asset_path(data / "F", "BMH3.FNT"))),
       calculator_art_(load_vga(asset_path(data / "KB", "6.VGA"))),
       panel_art_(load_vga(asset_path(data / "KB", "31.VGA"))),
-      button_art_(load_vga(asset_path(data / "KB", "0.VGA"))), sprite_font_(data) {
+      button_art_(load_vga(asset_path(data / "KB", "0.VGA"))), sprite_font_(data,reference) {
     if (state_.manager_slot < 0 || state_.runtime_club < 0 || state_.list_entry < 0 || state_.list_entry >= 44 ||  // 40..43: poaching
         state_.source_slot < 0 || state_.player < 0 || state_.player != state_.panel.player ||
         state_.list_entry != state_.panel.list_entry || state_.panel.pending_offer_source ||
@@ -406,6 +408,7 @@ void OutgoingTransferScreen::draw_footer(Image& out) const {
     // IDs 230..233 are Team-Info, Spieler-Info, Angebot and Abbruch.
     constexpr int drawn_height = 10; // FormatError3 raises requested h=9 for width>31.
     for (size_t i = 0; i < kFooterButtonX.size(); ++i) {
+        if((i==0&&!state_.team_info_available)||(i==1&&!state_.player_info_available))continue;
         const int x = kFooterButtonX[i];
         // FormatError3 first calls ColorBottomRightBevel for the raised control's shadow.
         fill_rect(out, x + 2, kFooterButtonY + drawn_height, kFooterButtonWidth, 2, 0x40);
@@ -482,6 +485,7 @@ OutgoingTransferRequest OutgoingTransferScreen::click(int x, int y, bool right, 
         return request;
     }
     for (size_t i = 0; i < kFooterButtonX.size(); ++i) {
+        if((i==0&&!state_.team_info_available)||(i==1&&!state_.player_info_available))continue;
         const int left = kFooterButtonX[i];
         // ExpireQuestion uses inclusive right/bottom bounds.
         if (x < left || x > left + kFooterButtonWidth || y < kFooterButtonY ||
@@ -599,13 +603,13 @@ void OutgoingTransferScreen::acknowledge(OutgoingTransferEditorState state) {
     calculator_open_ = false;
     numeric_text_.clear();
     active_profile_ = {};
-    panel_ = IncomingTransferScreen(data_, state_.panel, state_.gradient_text);
+    panel_ = IncomingTransferScreen(data_, state_.panel, state_.gradient_text,exe_);
 }
 
 void OutgoingTransferScreen::reject_action(std::string reason) {
     pending_.reset();
     state_ = confirmed_state_;
-    panel_ = IncomingTransferScreen(data_, state_.panel, state_.gradient_text);
+    panel_ = IncomingTransferScreen(data_, state_.panel, state_.gradient_text,exe_);
     closed_ = false;
     feedback_ = std::move(reason);
     calculator_open_ = false;

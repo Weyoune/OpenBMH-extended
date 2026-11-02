@@ -56,6 +56,7 @@ struct TransferMarketState {
     ClubInfoProjection roster;
     uint16_t source_view_flags = 0x1f0;
     bool gradient_text = true, decorated_background = true, textured_panes = true;
+    bool auxiliary_actions_available=true; // History/cards/poaching require separate typed owners.
     uint8_t source_market_mode = 0; // Unknown is not an inferred Mode III.
     std::optional<std::pair<int32_t,int32_t>> currency;
     std::array<uint16_t,5> active_strengths{},team_strengths{};
@@ -101,6 +102,10 @@ struct TransferMarketPreview {
 class TransferMarketScreen {
 public:
     TransferMarketScreen(const std::filesystem::path&, TransferMarketState);
+    TransferMarketScreen(const std::filesystem::path&,TransferMarketState,const LeImage&);
+    uint16_t display_word()const{return view_flags_;}
+    std::optional<std::pair<int,int>> squad_center(int physical_row)const;
+    std::optional<std::pair<int,int>> market_center(int list_entry)const;
     Image render() const;
     TransferMarketRequest click(int x, int y, bool right = false);
     // TransferMarketScreen hover preview; host acknowledges the quote before more input.
@@ -117,6 +122,7 @@ public:
     void acknowledge_preview(TransferMarketState, TransferMarketPreview);
     void refresh_after_offer(TransferMarketState);
     void reject_action(std::string reason);
+    void reject_close(std::string reason);
     std::string state_json() const;
 private:
     enum class View { market, sell_squad, offer };

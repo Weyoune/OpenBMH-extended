@@ -15,6 +15,7 @@
 #include "ui/incoming_transfer.hpp"
 #include "ui/sprite_font.hpp"
 
+namespace bmh {struct TransferOfferEditorState;}
 namespace bmh::ui {
 
 enum class OutgoingTransferField : uint8_t {
@@ -52,6 +53,7 @@ struct OutgoingTransferEditorState {
     // intentionally separate from the local quote-loan toggle and Native term.
     bool initial_action_loan = false;
     bool gradient_text = true;
+    bool team_info_available=true,player_info_available=true;
     uint32_t fee = 0, monthly_salary = 0;
     // OpenTransferEditor initializes a new empty row to a 24-month term (two years).
     uint8_t duration_years = 2;
@@ -83,12 +85,15 @@ struct OutgoingTransferRequest {
     uint8_t quoted_years = 0;
 };
 
+OutgoingTransferEditorState outgoing_transfer_from_game(const GameState&,const bmh::TransferOfferEditorState&,uint64_t revision,bool gradient);
+
 std::string outgoing_transfer_request_json(const OutgoingTransferRequest&);
 
 class OutgoingTransferScreen {
 public:
     OutgoingTransferScreen(const std::filesystem::path& data,
                            OutgoingTransferEditorState state);
+    OutgoingTransferScreen(const std::filesystem::path&,OutgoingTransferEditorState,const LeImage&);
     Image render() const;
     OutgoingTransferRequest click(int x, int y, bool right = false, bool double_click = false);
     // Source event8 returns calculator cancellation before closing its editor.

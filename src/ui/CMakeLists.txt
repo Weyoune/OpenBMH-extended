@@ -10,6 +10,7 @@ add_library(bmhui STATIC
     desktop.cpp
     preparation.cpp
     preparation_flow.cpp
+    world12_market_flow.cpp
     lineup.cpp
     training.cpp
     training_camp.cpp
@@ -56,6 +57,7 @@ add_library(bmhui STATIC
     contracts.cpp
     incoming_transfer.cpp
     outgoing_transfer.cpp
+    outgoing_transfer_state.cpp
     balance_plan.cpp
     pending_offer.cpp
     settings.cpp

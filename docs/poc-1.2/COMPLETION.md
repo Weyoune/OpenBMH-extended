@@ -5,7 +5,7 @@ The active objective is a playable, verified Extended 1.0 Beta. Work is on Exten
 | Gate | Current evidence | Work still required |
 | --- | --- | --- |
 | World and source data | 13 league identities, 234 full-scope clubs, wide IDs, scoped data and snapshots | Final editor/package binding and full career state |
-| Human management | Full initial player/manager confirmation, facilities/environment/sponsors, finance/tactics and human match state | Remaining live manager records/policy and other management actions |
+| Human management | Full initial player/manager confirmation, facilities/environment/sponsors, finance/tactics, owned transfer market/editor/received bids and human match state | Remaining live manager records/policy and other management actions |
 | Matchday | AI/human minute calculation, dated league/cup calculations with extra time/return legs, saved account/statistics/RNG publication | Visible live ownership and full matchday services; cup/indoor/national simulation |
 | Competitions | Initial national/European/domestic fields and campaigns, Source calendars, fixtures and domestic stages | Complete competition results, qualification, promotions and season transitions |
 | Career services | Initial services; saved daily/weekly/monthly processing; national nomination and uncoached calendar continuation; scheduled desk loops, later-day offers, saved Toto and Core settlement | Human national preparation, remaining management UI, match/competition progression and automatic notifications |

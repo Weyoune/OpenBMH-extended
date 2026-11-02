@@ -306,8 +306,10 @@ std::string transfer_market_request_json(const TransferMarketRequest& r) {
 }
 
 TransferMarketScreen::TransferMarketScreen(const std::filesystem::path& data, TransferMarketState state)
+    :TransferMarketScreen(data,std::move(state),load_le(asset_path(data,"BMH.exe"))) {}
+TransferMarketScreen::TransferMarketScreen(const std::filesystem::path& data,TransferMarketState state,const LeImage& reference)
     : state_(std::move(state)), font_(load_font(asset_path(data / "F", "BMH3.FNT"))),
-      exe_(load_le(asset_path(data,"BMH.exe"))),texts_(load_textd(asset_path(data,"TEXTD.BLK"))),sprite_font_(data),
+      exe_(reference),texts_(load_textd(asset_path(data,"TEXTD.BLK"))),sprite_font_(data,reference),
       background_(load_vga(asset_path(data / "KB", "56.VGA"))),
       frame_(load_vga(asset_path(data / "KB", "129.VGA"))),widgets_(load_vga(asset_path(data / "KB", "0.VGA"))),
       atlas_(load_vga(asset_path(data / "KB", "2.VGA"))),flags_(load_vga(asset_path(data / "KB", "24.VGA"))),
@@ -505,7 +507,7 @@ void TransferMarketScreen::draw_market_overview(Image& out) const {
     }
     button(out,1,215,51,texts_[text_id(data_b_?::bmh::layout::TransferMarket_Rect_TextPointer3: ::bmh::layout::TransferMarket_Rect_TextPointer4)],true);
     button(out,55,215,51,texts_[text_id(::bmh::layout::TransferMarket_Rect_TextPointer5)],full);
-    for(int n=1;n<4;++n)if(!full&&state_.source_market_mode==3)button(out,exe_.u16(::bmh::layout::TransferMarket_Click_RuntimeField + n*6),exe_.u16(::bmh::layout::TransferMarket_Click_RuntimeField2+n*6),exe_.u16(::bmh::layout::TransferMarket_Click_RuntimeField3+n*6),texts_[text_id(::bmh::layout::TransferMarket_Rect_TextPointer5)+size_t(n)],(view_flags_&(1u<<n))!=0);
+    for(int n=1;n<4;++n)if(!full&&state_.source_market_mode==3&&state_.auxiliary_actions_available)button(out,exe_.u16(::bmh::layout::TransferMarket_Click_RuntimeField + n*6),exe_.u16(::bmh::layout::TransferMarket_Click_RuntimeField2+n*6),exe_.u16(::bmh::layout::TransferMarket_Click_RuntimeField3+n*6),texts_[text_id(::bmh::layout::TransferMarket_Rect_TextPointer5)+size_t(n)],(view_flags_&(1u<<n))!=0);
 }
 std::string TransferMarketScreen::original_money(int32_t value) const {
     const int32_t numerator=state_.currency?state_.currency->first:int32_t(exe_.u32(::bmh::layout::CurrencyMultiplier));
@@ -669,7 +671,7 @@ TransferMarketRequest TransferMarketScreen::click(int x,int y,bool right) {
         // Reset's logical4 follows Data and the three leading market
         // buttons: its physical EXE/TransferMarket_Click_RuntimeField entry3 is Abwerben.
         const int px=exe_.u16(::bmh::layout::TransferMarket_Click_RuntimeField + 3*6),py=exe_.u16(::bmh::layout::TransferMarket_Click_RuntimeField2+3*6),pw=exe_.u16(::bmh::layout::TransferMarket_Click_RuntimeField3+3*6);
-        if(state_.source_market_mode==3&&x>=px&&x<=px+pw&&y>=py&&y<=py+10) {
+        if(state_.source_market_mode==3&&state_.auxiliary_actions_available&&x>=px&&x<=px+pw&&y>=py&&y<=py+10) {
             TransferMarketRequest request;
             request.kind=TransferMarketRequestKind::open_poach;
             request.manager_slot=state_.manager_slot;request.runtime_club=state_.runtime_club;
@@ -820,3 +822,10 @@ std::string TransferMarketScreen::state_json() const {
 }
 
 } // namespace bmh::ui
+
+namespace bmh::ui {void TransferMarketScreen::reject_close(std::string reason){if(!close_requested_||pending_||reason.empty())throw FormatError("transfer market: missing close rejection");close_requested_=false;feedback_=std::move(reason);}}
+
+namespace bmh::ui {
+std::optional<std::pair<int,int>> TransferMarketScreen::squad_center(int physical_row)const{for(const auto [row,baseline]:roster_rows())if(state_.roster.players.at(size_t(row)).physical_row==physical_row&&!state_.roster.players.at(size_t(row)).borrowed)return std::pair{20,baseline-2};return {};}
+std::optional<std::pair<int,int>> TransferMarketScreen::market_center(int list_entry)const{if(view_flags_&1)return {};const auto order=market_order();const auto first=std::min(market_page_,order.empty()?size_t(0):(order.size()-1)/6)*6;for(size_t row=first;row<order.size()&&row<first+6;++row)if(state_.items.at(size_t(order[row])).list_entry==list_entry)return std::pair{215,28+int(row-first)*15};return {};}
+}

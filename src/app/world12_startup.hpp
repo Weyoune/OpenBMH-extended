@@ -13,5 +13,5 @@ struct StartupTurnHooks {ClockHooks clock;bmh::world12::HumanRoundHooks matches;
 StartupResult serve_startup(ui::StartupFlow&,const ui::FlowResult&,std::unique_ptr<Session>&,
     const std::filesystem::path& data,uint32_t seed,uint64_t scope,const PendingOfferHooks& hooks={},
     const StartupTurnHooks* turn=nullptr,const AdvertisingRenewalPresenter& advertising={},const ConstructionNoticeHook& construction={},
-    const SeasonTicketCompensationNoticeHook& compensation={},std::optional<ui::SettingsSoundCapabilities> sound=std::nullopt,const SettingsNoticePresenter& settings_notice={},const ClubInformationPresenter& club_information={},const TableRangePresenter& table_range={});
+    const SeasonTicketCompensationNoticeHook& compensation={},std::optional<ui::SettingsSoundCapabilities> sound=std::nullopt,const SettingsNoticePresenter& settings_notice={},const ClubInformationPresenter& club_information={},const TableRangePresenter& table_range={},const MarketPresenters& market={});
 }

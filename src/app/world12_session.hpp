@@ -17,6 +17,7 @@
 #include "ui/settings.hpp"
 #include "ui/world12_other_games.hpp"
 #include "ui/world12_table.hpp"
+#include "app/world12_market.hpp"
 #include "ui/league_table_range_dialog.hpp"
 #include "app/world12_club_information.hpp"
 #include "app/world12_process_timer.hpp"
@@ -78,6 +79,9 @@ public:
     void play_prepared_matches(uint64_t expected_revision,const bmh::world12::HumanRoundHooks&);
 
     PendingOfferResult resolve_pending(const std::filesystem::path&,const ui::DeskRequest&,const PendingOfferHooks&);
+    ui::World12MarketState open_market(const ui::DeskRequest&);
+    ui::World12MarketState market_view()const;
+    bool apply_market(const ui::World12MarketRequest&,const std::filesystem::path&,const MarketPresenters& presenters={},const ClubInformationPresenter& club={});
     ui::World12TableState open_tables(const ui::DeskRequest&);
     ui::World12TableState tables_view()const;
     bool apply_tables(const ui::World12TableRequest&,const std::filesystem::path& data={},const ClubInformationPresenter& club={},const TableRangePresenter& range={});
@@ -157,6 +161,9 @@ private:
     std::optional<ui::World12TableIdentity> table_owner_;
     ui::World12TableSelection table_selection_;
     ui::World12TableState table_page(const bmh::world12::CareerSnapshot&,const ui::World12TableIdentity&,const ui::World12TableSelection&)const;
+    std::shared_ptr<const MarketDraft> market_owner_;
+    uint64_t market_generation_=0;
+    bool market_dispatch_active_=false;
     uint64_t other_games_generation_=0;
     std::optional<ui::World12OtherGamesIdentity> other_games_owner_;
     ui::World12OtherSelection other_games_selection_;

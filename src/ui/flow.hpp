@@ -14,6 +14,7 @@
 #include "ui/matchday_results_screen.hpp"
 #include "ui/league_table.hpp"
 #include "ui/league_table_range_dialog.hpp"
+#include "ui/world12_market.hpp"
 #include "ui/league_pairings.hpp"
 #include "ui/mailbox_screen.hpp"
 #include "ui/settings.hpp"
@@ -54,7 +55,7 @@ struct CareerInitializationResult {
     std::vector<InitializedManager> managers;
     PreparationState preparation;
 };
-enum class FlowRequest { none, load_game, manager_confirmed, new_career, kickoff, desk_action, end_session, submenu_opened, submenu_closed, contracts_closed, submenu_action, file_action, results_closed, mailbox_action, mailbox_closed, settings_action, settings_close, settings_file_action, friendly_action, national_friendly_selected, contract_action, advertising_action, environment_action, join_options, join_manager, join_cancel, league_pairings_action, strengths_action, top_scorers_action, balance_action, other_games_action, league_family_action, opportunities_action, statistics_menu_action, statistics_rankings_action, analytics_action, statistics_page_action, reschedule_action, world12_table_action };
+enum class FlowRequest { none, load_game, manager_confirmed, new_career, kickoff, desk_action, end_session, submenu_opened, submenu_closed, contracts_closed, submenu_action, file_action, results_closed, mailbox_action, mailbox_closed, settings_action, settings_close, settings_file_action, friendly_action, national_friendly_selected, contract_action, advertising_action, environment_action, join_options, join_manager, join_cancel, league_pairings_action, strengths_action, top_scorers_action, balance_action, other_games_action, league_family_action, opportunities_action, statistics_menu_action, statistics_rankings_action, analytics_action, statistics_page_action, reschedule_action, world12_table_action, world12_market_action };
 enum class StatisticsPageActionKind : uint8_t { close, alltime, world_cup };
 struct StatisticsPageAction { DeskRequest owner{}; int page=-1; StatisticsPageActionKind kind=StatisticsPageActionKind::close; int nation=-1; bool relative=false; bool operator==(const StatisticsPageAction&) const = default; };
 struct FlowResult {
@@ -87,6 +88,7 @@ struct FlowResult {
     LeagueFamilyRequest league_family_action{};
     RescheduleAction reschedule_action{};
     World12TableRequest world12_table_action{};
+    World12MarketRequest world12_market_action{};
 };
 
 class StartupFlow {
@@ -227,6 +229,14 @@ public:
     const BankRequest* pending_bank_action() const {
         return bank_ && bank_->pending() ? &*bank_->pending() : nullptr;
     }
+    void show_world12_market(World12MarketState,PreparationState,const DeskRequest&);
+    struct World12MarketView {std::unique_ptr<DesktopScreen> desktop;std::unique_ptr<PreparationState> preparation;std::unique_ptr<TransferMarketScreen> market;std::unique_ptr<OutgoingTransferScreen> offer;std::optional<World12MarketIdentity> identity;};
+    World12MarketView prepare_world12_market_result(World12MarketState,PreparationState,const World12MarketRequest&,bool closed)const;
+    void finish_world12_market(World12MarketView)noexcept;
+    void reject_world12_market(std::string);
+    const TransferMarketScreen* world12_market_screen()const{return world12_market_identity_?transfer_market_.get():nullptr;}
+    const OutgoingTransferScreen* world12_offer_screen()const{return world12_market_identity_?outgoing_transfer_.get():nullptr;}
+    const World12MarketRequest* pending_world12_market()const{return world12_market_pending_?&*world12_market_pending_:nullptr;}
     const TransferMarketRequest* pending_transfer_market() const {
         return transfer_market_ && transfer_market_->pending() ? &*transfer_market_->pending() : nullptr;
     }
@@ -529,6 +539,9 @@ private:
     std::unique_ptr<StadiumScreen> stadium_;
     std::unique_ptr<TotoScreen> toto_;
     std::unique_ptr<TransferMarketScreen> transfer_market_;
+    std::optional<World12MarketIdentity> world12_market_identity_;
+    std::optional<World12MarketRequest> world12_market_pending_;
+    FlowResult finish_world12_market_input(PreparationRequest,bool);
     std::unique_ptr<OutgoingTransferScreen> outgoing_transfer_;
     std::unique_ptr<SaveLoadScreen> save_load_;
     std::unique_ptr<TacticsScreen> tactics_;
