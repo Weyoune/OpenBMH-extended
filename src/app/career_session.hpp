@@ -41,6 +41,7 @@
 #include "game/human_buyer_sale.hpp"
 #include "game/weekly.hpp"
 #include "ui/flow.hpp"
+#include "ui/club_info.hpp"
 #include "ui/desk_state.hpp"
 #include "ui/league_table.hpp"
 #include "ui/league_table_range_dialog.hpp"
@@ -79,6 +80,8 @@ struct LiveSubstitutionResult {
 // Synchronous capability facade shared by live club modals and a staged KB31
 // TeamInfo transaction. It exposes no calendar/save/outer revision operations.
 struct ClubModalServices {
+    // Optional owned projection for typed inspection; legacy callbacks stay unchanged.
+    std::function<ui::ClubInfoProjection(ui::ClubInfoView)> club_projection;
     bool transactional = true;
     std::function<GameState&()> state;
     std::function<ClubInfoEntry(int)> enter_club;

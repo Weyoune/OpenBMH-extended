@@ -115,6 +115,28 @@ void desktop_tests(CareerSnapshot prepared,const GameState& source,const std::fi
             receipt<<"seat="<<int(manager.seat)<<" country="<<int(state.world.manager_country(manager.seat))<<" prestige="<<int(desk.prestige)
                 <<" G="<<state.game_seed<<" W="<<state.watcom_seed<<" Gdraws="<<outcome.game_draws<<" Wdraws="<<outcome.watcom_draws<<" date="<<state.date<<'\n';
         }
+        {
+            auto rules=synthetic().german;const uint8_t gate[]={234,0};rules.patch(layout::CareerSession_DispatchLineup_RuntimeField,gate,2);
+            auto drawing=reference;for(const auto address:{layout::TextGradientDisabled,layout::PlainBackground}){drawing.memory.add_block(address,1);drawing.memory.set8(address,0);}
+            auto inspected=state,expected=state;session_app::ClubInformationProvider retained;
+            auto oracle=project_manager_desktop(state,drawing);const auto team=int(oracle.local_club(manager.club));int pages=0;
+            session_app::inspect_club_information(inspected,drawing,rules,{},manager.club,[&](const auto& provider,const auto&){
+                retained=provider;
+                for(auto view:{ui::ClubInfoView::data_a,ui::ClubInfoView::data_b}){
+                    const auto page=provider(view);const auto entry=prepare_club_info_entry(oracle.state,team);const auto range=squad_range(team);
+                    check(page.has_squad&&page.players.size()==24&&page.original_club_name==state.world.clubs.at(manager.club).name,"synthetic canonical club inspection failed");
+                    for(size_t row=0;row<24;++row){auto& slot=expected.world.clubs.at(manager.club).roster[row];if(slot.empty())continue;check(oracle.global_player(entry.displayed_slots[row]&0xfff)==slot.player&&page.players[row].original_name==state.world.players.at(slot.player).attributes.name,"synthetic wide player identity was packed or replaced");const auto raw=oracle.state.squad_slots.at(range.first+row);slot.flags=uint16_t(((raw&0x8000)?1:0)|((raw&0x4000)?2:0)|((raw&0x2000)?4:0)|((raw&0x1000)?8:0));}
+                    ++pages;
+                }
+                return true;
+            },{});
+            check(pages==2&&inspected==expected&&read_save(make_save(inspected))==expected,"synthetic inspection changed more than Source roster flags");
+            rejects([&]{retained(ui::ClubInfoView::data_a);},"synthetic retired inspection remained usable");
+            const auto old=inspected;rejects([&]{session_app::inspect_club_information(inspected,drawing,rules,{},manager.club,[](const auto& provider,const auto&){provider(ui::ClubInfoView::data_a);return false;},{});},"synthetic inspection accepted an aborted presenter");check(inspected==old,"synthetic cancelled inspection changed world/RNG");
+            auto malformed=state;malformed.world.clubs.at(manager.club).roster[0]={};const auto malformed_before=malformed;bool called=false;
+            rejects([&]{session_app::inspect_club_information(malformed,drawing,rules,{},manager.club,[&](const auto&,const auto&){called=true;return true;},{});},"inspection accepted a non-compact roster");
+            check(!called&&malformed==malformed_before,"invalid roster entered the presenter or changed data");
+        }
         const auto entered=state;rejects([&]{session_app::enter_initial_manager_desktop(state,owner,{77,8},manager.seat,reference);},"stale desktop entry accepted");
         rejects([&]{session_app::enter_initial_manager_desktop(state,owner,owner,manager.seat,reference);},"initial desktop entry replay accepted");check(state==entered&&owner.revision==9,"rejected desktop entry changed state");
     }
@@ -1042,6 +1064,110 @@ void actual_competition_overview(const std::filesystem::path& data,const CareerS
     open();auto stale=more.other_games_action;stale.world12_identity->revision=session->revision();rejects([&]{session->apply_other_games(stale);},"retimed previous overview window accepted");check(session->other_games_view().world12_identity->sequence!=first.sequence,"reopened overview reused scope/sequence");send(flow.pointer_down(310,230,true));
     std::cout<<"Actual competition overview: all selectors, participant/round/complete controls, two real finals, Source display bytes, canonical teams, stale/reopen/file guards and unchanged gameplay passed\n";
 }
+void actual_club_inspection(const std::filesystem::path& data,const CareerSnapshot& base,const std::filesystem::path& output) {
+    const auto resources=session_app::load_runtime_resources(data);
+    const auto directory=std::filesystem::temp_directory_path()/("openbmh-club-inspection-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);
+    struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code ignored;std::filesystem::remove_all(path,ignored);}} cleanup{directory};
+    write_savegame(directory/"Fixture.FBM",make_save(base));ui::StartupFlow flow(data,directory,ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> session;
+    const auto send=[&](const ui::FlowResult& action,const session_app::ClubInformationPresenter& presenter={}){return session_app::serve_startup(flow,action,session,data,91,125,{},nullptr,{},{},{},std::nullopt,{},presenter);};
+    const auto require=[&](const ui::FlowResult& action){const auto result=send(action);if(!result.error.empty())throw std::runtime_error("club inspection GUI: "+result.error);};
+    flow.click(60,215);require(flow.click(240,215));require(flow.send_key("ENTER"));
+    const auto& items=flow.desktop()->state().items;const auto icon=std::find_if(items.begin(),items.end(),[](const auto& item){return item.kind==5&&!item.disabled;});check(icon!=items.end(),"competition icon missing for club inspection");require(flow.click(icon->x+icon->width/2,icon->y+icon->height/2));
+    flow.pointer_down(130,190);require(flow.click(130,190));
+    const auto capture=[&](const std::string& name,const Image& image,const CareerSnapshot& state){if(output.empty())return;std::filesystem::create_directories(output);const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));std::ofstream file(output/(name+".ppm"),std::ios::binary);file<<"P6\n320 240\n255\n";for(auto pixel:image.pixels){const auto c=palette.argb[pixel];file.put(char(c>>16));file.put(char(c>>8));file.put(char(c));}write_savegame(output/(name+".FBM"),make_save(state));};
+    capture("club-overview-before",flow.render(),session->snapshot());
+    const auto target_request=[&](int x,int y){const auto result=flow.pointer_down(x,y);check(result.request==ui::FlowRequest::other_games_action&&result.other_games_action.action==ui::OtherGamesAction::team_info,"visible club did not request typed inspection");return result;};
+    // Compare both country finals and both halves of each actual fixture with the
+    // independent Core entry, not with a generated expected table of values.
+    for(int side=0;side<4;++side){
+        const auto action=target_request(side%2?160:20,side<2?70:130);const auto club=action.other_games_action.world12_team;
+        const auto before=session->snapshot();const auto revision=session->revision();auto expected=before;
+        auto oracle=project_manager_desktop(before,resources.reference,{club});const int local=int(oracle.local_club(club));
+        session_app::ClubInformationProvider retained;
+        int redraws=0;
+        const auto presenter=[&](const session_app::ClubInformationProvider& provider,const Image& parent){
+            retained=provider;check(parent.pixels==flow.render().pixels,"club inspection lost its actual competition backdrop");
+            for(const auto view:{ui::ClubInfoView::data_a,ui::ClubInfoView::data_b}){
+                const auto shown=provider(view);const auto entry=prepare_club_info_entry(oracle.state,local);
+                auto original=ui::club_info_from_game(oracle.state,local,entry,resources.german,*resources.texts);original.view=view;
+                original.player_details_available=false;original.statistics_available=false;original.category_available=false;
+                ui::ClubInfoScreen actual(data,shown,resources.german),reference(data,original,resources.german);
+                check(shown.runtime_team==local&&shown.original_club_name==before.world.clubs.at(club).name,"club inspection changed canonical club/name");
+                check(actual.render().pixels==reference.render().pixels,"club inspection differs from the actual Core entry projection");
+                check(!actual.button_at(65,220)&&!actual.button_at(140,220)&&actual.pointer_down(10,35).kind==ui::ClubInfoRequestKind::none,"unowned child/category actions leaked from typed inspection");
+                actual.press(10,220);check(actual.release(10,220).kind==ui::ClubInfoRequestKind::toggle_view,"Source data A/B control missing");
+                auto& roster=expected.world.clubs.at(club).roster;const auto range=squad_range(local);
+                for(size_t row=0;row<roster.size();++row)if(!roster[row].empty()){
+                    const auto raw=oracle.state.squad_slots.at(range.first+row);check(oracle.global_player(raw&0xfff)==roster[row].player,"Core entry moved a global player");
+                    roster[row].flags=uint16_t(((raw&0x8000)?1:0)|((raw&0x4000)?2:0)|((raw&0x2000)?4:0)|((raw&0x1000)?8:0));
+                }
+                capture("club-"+std::to_string(side)+(view==ui::ClubInfoView::data_a?"-data-a":"-data-b"),actual.render(),expected);
+                check(session->snapshot()==before&&session->revision()==revision,"club presenter published before close");++redraws;
+            }
+            return true;
+        };
+        const auto result=send(action,presenter);if(!result.error.empty())throw std::runtime_error(result.error);
+        check(redraws==2&&session->snapshot()==expected&&session->revision()==revision+1&&flow.in_other_games()&&!flow.pending_other_games_action(),"club inspection changed unrelated world/RNG or lost its parent");
+        rejects([&]{retained(ui::ClubInfoView::data_a);},"retired inspection provider remained usable");
+        rejects([&]{session->apply_other_games(action.other_games_action,data,presenter);},"old club inspection request replayed");
+        check(read_save(make_save(session->snapshot()))==expected,"inspection roster flags did not survive FBM");
+        capture("club-"+std::to_string(side)+"-returned",flow.render(),session->snapshot());
+    }
+    const auto aborted=target_request(20,70);const auto before=session->snapshot();const auto revision=session->revision();session_app::ClubInformationProvider retired;
+    const auto failure=send(aborted,[&](const auto& provider,const auto&){retired=provider;provider(ui::ClubInfoView::data_a);return false;});
+    check(!failure.error.empty()&&session->snapshot()==before&&session->revision()==revision&&!flow.pending_other_games_action(),"interrupted inspection committed entry side effects or stuck input");
+    rejects([&]{retired(ui::ClubInfoView::data_a);},"aborted inspection retained a provider");
+    const auto no_draw=send(target_request(20,70),[](const auto&,const auto&){return true;});check(!no_draw.error.empty()&&session->snapshot()==before,"empty presenter claimed a successful club view");
+    const auto crashed=send(target_request(20,70),[](const auto& provider,const auto&)->bool{provider(ui::ClubInfoView::data_b);throw std::runtime_error("controlled interrupted club presenter");});check(!crashed.error.empty()&&session->snapshot()==before&&session->revision()==revision,"throwing inspection changed accepted career");
+    auto reentrant=*session;auto request=target_request(20,70).other_games_action;flow.reject_other_games("controlled reentrant test");const auto identity=*request.world12_identity;
+    ui::OtherGamesRequest close;close.action=ui::OtherGamesAction::close;close.world12_identity=identity;
+    rejects([&]{reentrant.apply_other_games(request,data,[&](const auto& provider,const auto&){provider(ui::ClubInfoView::data_a);reentrant.apply_other_games(close);return true;});},"reentrant inspection resurrected retired window");check(!reentrant.preparation_open(),"reentrant close was overwritten by staged inspection");
+    auto missing=before;const auto foreign=std::find_if(missing.world.clubs.begin(),missing.world.clubs.end(),[](const auto& row){return row.second.kind==ClubKind::club&&!row.second.league.valid();});check(foreign!=missing.world.clubs.end(),"actual cup-only club missing");
+    session_app::inspect_club_information(missing,resources.reference,resources.german,*resources.texts,foreign->first,[&](const auto& provider,const auto&){const auto page=provider(ui::ClubInfoView::data_a);check(!page.has_squad&&page.players.empty()&&page.original_club_name==foreign->second.name,"cup-only club received invented roster");ui::ClubInfoScreen screen(data,page,resources.german);check(!screen.button_at(10,220),"cup-only view exposed unowned category");capture("club-no-squad",screen.render(),missing);return true;},flow.render());check(missing==before,"cup-only inspection changed world");
+    auto injured=before;const auto owned=std::find_if(injured.world.managers.begin(),injured.world.managers.end(),[&](const auto& m){return m.seat==*injured.desktop->active_seat;})->club;
+    auto& injured_slot=injured.world.clubs.at(owned).roster[0];check(!injured_slot.empty(),"controlled injury needs an occupied first row");injured_slot.flags=1;
+    auto& player=injured.world.players.at(injured_slot.player);player.attributes.w364=(player.attributes.w364&~uint32_t(0x1f0000))|0x10000;
+    const auto injury_before=injured;ui::ClubInfoProjection injury_page;
+    session_app::inspect_club_information(injured,resources.reference,resources.german,*resources.texts,owned,[&](const auto& provider,const auto&){injury_page=provider(ui::ClubInfoView::data_a);return true;},flow.render());
+    auto injury_expected=injury_before;injury_expected.world.clubs.at(owned).roster[0].flags&=1;
+        check((injury_page.players[0].displayed_slot&0x8000)!=0&&(injured.world.clubs.at(owned).roster[0].flags&3)==0,"Source pre-cleanup display and saved injury flags were conflated");
+    for(size_t row=0;row<24;++row)injury_expected.world.clubs.at(owned).roster[row].flags=injured.world.clubs.at(owned).roster[row].flags;
+    check(injured==injury_expected&&read_save(make_save(injured))==injured,"injury inspection changed more than target roster flags");
+    capture("club-controlled-injury",ui::ClubInfoScreen(data,injury_page,resources.german).render(),injured);
+    const auto wide=std::find_if(before.world.clubs.begin(),before.world.clubs.end(),[](const auto& row){return row.second.league.valid()&&std::any_of(row.second.roster.begin(),row.second.roster.end(),[](const auto& slot){return !slot.empty()&&slot.player.value>4095;});});
+    if(wide!=before.world.clubs.end()){
+        auto extended=before;auto oracle=project_manager_desktop(extended,resources.reference,{wide->first});const int local=int(oracle.local_club(wide->first));const auto entry=prepare_club_info_entry(oracle.state,local);auto original=ui::club_info_from_game(oracle.state,local,entry,resources.german,*resources.texts);original.player_details_available=false;original.statistics_available=false;original.category_available=false;
+        session_app::inspect_club_information(extended,resources.reference,resources.german,*resources.texts,wide->first,[&](const auto& provider,const auto&){const auto page=provider(ui::ClubInfoView::data_a);check(ui::ClubInfoScreen(data,page,resources.german).render().pixels==ui::ClubInfoScreen(data,original,resources.german).render().pixels,"wide world player IDs were interpreted as packed drawing IDs");capture("club-wide-player-ids",ui::ClubInfoScreen(data,page,resources.german).render(),extended);return true;},flow.render());
+    }
+    require(flow.pointer_down(310,230,true));capture("club-desktop-after",flow.render(),session->snapshot());
+    // Independent real GUI fixture: own club, known first eleven and an injured
+    // first player. The parent must refresh strength/lights after Source cleanup.
+    auto controlled=base;const auto seat=*controlled.desktop->active_seat;
+    const auto own=std::find_if(controlled.world.managers.begin(),controlled.world.managers.end(),[&](const auto& m){return m.seat==seat;})->club;
+    auto& own_roster=controlled.world.clubs.at(own).roster;
+    for(size_t row=0;row<24;++row)if(!own_roster[row].empty())own_roster[row].flags=row<11?1:row<16?2:0;
+    controlled.world.players.at(own_roster[0].player).attributes.w364=(controlled.world.players.at(own_roster[0].player).attributes.w364&~uint32_t(0x1f0000))|0x10000;
+    // Controlled same-country final solely to make this manager's real club a
+    // visible click target; no match is played and no score is supplied.
+    const bool english_owner=controlled.world.clubs.at(own).country==Country::england;
+    const auto own_cup=english_owner?DomesticCup::english_supercup:DomesticCup::german_supercup;
+    auto& final=std::find_if(controlled.cups.begin(),controlled.cups.end(),[&](const auto& stage){return stage.cup==own_cup;})->rounds[0].fixtures[0];
+    if(final.away==own)std::swap(final.home,final.away);else final.home=own;
+    write_savegame(directory/"Fixture.FBM",make_save(controlled));
+    ui::StartupFlow own_flow(data,directory,ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> own_session;
+    const auto own_send=[&](const ui::FlowResult& action,const session_app::ClubInformationPresenter& presenter={}){const auto result=session_app::serve_startup(own_flow,action,own_session,data,91,126,{},nullptr,{},{},{},std::nullopt,{},presenter);if(!result.error.empty())throw std::runtime_error("controlled own-club GUI: "+result.error);};
+    own_flow.click(60,215);own_send(own_flow.click(240,215));own_send(own_flow.send_key("ENTER"));
+    const auto& own_items=own_flow.desktop()->state().items;const auto own_icon=std::find_if(own_items.begin(),own_items.end(),[](const auto& item){return item.kind==5&&!item.disabled;});check(own_icon!=own_items.end(),"controlled own-club competition icon absent");own_send(own_flow.click(own_icon->x+own_icon->width/2,own_icon->y+own_icon->height/2));
+    own_flow.pointer_down(130,190);own_send(own_flow.click(130,190));
+    const int own_x=20,own_y=english_owner?130:70;
+    capture("club-controlled-own-before",own_flow.render(),own_session->snapshot());
+    const auto own_before=own_session->snapshot();auto own_expected=own_before;auto own_oracle=project_manager_desktop(own_before,resources.reference);const auto own_local=int(own_oracle.local_club(own));prepare_club_info_entry(own_oracle.state,own_local);
+    for(size_t row=0;row<24;++row)if(!own_expected.world.clubs.at(own).roster[row].empty()){const auto raw=own_oracle.state.squad_slots.at(squad_range(own_local).first+row);own_expected.world.clubs.at(own).roster[row].flags=uint16_t(((raw&0x8000)?1:0)|((raw&0x4000)?2:0)|((raw&0x2000)?4:0)|((raw&0x1000)?8:0));}
+    own_send(own_flow.pointer_down(own_x,own_y),[&](const auto& provider,const auto&){const auto page=provider(ui::ClubInfoView::data_a);check(page.original_club_name==controlled.world.clubs.at(own).name,"own-club canonical target changed");capture("club-controlled-own-roster",ui::ClubInfoScreen(data,page,resources.german).render(),own_expected);return true;});
+    check(own_session->snapshot()==own_expected&&own_flow.in_other_games()&&own_flow.desktop()->state().warnings[5]==true,"own injured roster cleanup failed to refresh parent strength/lights");
+    own_send(own_flow.pointer_down(310,230,true));capture("club-controlled-own-after",own_flow.render(),own_session->snapshot());
+    std::cout<<"Actual owned club inspection: both finals/countries, A/B Original Core frames, canonical players, roster-only writes, saves, interrupted/reentrant/retired guards and no fabricated cup-only squad passed\n";
+}
 void actual_layout_files(const std::filesystem::path& data,const CareerSnapshot& fixture,const std::filesystem::path& output) {
     const auto directory=std::filesystem::temp_directory_path()/("openbmh-menu-files-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);
     struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code ignored;std::filesystem::remove_all(path,ignored);}} cleanup{directory};
@@ -1600,6 +1726,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     actual_layout_files(data,session->snapshot(),output.empty()?output:output/"layout-single");
     actual_settings_fixture(data,session->snapshot(),output.empty()?output:output/"settings-single");
     actual_competition_overview(data,session->snapshot(),output.empty()?output:output/"competition-single");
+    actual_club_inspection(data,session->snapshot(),output.empty()?output:output/"club-single");
     actual_process_timer(data,session->snapshot(),output.empty()?output:output/"timer-single");
     actual_indoor_settings(data,session->snapshot(),output.empty()?output:output/"indoor-single");
     for(int day:{109,110,230,231})actual_indoor_settings(data,session->snapshot(),output.empty()?output:output/("indoor-boundary-"+std::to_string(day)),day);
@@ -1627,6 +1754,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     actual_layout_files(data,multi->snapshot(),output.empty()?output:output/"layout-mixed");
     actual_settings_fixture(data,multi->snapshot(),output.empty()?output:output/"settings-mixed");
     actual_competition_overview(data,multi->snapshot(),output.empty()?output:output/"competition-mixed");
+    actual_club_inspection(data,multi->snapshot(),output.empty()?output:output/"club-mixed");
     actual_process_timer(data,multi->snapshot(),output.empty()?output:output/"timer-mixed");
     actual_indoor_settings(data,multi->snapshot(),output.empty()?output:output/"indoor-mixed");
     actual_stadium(mixed,multi,data,output.empty()?output:output/"stadium-mixed");
@@ -1643,6 +1771,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
         actual_layout_files(data,multi->snapshot(),output.empty()?output:output/"layout-german");
         actual_settings_fixture(data,multi->snapshot(),output.empty()?output:output/"settings-german");
         actual_competition_overview(data,multi->snapshot(),output.empty()?output:output/"competition-german");
+        actual_club_inspection(data,multi->snapshot(),output.empty()?output:output/"club-german");
         actual_process_timer(data,multi->snapshot(),output.empty()?output:output/"timer-german");
         actual_indoor_settings(data,multi->snapshot(),output.empty()?output:output/"indoor-german");
         actual_stadium(mixed,multi,data,output.empty()?output:output/"stadium-german");
@@ -1656,6 +1785,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
 int main(int argc,char** argv)try {
     if(argc==5&&std::string(argv[3])=="--indoor-settings-only"){const auto resources=session_app::load_runtime_resources(argv[1]);const auto fixture=read_save(load_savegame(argv[4]));actual_indoor_settings(argv[1],fixture,std::filesystem::path(argv[2])/"initial");for(int day:{109,110,230,231})actual_indoor_settings(argv[1],fixture,std::filesystem::path(argv[2])/("boundary-"+std::to_string(day)),day);return 0;}
     if(argc==5&&std::string(argv[3])=="--timer-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_process_timer(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
+    if(argc==5&&std::string(argv[3])=="--club-info-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_club_inspection(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--competition-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_competition_overview(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--settings-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_settings_fixture(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--layout-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_layout_files(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}

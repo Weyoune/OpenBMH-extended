@@ -680,6 +680,13 @@ StartupFlow::World12OtherGamesView StartupFlow::prepare_world12_other_games_resu
     auto expected=*request.world12_identity;++expected.revision;++expected.sequence;
     if(*page.world12_identity!=expected||parent.desktop.revision!=expected.revision)throw FormatError("world12: competition result has stale revision/sequence");
     auto before=desktop_->state();before.revision=parent.desktop.revision;
+    if(request.action==OtherGamesAction::team_info){
+        // Source roster entry normalizes selection/injury flags. The owner maps
+        // only those flags back; refresh their derived desktop indicators.
+        before.strength=parent.desktop.strength;
+        before.warnings[5]=parent.desktop.warnings[5];before.warnings[6]=parent.desktop.warnings[6];
+        for(size_t i=0;i<before.rank_curves.size();++i)before.rank_curves[i].strength=parent.desktop.rank_curves[i].strength;
+    }
     if(desk_json(before)!=desk_json(parent.desktop))throw FormatError("world12: competition navigation changed unrelated desktop state");
     validate_preparation_context(parent);World12OtherGamesView out;
     if(!closed)out.screen=std::make_unique<OtherGamesScreen>(data_,std::move(page),render_reference());

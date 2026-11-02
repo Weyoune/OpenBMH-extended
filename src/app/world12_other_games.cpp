@@ -2,6 +2,7 @@
 #include "app/world12_session.hpp"
 #include "game/world12/desktop_projection.hpp"
 #include "ui/desktop.hpp"
+#include "ui/other_games.hpp"
 #include <algorithm>
 namespace bmh::app::world12 {
 namespace {
@@ -52,7 +53,7 @@ ui::OtherGamesState Session::other_games_view()const {
         throw FormatError("world12: stale competition overview window");
     return other_games_page(state_,*other_games_owner_,other_games_selection_);
 }
-bool Session::apply_other_games(const ui::OtherGamesRequest& request) {
+bool Session::apply_other_games(const ui::OtherGamesRequest& request,const std::filesystem::path& data,const ClubInformationPresenter& presenter) {
     const auto current=other_games_view();const auto identity=*other_games_owner_;
     if(request.world12_identity!=other_games_owner_||request.identity!=ui::OtherGamesIdentity{}||
        owner_.revision==UINT64_MAX||identity.sequence==UINT64_MAX||((identity.sequence+1)>>32)!=other_games_generation_)
@@ -60,12 +61,19 @@ bool Session::apply_other_games(const ui::OtherGamesRequest& request) {
     if(request.action==ui::OtherGamesAction::team_info){
         const auto team=std::find_if(current.world12_teams.begin(),current.world12_teams.end(),[&](const auto& row){return row.second==request.world12_team;});
         if(request.value!=-1||!request.world12_team.valid()||team==current.world12_teams.end())throw FormatError("world12: competition team is outside the visible fixtures");
-        throw FormatError("Die Vereinsinfo dieser Wettbewerbsansicht ist noch nicht angebunden.");
+        if(!presenter)throw FormatError("world12: club information presenter is unavailable");
     }
     const bool close=request.action==ui::OtherGamesAction::close;
-    if(request.world12_team.valid()||(close&&request.value!=-1))throw FormatError("world12: unexpected competition action payload");
+    if((request.action!=ui::OtherGamesAction::team_info&&request.world12_team.valid())||(close&&request.value!=-1))throw FormatError("world12: unexpected competition action payload");
     auto candidate=state_;auto selection=other_games_selection_;
-    if(!close)selection=ui::navigate_world12_other_games(candidate,identity,selection,request);
+    if(request.action==ui::OtherGamesAction::team_info){
+        const auto before=state_;const auto old_generation=other_games_generation_;const auto old_selection=other_games_selection_;
+        if(!resources_.texts)throw FormatError("world12: club information texts are unavailable");
+        inspect_club_information(candidate,resources_.reference,resources_.german,*resources_.texts,request.world12_team,presenter,ui::OtherGamesScreen(data,current,resources_.german).render());
+        if(state_!=before||preparation_menu_!=5||other_games_owner_!=identity||other_games_generation_!=old_generation||
+           other_games_selection_!=old_selection||owner_.revision!=identity.revision)
+            throw FormatError("world12: club information changed its live competition owner");
+    }else if(!close)selection=ui::navigate_world12_other_games(candidate,identity,selection,request);
     auto next=identity;++next.revision;++next.sequence;
     const auto page=other_games_page(candidate,next,selection);
     auto& raw=*actor(candidate,identity.manager_slot).career->other_games_view;

@@ -58,9 +58,11 @@ The milestone regression passed 167 tests, with 95 unavailable-special-fixture
 skips and no failures. Screenshots and matching saves are private under
 `bmh_4k_ui/docs/qa/extended-competition-overview`.
 
-Team-info clicks authenticate the visible canonical club but currently return an
-explicit unsupported notice; their detail window is not connected. European and
-national competition schedule/results owners and round-date presentation remain
-open. Missing competition data or a future undrawn round never receives invented
+Visible club clicks now open [the Original roster inspection](CLUB_INFORMATION.md)
+with Data A/Data B and the same overview restored on exit. Source roster-entry
+selection/injury flag writes persist for that club; other gameplay stays unchanged.
+Nested player cards, club statistics and category changes remain separate typed
+owners. European and national competition schedule/results owners and round-date
+presentation also remain open. Missing competition data or a future undrawn round never receives invented
 fixtures, scores or dates. The seven-view demo above remains a separate synthetic
 UI probe, not evidence of a played career. Full live/annual/Beta gates remain open.

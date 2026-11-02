@@ -16,6 +16,7 @@
 #include "ui/toto.hpp"
 #include "ui/settings.hpp"
 #include "ui/world12_other_games.hpp"
+#include "app/world12_club_information.hpp"
 #include "app/world12_process_timer.hpp"
 #include "app/world12_advertising.hpp"
 #include "ui/advertising.hpp"
@@ -76,7 +77,7 @@ public:
     PendingOfferResult resolve_pending(const std::filesystem::path&,const ui::DeskRequest&,const PendingOfferHooks&);
     ui::OtherGamesState open_other_games(const ui::DeskRequest&);
     ui::OtherGamesState other_games_view()const;
-    bool apply_other_games(const ui::OtherGamesRequest&); // true retires the window.
+    bool apply_other_games(const ui::OtherGamesRequest&,const std::filesystem::path& data={},const ClubInformationPresenter& presenter={}); // true retires the window.
     void open_mailbox(const ui::DeskRequest&);
     ui::MailboxState mailbox_view()const;
     void edit_mailbox(const ui::MailboxActionRequest&);

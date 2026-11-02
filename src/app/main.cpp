@@ -1101,6 +1101,9 @@ int main(int argc, char** argv) {
             std::unique_ptr<ui::ClubInfoScreen> club_screen;
             const auto redraw = [&] {
                 std::string error;
+                if(services.club_projection){
+                    club_screen=std::make_unique<ui::ClubInfoScreen>(data,services.club_projection(selected_view),season_exe);return;
+                }
                 ClubInfoEntry snapshot;
                 if (team == kNoTeam || team < season_exe.u16(::bmh::layout::CareerSession_DispatchLineup_RuntimeField)) {
                     snapshot = services.enter_club(team);
@@ -1783,7 +1786,11 @@ int main(int argc, char** argv) {
                    (r.desk_action.menu_kind==10||r.desk_action.menu_kind==11||r.desk_action.menu_kind==19||r.desk_action.menu_kind==29)) {
                     process_timer.pause(process_source_seconds());process_timer_frame.reset();
                 }
-                const auto result=app::world12::serve_startup(flow,r,world_session,data,seed,1,r.request==ui::FlowRequest::kickoff?make_pending_offer_hooks(flow.render()):PendingOfferHooks{},nullptr,advertising,construction,compensation,ui::SettingsSoundCapabilities{playback.original_ready()&&playback.available(),playback.original_ready()&&playback.available()},settings_notice);
+                const app::world12::ClubInformationPresenter club_information=[&](const app::world12::ClubInformationProvider& provider,const Image&) {
+                    app::ClubModalServices services;services.club_projection=provider;
+                    return present_club_information(services,0)&&running;
+                };
+                const auto result=app::world12::serve_startup(flow,r,world_session,data,seed,1,r.request==ui::FlowRequest::kickoff?make_pending_offer_hooks(flow.render()):PendingOfferHooks{},nullptr,advertising,construction,compensation,ui::SettingsSoundCapabilities{playback.original_ready()&&playback.available(),playback.original_ready()&&playback.available()},settings_notice,club_information);
                 if(result.error.empty()&&(result.progress==app::world12::StartupProgress::prepared||
                    (r.request==ui::FlowRequest::file_action&&r.file_action.file_kind==ui::SaveLoadFileKind::game&&r.file_action.action==ui::SaveLoadAction::load))) {
                     world_process_timer.reset();process_timer_frame.reset();

@@ -47,6 +47,7 @@ struct ClubInfoProjection {
     std::string original_club_name;
     ClubInfoView view = ClubInfoView::data_a;
     bool has_squad = false;
+    bool player_details_available = true, statistics_available = true, category_available = true;
     bool gradient_text = true;
     bool decorated_background = true;
     uint8_t category = 0;
@@ -76,6 +77,7 @@ struct ClubInfoRequest {
 class ClubInfoScreen {
 public:
     ClubInfoScreen(const std::filesystem::path& data_directory, ClubInfoProjection projection);
+    ClubInfoScreen(const std::filesystem::path&, ClubInfoProjection, const LeImage& reference);
     Image render() const;
     bool move(int x, int y);
     std::optional<ClubInfoButton> button_at(int x, int y) const;

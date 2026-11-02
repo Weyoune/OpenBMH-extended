@@ -39,6 +39,16 @@ int main(int argc, char** argv) {
         }
         bmh::ui::ClubInfoScreen screen(data, projection(true));
         const auto image_a = screen.render();
+        auto read_only=projection(true);read_only.player_details_available=false;read_only.statistics_available=false;read_only.category_available=false;
+        bmh::ui::ClubInfoScreen inspection(data,read_only,bmh::load_le(bmh::ui::asset_path(data,"BMH.exe")));
+        check(!inspection.button_at(65,220)&&!inspection.button_at(140,220)&&inspection.button_at(10,220)==bmh::ui::ClubInfoButton::view,"inspection exposed an unowned nested action");
+        check(inspection.pointer_down(10,35).kind==bmh::ui::ClubInfoRequestKind::none&&!inspection.move(10,35),"inspection name routed an unowned player action");
+        inspection.press(10,220);check(inspection.release(10,220).kind==bmh::ui::ClubInfoRequestKind::toggle_view,"inspection lost Original A/B control");
+        check(inspection.pointer_down(200,100,true).kind==bmh::ui::ClubInfoRequestKind::close,"inspection lost Original right-down exit");
+        check(inspection.render().pixels!=image_a.pixels,"inspection retained unavailable nested controls");
+        auto absent=projection(false);absent.category_available=false;
+        bmh::ui::ClubInfoScreen unavailable(data,absent,bmh::load_le(bmh::ui::asset_path(data,"BMH.exe")));
+        check(!unavailable.button_at(10,220),"unrostered inspection exposed a category setter");
         check(image_a.width == 320 && image_a.height == 240, "Source framebuffer dimensions");
         check(screen.pointer_down(20, 30).kind == bmh::ui::ClubInfoRequestKind::open_player_detail,
               "name-column click routes to player detail");

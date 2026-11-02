@@ -11,6 +11,7 @@ struct World12OtherSelection {
     World12OtherPage page=World12OtherPage::german_cup;
     int stage=-1,round=-1,participant_offset=0;
     OtherGamesDisplayMode mode=OtherGamesDisplayMode::detail;
+    bool operator==(const World12OtherSelection&)const=default;
 };
 World12OtherSelection default_world12_other_selection(const bmh::world12::World&);
 OtherGamesState world12_other_games_state(const bmh::world12::CareerSnapshot&,

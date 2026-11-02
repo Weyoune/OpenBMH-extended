@@ -672,3 +672,22 @@ plus the existing manual-save W draws. Private screenshots and matching saves
 are in `bmh_4k_ui/docs/qa/extended-competition-overview`. Team-info windows,
 European/national schedule/results ownership, round-date presentation and the
 remaining live/annual/three-season release gates are still open.
+
+
+## Club roster inspection from competitions
+
+Visible club names now open [the existing Original Data A/Data B roster view](CLUB_INFORMATION.md).
+Canonical IDs map through a bounded workspace; Source selection/injury flag
+cleanup is retained for the target roster, with derived desktop strength and
+warning-light refresh. Accepted close restores the same competition page;
+interrupted or retired presenters cannot publish staged changes. No schema
+change or additional RNG consumption is introduced.
+
+Actual single/mixed GUI checks and a native Linux SDL run cover A/B pages,
+right-click return, saved flags, wide player IDs and rollback. Twelve native
+frames match the independently checked Core output outside the timer row; the
+complete native FBM matches the expected state plus the existing manual-save
+W draws. Player cards, club statistics and category changes remain hidden until
+their typed owners are ready. Remaining competition/live/annual/three-season
+Beta gates remain open. Screenshots and saves are private under
+`bmh_4k_ui/docs/qa/extended-club-information`.

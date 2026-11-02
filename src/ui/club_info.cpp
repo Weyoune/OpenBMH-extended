@@ -159,7 +159,9 @@ ClubInfoProjection club_info_from_game(const GameState& g, int team,
 }
 
 ClubInfoScreen::ClubInfoScreen(const std::filesystem::path& data, ClubInfoProjection projection)
-    : projection_(std::move(projection)), exe_(load_le(asset_path(data, "BMH.exe"))),
+    : ClubInfoScreen(data,std::move(projection),load_le(asset_path(data,"BMH.exe"))) {}
+ClubInfoScreen::ClubInfoScreen(const std::filesystem::path& data,ClubInfoProjection projection,const LeImage& reference)
+    : projection_(std::move(projection)), exe_(reference),
       font_(load_font(asset_path(data / "F", "BMH3.FNT"))), font2_(load_font(asset_path(data / "F", "BMH2.FNT"))),
       texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
       background_(load_vga(asset_path(data / "KB", "129.VGA"))),
@@ -335,13 +337,13 @@ Image ClubInfoScreen::render() const {
             }
         }
     };
-    button(1, projection_.has_squad ? texts_[((projection_.view == ClubInfoView::data_a ? ::bmh::layout::ClubInfo_Raw_TextPointer2 : ::bmh::layout::ClubInfo_Raw_TextPointer) - ::bmh::layout::TextPointerTable) / 4] : std::string_view{});
-    if (projection_.has_squad) button(60, texts_[(::bmh::layout::ClubInfo_Raw_TextPointer3 - ::bmh::layout::TextPointerTable) / 4]);
-    if (projection_.has_squad) button(120, {});
+    if(projection_.has_squad||projection_.category_available)button(1, projection_.has_squad ? texts_[((projection_.view == ClubInfoView::data_a ? ::bmh::layout::ClubInfo_Raw_TextPointer2 : ::bmh::layout::ClubInfo_Raw_TextPointer) - ::bmh::layout::TextPointerTable) / 4] : std::string_view{});
+    if (projection_.has_squad&&projection_.statistics_available) button(60, texts_[(::bmh::layout::ClubInfo_Raw_TextPointer3 - ::bmh::layout::TextPointerTable) / 4]);
+    if (projection_.has_squad&&projection_.category_available) button(120, {});
     const int icon = std::clamp(int(projection_.category), 0, 2);
     const bool category_pressed = pressed_button_ == ClubInfoButton::category;
     const int category_x = projection_.has_squad ? 140 : 21;
-    copy(out, widgets_, 45 + 10 * icon, 96, category_x + (category_pressed ? 2 : 0), 216 + (category_pressed ? 2 : 0), 10, 8);
+    if(projection_.category_available)copy(out, widgets_, 45 + 10 * icon, 96, category_x + (category_pressed ? 2 : 0), 216 + (category_pressed ? 2 : 0), 10, 8);
     return out;
 }
 
@@ -349,7 +351,7 @@ bool ClubInfoScreen::move(int x, int y) {
     bool changed = false;
     if (pressed_button_ && button_at(x, y) != pressed_button_) { pressed_button_.reset(); changed = true; }
     std::optional<int> next;
-    if (projection_.has_squad && x >= 0 && x < 61) for (const auto& [row, baseline] : rows())
+    if (projection_.has_squad && projection_.player_details_available && x >= 0 && x < 61) for (const auto& [row, baseline] : rows())
         if (y >= baseline - 7 && y < baseline + 2) { next = row; break; }
     std::optional<int> next_rendered;
     if (next) next_rendered = projection_.players[size_t(*next)].rendered_row;
@@ -361,7 +363,7 @@ ClubInfoRequest ClubInfoScreen::pointer_down(int x, int y, bool right) const {
     ClubInfoRequest out; out.runtime_team = projection_.runtime_team;
     out.squad_start_offset = projection_.squad_start_offset;
     if (right) { out.kind = ClubInfoRequestKind::close; return out; }
-    if (!projection_.has_squad || x < 0 || x >= 61) return out;
+    if (!projection_.has_squad || !projection_.player_details_available || x < 0 || x >= 61) return out;
     for (const auto& [row, baseline] : rows()) if (y >= baseline - 7 && y < baseline + 2) {
         const auto& player = projection_.players[size_t(row)];
         out.kind = ClubInfoRequestKind::open_player_detail; out.rendered_row = player.rendered_row;
@@ -373,10 +375,10 @@ ClubInfoRequest ClubInfoScreen::pointer_down(int x, int y, bool right) const {
 
 std::optional<ClubInfoButton> ClubInfoScreen::button_at(int x, int y) const {
     if (y < 215 || y > 225) return std::nullopt;
-    if (!projection_.has_squad && x >= 1 && x <= 52) return ClubInfoButton::category;
+    if (!projection_.has_squad && projection_.category_available && x >= 1 && x <= 52) return ClubInfoButton::category;
     if (projection_.has_squad && x >= 1 && x <= 52) return ClubInfoButton::view;
-    if (projection_.has_squad && x >= 60 && x <= 111) return ClubInfoButton::statistics;
-    if (projection_.has_squad && x >= 120 && x <= 171) return ClubInfoButton::category;
+    if (projection_.has_squad && projection_.statistics_available && x >= 60 && x <= 111) return ClubInfoButton::statistics;
+    if (projection_.has_squad && projection_.category_available && x >= 120 && x <= 171) return ClubInfoButton::category;
     return std::nullopt;
 }
 

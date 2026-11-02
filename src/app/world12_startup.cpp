@@ -7,7 +7,7 @@
 #include <limits>
 namespace bmh::app::world12 {
 StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,std::unique_ptr<Session>& session,
-    const std::filesystem::path& data,uint32_t seed,uint64_t scope,const PendingOfferHooks& hooks,const StartupTurnHooks* turn,const AdvertisingRenewalPresenter& advertising,const ConstructionNoticeHook& construction,const SeasonTicketCompensationNoticeHook& compensation,std::optional<ui::SettingsSoundCapabilities> sound,const SettingsNoticePresenter& settings_notice)try {
+    const std::filesystem::path& data,uint32_t seed,uint64_t scope,const PendingOfferHooks& hooks,const StartupTurnHooks* turn,const AdvertisingRenewalPresenter& advertising,const ConstructionNoticeHook& construction,const SeasonTicketCompensationNoticeHook& compensation,std::optional<ui::SettingsSoundCapabilities> sound,const SettingsNoticePresenter& settings_notice,const ClubInformationPresenter& club_information)try {
     if(action.request==ui::FlowRequest::load_game){
         if(session)throw FormatError("world12: setup load cannot replace an active startup session");
         const auto resources=load_runtime_resources(data);flow.open_world12_file_dialog(ui::SaveLoadMode::load,resources.german,save_info_reader(resources.german));return {};
@@ -75,7 +75,11 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
         if(!session||!flow.pending_other_games_action()||*flow.pending_other_games_action()!=action.other_games_action)
             throw FormatError("world12: competition command has no matching view owner");
         auto staged=std::make_unique<Session>(*session);auto page=staged->other_games_view();
-        const bool closed=staged->apply_other_games(action.other_games_action);
+        const auto* original=session.get();const auto before=session->snapshot();const auto revision=session->revision();
+        const bool closed=staged->apply_other_games(action.other_games_action,data,club_information);
+        if(session.get()!=original||session->snapshot()!=before||session->revision()!=revision||
+           !flow.pending_other_games_action()||*flow.pending_other_games_action()!=action.other_games_action)
+            throw FormatError("world12: club information changed its outer window owner");
         if(closed){++page.world12_identity->sequence;page.world12_identity->revision=staged->revision();}
         else page=staged->other_games_view();
         auto parent=staged->preparation_view(data);auto view=flow.prepare_world12_other_games_result(std::move(page),std::move(parent),action.other_games_action,closed);
