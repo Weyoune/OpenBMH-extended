@@ -43,3 +43,19 @@ The native UI adapters share the existing Original scene and lineup presenters
 and accept explicit reference rules, rather than rediscovering a legacy profile.
 These pieces do not by themselves complete calendar/live overview ownership or
 qualify a GUI season for the Beta gate.
+
+## Known career economy at the shared match boundary
+
+When a career economy is present, the common outdoor scoring projection now
+installs and captures its monthly counters, mailbox, loans and retained shared
+settings together with the already owned main finance, players and tactics.
+Older fixtures/worlds without this owner keep it absent; older unknown monthly
+or depreciation fields remain unknown. A late change to the accepted economy
+rejects publication without rewinding that change or either random stream.
+
+Synthetic sparse-seat cases compare the full post-match World to a direct Core
+clock/settlement oracle with nonzero month and mailbox state. An isolated actual
+four-manager data probe compares seventeen human league rounds, all financial
+and mailbox fields, both final seeds and saved roundtrips while computing 306
+league matches. This does not advance unrelated calendar competitions or claim
+a played season.

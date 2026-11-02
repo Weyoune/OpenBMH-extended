@@ -6,6 +6,9 @@
 #include "game/world12/prediction.hpp"
 #include "game/world12/codec.hpp"
 #include "game/world12/ai_match.hpp"
+#include "game/world12/economy.hpp"
+#include "game/messages.hpp"
+#include "game/driver.hpp"
 #include "app/world12_ai_day.hpp"
 #include "app/world12_live_scope.hpp"
 #include "game/match.hpp"
@@ -118,6 +121,21 @@ void live_preferences_and_scopes(const bmh::GameState& base) {
           "live scope probe missed a real minute or lost another manager's display word");
     std::cout<<"Real human minute scope: stale/replayed actions, substitution abort, actor/RNG rollback, Source opening lock, retirement and sparse desktop preferences passed\n";
 }
+void known_economy_match_oracle(const bmh::GameState& base){
+    auto initial=snapshot(base);initial.world.markets.emplace();initial.world.free_players.emplace();initial.world.settings=CareerSettings{3,6,5,2,false};initial.world.economy.emplace();auto& economy=*initial.world.economy;economy.week=2;economy.presentation_options.emplace();economy.presentation_options->fill(1);
+    for(size_t seat=0;seat<4;++seat){auto& manager=economy.managers[seat];manager.deposit=uint32_t(7000+seat*500);manager.monthly.emplace();manager.monthly->history_count=1;manager.depreciation=uint32_t(80+seat);for(size_t n=0;n<15;++n)manager.monthly->counters[n]=uint32_t(10000+seat*1000+n*13);manager.monthly->expenses={uint32_t(111+seat),uint32_t(222+seat)};manager.financial_history[0][0]=uint32_t(400+seat);}
+    EconomyMessage kept;kept.recipients=9;kept.date=39;const std::string original="Fixture retained mailbox entry";std::copy(original.begin(),original.end(),kept.text.begin());economy.messages={kept};
+    initial.world.economy->managers[0].monthly.reset();initial.world.economy->managers[0].depreciation.reset();initial.validate();
+    for(auto league:{LeagueId{4},LeagueId{9}}){auto played=initial;std::optional<CareerSnapshot> expected;std::optional<int32_t> expected_game;std::optional<uint32_t> expected_watcom;const auto fixtures=league_fixtures(played.world,league,3);AiLeagueConditions condition;condition.date=played.date;condition.month=8;condition.temperature=19;condition.spectators=15000;condition.referee_properties={24};condition.presentation_buttons.assign(180,1);std::vector<AiLeagueConditions> conditions(fixtures.size(),condition);bmh::GameRandom game(17);bmh::WatcomRandom random(91);HumanRoundHooks hooks;hooks.decline_unpresented_events=true;
+        hooks.before_matchday=[&](auto& projection,auto& engine){
+            bmh::post_composed(projection.state,0,"Fixture Source match mailbox mutation");auto oracle=projection;auto native_groups=engine.groups;bmh::GameRandom native_game=engine.game;bmh::WatcomRandom native_random=engine.rand;bmh::MatchEngine native(oracle.state,native_groups,native_game,native_random,engine.referees);native.month=engine.month;native.buttons=engine.buttons;native.leave_screens=true;bmh::MinuteReport report;bmh::play_matchday(native,oracle.state,native_groups,native.buttons,native_game,native_random,report);check(!report.unsupported,"direct Source economy oracle could not play");for(auto& group:native_groups)bmh::process_group(oracle.state,group,native_game,native_random,report);check(!report.unsupported,"direct Source economy oracle could not settle");expected=initial;oracle.commit_match_state(expected->world);capture_career_economy(expected->world,oracle);expected->game_seed=native_game.seed();expected->watcom_seed=native_random.seed();expected_game=native_game.seed();expected_watcom=native_random.seed();
+        };
+        simulate_and_settle_human_league_round(played,base,league,3,conditions,{3,6,false,true},game,random,hooks);check(expected&&played.world==expected->world&&game.seed()==*expected_game&&random.seed()==*expected_watcom,"common match lost direct Core month/mailbox/finance effects or RNG");check(played.world.economy->messages.size()>initial.world.economy->messages.size(),"Source match mailbox mutation was discarded");check(!played.world.economy->managers[0].monthly&&!played.world.economy->managers[0].depreciation,"known economy capture invented older unknown manager fields");check(played.world.economy->managers[1]==initial.world.economy->managers[1]&&played.world.economy->managers[2]==initial.world.economy->managers[2],"match captured an unrelated canonical seat's economy");check(read_save(make_save(played))==played,"Source match month/mailbox effects did not survive save/reopen");
+        auto stale=initial;const auto before=stale;bmh::GameRandom stale_game(17);bmh::WatcomRandom stale_random(91);HumanRoundHooks interrupted;interrupted.decline_unpresented_events=true;bool changed=false;interrupted.after_minute=[&](auto&,auto&,int){if(!changed){changed=true;++stale.world.economy->managers[3].deposit;}};rejects([&]{simulate_and_settle_human_league_round(stale,base,league,3,conditions,{3,6,false,true},stale_game,stale_random,interrupted);},"external economy change was overwritten");auto external=before;++external.world.economy->managers[3].deposit;check(stale==external&&stale_game.calls()==0&&stale_random.calls()==0,"economy owner rejection rewound external state or leaked match RNG");
+    }
+    std::cout<<"Known Source economy: full month/mailbox and sparse-seat Core oracles, unknown preservation and late-owner rollback passed\n";
+}
+
 void statistics_bridge(const bmh::GameState& base) {
     auto source=snapshot(base);
     const auto de=source.world.managers[0].club,en=source.world.managers[1].club;
@@ -191,7 +209,7 @@ void statistics_bridge(const bmh::GameState& base) {
 }
 }
 int main()try {
-    bmh::set_fixture_tables(bmh::test::authored_fixture_tables());const auto base=rules();statistics_bridge(base);live_preferences_and_scopes(base);const auto source=snapshot(base);auto world=source.world;
+    bmh::set_fixture_tables(bmh::test::authored_fixture_tables());const auto base=rules();statistics_bridge(base);live_preferences_and_scopes(base);known_economy_match_oracle(base);const auto source=snapshot(base);auto world=source.world;
     const auto de=world.membership[4].clubs[0],en=world.membership[9].clubs[0],de_other=world.membership[4].clubs[1],en_other=world.membership[9].clubs[1];
     const std::vector<ClubId> requested{de,de_other,en,en_other};
     rejects([&]{AiMatchProjection::create(world,requested,base);},"AI-only guard allowed a human participant");

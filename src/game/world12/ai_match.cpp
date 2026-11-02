@@ -2,6 +2,7 @@
 #include "game/world12/ai_match.hpp"
 #include "game/world12/cup_match.hpp"
 #include "game/world12/european_match.hpp"
+#include "game/world12/economy.hpp"
 #include "game/cup.hpp"
 #include "formats/le.hpp"
 #include <set>
@@ -43,7 +44,9 @@ AiLeagueRoundOutcome run_ai_league_matches(World& world,const GameState& base,co
     }
     if(human_snapshot&&(human_snapshot->world!=world||conditions[0].date!=human_snapshot->date))throw std::invalid_argument("world12: human forecast snapshot/date does not match round owner");
     const bool human_mode=human_snapshot&&((!cup&&!european)||std::any_of(world.managers.begin(),world.managers.end(),[&](const auto& m){return std::find(participants.begin(),participants.end(),m.club)!=participants.end();}));
+    const auto original_economy=world.economy;
     auto projection=european?AiMatchProjection::create_for_european(*human_snapshot,participants,base,policy):human_mode?AiMatchProjection::create_for_humans(*human_snapshot,participants,base,policy):AiMatchProjection::create(world,participants,base);auto& local=projection.state;
+    if(original_economy)install_career_economy(projection,world);
     local.indoor=false;local.lineups_frozen=false;local.pools_open=false;local.date=conditions[0].date;
     local.chance_rain=conditions[0].rain;local.chance_temperature=conditions[0].temperature;
     uint8_t group_type=0,group_flags=2;uint32_t source_entry=0;
@@ -147,7 +150,9 @@ AiLeagueRoundOutcome run_ai_league_matches(World& world,const GameState& base,co
     if(cup||european)cup_out->pools=outcome.pools;
     if(cup||european){for(const auto& finished:groups){cup_out->scores.insert(cup_out->scores.end(),finished.cup_results.begin(),finished.cup_results.end());cup_out->end_minutes.insert(cup_out->end_minutes.end(),finished.end_minute.begin(),finished.end_minute.end());}cup_out->game_draws=outcome.game_draws;cup_out->watcom_draws=outcome.watcom_draws;}
     else for(size_t m=0;m<fixtures.size();++m)outcome.matches.push_back({fixtures[m],{true,uint8_t(groups[0].results[m]>>4),uint8_t(groups[0].results[m]&15)},groups[0].end_minute[m],0,0,settle});
-    projection.commit_match_state(world);if(human_snapshot)projection.commit_desktop_preferences(*human_snapshot);game=staged_game;random=staged_random;return outcome;
+    if(world.economy!=original_economy)throw FormatError("world12: career economy changed during match calculation");
+    auto published=world;projection.commit_match_state(published);if(original_economy)capture_career_economy(published,projection);published.validate();
+    if(human_snapshot)projection.commit_desktop_preferences(*human_snapshot);world=std::move(published);game=staged_game;random=staged_random;return outcome;
 }
 }
 AiLeagueOutcome simulate_ai_league_match(World& world,const GameState& base,Fixture fixture,const AiLeagueConditions& conditions,GameRandom& game,WatcomRandom& random) {
