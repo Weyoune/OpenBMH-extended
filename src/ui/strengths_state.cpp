@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <functional>
 #include <limits>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -56,11 +57,10 @@ uint8_t source_name_color(const GameState& game, int team) {
     return game.manager_teams[active_manager] == team ? 0xf7 : 0x5f;
 }
 
-std::vector<uint8_t> source_age_scratch(const GameState& game, int league, bool lineup_only) {
-    const int first = league_first_team(league);
+std::vector<uint8_t> source_age_scratch(const GameState& game, bool lineup_only, const std::vector<int>& teams) {
     std::vector<uint8_t> result;
-    result.reserve(kLeagueSizes[league]);
-    for (int team = first; team < first + kLeagueSizes[league]; ++team) {
+    result.reserve(teams.size());
+    for (int team : teams) {
         const SquadRange range = squad_range(team);
         if (range.first > game.squad_slots.size() ||
             range.count > game.squad_slots.size() - range.first)
@@ -158,7 +158,7 @@ uint16_t strengths_family_word_source(uint16_t raw_family_word, uint8_t points_m
 
 StrengthsProjection strengths_from_game(const GameState& game, int manager_slot, int league,
                                         const StrengthsProjectionContext& context) {
-    if (league < 0 || league >= kLeagueCount) invalid("league is outside Source's nine domestic leagues");
+    if (league < 0 || (context.teams.empty() && league >= kLeagueCount)) invalid("league is outside Source's nine domestic leagues");
     require_memory(game, ::bmh::layout::ManagerCount);
     require_memory(game, ::bmh::layout::ActiveManager);
     require_memory(game, ::bmh::layout::DeskPosition);
@@ -175,13 +175,16 @@ StrengthsProjection strengths_from_game(const GameState& game, int manager_slot,
         invalid("manager team table is truncated");
     if (league < 5 && !game.texts) invalid("TEXTD data is unavailable for the league title");
 
-    const int first = league_first_team(league);
-    const int size = kLeagueSizes[league];
+    std::vector<int> teams=context.teams;
+    if(teams.empty())for(int i=0;i<kLeagueSizes[league];++i)teams.push_back(league_first_team(league)+i);
+    const int first=teams.front(),size=int(teams.size());
+    if(size>20||std::any_of(teams.begin(),teams.end(),[&](int team){return team<0||team>=runtime_dimensions.league_teams;})||
+       std::set<int>(teams.begin(),teams.end()).size()!=teams.size())invalid("invalid explicit league clubs");
     if (first < 0 || first + size > runtime_dimensions.league_teams) invalid("league bounds exceed domestic club table");
     if (game.club_ids.size() < size_t(first + size)) invalid("club ID table is truncated");
     if (game.club_names.empty()) invalid("club name pool is empty");
-    for (int team = first; team < first + size; ++team) {
-        if (game.club_ids[size_t(team)] >= game.club_names.size())
+    for (int team : teams) {
+        if (size_t(team)>=game.club_ids.size()||game.club_ids[size_t(team)] >= game.club_names.size())
             invalid("club name offset is outside the save pool");
         if (size_t(team) >= game.team_morale.size()) invalid("team morale table is truncated");
         const SquadRange range = squad_range(team);
@@ -215,7 +218,7 @@ StrengthsProjection strengths_from_game(const GameState& game, int manager_slot,
         if(context.retain_validated_owner_age) {
             if(!context.cached_age)invalid("validated age retention has no owner cache");
         } else {
-            const auto expected = source_age_scratch(game, league, cached.lineup_only);
+            const auto expected = source_age_scratch(game, cached.lineup_only, teams);
             if (cached.tenths != expected) invalid("cached age scratch is stale or forged");
         }
         out.age_scratch = cached;
@@ -230,10 +233,11 @@ StrengthsProjection strengths_from_game(const GameState& game, int manager_slot,
         out.age_scratch.league = league;
         out.age_scratch.basis = context.recompute_age_as;
         out.age_scratch.lineup_only = lineup_only;
-        out.age_scratch.tenths = source_age_scratch(game, league, lineup_only);
+        out.age_scratch.tenths = source_age_scratch(game, lineup_only, teams);
     }
 
-    if (league < 5) {
+    if(!context.teams.empty())out.league_name=context.league_name;
+    else if (league < 5) {
         out.league_name = iso646de_to_utf8(league_name(game, league).c_str());
     } else {
         const int title_team = kNoTeam + league - 4;
@@ -245,7 +249,7 @@ StrengthsProjection strengths_from_game(const GameState& game, int manager_slot,
     }
     out.rows.reserve(size_t(size));
     for (int row = 0; row < size; ++row) {
-        const int team = first + row;
+        const int team = teams[size_t(row)];
         StrengthsRow projected;
         projected.runtime_team = team;
         projected.source_row = size_t(row);

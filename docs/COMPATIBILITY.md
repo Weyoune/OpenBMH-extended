@@ -212,7 +212,18 @@ is inferred. World schema 33 then retains all sixteen preference bits.
 
 Changing to another typed league starts its own valid current-round interval,
 so a 38-round English selection cannot spill into an 18-round group. Same-league
-selection retains the existing view. The standalone typed table closes without
+selection retains the existing view. The typed league family closes without
 the unintegrated legacy family teardown/random stir. Legacy table controls and
 rendering retain their existing path. See [country tables](poc-1.2/TABLES.md) for
-supported controls, scope policy, ownership checks and remaining family actions.
+supported controls, scope policy, ownership checks and remaining forecast/live-overlay boundaries.
+
+## Extended typed league family
+
+OpenBMH deviates from the original: development snapshots before world schema 34
+have no typed strengths or pairings preferences. Their first owned entry uses
+the Original new-career UI defaults `0x1ff` and `1`, then preserves the complete
+word/byte. The typed family retains the country/league across its existing
+Original child screens, but does not invoke the unintegrated legacy family
+close-time random stir. Typed results contain no postponed-result records, so
+the postponed view is empty. Forecast and active weather/referee overlays remain
+unavailable until their actual RNG/presentation and live-event owners exist.

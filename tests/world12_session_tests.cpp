@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "world12_fixture.hpp"
 #include "app/world12_startup.hpp"
+#include "app/world12_tables.hpp"
 #include "app/settings_request_source.hpp"
 #include "app/world12_pending.hpp"
 #include "app/world12_desktop.hpp"
@@ -1030,10 +1031,10 @@ void competition_folder_owner(const std::filesystem::path& data,const CareerSnap
     for(int i=1;i<=30;++i)if(i!=menu&&rows[i][5]==255&&(rows[i][13]&0x7f)==0)rows[i][13]=uint8_t((rows[i][13]&0x80)|2);
     auto session=session_app::Session::resume(resources,fixture,122,20);const auto desk=ui::world12_initial_desktop(data,fixture,session.reference(),session.rules(),session.options(),session.revision());ui::DesktopScreen screen(data,desk,session.rules());
     const auto request=screen.pointer_up(210,69,false);check(request.kind==ui::DeskRequestKind::open_menu&&request.menu_kind==menu_kind&&request.item_id==menu,"stored unframed competition icon did not emit its real item");
-    if(menu_kind==0){session.open_tables(request);check(session.tables_view().identity.manager==seat,"stored table icon lost canonical owner");}
+    if(menu_kind>=0&&menu_kind<=2){session.open_tables(request);check(session.tables_view().identity.manager==seat,"stored table icon lost canonical owner");}
     else {session.open_other_games(request);check(session.other_games_view().world12_identity->manager_slot==seat,"stored competition icon lost canonical owner");}
     auto hidden=fixture;auto& hidden_rows=std::find_if(hidden.desktop->managers.begin(),hidden.desktop->managers.end(),[&](const auto& d){return d.seat==seat;})->layout;hidden_rows[folder][1]|=0x10;
-    auto blocked=session_app::Session::resume(resources,hidden,122,20);const auto before=blocked.snapshot();rejects([&]{if(menu_kind==0)blocked.open_tables(request);else blocked.open_other_games(request);},"hidden folder authorized a competition icon");check(blocked.snapshot()==before&&blocked.revision()==20,"hidden folder refusal changed state");
+    auto blocked=session_app::Session::resume(resources,hidden,122,20);const auto before=blocked.snapshot();rejects([&]{if(menu_kind>=0&&menu_kind<=2)blocked.open_tables(request);else blocked.open_other_games(request);},"hidden folder authorized a competition icon");check(blocked.snapshot()==before&&blocked.revision()==20,"hidden folder refusal changed state");
 }
 void actual_competition_overview(const std::filesystem::path& data,const CareerSnapshot& base,const std::filesystem::path& output) {
     competition_folder_owner(data,base);
@@ -1218,6 +1219,55 @@ void actual_tables_gui(const std::filesystem::path& data,const CareerSnapshot& f
     ui::SaveLoadRequest save;save.action=ui::SaveLoadAction::save;save.manager_slot=flow.desktop()->state().manager_slot;save.revision=revision;rejects([&]{session->prepare_manual_save(save);},"save stole an open table owner");
     require(flow.pointer_down(310,230,true));check(!session->preparation_open()&&flow.screen_name()=="desktop","table close did not retire and restore desk");capture("tables-closed",flow.render());check(read_save(make_save(session->snapshot()))==session->snapshot(),"table preferences failed FBM roundtrip");open();auto old=retained;old.identity.revision=session->revision();rejects([&]{session->apply_tables(old);},"retimed request stole reopened table");require(flow.process_timer_expired());check(flow.screen_name()=="desktop","Source process expiry did not close owned table");
     std::cout<<"Actual country tables: all active leagues/groups, Original controls, owned ranges and roster, saved preferences, stale/reopen/cancel/file/timer guards and unchanged gameplay passed\n";
+}
+void actual_family_gui(const std::filesystem::path& data,const CareerSnapshot& fixture,const std::filesystem::path& output){
+    competition_folder_owner(data,fixture,1);competition_folder_owner(data,fixture,2);
+    const auto resources=session_app::load_runtime_resources(data);const auto directory=std::filesystem::temp_directory_path()/("openbmh-family-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);
+    struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code ignored;std::filesystem::remove_all(path,ignored);}} cleanup{directory};write_savegame(directory/"Fixture.FBM",make_save(fixture));
+    ui::StartupFlow flow(data,directory,ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> session;
+    const auto send=[&](const ui::FlowResult& action,const session_app::ClubInformationPresenter& club={}){return session_app::serve_startup(flow,action,session,data,91,145,{},nullptr,{},{},{},std::nullopt,{},club);};
+    const auto require=[&](const ui::FlowResult& action){const auto result=send(action);if(!result.error.empty())throw std::runtime_error("family GUI: "+result.error);};
+    flow.click(60,215);require(flow.click(240,215));require(flow.send_key("ENTER"));const auto initial=session->snapshot();const auto seat=*initial.desktop->active_seat;
+    const auto unchanged=[&]{auto expected=initial;const auto& now=session->snapshot();for(auto& m:expected.world.managers)if(m.seat==seat){const auto& career=*std::find_if(now.world.managers.begin(),now.world.managers.end(),[&](const auto& other){return other.seat==seat;})->career;m.career->table_display_word=career.table_display_word;m.career->strengths_display_word=career.strengths_display_word;m.career->pairings_display_byte=career.pairings_display_byte;}check(expected==now,"family controls changed gameplay, another manager, date, results or RNG");};
+    const auto capture=[&](const std::string& name){if(output.empty())return;std::filesystem::create_directories(output);const auto image=flow.render();const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));std::ofstream file(output/(name+".ppm"),std::ios::binary);file<<"P6\n320 240\n255\n";for(auto pixel:image.pixels){const auto color=palette.argb[pixel];file.put(char(color>>16));file.put(char(color>>8));file.put(char(color));}write_savegame(output/(name+".FBM"),make_save(session->snapshot()));};
+    const auto open=[&](int kind){const auto& items=flow.desktop()->state().items;const auto icon=std::find_if(items.begin(),items.end(),[&](const auto& item){return item.kind==kind&&!item.disabled&&item.width>0;});check(icon!=items.end(),"family desktop icon missing");require(flow.click(icon->x+icon->width/2,icon->y+icon->height/2));check(session->tables_view().child==kind,"desktop opened wrong family child");};
+    const auto footer=[&](int x,int y){flow.pointer_down(x,y);const auto action=flow.click(x,y);check(action.request==ui::FlowRequest::world12_table_action,"family footer has no canonical request");return action;};
+    const auto navigate=[&](int target){const auto page=session->tables_view();const int child=page.child;int button=-1,width=65;if(child==0)button=target==1?10:11;else if(child==1){button=target==0?6:7;width=74;}else button=target==1?10:11;require(footer(2+button/4*width,177+button%4*13));const auto next=session->tables_view();check(next.child==target&&next.group==page.group&&next.table.league_id==page.table.league_id,"family switch lost country/league");unchanged();};
+    open(1);capture("family-pairings-open");ui::World12TableRequest stale;
+    std::set<LeagueId> visited;
+    if(!output.empty())std::filesystem::create_directories(output);std::ofstream itinerary;if(!output.empty())itinerary.open(output/"family-navigation.tsv");
+    for(int group=0;group<3;++group){const auto leagues=session->tables_view().leagues;
+        for(auto league:leagues){const auto [x,y]=*flow.world12_table_screen()->world12_league_center(league);if(itinerary.is_open())itinerary<<group<<'\t'<<league.value<<'\t'<<x<<'\t'<<y<<'\n';require(flow.pointer_down(x,y));const auto pairings=session->tables_view();check(pairings.pairings.has_value(),"pairings child missing");const auto& page=*pairings.pairings;const auto fixtures=bmh::world12::league_fixtures(session->snapshot().world,league,page.source.owner.round+1);check(page.source.rows.size()==fixtures.size(),"pairings lost actual league shape");
+            auto workspace=project_manager_desktop(session->snapshot(),resources.reference,session->snapshot().world.membership[league.value].clubs);
+            for(size_t row=0;row<fixtures.size();++row){const auto& actual=page.source.rows[row];const auto& fixture=fixtures[row];check(pairings.local_clubs.at(size_t(actual.home.runtime_team))==fixture.home&&pairings.local_clubs.at(size_t(actual.away.runtime_team))==fixture.away,"pairings substituted global clubs");const auto score=session->snapshot().results.result(session->snapshot().world.catalogue,league,page.source.owner.round+1,int(row));check(actual.raw_result==(score.played?uint8_t(score.home<<4|score.away):0xcc),"pairings fabricated a score");check(actual.home.strength[4]==team_average(workspace.state,int(workspace.local_club(fixture.home)),0x1ff).value,"pairings strength differs from Core");}
+            if(page.source.played_rounds>0){require(footer(153,190));const auto previous=session->tables_view();const auto& viewed=previous.pairings->source;const auto fixtures=bmh::world12::league_fixtures(session->snapshot().world,league,viewed.owner.round+1);for(size_t row=0;row<viewed.rows.size();++row){const auto score=session->snapshot().results.result(session->snapshot().world.catalogue,league,viewed.owner.round+1,int(row));check(viewed.rows[row].raw_result==(score.played?uint8_t(score.home<<4|score.away):0xcc),"past pairings changed a computed Core result");}capture("family-pairings-previous-league-"+std::to_string(league.value));require(footer(180,190));}
+            capture("family-pairings-league-"+std::to_string(league.value));navigate(2);const auto strengths=session->tables_view();check(strengths.strengths&&strengths.strengths->projection.rows.size()==session->snapshot().world.catalogue.league(league).clubs,"strengths lost actual league size");
+            for(const auto& row:strengths.strengths->projection.rows){const auto club=strengths.local_clubs.at(size_t(row.runtime_team));check(row.aggregate_value==team_average(workspace.state,int(workspace.local_club(club)),strengths.strengths->projection.words.effective_average_flags).value,"strengths uses another arithmetic kernel");}
+            capture("family-strengths-league-"+std::to_string(league.value));navigate(0);capture("family-table-league-"+std::to_string(league.value));navigate(1);visited.insert(league);unchanged();
+        }require(flow.pointer_down(285,192));
+    }
+    size_t expected=0;for(int group=0;group<3;++group)expected+=fixture.world.catalogue.table_leagues(TableGroup(group)).size();check(visited.size()==expected,"family did not visit all scoped leagues");
+    // Source round arrows, ordered search and selected-club paging.
+    require(footer(180,190));require(footer(153,190));require(footer(3,190));check(session->tables_view().pairings->source.owner.search_first==-2,"search not armed");require(flow.pointer_down(20,28));require(flow.pointer_down(140,28));require(footer(3,177));require(footer(3,203));require(flow.pointer_down(20,28));check(session->tables_view().pairings->source.total_rows==session->snapshot().world.catalogue.league({uint32_t(session->tables_view().table.league_id)}).rounds(),"club filter lost full directed season");capture("family-filter-page0");require(footer(180,190));capture("family-filter-page1");require(footer(153,190));require(footer(3,216));check(session->tables_view().pairings->rows.empty(),"postponed list invented typed postponed entries");capture("family-postponed");require(footer(3,177));
+    navigate(2);for(int control:{0,1,2,3,4,5,6,7,8,9,9,12}){const auto action=footer(control==12?210:2+control/4*65,control==12?218:177+control%4*13);stale=action.world12_table_action;require(action);unchanged();}capture("family-strengths-controls");
+    const auto before=session->snapshot();const auto revision=session->revision();rejects([&]{session->apply_tables(stale);},"family accepted stale control");check(session->snapshot()==before&&session->revision()==revision,"stale family action committed");
+    // Owned nested roster resolves the visible sorted row's canonical identity.
+    const auto stopped_state=session->snapshot();const auto stopped_revision=session->revision();const auto stopped=send(flow.pointer_down(20,30),[](const auto&,const auto&){return false;});check(!stopped.error.empty()&&session->snapshot()==stopped_state&&session->revision()==stopped_revision&&!flow.pending_world12_table(),"interrupted child roster changed state or retained its request");
+    const auto team=flow.pointer_down(20,30);const auto selected=team.world12_table_action.team;check(selected.valid(),"strengths row has no canonical club");int roster_calls=0;const auto inspected=send(team,[&](const auto& provider,const auto& backdrop){check(backdrop.pixels==flow.render().pixels,"family roster lost its actual backdrop");for(auto view:{ui::ClubInfoView::data_a,ui::ClubInfoView::data_b})check(provider(view).original_club_name==session->snapshot().world.clubs.at(selected).name,"family roster opened another club");++roster_calls;return true;});check(inspected.error.empty()&&roster_calls==1,"family roster did not return");capture("family-roster-returned");
+    require(flow.process_timer_expired());check(flow.screen_name()=="desktop","family process timer did not close child");check(read_save(make_save(session->snapshot()))==session->snapshot(),"family preferences failed FBM roundtrip");
+    for(int kind:{0,1,2}){open(kind);auto retimed=stale;retimed.identity.revision=session->revision();rejects([&]{session->apply_tables(retimed);},"retimed family request stole reopened child");require(flow.pointer_down(310,230,true));}
+    capture("family-closed");
+    std::cout<<"Actual country family: "<<visited.size()<<" leagues, Original three children, Core strengths/results, search/filter, preferences, roster and stale/reopen/timer guards passed\n";
+}
+void actual_family_result_views(const std::filesystem::path& data,const CareerSnapshot& state,const std::filesystem::path& output){
+    const auto resources=session_app::load_runtime_resources(data);const auto& manager=state.world.managers.front();const ui::World12TableIdentity identity{manager.seat,manager.club,77,151,1};size_t leagues=0,played=0;
+    for(int group=0;group<3;++group)for(auto league:state.world.catalogue.table_leagues(TableGroup(group))){
+        auto selection=ui::initial_world12_table_selection(state,manager.seat,0x71,1);selection.group=TableGroup(group);selection.league=league;selection.end_round=state.league_rounds[league.value];ui::normalize_world12_table_range(selection,state);selection.pairings.round=selection.pairings.title_round=std::max<int>(0,state.league_rounds[league.value]-1);
+        for(int child:{0,1,2}){selection.child=uint8_t(child);const auto page=session_app::project_league_family(state,resources,identity,selection);const auto frame=ui::LeagueTableScreen(data,page,resources.german).render();
+            if(page.pairings){const auto& source=page.pairings->source;const auto fixtures=bmh::world12::league_fixtures(state.world,league,source.owner.round+1);for(size_t row=0;row<source.rows.size();++row){const auto score=state.results.result(state.world.catalogue,league,source.owner.round+1,int(row));check(page.local_clubs.at(size_t(source.rows[row].home.runtime_team))==fixtures[row].home&&page.local_clubs.at(size_t(source.rows[row].away.runtime_team))==fixtures[row].away,"computed pairings changed fixture clubs");check(page.pairings->rows[row].result.empty()!=score.played,"computed pairings lost played state");if(score.played){++played;const auto expected=std::to_string(score.home)+resources.german.cstring(layout::CupDraw_DrawGroupOverview_TextPointer9)+std::to_string(score.away);check(page.pairings->rows[row].result==expected,"computed pairings changed Core goals");}}}
+            if(!output.empty()){std::filesystem::create_directories(output);const auto name="family-results-"+std::to_string(child)+"-league-"+std::to_string(league.value);const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));std::ofstream file(output/(name+".ppm"),std::ios::binary);file<<"P6\n320 240\n255\n";for(auto pixel:frame.pixels){const auto c=palette.argb[pixel];file.put(char(c>>16));file.put(char(c>>8));file.put(char(c));}write_savegame(output/(name+".FBM"),make_save(state));}
+        }++leagues;
+    }check(played>0,"computed family result fixture contains no played match");std::cout<<"Actual Core-computed results: "<<leagues<<" league families, "<<played<<" played scores, immutable Original projections without a fabricated desktop owner passed\n";
 }
 void actual_table_result_views(const std::filesystem::path& data,const CareerSnapshot& state,const std::filesystem::path& output){
     const auto resources=session_app::load_runtime_resources(data);const auto& manager=state.world.managers.front();const ui::World12TableIdentity identity{manager.seat,manager.club,77,131,1};size_t pages=0,played=0;
@@ -1566,6 +1616,7 @@ void actual_four_managers(const std::filesystem::path& data,const std::filesyste
             check(read_save(make_save(source_loaded.snapshot()))==source_loaded.snapshot(),"actual booked league histories failed save roundtrip");
             if(!output.empty())write_savegame(output/"source-prepared-leagues-computed.FBM",make_save(source_loaded.snapshot()));
             actual_table_result_views(data,source_loaded.snapshot(),output.empty()?output:output/"tables-played");
+            actual_family_result_views(data,source_loaded.snapshot(),output.empty()?output:output/"family-played");
             std::cout<<"Actual source-prepared leagues: original weather/referee catalogue, calculated crowds and gates, persistent attendance records and real scoring passed\n";
         }
         const auto league_date=resumed.snapshot().date;
@@ -1789,6 +1840,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     actual_competition_overview(data,session->snapshot(),output.empty()?output:output/"competition-single");
     actual_club_inspection(data,session->snapshot(),output.empty()?output:output/"club-single");
     actual_tables_gui(data,session->snapshot(),output.empty()?output:output/"tables-single");
+    actual_family_gui(data,session->snapshot(),output.empty()?output:output/"family-single");
     actual_process_timer(data,session->snapshot(),output.empty()?output:output/"timer-single");
     actual_indoor_settings(data,session->snapshot(),output.empty()?output:output/"indoor-single");
     for(int day:{109,110,230,231})actual_indoor_settings(data,session->snapshot(),output.empty()?output:output/("indoor-boundary-"+std::to_string(day)),day);
@@ -1818,6 +1870,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     actual_competition_overview(data,multi->snapshot(),output.empty()?output:output/"competition-mixed");
     actual_club_inspection(data,multi->snapshot(),output.empty()?output:output/"club-mixed");
     actual_tables_gui(data,multi->snapshot(),output.empty()?output:output/"tables-mixed");
+    actual_family_gui(data,multi->snapshot(),output.empty()?output:output/"family-mixed");
     actual_process_timer(data,multi->snapshot(),output.empty()?output:output/"timer-mixed");
     actual_indoor_settings(data,multi->snapshot(),output.empty()?output:output/"indoor-mixed");
     actual_stadium(mixed,multi,data,output.empty()?output:output/"stadium-mixed");
@@ -1836,6 +1889,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
         actual_competition_overview(data,multi->snapshot(),output.empty()?output:output/"competition-german");
         actual_club_inspection(data,multi->snapshot(),output.empty()?output:output/"club-german");
         actual_tables_gui(data,multi->snapshot(),output.empty()?output:output/"tables-german");
+    actual_family_gui(data,multi->snapshot(),output.empty()?output:output/"family-german");
         actual_process_timer(data,multi->snapshot(),output.empty()?output:output/"timer-german");
         actual_indoor_settings(data,multi->snapshot(),output.empty()?output:output/"indoor-german");
         actual_stadium(mixed,multi,data,output.empty()?output:output/"stadium-german");
@@ -1847,8 +1901,10 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
 }
 }
 int main(int argc,char** argv)try {
+    if(argc==5&&std::string(argv[3])=="--family-results"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_family_result_views(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--indoor-settings-only"){const auto resources=session_app::load_runtime_resources(argv[1]);const auto fixture=read_save(load_savegame(argv[4]));actual_indoor_settings(argv[1],fixture,std::filesystem::path(argv[2])/"initial");for(int day:{109,110,230,231})actual_indoor_settings(argv[1],fixture,std::filesystem::path(argv[2])/("boundary-"+std::to_string(day)),day);return 0;}
     if(argc==5&&std::string(argv[3])=="--timer-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_process_timer(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
+    if(argc==5&&std::string(argv[3])=="--family-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_family_gui(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--table-results"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_table_result_views(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--tables-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_tables_gui(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--club-info-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_club_inspection(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}

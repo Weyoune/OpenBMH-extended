@@ -39,6 +39,7 @@ struct LeaguePairingsState {
     bool decorated=true,original_panel=true,gradient=true,secondary_leagues=true;
     std::optional<LeaguePairingsActivePacket> active_packet;
 };
+LeaguePairingsState league_pairings_from_view(const GameState&,LeaguePairingsView,const LeImage&,std::string league_title,const std::optional<LeaguePairingsActivePacket>& active_packet={});
 LeaguePairingsConstants league_pairings_constants(const LeImage&);
 LeaguePairingsState league_pairings_from_game(const GameState&,const LeaguePairingsOwner&,
     const LeImage&,uint64_t revision,uint64_t scope,uint64_t sequence,
@@ -49,6 +50,7 @@ class LeaguePairingsScreen {
 public:
     struct FamilyMode { StrengthsIdentity identity; };
     LeaguePairingsScreen(const std::filesystem::path&,LeaguePairingsState);
+    LeaguePairingsScreen(const std::filesystem::path&,LeaguePairingsState,const LeImage&,bool typed);
     LeaguePairingsScreen(const std::filesystem::path&,LeaguePairingsState,FamilyMode);
     Image render() const;
     std::string state_json() const;
@@ -59,6 +61,7 @@ public:
     bool tick_source_seconds(uint64_t now);
     void mark_presented_source_seconds(uint64_t now);
     const std::optional<LeaguePairingsRequest>& pending() const {return pending_;}
+    bool source_mouse_wait_release_pending()const{return pressed_button_>=0||pressed_arrow_>=0;}
     const LeaguePairingsState& state() const {return state_;}
     void reject_action(std::string reason);
     const std::optional<LeagueFamilyRequest>& pending_family_action() const { return pending_family_action_; }
@@ -79,6 +82,7 @@ private:
     std::optional<LeaguePairingsRequest> pending_;
     std::optional<FamilyMode> family_;
     std::optional<LeagueFamilyRequest> pending_family_action_;
+    bool typed_=false;
     int pressed_button_=-1,pressed_arrow_=-1;
     std::string rejection_;
     std::optional<uint64_t> last_presented_source_seconds_;

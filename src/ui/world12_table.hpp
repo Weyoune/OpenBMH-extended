@@ -9,7 +9,11 @@ struct World12TableSelection {
     bmh::world12::TableGroup group=bmh::world12::TableGroup::germany;
     uint16_t word=0x11;
     int first_round=0,end_round=1,aggregation=7;
-    uint8_t normal_mode=1;
+    uint8_t normal_mode=1,child=0,pairings_preferences=0;
+    uint16_t strengths_word=0x1ff;
+    LeaguePairingsOwner pairings;
+    std::optional<StrengthsAgeScratch> age;
+    StrengthsAgeBasis age_basis=StrengthsAgeBasis::entry_or_league_change_bit10;
     bool operator==(const World12TableSelection&)const=default;
 };
 World12TableState world12_table_state(const bmh::world12::CareerSnapshot&,const World12TableIdentity&,

@@ -23,15 +23,19 @@ std::string number(unsigned value,int width) {
 }
 }
 StrengthsScreen::StrengthsScreen(const std::filesystem::path& data,StrengthsState state)
-    :exe_(load_le(asset_path(data,"BMH.exe"))),texts_(load_textd(asset_path(data,"TEXTD.BLK"))),
+    :StrengthsScreen(data,std::move(state),load_le(asset_path(data,"BMH.exe")),false) {}
+StrengthsScreen::StrengthsScreen(const std::filesystem::path& data,StrengthsState state,const LeImage& reference,bool typed)
+    :exe_(reference),texts_(load_textd(asset_path(data,"TEXTD.BLK"))),
      frame_(load_vga(asset_path(data/"KB","129.VGA"))),panel_(load_vga(asset_path(data/"KB","56.VGA"))),
      arrows_(load_vga(asset_path(data/"KB","1.VGA"))),widgets_(load_vga(asset_path(data/"KB","0.VGA"))),
-     font_(load_font(asset_path(data/"F","BMH3.FNT"))),sprite_(data),state_(std::move(state)) {
+     font_(load_font(asset_path(data/"F","BMH3.FNT"))),sprite_(data,reference),state_(std::move(state)) {
+    typed_=typed;
     const auto& id=state_.identity;const auto& p=state_.projection;
-    if(id.manager<0||id.manager>3||id.league<0||id.league>8||!id.scope||
+    if(id.manager<0||id.manager>3||id.league<0||id.league>(typed?12:8)||!id.scope||
+       (typed&&p.rows.size()!=10&&p.rows.size()!=18&&p.rows.size()!=20)||
        p.manager_slot!=id.manager||p.league!=id.league||state_.league_group<0||state_.league_group>1||
        id.expected_settings_word!=p.words.post_draw_settings_word||
-       p.rows.size()!=size_t(exe_.u8(::bmh::layout::LeagueSizes+uint32_t(id.league)))||p.age_scratch.league!=id.league||
+       (!typed&&p.rows.size()!=size_t(exe_.u8(::bmh::layout::LeagueSizes+uint32_t(id.league))))||p.age_scratch.league!=id.league||
        p.age_scratch.tenths.size()!=p.rows.size()||state_.title.empty()||state_.subtitle.empty())
         throw FormatError("strengths: incomplete owned projection");
     (void)render();
@@ -61,6 +65,7 @@ void StrengthsScreen::selector(Image& out,int x,int y,int style) const {
         exe_.u8(::bmh::layout::LeaguePairings_Selector_RuntimeField4+uint32_t(style)),38);
 }
 int StrengthsScreen::row_step() const {
+    if(typed_)return std::min(8,144/int(state_.projection.rows.size()));
     const int original=exe_.u8(layout::Strengths_PointerDown_RuntimeField+uint32_t(state_.identity.league));
     return exe_.expanded_profile() ? std::min(original, 144/int(state_.projection.rows.size())) : original;
 }
@@ -97,11 +102,12 @@ Image StrengthsScreen::render() const {
     }
     for(int n=0;n<12;++n)button(out,1+n/4*65,176+n%4*13,63,texts_[103+size_t(n)],pressed_==n||(word&(1u<<n)));
     button(out,202,215,114,texts_[115+size_t(state_.projection.words.raw_settings_word>>15)],pressed_==12);
-    selector(out,205,176,3);selector(out,262,176,state_.league_group);
+    if(!typed_){selector(out,205,176,3);selector(out,262,176,state_.league_group);
     int league=state_.league_group*5;
     for(int r=0;r<4;++r) {const int count=exe_.u8(::bmh::layout::CalendarLeagueCounts+uint32_t(state_.league_group*4+r));
         for(int n=0;n<count;++n,++league)copy(out,arrows_,188,state_.identity.league==league?8:0,
             233-count*4+n*8,exe_.u8(::bmh::layout::Strengths_Fill_RuntimeField)+exe_.u8(::bmh::layout::Strengths_Fill_RuntimeField2)*r,8,8);}
+    }
     return out;
 }
 int StrengthsScreen::button_at(int x,int y) const {
@@ -109,6 +115,7 @@ int StrengthsScreen::button_at(int x,int y) const {
     return x>=202&&x<=316&&y>=215&&y<=225?12:-1;
 }
 std::optional<StrengthsRequest> StrengthsScreen::selector_at(int x,int y) const {
+    if(typed_)return {};
     if(x>=205&&x<=260&&y>=176&&y<=216) {
         auto image=render();if(image.at(x,y)==0x19||image.at(x,y)==0x42)return {};
         const int r=(y-exe_.u8(::bmh::layout::Strengths_SelectorAt_RuntimeField))/exe_.u8(::bmh::layout::Strengths_SelectorAt_RuntimeField2);if(r<0||r>=4)return {};
@@ -136,7 +143,7 @@ bool StrengthsScreen::pointer_down(int x,int y,bool right) {
     if(right) {post(StrengthsAction::close);return true;}
     if(auto selector=selector_at(x,y)) {pending_=*selector;return true;}
     const int step=row_step();
-    const int top=exe_.expanded_profile()?27:24;
+    const int top=typed_||exe_.expanded_profile()?27:24;
     if(y>=top&&y<int(state_.projection.rows.size())*step+top) {
         const int row=(y-top)/step;post(StrengthsAction::team_info,state_.projection.rows[size_t(row)].runtime_team);return true;
     }

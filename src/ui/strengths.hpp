@@ -29,11 +29,13 @@ struct StrengthsState {
 class StrengthsScreen {
 public:
     StrengthsScreen(const std::filesystem::path&, StrengthsState);
+    StrengthsScreen(const std::filesystem::path&,StrengthsState,const LeImage&,bool typed);
     Image render() const;
     bool pointer_down(int x, int y, bool right = false);
     bool release(int x, int y);
     bool move(int x, int y);
     void reject_action(std::string reason);
+    bool source_mouse_wait_release_pending()const{return pressed_>=0;}
     const StrengthsState& state() const { return state_; }
     const std::optional<StrengthsRequest>& pending() const { return pending_; }
     std::string state_json() const;
@@ -52,6 +54,7 @@ private:
     SpriteFont sprite_;
     StrengthsState state_;
     std::optional<StrengthsRequest> pending_;
+    bool typed_=false;
     int pressed_ = -1;
     std::string rejection_;
 };

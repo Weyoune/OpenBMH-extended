@@ -663,7 +663,7 @@ FlowResult StartupFlow::finish_world12_table_input(bool changed){
 }
 void StartupFlow::show_world12_tables(World12TableState page,PreparationState parent,const DeskRequest& owner){
     if(!desktop_||!world12_reference_||desktop_->state().source!="world12"||!engine_attached_||in_preparation_menu()||in_readonly_view()||
-       !desktop_->pending()||*desktop_->pending()!=owner||owner.kind!=DeskRequestKind::open_menu||owner.menu_kind!=0||
+       !desktop_->pending()||*desktop_->pending()!=owner||owner.kind!=DeskRequestKind::open_menu||(owner.menu_kind<0||owner.menu_kind>2)||
        owner.revision!=desktop_->state().revision||owner.manager_slot!=desktop_->state().manager_slot||page.identity.revision!=owner.revision+1||
        parent.desktop.revision!=page.identity.revision||page.identity.club!=desktop_->state().managers.at(size_t(owner.manager_slot)).world_club)
         throw FormatError("world12: table opening lacks its desktop owner");

@@ -409,6 +409,19 @@ void strengths_projection_tests() {
     draw_hook = count_calendar_rng_draw;
     const auto projection = strengths_from_game(game, 0, 0);
     draw_hook = previous_hook;
+    StrengthsProjectionContext explicit_context;explicit_context.league_name=projection.league_name;
+    for(int team=0;team<18;++team)explicit_context.teams.push_back(team);
+    check(strengths_from_game(game,0,0,explicit_context)==projection,
+          "explicit country-club projection differs from the Original eighteen-team calculation");
+    explicit_context.teams.resize(10);explicit_context.league_name="Synthetic tenth tier";
+    const auto ten=strengths_from_game(game,0,12,explicit_context);
+    check(ten.rows.size()==10&&ten.league==12&&ten.age_scratch.tenths.size()==10,
+          "explicit ten-team league leaked bounded German league coordinates");
+    for(const auto& row:ten.rows){const auto original=std::find_if(projection.rows.begin(),projection.rows.end(),[&](const auto& other){return other.runtime_team==row.runtime_team;});
+        check(original!=projection.rows.end()&&row.criterion_values==original->criterion_values&&row.aggregate_value==original->aggregate_value&&row.age_tenths==original->age_tenths,
+              "ten-team projection changed Core strength or age arithmetic");}
+    auto truncated_clubs=game;truncated_clubs.club_ids.resize(8);auto noncontiguous=explicit_context;noncontiguous.teams={0,12};
+    rejected([&]{strengths_from_game(truncated_clubs,0,12,noncontiguous);});
     check(projection.rows.size() == 18 && projection.first_team == 0 &&
           projection.manager_slot == 0 && projection.age_scratch.basis ==
               StrengthsAgeBasis::entry_or_league_change_bit10 &&
@@ -929,6 +942,7 @@ void desktop_control_input_tests(const std::filesystem::path& data,DeskState& d)
 
 int main(int argc, char** argv) {
     try {
+        if(argc==2&&std::string_view(argv[1])=="--strengths-only"){strengths_projection_tests();std::cout<<"Source strengths controls and explicit country club projections passed.\n";return 0;}
         if (argc < 2) throw std::runtime_error("data directory required");
         const bool input_only=argc>2 && std::string_view(argv[2])=="--input-only";
         const std::filesystem::path data = argv[1]; const auto exe = bmh::test::load_executable(asset_path(data,"BMH.exe"));

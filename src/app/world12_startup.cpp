@@ -139,7 +139,7 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
             auto desk=ui::world12_initial_desktop(data,staged->snapshot(),staged->reference(),staged->rules(),staged->options(),staged->revision());
             flow.acknowledge_desk(std::move(desk));session.swap(staged);return {};
         }
-        if(action.desk_action.kind==ui::DeskRequestKind::open_menu&&action.desk_action.menu_kind==0){
+        if(action.desk_action.kind==ui::DeskRequestKind::open_menu&&action.desk_action.menu_kind>=0&&action.desk_action.menu_kind<=2){
             auto staged=std::make_unique<Session>(*session);auto page=staged->open_tables(action.desk_action);auto parent=staged->preparation_view(data);flow.show_world12_tables(std::move(page),std::move(parent),action.desk_action);session.swap(staged);return {};
         }
         if(action.desk_action.kind==ui::DeskRequestKind::open_menu&&action.desk_action.menu_kind==5){

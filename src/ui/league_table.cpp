@@ -321,7 +321,22 @@ LeagueTableScreen::LeagueTableScreen(const std::filesystem::path& data,World12Ta
         throw FormatError("world12: invalid table club/rank mapping");
     country_atlas_=load_vga(asset_path(data/"KB","SETUP12.VGA"));
     if(country_atlas_.width!=204||country_atlas_.height!=80)throw FormatError("world12: missing Original country selectors");
-    selected_league_=page.table.league_id;league_group_=int(page.group);world12_=std::move(page);(void)render();
+    const auto child_identity=[&](const auto& id){return id.manager==page.identity.manager&&id.league==page.table.league_id&&id.revision==page.identity.revision&&id.scope==page.identity.scope&&id.sequence==page.identity.sequence;};
+    if(page.child==1){
+        if(!page.pairings||page.strengths||!child_identity(page.pairings->identity)||page.pairings->source.total_rounds!=int(page.table.rows.size()*2-2))throw FormatError("world12: mismatched pairings child owner");
+        const auto& owner=page.pairings->source.owner;
+        if(!owner.postponed_active&&(!owner.filter_active||owner.filter_team<0)&&page.pairings->source.rows.size()!=page.table.rows.size()/2)throw FormatError("world12: incomplete pairings fixture set");
+        for(const auto& row:page.pairings->source.rows)for(const auto* team:{&row.home,&row.away})if(team->runtime_team<0||size_t(team->runtime_team)>=page.local_clubs.size()||std::find(page.clubs.begin(),page.clubs.end(),page.local_clubs[size_t(team->runtime_team)])==page.clubs.end())throw FormatError("world12: pairings child has an unowned club");
+    }else if(page.child==2){
+        if(!page.strengths||page.pairings||!child_identity(page.strengths->identity)||page.strengths->projection.rows.size()!=page.clubs.size())throw FormatError("world12: mismatched strengths child owner");
+        std::vector<bmh::world12::ClubId> seen;
+        for(const auto& row:page.strengths->projection.rows){if(row.runtime_team<0||size_t(row.runtime_team)>=page.local_clubs.size())throw FormatError("world12: unowned strengths row");const auto club=page.local_clubs[size_t(row.runtime_team)];if(std::find(page.clubs.begin(),page.clubs.end(),club)==page.clubs.end()||std::find(seen.begin(),seen.end(),club)!=seen.end())throw FormatError("world12: repeated/hidden strengths club");seen.push_back(club);}
+    }else if(page.pairings||page.strengths)throw FormatError("world12: table child has another child projection");
+    selected_league_=page.table.league_id;league_group_=int(page.group);world12_=std::move(page);
+    if(world12_->child==1&&world12_->pairings)world12_pairings_=std::make_unique<LeaguePairingsScreen>(data,*world12_->pairings,reference,true);
+    else if(world12_->child==2&&world12_->strengths)world12_strengths_=std::make_unique<StrengthsScreen>(data,*world12_->strengths,reference,true);
+    else if(world12_->child!=0)throw FormatError("world12: missing family child projection");
+    (void)render();
 }
 
 void LeagueTableScreen::text(Image& image, int x, int y, std::string_view value,
@@ -334,6 +349,7 @@ void LeagueTableScreen::text(Image& image, int x, int y, std::string_view value,
 }
 
 Image LeagueTableScreen::render() const {
+    if(world12_pairings_||world12_strengths_){auto image=world12_pairings_?world12_pairings_->render():world12_strengths_->render();draw_world12_selectors(image);return image;}
     const auto& table = state();
     Image image = table.decorated_background ? desktop_background_ : Image(320, 240);
     if (!table.decorated_background) {
@@ -459,7 +475,7 @@ Image LeagueTableScreen::render() const {
     // FriendlyMatchScreen's twelve original control buttons (FormatError3).
     const uint16_t word = uint16_t(table.display_word & ~uint16_t(0x80));
     for (int index = 0; index < 12; ++index) {
-        if(world12_&&(index==3||index>=10))continue;
+        if(world12_&&index==3)continue;
         const int x = 1 + (index / 4) * 65;
         const int y = 176 + (index % 4) * 13;
         std::string label = texts_[size_t(73 + index)];
@@ -490,15 +506,7 @@ Image LeagueTableScreen::render() const {
     }
 
     if(world12_){
-        selector(image,205,176,3);
-        // Reuse the supplied Original Germany/England/globe setup symbols.
-        copy_region(image,country_atlas_,int(world12_->group)*51,40,264,176,51,40,0xc0);
-        const char* label=world12_->group==bmh::world12::TableGroup::germany?"Deutschland":world12_->group==bmh::world12::TableGroup::england?"England":"Europa";
-        text(image,264,225,label,kHeading,54);
-        for(size_t row=0;row<world12_->leagues.size();++row){
-            const auto [x,y]=world12_league_cell(row);
-            copy_region(image,selector_atlas_,188,world12_->leagues[row].value==uint32_t(selected_league_)?8:0,x,y,8,8,0xc0);
-        }
+        draw_world12_selectors(image);
     }else {
     // Selector/Selector2: Source's league map and league-group selectors.
     selector(image, 205, 176, 3);
@@ -520,6 +528,8 @@ Image LeagueTableScreen::render() const {
 }
 
 std::string LeagueTableScreen::state_json() const {
+    if(world12_pairings_)return world12_pairings_->state_json();
+    if(world12_strengths_)return world12_strengths_->state_json();
     std::ostringstream out;
     out << "{\"screen\":\"league_table\",\"selected_league\":" << selected_league_
         << ",\"league_group\":" << league_group_
@@ -560,7 +570,7 @@ void LeagueTableScreen::button(Image& out, int, int x, int y, int width,
 }
 
 void LeagueTableScreen::selector(Image& out, int x, int y, int group) const {
-    const int height = exe_.u8(::bmh::layout::LeaguePairings_Selector_RuntimeField);
+    const int height = exe_.u8(world12_&&world12_->child==2?layout::Strengths_Selector_RuntimeField:layout::LeaguePairings_Selector_RuntimeField);
     copy_region(out, selector_atlas_, 198, 0, x, y, 55, 38, 0xc0);
     copy_region(out, selector_atlas_, 198, 76 - height, x, y + 37, 55, height - 38, 0xc0);
     if (group < 3)
@@ -626,6 +636,12 @@ int LeagueTableScreen::hit_at(int x, int y, bool right) const {
 bool LeagueTableScreen::pointer_down(int x, int y, bool right) {
     if(world12_){
         if(world12_pending_)return false;
+        if(world12_pairings_||world12_strengths_){
+            const int hit=world12_hit_at(x,y,right);
+            if(hit==400||hit==200||hit>=300)return post_world12_hit(hit);
+            const bool changed=world12_pairings_?world12_pairings_->pointer_down(x,y,right):world12_strengths_->pointer_down(x,y,right);
+            post_world12_child();return changed;
+        }
         const int hit=world12_hit_at(x,y,right);if(hit<0)return false;
         if(hit<12){pressed_hit_=hit;return true;}return post_world12_hit(hit);
     }
@@ -658,6 +674,8 @@ bool LeagueTableScreen::pointer_down(int x, int y, bool right) {
 }
 
 bool LeagueTableScreen::move(int x, int y) {
+    if(world12_pairings_)return world12_pairings_->move(x,y);
+    if(world12_strengths_)return world12_strengths_->move(x,y);
     if (pressed_hit_ < 0) return false;
     if ((world12_?world12_hit_at(x,y,pressed_hit_==400):hit_at(x,y,pressed_hit_==400)) != pressed_hit_) {
         pressed_hit_ = -1;
@@ -720,9 +738,10 @@ bool LeagueTableScreen::activate_hit(int hit) {
 std::pair<int,int> LeagueTableScreen::world12_league_cell(size_t row)const{
     const bool german=world12_->group==bmh::world12::TableGroup::germany;
     const int tiers=german?4:int(world12_->leagues.size());
-    const int step=tiers==5?8:10;
+    const int height=exe_.u8(world12_->child==2?layout::Strengths_Selector_RuntimeField:layout::LeaguePairings_Selector_RuntimeField);
+    const int step=std::min(tiers==5?8:10,(height-8)/std::max(1,tiers-1));
     const int content_height=(tiers-1)*step+8;
-    const int top=176+(int(exe_.u8(layout::LeaguePairings_Selector_RuntimeField))-content_height)/2;
+    const int top=176+(height-content_height)/2;
     if(german){
         const auto league=world12_->leagues.at(row).value;
         return {league==2?225:league==3?233:229,top+(league<2?int(league):league<4?2:3)*step};
@@ -737,8 +756,8 @@ std::optional<std::pair<int,int>> LeagueTableScreen::world12_league_center(bmh::
 }
 int LeagueTableScreen::world12_hit_at(int x,int y,bool right)const {
     if(right)return 400;
-    for(int i=0;i<10;++i){if(i==3)continue;const int bx=1+(i/4)*65,by=176+(i%4)*13;if(x>=bx&&x<=bx+63&&y>=by&&y<=by+10)return i;}
-    if(x>=264&&x<315&&y>=176&&y<216)return 200;
+    for(int i=0;i<12;++i){if(i==3)continue;const int bx=1+(i/4)*65,by=176+(i%4)*13;if(x>=bx&&x<=bx+63&&y>=by&&y<=by+10)return i;}
+    if(x>=264&&x<315&&y>=176&&y<176+std::min(40,int(exe_.u8(world12_->child==2?layout::Strengths_Selector_RuntimeField:layout::LeaguePairings_Selector_RuntimeField))))return 200;
     for(size_t row=0;row<world12_->leagues.size();++row){const auto [cx,cy]=world12_league_cell(row);if(x>=cx&&x<cx+8&&y>=cy&&y<cy+8)return 300+int(row);}
     if(y>28&&y<28+int(state().rows.size())*7&&x>0&&x<319)return 100+(y-29)/7;
     return -1;
@@ -749,12 +768,16 @@ bool LeagueTableScreen::post_world12_hit(int hit){
     else if(hit==200)request.action=World12TableAction::next_group;
     else if(hit>=300){request.action=World12TableAction::select_league;request.league=world12_->leagues.at(size_t(hit-300));}
     else if(hit>=100){request.action=World12TableAction::team_info;request.team=world12_->clubs.at(size_t(hit-100));}
+    else if(hit>=10){request.action=World12TableAction::navigate;request.value=hit==10?1:2;}
     else {request.action=World12TableAction::control;request.value=hit;}
     world12_pending_=request;rejection_.clear();return true;
 }
 void LeagueTableScreen::reject_world12_action(std::string reason){
     if(!world12_pending_||reason.empty())throw FormatError("world12: no table action to reject");
-    world12_pending_.reset();pressed_hit_=-1;rejection_=std::move(reason);
+    world12_pending_.reset();pressed_hit_=-1;
+    if(world12_pairings_&&world12_pairings_->pending())world12_pairings_->reject_action(reason);
+    if(world12_strengths_&&world12_strengths_->pending())world12_strengths_->reject_action(reason);
+    rejection_=std::move(reason);
 }
 
 void LeagueTableScreen::reject_family_action(std::string reason) {
@@ -813,7 +836,9 @@ void LeagueTableScreen::acknowledge_friendly_own_club(const StrengthsIdentity& a
 
 bool LeagueTableScreen::click(int x, int y, bool right) {
     if(world12_){
-        if(world12_pending_||pressed_hit_<0)return false;
+        if(world12_pending_)return false;
+        if(world12_pairings_||world12_strengths_){const bool changed=world12_pairings_?world12_pairings_->release(x,y):world12_strengths_->release(x,y);post_world12_child();return changed;}
+        if(pressed_hit_<0)return false;
         const int hit=pressed_hit_;pressed_hit_=-1;
         if(world12_hit_at(x,y,right)!=hit)return true;
         return post_world12_hit(hit);
@@ -863,3 +888,38 @@ bool LeagueTableScreen::key(std::string_view value) {
 }
 
 } // namespace bmh::ui
+
+namespace bmh::ui {
+void LeagueTableScreen::draw_world12_selectors(Image& image)const{
+        selector(image,205,176,3);
+        // Reuse the supplied Original Germany/England/globe setup symbols.
+        copy_region(image,country_atlas_,int(world12_->group)*51,40,264,176,51,std::min(40,int(exe_.u8(world12_->child==2?layout::Strengths_Selector_RuntimeField:layout::LeaguePairings_Selector_RuntimeField))),0xc0);
+        const char* label=world12_->group==bmh::world12::TableGroup::germany?"Deutschland":world12_->group==bmh::world12::TableGroup::england?"England":"Europa";
+        if(world12_->child!=2)text(image,264,225,label,kHeading,54);
+        for(size_t row=0;row<world12_->leagues.size();++row){
+            const auto [x,y]=world12_league_cell(row);
+            copy_region(image,selector_atlas_,188,world12_->leagues[row].value==uint32_t(selected_league_)?8:0,x,y,8,8,0xc0);
+        }
+}
+}
+
+namespace bmh::ui {
+bool LeagueTableScreen::post_world12_child(){
+    World12TableRequest request;request.identity=world12_->identity;
+    if(world12_pairings_&&world12_pairings_->pending()){
+        const auto& e=world12_pairings_->pending()->event;
+        if(e.kind==LeaguePairingsAction::team_info){request.action=World12TableAction::team_info;request.team=world12_->local_clubs.at(size_t(e.value));}
+        else {request.action=World12TableAction::pairings_control;request.value=int(e.kind);}
+        // Search/filter clicks carry their canonical club in the same owned field.
+        if(e.kind==LeaguePairingsAction::search_team||e.kind==LeaguePairingsAction::filter_club)request.team=world12_->local_clubs.at(size_t(e.value));
+        if(e.kind==LeaguePairingsAction::unsupported&&(e.value==6||e.value==7)){request.action=World12TableAction::navigate;request.value=e.value==6?0:2;}
+    }else if(world12_strengths_&&world12_strengths_->pending()){
+        const auto& e=*world12_strengths_->pending();
+        if(e.kind==StrengthsAction::team_info){request.action=World12TableAction::team_info;request.team=world12_->local_clubs.at(size_t(e.value));}
+        else if(e.kind==StrengthsAction::pairings||e.kind==StrengthsAction::table){request.action=World12TableAction::navigate;request.value=e.kind==StrengthsAction::pairings?1:0;}
+        else if(e.kind==StrengthsAction::control){request.action=World12TableAction::strengths_control;request.value=int(e.control);}
+        else return false;
+    }else return false;
+    world12_pending_=request;return true;
+}
+}

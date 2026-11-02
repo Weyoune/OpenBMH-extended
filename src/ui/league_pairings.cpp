@@ -76,6 +76,11 @@ LeaguePairingsState league_pairings_from_game(const GameState& g,const LeaguePai
         }
         out.active_packet=active_packet;
     }
+    auto formatted=league_pairings_from_view(g,std::move(out.source),exe,owner.league<5?league_name(g,owner.league):g.club_name(kNoTeam+owner.league-4),active_packet);
+    formatted.identity=out.identity;formatted.active_packet=out.active_packet;return formatted;
+}
+LeaguePairingsState league_pairings_from_view(const GameState& g,LeaguePairingsView view,const LeImage& exe,std::string league_title,const std::optional<LeaguePairingsActivePacket>& active_packet){
+    LeaguePairingsState out;out.source=std::move(view);const auto& owner=out.source.owner;
     out.decorated=g.memory.u8(::bmh::layout::PlainBackground)==0;out.original_panel=g.memory.u8(::bmh::layout::SolidPanelBackground)==0;
     out.gradient=g.memory.u8(::bmh::layout::TextGradientDisabled)==0&&exe.u8(::bmh::layout::TextGradientMode)==2;
     out.secondary_leagues=g.memory.u8(::bmh::layout::CalendarState_FormatError_RuntimeField2)==0;
@@ -83,7 +88,7 @@ LeaguePairingsState league_pairings_from_game(const GameState& g,const LeaguePai
     //51329 ->LeagueName uses the league names prepared by6b98e, including
     //the shared Regionalliga A/B text and foreign country's Native name.
     //TeamStatistics_SourceLeagueName_RuntimeField's temporary prefix is only set around other callers, not this Desk.
-    const auto league_title=owner.league<5?league_name(g,owner.league):g.club_name(kNoTeam+owner.league-4);
+
     if(owner.postponed_active) {
         out.title=message_text(g,::bmh::layout::LeaguePairings_FormatError_TextPointer12)+league_title;
         out.subtitle.clear();
@@ -145,19 +150,22 @@ LeaguePairingsState league_pairings_from_game(const GameState& g,const LeaguePai
 }
 
 LeaguePairingsScreen::LeaguePairingsScreen(const std::filesystem::path& data,LeaguePairingsState state)
-    :exe_(load_le(asset_path(data,"BMH.exe"))),frame_(load_vga(asset_path(data/"KB","129.VGA"))),
+    :LeaguePairingsScreen(data,std::move(state),load_le(asset_path(data,"BMH.exe")),false) {}
+LeaguePairingsScreen::LeaguePairingsScreen(const std::filesystem::path& data,LeaguePairingsState state,const LeImage& reference,bool typed)
+    :exe_(reference),frame_(load_vga(asset_path(data/"KB","129.VGA"))),
     panel_(load_vga(asset_path(data/"KB","56.VGA"))),arrows_(load_vga(asset_path(data/"KB","1.VGA"))),
     widgets_(load_vga(asset_path(data/"KB","0.VGA"))),weather_(load_vga(asset_path(data/"KB","22.VGA"))),
     font_(load_font(asset_path(data/"F","BMH3.FNT"))),
-    sprite_(data),state_(std::move(state)) {
+    sprite_(data,reference),state_(std::move(state)) {
+    typed_=typed;
     const auto& id=state_.identity;
     const auto& owner=state_.source.owner;
-    if(id.manager<0||id.manager>=4||id.league<0||id.league>=9||id.round<0||id.round>=state_.source.total_rounds||
+    if(id.manager<0||id.manager>=4||id.league<0||id.league>=(typed?13:9)||id.round<0||id.round>=state_.source.total_rounds||
         !id.scope||state_.source.owner.closed||state_.rows.size()!=state_.source.rows.size()||
         !owner.supported||owner.manager!=id.manager||owner.runtime_club!=id.runtime_club||
         owner.club_identity!=id.club_identity||owner.league!=id.league||owner.round!=id.round||
         (!owner.postponed_active&&state_.rows.empty())||state_.rows.size()>10||state_.source.total_rows<int(state_.rows.size())||
-        ((!owner.filter_active||owner.filter_team<0)&&!owner.postponed_active&&
+        (!typed&&(!owner.filter_active||owner.filter_team<0)&&!owner.postponed_active&&
             state_.rows.size()!=league_fixtures(id.league,id.round+1).size())||
         state_.title.empty()||(!owner.postponed_active&&state_.subtitle.empty())||
         (owner.postponed_active&&(
@@ -246,6 +254,7 @@ Image LeaguePairingsScreen::render() const {
         text(out,result_x,y,row.scheduled_date.empty()?row.result:row.scheduled_date,0x5f);text(out,263,y+7,row.first_leg,0x69);
     }
     for(int n=0;n<8;++n) {
+        if(typed_&&n==4)continue;
         const int x=1+(n/4)*74,y=176+(n%4)*13;
         const bool selected=pressed_button_==n||(state_.source.preferences&(1u<<n));
         int dx=x,dy=y;
@@ -260,7 +269,8 @@ Image LeaguePairingsScreen::render() const {
         const auto label=original_to_utf8(state_.buttons[size_t(n)]);
         sprite_.draw(out,dx+35-sprite_.text_width(label)/2,dy+7,label,exe_.u8(::bmh::layout::Advertising_Button_RuntimeField + uint32_t(selected)));
     }
-    selector(out,148,176,2);selector(out,205,176,3);selector(out,262,176,state_.source.owner.league_group);
+    selector(out,148,176,2);
+    if(!typed_){selector(out,205,176,3);selector(out,262,176,state_.source.owner.league_group);
     int league=state_.source.owner.league_group*5;
     for(int r=0;r<4;++r) {
         const int count=exe_.u8(::bmh::layout::CalendarLeagueCounts + uint32_t(state_.source.owner.league_group*4+r));
@@ -268,12 +278,13 @@ Image LeaguePairingsScreen::render() const {
         for(int n=0;n<count;++n,++league)copy(out,arrows_,188,state_.identity.league==league?8:0,
             233-count*4+n*8,y,8,8);
     }
+    }
     if(pressed_arrow_>=0)copy(out,arrows_,136+pressed_arrow_*26,0,149+pressed_arrow_*26,182,26,38);
     return out;
 }
 int LeaguePairingsScreen::button_at(int x,int y) const {
     for(int n=0;n<8;++n) {const int bx=1+n/4*74,by=176+n%4*13;
-        if(x>=bx&&x<=bx+70&&y>=by&&y<=by+10)return n;}return -1;
+        if((!typed_||n!=4)&&x>=bx&&x<=bx+70&&y>=by&&y<=by+10)return n;}return -1;
 }
 int LeaguePairingsScreen::arrow_at(int x,int y) const {
     if(y>=182&&y<=220)for(int n=0;n<2;++n)if(x>=149+n*26&&x<=175+n*26)return n;
@@ -303,7 +314,7 @@ void LeaguePairingsScreen::mark_presented_source_seconds(uint64_t now) {
     last_presented_source_seconds_=now;
 }
 std::optional<LeaguePairingsEvent> LeaguePairingsScreen::selector_event(int x,int y) const {
-    if(pending_)return std::nullopt;
+    if(pending_||typed_)return std::nullopt;
     if(x>=205&&x<=260&&y>=176&&y<=216) {
         auto image=render();if(image.at(x,y)==0x19||image.at(x,y)==0x42)return std::nullopt;
         const int r=(y-exe_.u8(::bmh::layout::LeaguePairings_SelectorEvent_RuntimeField2))/exe_.u8(::bmh::layout::LeaguePairings_SelectorEvent_RuntimeField3);if(r<0||r>=4)return std::nullopt;

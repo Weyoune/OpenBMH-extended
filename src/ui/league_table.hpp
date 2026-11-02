@@ -15,6 +15,9 @@
 #include "game/world12/identity.hpp"
 #include "ui/league_family_request.hpp"
 #include "ui/sprite_font.hpp"
+#include "ui/league_pairings.hpp"
+#include "ui/strengths.hpp"
+#include <memory>
 
 namespace bmh { struct GameState; }
 
@@ -81,7 +84,7 @@ struct World12TableIdentity {
     uint64_t revision=0,scope=0,sequence=0;
     bool operator==(const World12TableIdentity&)const=default;
 };
-enum class World12TableAction:uint8_t {close,select_league,next_group,control,team_info};
+enum class World12TableAction:uint8_t {close,select_league,next_group,control,team_info,navigate,pairings_control,strengths_control};
 struct World12TableRequest {
     World12TableIdentity identity;
     World12TableAction action=World12TableAction::close;
@@ -93,6 +96,10 @@ struct World12TableRequest {
 struct World12TableState {
     World12TableIdentity identity;
     LeagueTableState table;
+    uint8_t child=0; // table=0, pairings=1, strengths=2 (Original desk kinds)
+    std::optional<LeaguePairingsState> pairings;
+    std::optional<StrengthsState> strengths;
+    std::vector<bmh::world12::ClubId> local_clubs;
     std::string subtitle;
     bmh::world12::TableGroup group=bmh::world12::TableGroup::germany;
     std::array<bool,3> groups{};
@@ -129,7 +136,7 @@ public:
     int selected_league() const { return selected_league_; }
     bool close_requested() const { return close_requested_; }
     const std::optional<LeagueFamilyRequest>& pending_family_action() const { return pending_family_action_; }
-    bool source_mouse_wait_release_pending() const { return pressed_hit_ >= 0; }
+    bool source_mouse_wait_release_pending() const { return pressed_hit_ >= 0||(world12_pairings_&&world12_pairings_->source_mouse_wait_release_pending())||(world12_strengths_&&world12_strengths_->source_mouse_wait_release_pending()); }
     void reject_family_action(std::string reason);
     // Consume an accepted same-league selector while retaining the visible Table body.
     void acknowledge_same_league_selector(const LeagueFamilyRequest& old_request,
@@ -147,6 +154,10 @@ private:
     std::optional<World12TableState> world12_;
     std::optional<World12TableRequest> world12_pending_;
     Image country_atlas_;
+    std::unique_ptr<LeaguePairingsScreen> world12_pairings_;
+    std::unique_ptr<StrengthsScreen> world12_strengths_;
+    bool post_world12_child();
+    void draw_world12_selectors(Image&)const;
     std::pair<int,int> world12_league_cell(size_t)const;
     int world12_hit_at(int,int,bool)const;
     bool post_world12_hit(int);

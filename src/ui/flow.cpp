@@ -1068,6 +1068,7 @@ std::string StartupFlow::screen_name() const {
     if(opportunities_)return "opportunities";
     if(statistics_menu_)return "statistics_menu";
     if(strengths_)return "strengths";
+    if(world12_table_screen()){const auto child=league_table_->world12_state()->child;if(child==1)return "league_pairings";if(child==2)return "strengths";}
     if (calendar_) return calendar_->state().reschedule_manager >= 0 ? "reschedule_calendar" : "calendar";
     if(league_pairings_)return "league_pairings";
     if (joining_) return manager_ ? manager_->screen_name() : "joining_options";

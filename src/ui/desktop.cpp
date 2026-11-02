@@ -72,6 +72,7 @@ std::string_view desk_menu_name(int kind) {
     switch (kind) {
     case 0: return "league_table";
     case 1: return "league_pairings";
+    case 2: return "strengths";
     case 53: return "menu_layout";
     case 63: return "mailbox";
     case 19: return "settings";

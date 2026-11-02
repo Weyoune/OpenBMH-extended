@@ -32,6 +32,9 @@ struct StrengthsProjectionContext {
     // Set only by an owner-validated same-child ClubInfoFromGame return. Source
     // retains local_68 across that modal even if injury cleanup changes lineups.
     bool retain_validated_owner_age = false;
+    // Explicit bounded club coordinates supplied by the typed country owner.
+    std::vector<int> teams;
+    std::string league_name;
     bool operator==(const StrengthsProjectionContext&) const = default;
 };
 

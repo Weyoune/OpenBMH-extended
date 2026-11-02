@@ -28,8 +28,8 @@ flags. Both dialogs use the actual table backdrop and explicit runtime reference
 The SDL presenter completes the separate updated-modal and restored-underlay
 Present phases before delivering an accepted result.
 
-KI forecast and family navigation to pairings/strengths are not connected in this
-packet; their buttons/hitboxes are absent. Visible team rows open the existing
+KI forecast is not connected; its button/hitbox is absent. The existing footer
+opens the owned pairings/strengths children described below. Visible team rows open the existing
 owned roster Data A/Data B inspector and restore the same table on exit. Player
 cards, club statistics and category setters retain their documented boundary.
 
@@ -63,8 +63,8 @@ not expose this typed menu, initialize their unknown table word to the Original
 new-career default `0x11` on first entry. No gameplay history is reconstructed.
 Changing to another league also starts a valid current-round interval for that
 league, preventing a 38-round English interval from spilling into an 18-round
-league. Selecting the same league retains the current view. Closing this standalone
-typed table does not run the still-unintegrated legacy family teardown/random stir.
+league. Selecting the same league retains the current view. Closing this typed
+family does not run the still-unintegrated legacy teardown/random stir.
 These decisions apply to Extended's typed path; the legacy renderer/control path
 remains unchanged.
 
@@ -84,3 +84,54 @@ These are result-view checks, not a claim of a new post-match GUI owner or a pla
 season. Native SDL screenshots/state comparisons and matching FBMs are private at
 `bmh_4k_ui/docs/qa/extended-league-tables`. Native Windows/macOS GUI operation and
 full Beta/season qualification remain separate gates.
+
+## Pairings and strengths family
+
+The typed owner also accepts Original desktop kinds 1 (pairings) and 2
+(strengths). The existing Original pairings and strengths screens now have
+explicit-reference constructors. The table footer and their existing family
+buttons switch between all three views while retaining the selected country and
+league. Each child uses the same canonical owner, generation and monotone request
+sequence. Closing any child retires the entire window.
+
+Pairings use the authoritative typed fixture table and stored results, with
+actual 18-, 20- or 10-team rows. Their ratings call the existing Core
+`team_average` kernel in a bounded local-club workspace. Dates come from the
+saved league calendar; unavailable dates retain the Original unknown-date
+presentation. Ordered home/away search, selected-club season filtering, ten-row
+paging, current-round reset and round arrows follow the Source controls. The
+postponed list is empty because typed league results currently have no postponed
+result records; it does not construct postponements. The temporary KI forecast
+button remains hidden pending its separate RNG and actual-Present owner. Active
+weather/referee alternation also requires a qualified live-event packet and is
+not inferred from a saved score.
+
+Strengths reuse the Original criterion/position controls, sorting, draw-word
+normalization and byte-age calculation, including the distinct entry bit10 and
+header bit15 age bases. Explicit club coordinates remove the old nine-league
+membership assumption without packing global identifiers into legacy fields.
+The 18/20-team row spacing remains within the Original panel. Country markers
+use each child's actual selector height; the strengths footer keeps its existing
+lineup toggle. Both children open the same owned roster inspector as tables.
+
+World schema 34 adds optional `strengths_display_word` and
+`pairings_display_byte` career preferences. Older snapshots retain unknown
+values until the corresponding first entry. That entry uses the Original new
+career defaults (`0x1ff` and `1`). Family navigation restarts the selected
+child's transient state as the Original family entry does, while retaining its
+league. Window-only search, filter, age scratch and intervals are not save data.
+The typed family still does not run the unintegrated legacy close-time random
+stir; its navigation and close consume neither random stream.
+
+The focused regression suite has nine passing targets and one expected external
+fixture skip. It includes a data-free strengths projection/control test, codec
+backward-compatibility checks and the existing Original pairings/table render
+checks. Actual shared-world GUI checks visit all thirteen leagues for a single
+English manager and both actors of a mixed-country career. Separate immutable
+projections render all three children from the real Core-computed result
+snapshot, checking 112 played scores without constructing a desktop owner.
+Native Linux SDL input produces 46 exact frame comparisons (apart from the
+process-timer row) and a complete save equal to the checked snapshot plus the
+Original four manual-save Watcom draws. Native Windows/macOS GUI operation,
+qualified forecast/live overlays and Beta/season completion remain separate
+gates.
