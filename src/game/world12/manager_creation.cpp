@@ -18,6 +18,7 @@ void put32(Bytes& data,size_t at,uint32_t n){for(size_t i=0;i<4;++i)data.at(at+i
 }
 ManagerCareerState manager_career_state_from_legacy(const GameState& state,uint8_t seat,const std::vector<PlayerId>& players,bool season_services,const ManagerCareerState* previous) {
     const auto at=record(state,seat);ManagerCareerState result;
+    if(!previous||previous->annual_records){auto& annual=result.annual_records.emplace();annual.tax_paid=std::bit_cast<int32_t>(word32(state.manager_records,at+0x328));annual.taxable_profit=std::bit_cast<int32_t>(word32(state.manager_records,at+0x32c));annual.league_titles=uint16_t(state.manager_records.at(at+0x8a4)|uint16_t(state.manager_records.at(at+0x8a5))<<8);annual.national_eligibility=state.manager_records.at(at+0x21c);annual.player_awards=state.manager_records.at(at+0x21e);}
     const auto copy=[&](size_t offset,auto& output){std::copy_n(state.manager_records.begin()+at+offset,output.size(),output.begin());};
     const auto strength_word=layout::ManagerSettings+uint32_t(seat)*2;
     if((!previous||previous->strengths_display_word)&&state.memory.has(strength_word+1))result.strengths_display_word=state.memory.u16(strength_word);
@@ -60,6 +61,7 @@ void install_manager_career_state(GameState& state,uint8_t seat,const ManagerCar
     for(size_t i=0;i<5;++i)if(input.poach_attempts[i].valid()){const auto found=std::find(players.begin(),players.end(),input.poach_attempts[i]);if(found==players.end()||found-players.begin()>=4095)throw std::invalid_argument("world12: unmapped poaching attempt");attempts[i]=uint16_t(found-players.begin());}
     if(input.strengths_display_word){const auto at=layout::ManagerSettings+uint32_t(seat)*2;state.memory.add_block(at,2);state.memory.set16(at,*input.strengths_display_word);}
     if(input.pairings_display_byte){const auto at=layout::CareerSession_CloseLeagueFamily_ExecutableField+uint32_t(seat);state.memory.add_block(at,1);state.memory.set8(at,*input.pairings_display_byte);}
+    if(input.annual_records){const auto& annual=*input.annual_records;put32(state.manager_records,at+0x328,uint32_t(annual.tax_paid));put32(state.manager_records,at+0x32c,uint32_t(annual.taxable_profit));state.manager_records.at(at+0x8a4)=uint8_t(annual.league_titles);state.manager_records.at(at+0x8a5)=uint8_t(annual.league_titles>>8);state.manager_records.at(at+0x21c)=annual.national_eligibility;state.manager_records.at(at+0x21e)=annual.player_awards;}
     if(input.table_display_word){const auto at=layout::LeagueTableDisplayModes+uint32_t(seat)*2;state.memory.add_block(at,2);state.memory.set16(at,*input.table_display_word);}
     const auto other_view=layout::CareerSession_DispatchOtherGames_RuntimeField+uint32_t(seat);
     if(input.other_games_view){state.memory.add_block(other_view,1);state.memory.set8(other_view,*input.other_games_view);}

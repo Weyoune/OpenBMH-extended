@@ -9,13 +9,14 @@
 namespace bmh::test::world12 {
 // Older-schema fixtures must actually omit fields their writer did not know.
 inline void omit_recent_manager_records(bmh::cli::Json& root) {
+    root.object()->erase("annual_awards_completed");
     root.object()->erase("amateur_slots");
     root.object()->erase("european_campaigns");root.object()->erase("indoor");
     auto& managers=std::get<bmh::cli::Json::Array>(root.object()->at("managers").value);
     for(auto& manager:managers) {
         auto& match=manager.object()->at("match_state");
         if(match.object())match.object()->erase("attendance");
-        auto& career=manager.object()->at("career");if(career.object()){const auto services=career.object()->find("season_services");if(services!=career.object()->end()&&services->second.object())services->second.object()->erase("promotion_tail_flags");}if(career.object()){career.object()->erase("cup_titles");career.object()->erase("strengths_display_word");career.object()->erase("pairings_display_byte");career.object()->erase("table_display_word");career.object()->erase("other_games_view");career.object()->erase("camp_focus");career.object()->erase("stadium_curve_flags");}
+        auto& career=manager.object()->at("career");if(career.object()){const auto services=career.object()->find("season_services");if(services!=career.object()->end()&&services->second.object())services->second.object()->erase("promotion_tail_flags");}if(career.object()){career.object()->erase("annual_records");career.object()->erase("cup_titles");career.object()->erase("strengths_display_word");career.object()->erase("pairings_display_byte");career.object()->erase("table_display_word");career.object()->erase("other_games_view");career.object()->erase("camp_focus");career.object()->erase("stadium_curve_flags");}
     }
     const auto economy=root.object()->find("economy");
     if(economy!=root.object()->end()&&economy->second.object())economy->second.object()->erase("presentation_options");
@@ -23,6 +24,8 @@ inline void omit_recent_manager_records(bmh::cli::Json& root) {
         for(auto& manager:std::get<bmh::cli::Json::Array>(economy->second.object()->at("managers").value))manager.object()->erase("depreciation");
 }
 inline void omit_recent_manager_records(bmh::world12::World& world) {
+    world.annual_awards_completed.reset();
+    for(auto& manager:world.managers)if(manager.career)manager.career->annual_records.reset();
     world.amateur_slots.reset();
     for(auto& manager:world.managers)if(manager.career&&manager.career->season_services)manager.career->season_services->promotion_tail_flags.reset();
     world.european_campaigns.reset();world.indoor.reset();

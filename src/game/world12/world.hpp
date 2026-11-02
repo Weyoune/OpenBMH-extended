@@ -128,7 +128,14 @@ struct ManagerSeasonServices {
     std::array<uint8_t,38> strength_history{},position_history{};
     bool operator==(const ManagerSeasonServices&)const=default;
 };
+struct ManagerAnnualRecords {
+    int32_t tax_paid=0,taxable_profit=0;
+    uint16_t league_titles=0;
+    uint8_t national_eligibility=0,player_awards=0;
+    bool operator==(const ManagerAnnualRecords&)const=default;
+};
 struct ManagerCareerState {
+    std::optional<ManagerAnnualRecords> annual_records; // Source annual accounts/title words; unknown before schema38.
     std::optional<std::array<uint16_t,2>> cup_titles; // Native national/European title words; unknown before schema35.
     std::optional<uint16_t> strengths_display_word; // Original per-seat UI word, unknown before schema34.
     std::optional<uint8_t> pairings_display_byte; // Original per-seat UI list mode, unknown before schema34.
@@ -262,6 +269,7 @@ struct TransferMarket {
 };
 using GlobalPlayerStatistics = std::map<std::pair<ClubId,PlayerId>,PlayerClubStatistics>;
 struct World {
+    std::optional<uint32_t> annual_awards_completed; // Exactly-once season count; fresh0, unknown before schema38.
     std::optional<std::array<std::vector<ClubId>,2>> amateur_slots; // Source physical DE/EN newcomer order; unknown before schema36.
     std::vector<NationalSquad> national_squads;
     GlobalPlayerStatistics player_statistics;

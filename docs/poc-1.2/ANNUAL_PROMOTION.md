@@ -115,3 +115,39 @@ by silently exposing a fifth division. Membership staging rejects a manager
 newly entering a hidden division until the full annual player-ladder owner
 settles that policy. Existing/synthetic hidden-division managers remain valid
 for read-only world/save inspection. No internal membership or roster is dropped.
+
+## Closing awards and schema38 annual facts
+
+`calculate_annual_awards` reads each enabled domestic country's actual club draw
+order, roster counters and discipline. It shares the Original positive-score
+top-ten insertion behavior, first-occurrence scoring ties, signed discipline
+arithmetic, `Games` fair-play tie order and local-tier prize table. Foreign-only
+leagues are excluded. The internal fifth English data group remains available to
+the calculation without becoming a player-visible starting division.
+
+`stage_annual_awards` requires the genuine July closing progression boundary and
+complete actual league results/cursors. It stages Source income booking and
+mail in kind-first catalogue order, preserving date, both RNG seeds, rosters,
+player archives and competition ownership. Source difficulty0 still announces
+awards without creating money. `publish_annual_awards` commits the staged result
+under the shared scope/revision owner; missing text/accounts and stale owners
+cannot leave partial payouts.
+
+Schema38 stores the number of seasons whose awards have actually been paid.
+Fresh first-season services establish zero; each successful closing publication
+advances it once. Reload cannot pay the same awards again, and older unknown
+completion is not inferred. This is a closing-phase fact, not proof that the
+next season has been created.
+
+Schema38 also retains Source annual account words (previous tax/profit), league
+title count, national eligibility and seasonal player-award count. Fresh Source
+manager capture supplies their real values; ordinary projections preserve old
+unknown backing. These fields prevent later accounts/refunds and yearly resets
+from inventing zero carries or discarding counters. A league-title count does not
+replace the still-required per-season global-ID title archive.
+
+An exhausted calendar is now valid at its owned closing boundary: appointment
+lookup does not read beyond the final day. It still cannot claim a scheduled
+match event after calendar exhaustion. Annual accounts, actual academy donor
+selection, ageing/retirement, qualification/title archives, renewed calendars and
+closing/new desk presentation remain required. The Session annual guard remains.

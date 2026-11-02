@@ -20,3 +20,8 @@ completed play-off inputs. Source licence/newcomer decisions and unpublished
 amateur membership/loan/statistics stages are implemented with schema36 pool/tail
 ownership. Annual accounts/academy/player renewal and transactional season
 publication remain open. These stages do not close a completion gate.
+
+Closing awards now have an atomic scope/revision owner with schema38 exactly-once
+payment and fresh annual account/title backing. This does not complete closing
+desks, accounts/academy, player renewal, qualification/archive or new-calendar
+publication; no annual/three-season/Beta gate is closed by that component.

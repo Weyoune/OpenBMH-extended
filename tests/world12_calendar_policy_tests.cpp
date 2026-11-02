@@ -29,10 +29,12 @@ int main()try {
         check(std::count_if(admitted.begin(),admitted.end(),[](const auto& a){return a.domain==CalendarDomain::england;})==int(league_cup),"German indoor switch removed English League Cup");
         check(s.calendar->schedule==schedule,"runtime policy rewrote immutable source appointments");
     }
-    auto& raw=(*s.world.economy->presentation_options)[16*9+4];raw=0;const auto old=*prepare_day(s);raw=1;const auto before=s;
+    auto& raw=(*s.world.economy->presentation_options)[16*9+4];raw=0;
+    rejects([&]{prepare_day(s);},"unknown older indoor campaign was invented");
+    raw=1;const auto old=*prepare_day(s);raw=0;const auto before=s;
     rejects([&]{commit_day(s,old,{},{});},"ticket from another indoor policy was committed");check(s==before,"stale policy ticket changed state");
-    const auto english=*prepare_day(s);check(english.others.size()==1&&english.others[0].domain==CalendarDomain::england,"English appointment was discarded");
-    rejects([&]{commit_day(s,english,{},{});},"unplayed English cup was skipped with disabled German indoors");check(s==before,"unplayed English cup changed date/RNG");
+    raw=1;const auto english_before=s;const auto english=*prepare_day(s);check(english.others.size()==1&&english.others[0].domain==CalendarDomain::england,"English appointment was discarded");
+    rejects([&]{commit_day(s,english,{},{});},"unplayed English cup was skipped with disabled German indoors");check(s==english_before,"unplayed English cup changed date/RNG");
     s.date=2;s.calendar->next_day=2;const auto quiet=*prepare_day(s);check(quiet.others.empty(),"disabled German-only date was not quiet");
     const auto seed=s.game_seed;const auto watcom=s.watcom_seed;commit_day(s,quiet,{},{});check(s.date==3&&s.game_seed==seed&&s.watcom_seed==watcom&&s.calendar->schedule==schedule,"quiet indoor date changed RNG or source schedule");
     check(read_save(make_save(s))==s,"indoor policy/date did not survive FBM");

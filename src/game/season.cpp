@@ -2,6 +2,7 @@
 #include "formats/executable_layout.hpp"
 #include "game/environment.hpp"
 #include "game/season.hpp"
+#include "game/season_awards.hpp"
 #include "game/season_exchange.hpp"
 
 #include <algorithm>
@@ -1520,31 +1521,24 @@ namespace {
 int best_scorer_team(GameState& g, int league, int flags) {
     std::vector<uint16_t> list(40, 0);
     for (int i = 0; i < 40; i += 4) list[size_t(i)] = 0xfff, list[size_t(i) + 1] = 0xfff;
-    int16_t best[10] = {};
+    std::vector<SeasonScoringEntry> counters;
+    std::vector<std::pair<uint16_t,uint16_t>> slots;
     const int first = league_first_team(league);
     for (int team = first; team < first + kLeagueSizes[league]; team++) {
         if (g.manager_of(team) < 0 && (flags & 1)) continue;
         const SquadRange range = squad_range(team);
-        for (size_t s = range.first; s < range.first + range.count; s++) {
-            const int player = g.squad_slots.at(s) & 0xfff;
-            if (player == 0xfff) continue;
-            const Player& p = g.players.at(size_t(player));
-            const uint16_t goals = (flags & 2) ? uint16_t((p.w364 >> 2) & 0x3f) : 0;
-            const uint16_t assists = (flags & 4) ? uint16_t((p.w368 >> 18) & 0x3f) : 0;
-            const uint8_t points = uint8_t(goals + assists);
-            if (points == 0) continue;
-            for (int i = 0; i < 10; i++) {
-                if (best[i] >= int16_t(points)) continue;
-                for (int k = 9; k > i; k--) {
-                    best[k] = best[k - 1];
-                    for (int j = 0; j < 4; j++) list[size_t(k * 4 + j)] = list[size_t((k - 1) * 4 + j)];
-                }
-                list[size_t(i * 4)] = uint16_t(s), list[size_t(i * 4 + 1)] = uint16_t(team);
-                list[size_t(i * 4 + 2)] = goals, list[size_t(i * 4 + 3)] = assists;
-                best[i] = int16_t(points);
-                break;
-            }
+        for(size_t slot=range.first;slot<range.first+range.count;++slot) {
+            const auto player=g.squad_slots.at(slot)&0xfff;
+            if(player==0xfff)continue;
+            const auto& person=g.players.at(player);
+            slots.push_back({uint16_t(slot),uint16_t(team)});
+            counters.push_back({uint8_t((person.w364>>2)&63),uint8_t((person.w368>>18)&63)});
         }
+    }
+    const auto order=rank_season_scorers(counters,uint8_t(flags));
+    for(size_t row=0;row<order.size();++row) {
+        const auto index=order[row];list[row*4]=slots[index].first;list[row*4+1]=slots[index].second;
+        list[row*4+2]=flags&2?counters[index].goals:0;list[row*4+3]=flags&4?counters[index].assists:0;
     }
     if (g.memory.has(::bmh::layout::Season_List_RuntimeField))
         for (uint32_t i = 0; i < 40; i++) g.memory.set16(::bmh::layout::Season_List_RuntimeField + i * 2, list[i]);
@@ -1556,29 +1550,21 @@ int best_scorer_team(GameState& g, int league, int flags) {
 // Returns the club with the fewest points.
 int fair_play_team(const GameState& g, int league) {
     const int first = league_first_team(league), count = kLeagueSizes[league];
-    std::vector<int16_t> teams(static_cast<size_t>(count));
-    std::vector<uint32_t> points(static_cast<size_t>(count));
-    for (int i = 0; i < count; i++) {
-        teams[size_t(i)] = int16_t(first + i);
-        const uint16_t cards = g.memory.u16(::bmh::layout::DeskRecords_Teams_RuntimeField + uint32_t(first + i) * 2);
-        points[size_t(i)] = uint32_t((int16_t(cards) >> 8) * 4 + (cards & 0xff));
-    }
-    quicksort_by_key(teams.data(), points.data(), count, true);
-    return teams[0];
+    std::vector<uint16_t> discipline;discipline.reserve(size_t(count));
+    for(int i=0;i<count;++i)discipline.push_back(g.memory.u16(::bmh::layout::DeskRecords_Teams_RuntimeField+uint32_t(first+i)*2));
+    return first+int(season_fairplay_winner(discipline));
 }
 
 }  // namespace
 
 void season_awards(GameState& g) {
     static const uint8_t kFlags[2] = {2, 6};  // SeasonRuntimeField25: top scorer, best scorer (+ assists)
-    // SeasonRuntimeField26: the prizes in 10000s per league (top scorer, best scorer, fair play)
-    static const uint8_t kPrize[5][3] = {{30, 20, 25}, {20, 15, 17}, {15, 10, 12}, {15, 10, 12}, {10, 7, 9}};
     for (int kind = 0; kind < 3; kind++)
         for (int league = 0; league < 5; league++) {
             const int team = kind < 2 ? best_scorer_team(g, league, kFlags[kind]) : fair_play_team(g, league);
             for (size_t m = 0; m < g.manager_teams.size(); m++) {
                 if (g.manager_teams[m] != team) continue;
-                const int32_t prize = int32_t(kPrize[league][kind]) * 10000;
+                const int32_t prize = season_award_prize(league,kind);
                 // "Ihr Spieler / Ihre Mannschaft gewinnt den ... der <league>. Prämie: <amount>."
                 std::string text = message_text(g, ::bmh::layout::Season_SeasonAwards_TextPointer3) + message_text(g, ::bmh::layout::Season_SeasonAwards_TextPointer2 + (kind == 2 ? 4u : 0u)) +
                                    message_text(g, ::bmh::layout::Season_SeasonAwards_TextPointer4) + message_text(g, ::bmh::layout::Season_SeasonAwards_TextPointer + uint32_t(kind) * 4) +

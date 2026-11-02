@@ -95,6 +95,7 @@ InitialManagerServicesOutcome initialize_first_season_manager_services(bmh::worl
     if(!owner.scope||owner.scope!=expected.scope||owner.revision!=expected.revision||owner.revision==std::numeric_limits<uint64_t>::max()||
         state.date||state.season||!state.world.loans.empty()||!state.world.initial_competitions||state.world.initial_competitions->manager_services_complete||!state.world.settings||
         !state.calendar||state.calendar->next_day||std::any_of(state.league_rounds.begin(),state.league_rounds.end(),[](auto n){return n!=0;}))throw std::invalid_argument("world12: invalid first-season manager service phase");
+    if(state.world.annual_awards_completed&&*state.world.annual_awards_completed!=0)throw std::invalid_argument("world12: fresh services cannot overwrite completed annual awards");
     for(const auto& m:state.world.managers)if(!m.career||!m.career->season_records||m.career->season_services)throw std::invalid_argument("world12: initial manager service state is missing or already present");
     const auto before=state;auto candidate=state;const auto settings=*state.world.settings;WatcomRandom random(state.watcom_seed);InitialManagerServicesOutcome outcome;
     // Original sells every manager's tickets before resetting any manager.
@@ -110,6 +111,7 @@ InitialManagerServicesOutcome initialize_first_season_manager_services(bmh::worl
         capture_transfer_history(candidate,projected);
     }
     for(auto& [id,club]:candidate.world.clubs)if(club.league.valid())club.fairplay_points=0;
+    candidate.world.annual_awards_completed=0;
     candidate.results=SeasonResults::empty(candidate.world.catalogue);candidate.world.initial_competitions->manager_services_complete=true;candidate.watcom_seed=random.seed();candidate.validate();
     if(state!=before||owner.scope!=expected.scope||owner.revision!=expected.revision)throw std::invalid_argument("world12: manager service owner changed during initialization");
     outcome.watcom_draws=random.calls();state=std::move(candidate);++owner.revision;return outcome;
