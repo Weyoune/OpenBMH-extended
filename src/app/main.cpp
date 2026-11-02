@@ -33,6 +33,7 @@
 #include "app/world12_startup.hpp"
 #include "app/world12_live_scope.hpp"
 #include "game/matchday_setup.hpp"
+#include "app/world12_clock_presenters.hpp"
 #include "app/quit_confirmation.hpp"
 #include "launch/archive.hpp"
 #include "launch/file_dialog.hpp"
@@ -982,9 +983,9 @@ int main(int argc, char** argv) {
         // Ordinary typed market rows0..39 use their Source selector and actual
         // settlement outcome. Unsolicited40..43 offers retain their own adapter.
         using OrdinaryTransferCrestLookup=std::function<bmh::world12::CrestResource(const GameState&,int runtime_team)>;
-        auto make_ordinary_transfer_presenters = [&](Image parent,OrdinaryTransferCrestLookup crest_lookup) {
+        auto make_ordinary_transfer_presenters = [&](Image parent,OrdinaryTransferCrestLookup crest_lookup,std::shared_ptr<Image> retained_backdrop={}) {
             app::world12::MarketPresenters hooks;
-            auto backdrop=std::make_shared<Image>(std::move(parent));
+            auto backdrop=retained_backdrop?std::move(retained_backdrop):std::make_shared<Image>(std::move(parent));
             const auto panel_for=[&,crest_lookup](const GameState& state,const TransferOfferListView& offers,int viewer) {
                 auto panel=ui::incoming_transfer_decision_from_game(state,transfer_view(state,offers,viewer));
                 const auto viewer_crest=crest_lookup(state,state.manager_teams.at(size_t(viewer)));panel.badge_atlas=viewer_crest.path;panel.badge_sprite=viewer_crest.cell;
@@ -2396,6 +2397,81 @@ int main(int argc, char** argv) {
             return hooks;
         };
 
+        // The day owner supplies the canonical last/active desk seat explicitly.
+        // Each callback presents the staged numeric workspace supplied by Core.
+        auto make_world12_clock_hooks = [&](Image parent,uint8_t active_seat) {
+            if(!world_session||std::none_of(world_session->snapshot().world.managers.begin(),world_session->snapshot().world.managers.end(),[&](const auto& manager){return manager.seat==active_seat;}))throw FormatError("world12: clock presenter has no canonical desk actor");
+            app::world12::ClockHooks hooks;auto backdrop=std::make_shared<Image>(std::move(parent));
+            const auto crest_for=[&](bmh::world12::ClubId club){if(!world_session)throw FormatError("world12: clock presenter retired");const auto& world=world_session->snapshot().world;return world.crests.at(world.clubs.at(club).crest);};
+            const auto local_manager=[](const bmh::world12::AiMatchProjection& projection,uint8_t seat){for(uint8_t local=0;local<projection.human_managers();++local)if(projection.global_manager(local)==seat)return local;throw FormatError("world12: clock modal has no projected manager");};
+            hooks.relations=[](const bmh::world12::CareerSnapshot& snapshot){return bmh::world12::current_weekly_club_relations(snapshot);};
+            hooks.services.auctions.active_seat=active_seat;hooks.services.loans.active_seat=active_seat;
+            hooks.services.auctions.allocator=season_exe.u8(layout::MatchEventsDisabled)==0?TransferAllocatorContext::zero:TransferAllocatorContext::blocked;
+            hooks.services.auctions.select=[&,backdrop,crest_for](const GameState& staged,const TransferOfferListView& offers,const bmh::world12::AiMatchProjection& projection)->std::optional<int>{
+                auto modal=make_ordinary_transfer_presenters(*backdrop,[&](const GameState&,int team){return crest_for(projection.global_club(uint32_t(team)));},backdrop);return modal.select(staged,offers);
+            };
+            hooks.services.auctions.notice=[&,backdrop,crest_for](const GameState& staged,const TransferDecisionEvent& event,const bmh::world12::AiMatchProjection& projection){
+                auto modal=make_ordinary_transfer_presenters(*backdrop,[&](const GameState&,int team){return crest_for(projection.global_club(uint32_t(team)));},backdrop);modal.notice(staged,event);
+            };
+            hooks.services.incidents.answer=[&,backdrop,crest_for](const GameState& staged,uint8_t seat,const WeeklyOfferQuestion& question)->std::optional<bool>{
+                if(!running||!world_session)return {};const auto& world=world_session->snapshot().world;const auto found=std::find_if(world.managers.begin(),world.managers.end(),[&](const auto& manager){return manager.seat==seat;});if(found==world.managers.end())throw FormatError("world12: weekly question lost canonical manager");
+                auto panel=ui::weekly_offer_question_dialog(staged,question,season_exe);const auto crest=crest_for(found->club);panel.badge_atlas=crest.path;panel.badge_sprite=crest.cell;panel.badge_fallback=false;
+                const auto answer=present_pending_dialog(staged,std::move(panel),*backdrop,"OpenBMH - weekly_offer");if(answer==PendingOfferAnswer::yes)return true;if(answer==PendingOfferAnswer::no)return false;return {};
+            };
+            hooks.services.contracts.renew=[&,backdrop,crest_for,local_manager](GameState& staged,GameRandom&,WatcomRandom& random,uint8_t seat,bmh::world12::PlayerId player,int row,const bmh::world12::AiMatchProjection& projection)->std::optional<bool>{
+                const auto manager=local_manager(projection,seat);const auto club=projection.global_club(uint32_t(staged.manager_teams.at(manager)));const auto range=squad_range(staged.manager_teams.at(manager));if(row<0||size_t(row)>=range.count||projection.global_player(staged.squad_slots.at(range.first+size_t(row))&0xfff)!=player)throw FormatError("world12: expired contract lost canonical player");
+                app::world12::MonthlyRenewalModal modal(staged,random,manager,row,*staged.texts);const auto crest=crest_for(club);
+                const auto view=[&]{auto value=modal.view();value.badge_atlas=crest.path;value.badge_sprite=crest.cell;return value;};
+                ui::ContractsScreen screen(data,view(),season_exe);bool redraw=true;
+                while(running){
+                    if(redraw){*backdrop=screen.render();present_season(*backdrop,"OpenBMH - monthly_contract");redraw=false;}
+                    SDL_Event input;while(quit_confirmation.poll(&input)){
+                        if(input.type==SDL_QUIT){running=false;return modal.finish(false);}
+                        if(input.type==SDL_MOUSEBUTTONUP&&(input.button.button==SDL_BUTTON_LEFT||input.button.button==SDL_BUTTON_RIGHT))redraw|=screen.click(input.button.x,input.button.y,input.button.button==SDL_BUTTON_RIGHT);
+                        else if(input.type==SDL_MOUSEMOTION)redraw|=screen.move(input.motion.x,input.motion.y);
+                        else if(input.type==SDL_TEXTINPUT)redraw|=screen.text(input.text.text);
+                        else if(input.type==SDL_KEYDOWN){if(input.key.keysym.sym==SDLK_ESCAPE)redraw|=screen.key("ESC");else if(input.key.keysym.sym==SDLK_BACKSPACE)redraw|=screen.key("BACKSPACE");else if(input.key.keysym.sym==SDLK_RETURN)redraw|=screen.key("ENTER");}
+                        if(const auto* pending=screen.pending()){const auto request=*pending;ui::ContractActionResult result;std::string error;
+                            if(!modal.apply(request,result,error)){screen.reject(std::move(error));redraw=true;continue;}
+                            auto state=view();state.feedback=result.feedback;
+                            if(request.kind==ui::ContractActionKind::request_demands)screen.acknowledge_quote(state);
+                            else if(request.kind==ui::ContractActionKind::submit_offer)screen.acknowledge_offer(state);
+                            else if(request.kind==ui::ContractActionKind::submit_bonuses)screen.acknowledge_bonus_offer(state);
+                            else screen.acknowledge_insurance(state);redraw=true;
+                        }
+                        if(screen.close_requested()||(modal.renewed()&&!screen.result_page_open())){press.reset();return modal.finish(true);}
+                    }
+                    if(playback.needs_pump())playback.pump(audio_error);SDL_Delay(10);
+                }return modal.finish(false);
+            };
+            hooks.services.loans.keep=[&,backdrop,crest_for,local_manager](const GameState& staged,uint8_t seat,const std::string& text,const bmh::world12::AiMatchProjection& projection)->std::optional<bool>{
+                const auto manager=local_manager(projection,seat);auto panel=ui::loan_return_question_dialog(staged,manager,text);const auto crest=crest_for(projection.global_club(uint32_t(staged.manager_teams.at(manager))));panel.badge_atlas=crest.path;panel.badge_sprite=crest.cell;panel.badge_fallback=false;
+                const auto answer=present_pending_dialog(staged,std::move(panel),*backdrop,"OpenBMH - monthly_loan_question");if(answer==PendingOfferAnswer::yes)return true;if(answer==PendingOfferAnswer::no)return false;return {};
+            };
+            hooks.services.loans.offer=[&,backdrop,crest_for,local_manager](GameState& staged,GameRandom& game,WatcomRandom& random,uint8_t seat,int slot,int entry,const HumanBuyerSaleHooks&,const bmh::world12::AiMatchProjection& projection)->int{
+                const auto manager=local_manager(projection,seat);app::world12::LoanReturnOfferModal modal(staged,game,random,manager,slot,entry);
+                const auto view=[&]{auto value=modal.view();const auto viewer=crest_for(projection.global_club(uint32_t(value.runtime_club)));const auto seller=crest_for(projection.global_club(uint32_t(value.seller)));value.panel.badge_atlas=viewer.path;value.panel.badge_sprite=viewer.cell;value.panel.seller_badge_atlas=seller.path;value.panel.seller_badge_sprite=seller.cell;return value;};
+                auto sale=make_ordinary_transfer_presenters(*backdrop,[&](const GameState&,int team){return crest_for(projection.global_club(uint32_t(team)));},backdrop).sale;sale.allocator_gate=season_exe.u8(layout::MatchEventsDisabled)==0?HumanBuyerSaleAllocatorGate::zero:HumanBuyerSaleAllocatorGate::blocked;sale.direct_mode=HumanBuyerSaleDirectMode::ordinary_ai_purchase;
+                ui::OutgoingTransferScreen screen(data,view(),season_exe);bool redraw=true;
+                while(running){
+                    if(redraw){*backdrop=screen.render();present_season(*backdrop,"OpenBMH - monthly_loan_offer");redraw=false;}
+                    SDL_Event input;while(quit_confirmation.poll(&input)){
+                        if(input.type==SDL_QUIT){running=false;return modal.finish(false);}
+                        ui::OutgoingTransferRequest request;
+                        if(input.type==SDL_MOUSEBUTTONDOWN&&(input.button.button==SDL_BUTTON_LEFT||input.button.button==SDL_BUTTON_RIGHT))request=screen.click(input.button.x,input.button.y,input.button.button==SDL_BUTTON_RIGHT,input.button.clicks>1);
+                        else if(input.type==SDL_TEXTINPUT){redraw|=screen.text(input.text.text);continue;}
+                        else if(input.type==SDL_KEYDOWN){std::string key=SDL_GetKeyName(input.key.keysym.sym);std::transform(key.begin(),key.end(),key.begin(),[](unsigned char c){return char(std::toupper(c));});request=screen.key(key);}
+                        if(request.kind==ui::OutgoingTransferRequestKind::none){redraw=true;continue;}
+                        std::string error;const auto team_info=[&](GameState& current,int team){
+                            auto active=std::make_shared<bool>(true);app::ClubModalServices services;services.club_projection=[&,active,team](ui::ClubInfoView page){if(!*active)throw FormatError("world12: retired monthly roster presenter");if(page!=ui::ClubInfoView::data_a&&page!=ui::ClubInfoView::data_b)throw FormatError("world12: unsupported monthly roster page");const auto entry=prepare_club_info_entry(current,team);auto value=ui::club_info_from_game(current,team,entry,season_exe,*current.texts);value.view=page;value.player_details_available=false;value.statistics_available=false;value.category_available=false;return value;};
+                            try{const bool shown=present_club_information&&present_club_information(services,team)&&running;*active=false;return shown;}catch(...){*active=false;throw;}
+                        };if(!modal.apply(request,sale,error,team_info))throw FormatError(error);if(modal.closed()){press.reset();return modal.finish(true);}screen.acknowledge(view());redraw=true;
+                    }
+                    if(playback.needs_pump())playback.pump(audio_error);SDL_Delay(10);
+                }return modal.finish(false);
+            };
+            return hooks;
+        };
         auto handle = [&](const ui::FlowResult& r) {
             pitch_pointer.show({}, renderer);
             if(world12_development){
