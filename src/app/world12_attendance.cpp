@@ -28,7 +28,8 @@ AttendanceOutcome book_event_attendance(CareerSnapshot& state,ManagerActionOwner
     for(const auto& group:candidate.prepared_event->groups)for(const auto& match:group.matches) {
         std::vector<ClubId> clubs;for(const auto& manager:candidate.world.managers)clubs.push_back(manager.club);
         for(auto club:{match.fixture.home,match.fixture.away})if(std::find(clubs.begin(),clubs.end(),club)==clubs.end())clubs.push_back(club);
-        auto p=AiMatchProjection::create_for_humans(candidate,clubs,reference,
+        auto p=group.european?AiMatchProjection::create_for_european(candidate,clubs,reference,
+            {settings.mode,settings.difficulty,settings.foreign_rule,true}):AiMatchProjection::create_for_humans(candidate,clubs,reference,
             {settings.mode,settings.difficulty,settings.foreign_rule,true});
         install_career_economy(p,candidate.world);auto& local=p.state;local.texts=&texts;
         local.season=int(candidate.season);local.season_start=candidate.progress->season_start;
@@ -39,6 +40,10 @@ AttendanceOutcome book_event_attendance(CareerSnapshot& state,ManagerActionOwner
         uint32_t competition=uint32_t(match_team_league(local,home));uint8_t type=0;
         if(group.league){context.projected_matchdays=candidate.world.catalogue.league(*group.league).rounds();
             context.projected_completed_rounds=candidate.league_rounds[group.league->value];}
+        else if(group.european){
+            competition=cup_entry_address(group.source_entry);type=uint8_t(*group.european)+1;const auto& campaign=(*candidate.world.european_campaigns)[size_t(uint8_t(*group.european)-1)];
+            for(const auto& stage:campaign.stages){const auto at=cup_entry_address(stage.rules.entry);local.memory.add_block(at,0x28);for(uint32_t b=0;b<0x28;++b)local.memory.set8(at+b,sources.german.u8(at+b));local.memory.set8(at+0x1d,stage.played);}
+        }
         else {
             const auto& source=cup_country(*group.cup)==Country::germany?sources.german:sources.english;
             competition=cup_entry_address(group.source_entry);type=uint8_t(source.u16(competition+0x18)+1);

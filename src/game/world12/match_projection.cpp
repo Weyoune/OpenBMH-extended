@@ -14,8 +14,9 @@ namespace bmh::world12 {
 namespace {
 uint16_t flags(uint16_t source){return uint16_t(((source&1)?0x8000:0)|((source&2)?0x4000:0)|((source&4)?0x2000:0)|((source&8)?0x1000:0));}
 }
-AiMatchProjection AiMatchProjection::create(const World& world,const std::vector<ClubId>& requested,const GameState& base){
-    if(requested.empty()||requested.size()>64||requested.size()>size_t(runtime_dimensions.big_squad_teams))
+AiMatchProjection AiMatchProjection::create(const World& world,const std::vector<ClubId>& requested,const GameState& base){return create_core(world,requested,base,false);}
+AiMatchProjection AiMatchProjection::create_core(const World& world,const std::vector<ClubId>& requested,const GameState& base,bool allow_empty){
+    if((requested.empty()&&!allow_empty)||requested.size()>64||requested.size()>size_t(runtime_dimensions.big_squad_teams))
         throw std::invalid_argument("world12: match projection requires 1-64 clubs within the native squad workspace");
     world.validate();
     for(const auto& manager:world.managers)if(std::find(requested.begin(),requested.end(),manager.club)!=requested.end())throw std::invalid_argument("world12: human manager projection is not integrated");
@@ -35,8 +36,8 @@ AiMatchProjection AiMatchProjection::create(const World& world,const std::vector
     state.squad_slots.assign(size_t(runtime_dimensions.total_slots),0xfff);state.club_names.clear();state.club_ids.assign(base.club_ids.size(),0);state.club_kits.assign(base.club_ids.size(),0);state.club_short_offsets.assign(base.club_ids.size(),0);state.team_flags.assign(base.team_flags.size(),0);state.team_morale.assign(base.team_morale.size(),25);
     state.club_table.assign(base.club_ids.size()*0x4a,0);
     const auto discipline=layout::DeskRecords_Teams_RuntimeField;
-    state.memory.add_block(discipline,requested.size()*2);
-    if(!state.memory.has(discipline+uint32_t(requested.size()*2-1)))throw std::invalid_argument("world12: discipline workspace too small");
+    if(!requested.empty())state.memory.add_block(discipline,requested.size()*2);
+    if(!requested.empty()&&!state.memory.has(discipline+uint32_t(requested.size()*2-1)))throw std::invalid_argument("world12: discipline workspace too small");
     std::set<ClubId> clubs;std::set<PlayerId> players;std::map<ClubId,uint16_t> record_names;projection.record_opponents_[0]=ClubId{};
     const auto append=[](Bytes& pool,const std::string& value){if(pool.size()+value.size()+1>65535)throw std::invalid_argument("world12: local match string pool overflow");auto offset=uint16_t(pool.size());pool.insert(pool.end(),value.begin(),value.end());pool.push_back(0);return offset;};
     append(state.club_names,"Unused local club");
@@ -150,6 +151,24 @@ AiMatchProjection AiMatchProjection::create_for_humans(const CareerSnapshot& sna
     result.install_player_statistics(world,true);
     local.counts.players=uint32_t(local.players.size());return result;
 }
+AiMatchProjection AiMatchProjection::create_for_european(const CareerSnapshot& snapshot,const std::vector<ClubId>& requested,const GameState& base,HumanProjectionPolicy policy) {
+    snapshot.validate();if(requested.empty()||requested.size()>128)throw FormatError("world12: European projection needs 1-128 actual clubs");
+    std::vector<ClubId> rostered,abstract;std::set<ClubId> seen;
+    for(auto id:requested){const auto& club=snapshot.world.clubs.at(id);if(!seen.insert(id).second||club.kind!=ClubKind::club)throw FormatError("world12: invalid European match participant");
+        if(club.league.valid())rostered.push_back(id);else {if(uint8_t(club.country)<5||std::any_of(club.roster.begin(),club.roster.end(),[](const auto& row){return !row.empty();}))throw FormatError("world12: unsupported non-league European squad");abstract.push_back(id);}}
+    const bool human=std::any_of(snapshot.world.managers.begin(),snapshot.world.managers.end(),[&](const auto& manager){return seen.contains(manager.club);});
+    auto result=human?create_for_humans(snapshot,rostered,base,policy):create_core(snapshot.world,rostered,base,true);auto& local=result.state;
+    if(result.manager_reference_clubs_.empty())result.manager_reference_clubs_=rostered;
+    local.foreign_strength.resize(std::max(local.foreign_strength.size(),abstract.size()));
+    for(auto id:abstract){const auto& club=snapshot.world.clubs.at(id);const auto team=size_t(runtime_dimensions.record_teams)+result.abstract_clubs_.size();
+        if(team>=local.club_ids.size()||team>=local.team_flags.size()||team>=local.team_morale.size()||local.club_names.size()+club.name.size()+1>65535)throw FormatError("world12: abstract match workspace exceeded");
+        result.abstract_clubs_.push_back(club);const auto name=uint16_t(local.club_names.size());local.club_names.insert(local.club_names.end(),club.name.begin(),club.name.end());local.club_names.push_back(0);local.club_ids[team]=name;result.record_opponents_[name]=id;
+        local.club_kits[team]=club.kit;local.club_short_offsets[team]=club.short_span;local.team_flags[team]=club.match_flags;local.team_morale[team]=club.morale;local.foreign_strength[team-size_t(runtime_dimensions.record_teams)]=club.rating;
+        local.projected_match_clubs.resize(team+1);local.projected_match_clubs[team]={9,int(club.country)+5,0};
+        result.manager_reference_clubs_.resize(team+1);result.manager_reference_clubs_[team]=id;
+    }
+    return result;
+}
 AiMatchProjection AiMatchProjection::create_for_desktop(const CareerSnapshot& snapshot,const std::vector<ClubId>& clubs,const GameState& reference,HumanProjectionPolicy policy) {
     auto result=create_for_humans(snapshot,clubs,reference,policy);auto& local=result.state;
     std::vector<size_t> order;for(size_t i=0;i<result.players_.size();++i)order.push_back(i);
@@ -195,9 +214,9 @@ uint32_t AiMatchProjection::local_club_reference(ClubId id)const {
     const auto& refs=manager_reference_clubs_.empty()?clubs_:manager_reference_clubs_;const auto found=std::find(refs.begin(),refs.end(),id);
     if(found==refs.end())throw std::out_of_range("world12: club reference is not projected");return uint32_t(found-refs.begin());
 }
-ClubId AiMatchProjection::global_club(uint32_t local)const{return manager_reference_clubs_.empty()?clubs_.at(local):manager_reference_clubs_.at(local);}
+ClubId AiMatchProjection::global_club(uint32_t local)const{if(local>=uint32_t(runtime_dimensions.record_teams)&&local-uint32_t(runtime_dimensions.record_teams)<abstract_clubs_.size())return abstract_clubs_[local-uint32_t(runtime_dimensions.record_teams)].id;return manager_reference_clubs_.empty()?clubs_.at(local):manager_reference_clubs_.at(local);}
 PlayerId AiMatchProjection::global_player(uint32_t local)const{return players_.at(local);}
-uint32_t AiMatchProjection::local_club(ClubId id)const{auto it=std::find(clubs_.begin(),clubs_.end(),id);if(it==clubs_.end())throw std::out_of_range("world12: club is not projected");return uint32_t(it-clubs_.begin());}
+uint32_t AiMatchProjection::local_club(ClubId id)const{const auto abstract=std::find_if(abstract_clubs_.begin(),abstract_clubs_.end(),[&](const auto& club){return club.id==id;});if(abstract!=abstract_clubs_.end())return uint32_t(runtime_dimensions.record_teams)+uint32_t(abstract-abstract_clubs_.begin());auto it=std::find(clubs_.begin(),clubs_.end(),id);if(it==clubs_.end())throw std::out_of_range("world12: club is not projected");return uint32_t(it-clubs_.begin());}
 uint32_t AiMatchProjection::local_player(PlayerId id)const{auto it=std::find(players_.begin(),players_.end(),id);if(it==players_.end())throw std::out_of_range("world12: player is not projected");return uint32_t(it-players_.begin());}
 void AiMatchProjection::commit_player_attributes(World& world)const {
     if(!manager_seats_.empty())throw std::invalid_argument("world12: human projection requires complete match-state commit");
@@ -277,8 +296,11 @@ void AiMatchProjection::commit_state(World& world,bool capture_season_services,c
         throw std::invalid_argument("world12: projected player changed externally");
     for(size_t i=0;i<clubs_.size();++i)if(!world.clubs.contains(clubs_[i]) || world.clubs.at(clubs_[i])!=original_clubs_.at(i))
         throw std::invalid_argument("world12: projected club or roster changed externally");
+    for(const auto& club:abstract_clubs_)if(!world.clubs.contains(club.id)||world.clubs.at(club.id)!=club)throw FormatError("world12: abstract match participant changed externally");
     auto candidate=world;
     for(size_t i=0;i<players_.size();++i){auto& target=candidate.players.at(players_[i]);target.attributes=state.players[i];target.bonus=state.player_bonus[i];target.cards=state.player_cards[i];}
+    for(size_t i=0;i<abstract_clubs_.size();++i){auto& club=candidate.clubs.at(abstract_clubs_[i].id);const auto team=size_t(runtime_dimensions.record_teams)+i;club.match_flags=state.team_flags.at(team);club.morale=state.team_morale.at(team)&63;}
+
     for(size_t team=0;team<clubs_.size();++team) {
         auto& target=candidate.clubs.at(clubs_[team]);std::set<PlayerId> before,after;
         for(const auto& slot:target.roster)if(!slot.empty())before.insert(slot.player);

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "app/world12_session.hpp"
+#include "app/world12_european.hpp"
 #include <algorithm>
 #include "game/world12/pools.hpp"
 #include "app/world12_desktop.hpp"
@@ -162,7 +163,7 @@ void Session::play_prepared_matches(uint64_t revision,const HumanRoundHooks& hoo
         throw FormatError("world12: prepared match receipt is not ready");
     const auto before=state_;auto candidate=state_;const auto event=*candidate.prepared_event;
     const auto ticket=*prepare_day(candidate);const auto settings=*candidate.world.settings;
-    std::vector<CupDayConditions> cups;std::vector<AiDayLeagueConditions> leagues;
+    std::vector<CupDayConditions> cups;std::vector<AiDayLeagueConditions> leagues;std::vector<EuropeanDayConditions> european;
     for(const auto& group:event.groups) {
         std::vector<AiLeagueConditions> conditions;
         for(const auto& match:group.matches){AiLeagueConditions c;c.date=candidate.date;c.month=month_code(candidate.date);
@@ -173,17 +174,15 @@ void Session::play_prepared_matches(uint64_t revision,const HumanRoundHooks& hoo
             if(!candidate.world.economy||!candidate.world.economy->presentation_options)throw FormatError("world12: match presentation options are unknown in this old career");
             const auto& options=*candidate.world.economy->presentation_options;c.presentation_buttons.assign(options.begin(),options.end());conditions.push_back(std::move(c));}
         if(group.league)leagues.push_back({{event.day,*group.league,group.round},std::move(conditions)});
+        else if(group.european){const auto planned=std::find_if(ticket.european.begin(),ticket.european.end(),[&](const auto& plan){return plan.competition==*group.european&&plan.source_entry==group.source_entry;});if(planned==ticket.european.end())throw FormatError("world12: prepared European group lost its ticket");european.push_back({*planned,std::move(conditions)});}
         else cups.push_back({*group.cup,group.source_entry,group.revision,std::move(conditions)});
     }
-    if(!cups.empty()&&!leagues.empty())throw FormatError("world12: mixed cup/league match receipt requires its combined owner");
     candidate.prepared_event.reset();
     const HumanProjectionPolicy policy{settings.mode,settings.difficulty,settings.foreign_rule,true};
     auto staged_owner=owner_;
-    std::vector<PoolsMatchOutcome> receipts;
-    if(!cups.empty()) {const auto result=play_domestic_cup_day(candidate,staged_owner,{owner_.scope,revision},ticket,resources_.reference,
-        {resources_.german,resources_.english},cups,policy,hooks);for(const auto& round:result.cups)receipts.insert(receipts.end(),round.pools.begin(),round.pools.end());}
-    else {AiDayOwner league_owner{owner_.scope,revision};const auto result=play_league_day(candidate,league_owner,{owner_.scope,revision},ticket,
-        resources_.reference,leagues,policy,hooks);staged_owner.revision=league_owner.revision;for(const auto& round:result.leagues)receipts.insert(receipts.end(),round.pools.begin(),round.pools.end());}
+    const auto result=play_competition_day(candidate,staged_owner,{owner_.scope,revision},ticket,resources_.reference,
+        {resources_.german,resources_.english},leagues,cups,european,policy,hooks);
+    const auto& receipts=result.pools;
     if(candidate.world.economy&&candidate.world.economy->pools){if(!resources_.texts)throw FormatError("world12: Toto settlement needs owned Source texts");settle_scheduled_pools(candidate,event,receipts,resources_.reference,*resources_.texts);}
     if(state_!=before||owner_.revision!=revision)throw FormatError("world12: prepared match owner changed during calculation");
     state_=std::move(candidate);owner_=staged_owner;

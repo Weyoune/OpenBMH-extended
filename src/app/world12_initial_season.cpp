@@ -34,7 +34,9 @@ InitialCompetitionOutcome prepare_initial_competitions(CareerSnapshot& state,Man
         const uint8_t rounds[]={1,3,2};
         for(size_t k=0;k<3;++k)if(std::find(fields.qualified[k].begin(),fields.qualified[k].end(),manager.club)!=fields.qualified[k].end())history[2]=uint8_t(rounds[k]+k*32);
     }
-    candidate.world.initial_competitions=std::move(fields);candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();
+    candidate.world.initial_competitions=std::move(fields);
+    candidate.world.european_campaigns=initial_european_campaigns(candidate.world,sources.german);
+    candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();
     CountryCupRanking germany,england;
     for(auto country:{Country::germany,Country::england})if(candidate.world.catalogue.selectable(country))for(uint8_t local=0;local<5;++local)
         (country==Country::germany?germany:england)[local]=candidate.world.membership[candidate.world.catalogue.starting_league(country,local).value].clubs;

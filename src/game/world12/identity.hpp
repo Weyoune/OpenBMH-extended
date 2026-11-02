@@ -13,6 +13,7 @@ template<class Tag> struct Id {
 struct PlayerTag;struct ClubTag;struct LeagueTag;struct CompetitionTag;struct CrestTag;
 using PlayerId=Id<PlayerTag>;using ClubId=Id<ClubTag>;using LeagueId=Id<LeagueTag>;
 using CompetitionId=Id<CompetitionTag>;using CrestId=Id<CrestTag>;
+struct Fixture {ClubId home,away;bool operator==(const Fixture&)const=default;};
 enum class Country:uint8_t { germany=0,spain=1,england=2,france=3,italy=4,portugal=5 };
 enum class TableGroup:uint8_t { germany,england,europe };
 enum class RosterFlag:uint16_t { lineup=1,reserve=2,unavailable=4,auxiliary=8 };

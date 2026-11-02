@@ -31,9 +31,9 @@ DesktopEntryOutcome begin_scheduled_desks(CareerSnapshot& state,ManagerActionOwn
     const auto before=state;auto candidate=state;const auto settings=*state.world.settings;
     const HumanProjectionPolicy policy{settings.mode,settings.difficulty,settings.foreign_rule,true};
     for(const auto& group:candidate.prepared_event->groups)for(const auto& match:group.matches) {
-        auto p=AiMatchProjection::create_for_humans(candidate,participants(candidate.world,match.fixture),reference,policy);
+        auto p=group.european?AiMatchProjection::create_for_european(candidate,participants(candidate.world,match.fixture),reference,policy):AiMatchProjection::create_for_humans(candidate,participants(candidate.world,match.fixture),reference,policy);
         const auto home=int(p.local_club(match.fixture.home)),away=int(p.local_club(match.fixture.away));
-        const uint8_t type=group.league?0:group.cup==DomesticCup::league_cup?12:
+        const uint8_t type=group.league?0:group.european?uint8_t(*group.european)+1:group.cup==DomesticCup::league_cup?12:
             group.cup==DomesticCup::german_supercup||group.cup==DomesticCup::english_supercup?9:1;
         prepare_team(p.state,home,match_competition_class(type),0);prepare_team(p.state,away,match_competition_class(type),1);
         auto_lineup(p.state,home,100);auto_lineup(p.state,away,100);

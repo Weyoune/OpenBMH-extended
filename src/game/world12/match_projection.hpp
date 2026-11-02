@@ -16,6 +16,10 @@ public:
         const GameState& rules_template,HumanProjectionPolicy);
     static AiMatchProjection create_for_desktop(const CareerSnapshot&,const std::vector<ClubId>&,
         const GameState& rules_template,HumanProjectionPolicy);
+    // Rating-only foreign clubs retain the Original non-squad indices and Core
+    // random ratings; no players are synthesized for them.
+    static AiMatchProjection create_for_european(const CareerSnapshot&,const std::vector<ClubId>&,
+        const GameState& rules_template,HumanProjectionPolicy);
     // Explicit non-roster references for market/free-agent/loan workspaces.
     void include_players(const World&,const std::vector<PlayerId>&);
     void include_club_references(const World&,const std::vector<ClubId>&);
@@ -32,6 +36,8 @@ public:
     void commit_transfer_state(World&,PlayerId,ClubId seller,ClubId buyer,bool moved)const;
     void commit_released_players(World&,const std::vector<std::pair<PlayerId,ClubId>>&)const;
 private:
+    static AiMatchProjection create_core(const World&,const std::vector<ClubId>&,const GameState&,bool allow_empty);
+    std::vector<ClubRecord> abstract_clubs_;
     struct TransferMove {PlayerId player;ClubId seller,buyer;};
     void commit_state(World&,bool,const std::vector<TransferMove>&)const;
     void install_player_statistics(const World&,bool reset);

@@ -34,22 +34,33 @@ std::optional<DayTicket> prepare_day(const CareerSnapshot& state){
                 ticket.cups.push_back({cup,stage->source_entry,stage->next_leg(),stage->revision,stage->next_fixtures()});
             }
         }
+    std::set<EuropeanCompetition> shared;
+    for(const auto& appointment:ticket.others)if(const auto required=european_cups_on(appointment))for(auto cup:*required){
+        if(!shared.insert(cup).second)throw FormatError("world12: European competition scheduled twice on one day");
+        if(!state.world.european_campaigns)throw FormatError("world12: European campaign state is unknown in this snapshot");
+        const auto& campaign=(*state.world.european_campaigns)[size_t(uint8_t(cup)-1)];
+        if(campaign.complete)throw FormatError("world12: calendar schedules an already completed European programme");
+        const auto groups=prepare_european_groups(campaign);ticket.european.insert(ticket.european.end(),groups.begin(),groups.end());
+    }
     return ticket;
 }
 void commit_league_day(CareerSnapshot& state,const DayTicket& ticket,const std::vector<CompletedLeagueRound>& completed){
     commit_day(state,ticket,completed,{});
 }
 DayPresentation commit_day(CareerSnapshot& state,const DayTicket& ticket,const std::vector<CompletedLeagueRound>& completed,
-    const std::vector<CupLegResult>& cup_results){
+    const std::vector<CupLegResult>& cup_results,const std::vector<EuropeanResults>& european_results,const LeImage* shared_rules){
     const auto expected=prepare_day(state);if(!expected||*expected!=ticket)throw std::invalid_argument("world12: stale or changed day ticket");
-    size_t required_count=0;
+    size_t required_count=0;std::vector<EuropeanCompetition> shared;
     for(const auto& appointment:ticket.others) {
         const auto required=domestic_cups_on(appointment);
-        if(!required) throw std::invalid_argument("world12: indoor/shared/national transaction is required before advancing this day");
-        required_count+=required->size();
+        if(required)required_count+=required->size();
+        else if(const auto european=european_cups_on(appointment))shared.insert(shared.end(),european->begin(),european->end());
+        else throw std::invalid_argument("world12: indoor/shared/national transaction is required before advancing this day");
     }
     if(required_count!=ticket.cups.size() || cup_results.size()!=ticket.cups.size())
         throw std::invalid_argument("world12: complete installed domestic cup stages and results are required");
+    if(european_results.size()!=shared.size()||(!shared.empty()&&!shared_rules))throw FormatError("world12: complete European results/source owner is required");
+    for(size_t i=0;i<shared.size();++i)if(european_results[i].competition!=shared[i])throw FormatError("world12: European result order/competition does not match calendar");
     if(state.date==std::numeric_limits<uint32_t>::max()||state.calendar->revision==std::numeric_limits<uint64_t>::max())throw std::overflow_error("world12: date/revision exhausted");
     if(completed.size()!=ticket.leagues.size())throw std::invalid_argument("world12: incomplete day results");
     // Validate the entire result batch before writing any table or cursor.
@@ -74,6 +85,9 @@ DayPresentation commit_day(CareerSnapshot& state,const DayTicket& ticket,const s
             if(auto notice=cup_draw_notice(staged.world,*stage))presentation.cup_draws.push_back(std::move(*notice));
         }
     }
+    WatcomRandom european_random(staged.watcom_seed);
+    for(const auto& result:european_results)commit_european_results(staged.world,result,*shared_rules,european_random,staged.season);
+    staged.watcom_seed=european_random.seed();presentation.watcom_draws=european_random.calls();
     for(const auto& round:completed){for(size_t m=0;m<round.results.size();++m)staged.results.result(staged.world.catalogue,round.league,round.round,int(m))=round.results[m];staged.league_rounds[round.league.value]=round.round;}
     ++staged.calendar->next_day;++staged.calendar->revision;++staged.date;
     validate_cup_programmes(staged.world,staged.cups);

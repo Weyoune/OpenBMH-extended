@@ -48,4 +48,6 @@ Synthetic tests cover mixed German/English cup days, atomic rollback with concur
 
 `world12_cups_validate` checks all eight supported stage descriptors against locally supplied German/FLTD source rules and a typed world. It also creates the three initial fields from supplied world membership order and checks their typed save roundtrip. Its descriptor pairings are synthetic metadata probes; its membership order is not an independently verified previous-season table. It does not validate a played career. Private input/output files stay outside the public repository.
 
-Still required: match simulation/after-match integration, supercup participant selection, European/group/indoor/national competition adapters, source-compatible premiums/title/manager records, complete application progression and native multiplayer QA.
+The [shared European owner](EUROPEAN_CAMPAIGNS.md) separately retains full knockout/group programmes and uses actual Core scoring.
+
+Still required: final visible match/after-match integration, supercup participant selection, indoor/national competition adapters, source-compatible premiums/title/manager records, complete application progression and native multiplayer QA.

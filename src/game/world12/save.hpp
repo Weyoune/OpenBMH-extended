@@ -77,6 +77,7 @@ struct PreparedFixture {
 struct PreparedGroup {
     std::optional<LeagueId> league;
     std::optional<DomesticCup> cup;
+    std::optional<EuropeanCompetition> european;
     uint8_t source_entry=0,round=0,leg=0,flags=2;
     uint64_t revision=0;
     std::vector<PreparedFixture> matches;

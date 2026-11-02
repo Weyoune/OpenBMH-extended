@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
+#include "game/world12/european_campaign.hpp"
 #include "game/world12/catalogue.hpp"
 #include "formats/m3d.hpp"
 #include "game/long_career.hpp"
@@ -126,6 +127,7 @@ struct ManagerSeasonServices {
     bool operator==(const ManagerSeasonServices&)const=default;
 };
 struct ManagerCareerState {
+    std::optional<std::array<uint16_t,2>> cup_titles; // Native national/European title words; unknown before schema35.
     std::optional<uint16_t> strengths_display_word; // Original per-seat UI word, unknown before schema34.
     std::optional<uint8_t> pairings_display_byte; // Original per-seat UI list mode, unknown before schema34.
     std::optional<uint16_t> table_display_word; // Original per-seat Table preferences, unknown before schema 33.
@@ -267,6 +269,7 @@ struct World {
     std::optional<CareerPlayerPools> free_players={};
     std::optional<CareerSettings> settings={};
     std::optional<InitialCompetitionFields> initial_competitions={};
+    std::optional<EuropeanCampaigns> european_campaigns={};
     std::optional<TransferMarket> transfer_market={};
     int32_t development_balance=0;
     uint8_t trend_rotation=0;

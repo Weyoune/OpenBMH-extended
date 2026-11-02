@@ -49,6 +49,7 @@ void World::validate(bool complete)const {
         const auto validate_pool=[&](const auto& pool){for(auto player:pool){if(!player.valid())continue;if(!players.contains(player)||!rostered.insert(player).second)throw std::invalid_argument("world12: missing or repeated free player");}};
         validate_pool(free_players->domestic);validate_pool(free_players->foreign);
     }
+    validate_european_campaigns(*this);
     if(initial_competitions){
         if(!settings)throw std::invalid_argument("world12: initial competitions lack career settings");
         for(const auto& manager:managers)if(!manager.career||!manager.career->season_records||!manager.tactics||!manager.finance||!manager.match_state)throw std::invalid_argument("world12: prepared competitions lack complete manager state");

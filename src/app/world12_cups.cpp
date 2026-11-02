@@ -27,7 +27,7 @@ std::vector<CupDrawNotice> install_domestic_cup_fields(CareerSnapshot& state,
     state=std::move(candidate);return notices;
 }
 DayPresentation commit_day_with_domestic_draws(CareerSnapshot& state,const DayTicket& ticket,
-    const std::vector<CompletedLeagueRound>& leagues,const std::vector<CupScores>& scores,const CupSources& sources) {
+    const std::vector<CompletedLeagueRound>& leagues,const std::vector<CupScores>& scores,const CupSources& sources,const std::vector<EuropeanResults>& european) {
     const auto expected=prepare_day(state);
     if(!expected || *expected!=ticket || scores.size()!=ticket.cups.size())
         throw std::invalid_argument("world12: stale or incomplete cup day score input");
@@ -41,9 +41,9 @@ DayPresentation commit_day_with_domestic_draws(CareerSnapshot& state,const DayTi
         const auto& source=cup_country(score.cup)==Country::germany?sources.german:sources.english;
         completed.push_back(draw_after_cup_leg(candidate.world,*cup,score.scores,source,random));
     }
-    auto notices=commit_day(candidate,ticket,leagues,completed);
-    notices.watcom_draws=random.calls();
-    candidate.watcom_seed=random.seed();candidate.validate();state=std::move(candidate);return notices;
+    candidate.watcom_seed=random.seed();
+    auto notices=commit_day(candidate,ticket,leagues,completed,european,&sources.german);
+    notices.watcom_draws+=random.calls();candidate.validate();state=std::move(candidate);return notices;
 }
 
 CupDayOutcome play_domestic_cup_day(CareerSnapshot& state,ManagerActionOwner& owner,

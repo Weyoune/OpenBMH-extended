@@ -71,8 +71,8 @@ WeatherPreparation prepare_event_weather(CareerSnapshot& state,ManagerActionOwne
        state.progress->phase!=ProgressPhase::scheduled_event||!state.desktop||state.desktop->manager_order.empty()||catalogue.size()!=50)
         throw FormatError("world12: missing or stale event-weather owner");
     const auto ticket=prepare_day(state);
-    if(!ticket||ticket->leagues.empty()&&ticket->cups.empty())throw FormatError("world12: event weather has no scheduled matches");
-    for(const auto& appointment:ticket->others)if(!domestic_cups_on(appointment))
+    if(!ticket||ticket->leagues.empty()&&ticket->cups.empty()&&ticket->european.empty())throw FormatError("world12: event weather has no scheduled matches");
+    for(const auto& appointment:ticket->others)if(!domestic_cups_on(appointment)&&!european_cups_on(appointment))
         throw FormatError("world12: weather for this shared/national appointment needs its competition owner");
     const auto before=state;auto candidate=state;PreparedEvent event;
     event.day=ticket->day;event.calendar_revision=ticket->revision;
@@ -93,6 +93,13 @@ WeatherPreparation prepare_event_weather(CareerSnapshot& state,ManagerActionOwne
         group.round=uint8_t(stage->rounds.size());group.revision=cup.revision;group.flags=prepared_cup_flags(*stage);
         for(auto fixture:cup.matches){requests.push_back({fixture,group.flags});group.matches.push_back({fixture});}
         event.groups.push_back(std::move(group));
+    }
+    for(const auto& plan:ticket->european){
+        const auto rules=european_programme_rules(sources.german,plan.competition);const auto& campaign=(*candidate.world.european_campaigns)[size_t(uint8_t(plan.competition)-1)];
+        if(rules.size()!=campaign.stages.size())throw FormatError("world12: European source programme changed before weather");
+        for(size_t i=0;i<rules.size();++i)if(rules[i]!=campaign.stages[i].rules)throw FormatError("world12: European source stage changed before weather");
+        PreparedGroup group;group.european=plan.competition;group.source_entry=plan.source_entry;group.round=plan.round;group.leg=plan.leg;group.flags=plan.flags;group.revision=plan.revision;
+        for(auto fixture:plan.matches){requests.push_back({fixture,group.flags});group.matches.push_back({fixture});}event.groups.push_back(std::move(group));
     }
     GameRandom game(candidate.game_seed);WatcomRandom random(candidate.watcom_seed);
     const auto weather=prepare_fixture_weather(candidate.world,month_code(candidate.date),requests,catalogue,game,random);
