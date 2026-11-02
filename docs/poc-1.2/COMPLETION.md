@@ -13,3 +13,8 @@ The active objective is a playable, verified Extended 1.0 Beta. Work is on Exten
 | Delivery | Current source/data regression evidence | Three complete seasons, two/four-manager sessions, native build/UI checks, screenshots/saves and Beta package |
 
 No gate is complete merely because its data model or a bounded Core test passes. Missing backends remain explicit until integrated, rather than manufacturing outcomes or silently using the German legacy career. Progress and validation receipts are recorded in `STATUS.md` and the private QA repository.
+
+The country-bound [annual promotion planner](ANNUAL_PROMOTION.md) now shares
+Original ordering kernels and validates completed result tables. It requires
+settled licence/play-off/newcomer inputs; annual roster renewal and transactional
+season publication remain open. This planning foundation does not close a gate.

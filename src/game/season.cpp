@@ -2,6 +2,7 @@
 #include "formats/executable_layout.hpp"
 #include "game/environment.hpp"
 #include "game/season.hpp"
+#include "game/season_exchange.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -1413,25 +1414,30 @@ void promotion(GameState& g, GameRandom& game, WatcomRandom& rand, MinuteReport&
         for (int l = kFirst[grp]; l < kFirst[grp] + kCount[grp]; l++) {
             int places = kDown[l];
             licence_withdrawals(g, l, down, places, ranks[l], game, rand);
-            for (int rank = kLeagueSizes[l] - 1; places != 0; rank--) {
-                const int team = club_at_rank(l, rank, ranks[l]);
-                if (std::find(down.begin(), down.end(), uint16_t(team)) == down.end()) down.push_back(uint16_t(team)), places--;
-            }
+            std::vector<uint16_t> ranked;
+            for (int rank = 0; rank < kLeagueSizes[l]; ++rank)
+                ranked.push_back(uint16_t(club_at_rank(l, rank, ranks[l])));
+            append_relegation_places(down, ranked, places);
         }
         size_t count = down.size();
         if (grp < 3) {
             // the top of the division(s) below; from the two third divisions their
             // champions and the play-off winners (Season_Promotion_ExecutableField2 / Season_Promotion_ExecutableField), without a play-off
             // only the champions
-            size_t per = count / kBelowCount[grp];
+            std::vector<std::vector<uint16_t>> feeders;
+            std::optional<std::vector<uint16_t>> winners;
+            if (kBelowCount[grp] > 1 && mem_u16(g, ::bmh::layout::Season_Promotion_ExecutableField) != 0)
+                winners = std::vector<uint16_t>{mem_u16(g, ::bmh::layout::Season_Promotion_ExecutableField2),
+                                                mem_u16(g, ::bmh::layout::Season_Promotion_ExecutableField)};
             for (int l = kBelow[grp]; l < kBelow[grp] + kBelowCount[grp]; l++) {
-                if (kBelowCount[grp] > 1) {
-                    if (mem_u16(g, ::bmh::layout::Season_Promotion_ExecutableField) == 0) count = 2;
-                    else up.push_back(l > kBelow[grp] ? mem_u16(g, ::bmh::layout::Season_Promotion_ExecutableField) : mem_u16(g, ::bmh::layout::Season_Promotion_ExecutableField2));
-                    per = 1;
-                }
-                for (size_t i = 0; i < per; i++) up.push_back(uint16_t(club_at_rank(l, int(i), ranks[l])));
+                std::vector<uint16_t> ranked;
+                for (int rank = 0; rank < kLeagueSizes[l]; ++rank)
+                    ranked.push_back(uint16_t(club_at_rank(l, rank, ranks[l])));
+                feeders.push_back(std::move(ranked));
             }
+            auto candidates = select_promotion_candidates(count, feeders, winners);
+            count = candidates.count;
+            up = std::move(candidates.clubs);
         } else {
             // into the fourth division come amateur clubs (ids 138-167) at random
             for (size_t i = 0; i < count; i++) {
