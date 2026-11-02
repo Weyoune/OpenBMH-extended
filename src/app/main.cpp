@@ -974,6 +974,59 @@ int main(int argc, char** argv) {
             };
             return hooks;
         };
+        // Ordinary typed market rows0..39 use their Source selector and actual
+        // settlement outcome. Unsolicited40..43 offers retain their own adapter.
+        using OrdinaryTransferCrestLookup=std::function<bmh::world12::CrestResource(const GameState&,int runtime_team)>;
+        auto make_ordinary_transfer_presenters = [&](Image parent,OrdinaryTransferCrestLookup crest_lookup) {
+            app::world12::MarketPresenters hooks;
+            auto backdrop=std::make_shared<Image>(std::move(parent));
+            const auto panel_for=[&,crest_lookup](const GameState& state,const TransferOfferListView& offers,int viewer) {
+                auto panel=ui::incoming_transfer_decision_from_game(state,transfer_view(state,offers,viewer));
+                const auto viewer_crest=crest_lookup(state,state.manager_teams.at(size_t(viewer)));panel.badge_atlas=viewer_crest.path;panel.badge_sprite=viewer_crest.cell;
+                if(offers.seller!=0x0fff&&offers.seller!=kNoTeam){const auto seller_crest=crest_lookup(state,offers.seller);panel.seller_badge_atlas=seller_crest.path;panel.seller_badge_sprite=seller_crest.cell;}
+                panel.notice_badge_fallback=false;return panel;
+            };
+            hooks.sale.notice=[&,backdrop,crest_lookup](const GameState& state,const HumanBuyerSaleNotice& notice) {
+                const PendingOfferNotice source{notice.manager,notice.raw_offer_slot,notice.source_text_address,notice.original_message};auto panel=ui::pending_offer_notice_dialog(state,source);const auto crest=crest_lookup(state,state.manager_teams.at(size_t(notice.manager)));panel.badge_atlas=crest.path;panel.badge_sprite=crest.cell;panel.badge_fallback=false;
+                if(present_pending_dialog(state,std::move(panel),*backdrop,"OpenBMH - transfer_market_notice")==PendingOfferAnswer::unsupported)throw FormatError("world12: market notice interrupted");
+                press.reset();
+            };
+            hooks.select=[&,backdrop,panel_for](const GameState& state,const TransferOfferListView& offers)->std::optional<int> {
+                if(!running)return {};ui::IncomingTransferScreen screen(data,panel_for(state,offers,offers.seller_manager),state.memory.u8(layout::TextGradientDisabled)==0,season_exe);
+                uint64_t started=SDL_GetTicks64();bool redraw=true;
+                while(running){
+                    if(screen.notice_active()&&SDL_GetTicks64()-started>=4260){screen.dismiss_notice();redraw=true;}
+                    if(redraw){*backdrop=screen.render();present_season(*backdrop,"OpenBMH - transfer_market_offers");redraw=false;}
+                    SDL_Event input;while(quit_confirmation.poll(&input)){
+                        if(input.type==SDL_QUIT){running=false;return {};}
+                        std::optional<int> answer;
+                        if(input.type==SDL_MOUSEBUTTONDOWN&&(input.button.button==SDL_BUTTON_LEFT||input.button.button==SDL_BUTTON_RIGHT))screen.pointer_down(input.button.button==SDL_BUTTON_RIGHT);
+                        else if(input.type==SDL_MOUSEBUTTONUP&&(input.button.button==SDL_BUTTON_LEFT||input.button.button==SDL_BUTTON_RIGHT)){answer=screen.pointer_up(input.button.x,input.button.y,input.button.button==SDL_BUTTON_RIGHT);redraw=true;}
+                        else if(input.type==SDL_KEYDOWN&&input.key.keysym.sym==SDLK_ESCAPE){answer=screen.key("ESC");redraw=true;}
+                        if(answer){press.reset();SDL_FlushEvents(SDL_MOUSEMOTION,SDL_MOUSEBUTTONUP);return answer;}
+                    }
+                    if(playback.needs_pump())playback.pump(audio_error);SDL_Delay(10);
+                }return {};
+            };
+            hooks.notice=[&,backdrop,panel_for,crest_lookup](const GameState& state,const TransferDecisionEvent& event) {
+                if(!running)throw FormatError("world12: market outcome interrupted");
+                if(event.kind==TransferDecisionEventKind::last_week){auto panel=ui::transfer_last_week_dialog(state,event);const auto crest=crest_lookup(state,state.manager_teams.at(size_t(event.viewer_manager)));panel.badge_atlas=crest.path;panel.badge_sprite=crest.cell;panel.badge_fallback=false;if(present_pending_dialog(state,std::move(panel),*backdrop,"OpenBMH - transfer_market_last_week")==PendingOfferAnswer::unsupported)throw FormatError("world12: market outcome interrupted");return;}
+                ui::IncomingTransferScreen screen(data,panel_for(state,event.offers,event.viewer_manager),state.memory.u8(layout::TextGradientDisabled)==0,season_exe);const bool confirmation=event.kind==TransferDecisionEventKind::confirmation;
+                if(confirmation)screen.show_confirmation(event.result_text_address,*backdrop);else screen.begin_outcome(event.offers.offer_count,event.selected_bid_index,state.memory.u8(layout::OutcomeDelayDisabled));
+                const uint64_t started=SDL_GetTicks64();uint64_t drawn=UINT64_MAX;
+                while(running){const auto elapsed=SDL_GetTicks64()-started;const auto phase=confirmation?0:elapsed/ui::IncomingTransferScreen::outcome_phase_ms;
+                    if(drawn!=phase){*backdrop=screen.render_at_elapsed(elapsed);present_season(*backdrop,"OpenBMH - transfer_market_outcome");drawn=phase;}
+                    SDL_Event input;while(quit_confirmation.poll(&input)){
+                        if(input.type==SDL_QUIT){running=false;break;}
+                        if(input.type==SDL_MOUSEBUTTONDOWN&&(input.button.button==SDL_BUTTON_LEFT||input.button.button==SDL_BUTTON_RIGHT))screen.pointer_down(input.button.button==SDL_BUTTON_RIGHT);
+                        else if(input.type==SDL_MOUSEBUTTONUP&&(input.button.button==SDL_BUTTON_LEFT||input.button.button==SDL_BUTTON_RIGHT))(void)screen.pointer_up(input.button.x,input.button.y,input.button.button==SDL_BUTTON_RIGHT,elapsed);
+                    }
+                    if(confirmation?screen.confirmation_dismissed():screen.outcome_dismissed()){press.reset();return;}
+                    if(playback.needs_pump())playback.pump(audio_error);SDL_Delay(10);
+                }throw FormatError("world12: market outcome interrupted");
+            };
+            return hooks;
+        };
         std::function<bool(app::ClubModalServices&, int)> present_club_information;
         std::function<std::optional<bool>(app::ClubModalServices&,const ClubPlayerDetailSelection&,const Image&)> present_player_detail;
         auto loan_return_offer_presenter = [&](GameState& staged, GameRandom& game_random,
@@ -1856,7 +1909,7 @@ int main(int argc, char** argv) {
                     if(!outcome)return {};
                     return *outcome;
                 };
-                const auto result=app::world12::serve_startup(flow,r,world_session,data,seed,1,r.request==ui::FlowRequest::kickoff?make_pending_offer_hooks(flow.render()):PendingOfferHooks{},nullptr,advertising,construction,compensation,ui::SettingsSoundCapabilities{playback.original_ready()&&playback.available(),playback.original_ready()&&playback.available()},settings_notice,club_information,table_range);
+                const auto result=app::world12::serve_startup(flow,r,world_session,data,seed,1,r.request==ui::FlowRequest::kickoff?make_pending_offer_hooks(flow.render()):PendingOfferHooks{},nullptr,advertising,construction,compensation,ui::SettingsSoundCapabilities{playback.original_ready()&&playback.available(),playback.original_ready()&&playback.available()},settings_notice,club_information,table_range,r.request==ui::FlowRequest::world12_market_action?make_ordinary_transfer_presenters(flow.render(),[&](const GameState& state,int team){const int local=state.manager_of(team);if(!world_session||local<0||size_t(local)>=world_session->snapshot().world.managers.size())throw FormatError("world12: market crest has no canonical human manager");const auto& world=world_session->snapshot().world;return world.crests.at(world.clubs.at(world.managers[size_t(local)].club).crest);}):app::world12::MarketPresenters{});
                 if(result.error.empty()&&(result.progress==app::world12::StartupProgress::prepared||
                    (r.request==ui::FlowRequest::file_action&&r.file_action.file_kind==ui::SaveLoadFileKind::game&&r.file_action.action==ui::SaveLoadAction::load))) {
                     world_process_timer.reset();process_timer_frame.reset();
