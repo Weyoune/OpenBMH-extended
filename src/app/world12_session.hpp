@@ -14,6 +14,7 @@
 #include "app/stadium_source_types.hpp"
 #include "ui/stadium.hpp"
 #include "ui/toto.hpp"
+#include "ui/settings.hpp"
 #include "app/world12_advertising.hpp"
 #include "ui/advertising.hpp"
 #include "formats/le.hpp"
@@ -82,6 +83,12 @@ public:
     ui::ContractsState contracts_view(const std::filesystem::path& data)const;
     ui::ContractActionResult apply_contract(const std::filesystem::path& data,const ui::ContractRequest&);
     void close_contracts();
+    ui::SettingsState open_settings(const ui::DeskRequest&,std::optional<ui::SettingsSoundCapabilities> sound=std::nullopt);
+    ui::SettingsState settings_view()const;
+    uint64_t settings_sequence()const{return settings_generation_;}
+    void apply_settings(const ui::SettingsWriteRequest&,uint64_t sequence);
+    Bytes prepare_settings_file(const ui::SaveLoadRequest&,uint64_t sequence,const std::optional<Bytes>& incoming=std::nullopt);
+    void close_settings(uint64_t sequence,uint64_t revision);
     void apply_desktop(const ui::DeskRequest&,const std::filesystem::path& data);
     void open_toto(const ui::DeskRequest&,const std::filesystem::path& data);
     ui::TotoState toto_view(const std::filesystem::path& data)const;
@@ -127,5 +134,9 @@ private:
     StadiumSourceRuntime stadium_;
     uint64_t next_stadium_scope_=1;
     uint64_t toto_generation_=0,toto_request_=0;
+    uint64_t settings_generation_=0;
+    std::optional<ui::DeskRequest> settings_owner_;
+    std::optional<ui::SettingsSoundCapabilities> settings_sound_;
+    void validate_settings_owner(uint64_t sequence,uint64_t revision)const;
 };
 }

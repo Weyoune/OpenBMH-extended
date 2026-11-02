@@ -63,7 +63,7 @@ namespace {
 std::filesystem::path checked_file_path(const std::filesystem::path& directory,const ui::SaveLoadRequest& request,
     ui::SaveLoadFileKind kind,const char* suffix) {
     if(request.file_kind!=kind||!request.path.is_absolute()||request.path.filename().empty()||
-       (kind==ui::SaveLoadFileKind::game?request.origin_item_id!=-1:request.origin_item_id!=53))throw FormatError("world12: invalid file request owner");
+       (kind==ui::SaveLoadFileKind::game?request.origin_item_id!=-1:kind==ui::SaveLoadFileKind::menu_layout?request.origin_item_id!=53:(request.origin_item_id<0||request.origin_item_id>=54)))throw FormatError("world12: invalid file request owner");
     auto extension=request.path.extension().string();std::transform(extension.begin(),extension.end(),extension.begin(),[](unsigned char c){return char(std::tolower(c));});
     if(extension!=suffix)throw FormatError("world12: unexpected saved-file extension");
     const auto root=std::filesystem::canonical(directory);const auto parent=std::filesystem::canonical(request.path.parent_path());
@@ -78,6 +78,7 @@ std::filesystem::path checked_file_path(const std::filesystem::path& directory,c
 }
 }
 std::filesystem::path checked_game_path(const std::filesystem::path& directory,const ui::SaveLoadRequest& request){return checked_file_path(directory,request,ui::SaveLoadFileKind::game,".fbm");}
+std::filesystem::path checked_settings_path(const std::filesystem::path& directory,const ui::SaveLoadRequest& request){return checked_file_path(directory,request,ui::SaveLoadFileKind::settings,".ein");}
 std::filesystem::path checked_menu_layout_path(const std::filesystem::path& directory,const ui::SaveLoadRequest& request){return checked_file_path(directory,request,ui::SaveLoadFileKind::menu_layout,".men");}
 
 namespace {
@@ -133,4 +134,11 @@ ui::SaveLoadInfoReader save_info_reader(LeImage rules){return [rules=std::move(r
     ui::SaveLoadInfo info;const auto filename=path.stem().u8string();info.path.assign(filename.begin(),filename.end());const auto two=[](int n){return (n<10?"0":"")+std::to_string(n);};info.date=two(date.day)+"."+two(date.month)+"."+std::to_string(date.year);
     for(const auto& m:state.world.managers){const auto& club=state.world.clubs.at(m.club);info.rows.push_back({ui::original_to_utf8(m.name),ui::original_to_utf8(club.name),state.world.catalogue.league(club.league).name});}return info;
 };}
+}
+
+namespace bmh::app::world12 {
+void publish_settings(const std::filesystem::path& path,const Bytes& bytes,bool overwrite) {
+    if(bytes.size()!=180)throw FormatError("world12: EIN must contain exactly 180 bytes");
+    publish_checked_bytes(path,bytes,overwrite,[](const auto& p){if(read_file(p).size()!=180)throw FormatError("world12: invalid EIN temporary");});
+}
 }

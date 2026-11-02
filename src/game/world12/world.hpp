@@ -203,6 +203,7 @@ struct CareerPools {
     bool operator==(const CareerPools&)const=default;
 };
 struct CareerEconomy {
+    std::optional<std::array<uint8_t,180>> presentation_options; // Original global settings; unknown in older careers.
     std::optional<CareerPools> pools; // Unknown in older development careers.
     std::optional<uint8_t> advertising_group; // Source bundle counter; unknown in older worlds.
     uint8_t week=0;

@@ -140,6 +140,9 @@ public:
     World12DesktopView prepare_world12_manager_result(DeskState,const LeImage&,const DeskRequest&)const;
     World12DesktopView prepare_world12_turn_result(DeskState,const LeImage&,const DeskRequest&)const;
     void finish_world12_desktop(World12DesktopView) noexcept;
+    struct World12SettingsView {std::unique_ptr<DesktopScreen> desktop;std::unique_ptr<PreparationState> preparation;std::unique_ptr<SettingsScreen> settings;bool close=false;};
+    World12SettingsView prepare_world12_settings_result(SettingsState,PreparationState,const FlowResult&)const;
+    void finish_world12_settings(World12SettingsView) noexcept;
     const std::filesystem::path& save_directory()const{return save_directory_;}
     void acknowledge_desk(DeskState state);
     void reject_desk_action(std::string reason);

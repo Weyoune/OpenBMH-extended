@@ -619,3 +619,12 @@ the active typed manager. Shared payload checks and the checked-byte publisher
 reject malformed data and preserve the old file/session on failed publication.
 Custom backlinks, empty layouts and recovery remain Source-compatible. See
 [layout files](MENU_LAYOUT_FILES.md). Other file/settings and release owners remain open.
+
+## Original settings / EIN ownership
+
+[Settings](SETTINGS.md) now use the Original grid and the shared native write
+kernel. Fresh typed careers own all 180 saved bytes (world schema 31), install
+them into desktop/match projections and retain them in FBM. EIN load/save uses
+confined paths, confirmed overwrite and verified atomic publication. Retired
+windows and failed imports cannot change live state. H8/Q5/R5 and live-match
+settings ownership remain explicit boundaries; this does not qualify a Beta.

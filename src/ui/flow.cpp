@@ -645,7 +645,7 @@ FlowResult StartupFlow::finish_settings_input(bool changed) {
     if (!settings_) return {changed};
     if (settings_->readme_requested()) {
         settings_->consume_readme_request();
-        settings_readme_ = std::make_unique<SettingsReadmeScreen>(data_, settings_->state().decorated_background);
+        settings_readme_ = std::make_unique<SettingsReadmeScreen>(data_, settings_->state().decorated_background,render_reference());
         return {true};
     }
     if (settings_->close_requested()) {
@@ -659,7 +659,7 @@ FlowResult StartupFlow::finish_settings_input(bool changed) {
             save_load_ = std::make_unique<SaveLoadScreen>(data_, save_directory_,
                 request.action == SaveLoadAction::load ? SaveLoadMode::load : SaveLoadMode::save,
                 request.manager_slot, request.revision, settings_->render(), true,
-                SaveLoadFileKind::settings, request.origin_item_id);
+                SaveLoadFileKind::settings, request.origin_item_id,render_reference());
             return {true, FlowRequest::submenu_opened};
         }
     }
@@ -778,6 +778,32 @@ void StartupFlow::finish_world12_desktop(World12DesktopView view) noexcept {
     static_assert(std::is_nothrow_move_constructible_v<World12DesktopView>&&std::is_nothrow_move_assignable_v<std::unique_ptr<LeImage>>);
     desktop_=std::move(view.desktop);world12_reference_=std::move(view.reference);confirmed_runtime_teams_=std::move(view.teams);
     save_load_.reset();preparation_.reset();manager_.reset();pending_.reset();confirmed_.clear();awaiting_context_=false;engine_attached_=true;
+}
+
+StartupFlow::World12SettingsView StartupFlow::prepare_world12_settings_result(SettingsState state,PreparationState parent,const FlowResult& action)const {
+    if(!settings_||!desktop_||!world12_reference_||!settings_owner_sequence_||action.settings_owner_sequence!=settings_owner_sequence_||
+       desktop_->state().source!="world12"||parent.desktop.source!="world12"||state.manager_slot!=settings_->state().manager_slot||
+       state.revision!=settings_->state().revision+1||parent.desktop.revision!=state.revision||parent.desktop.manager_slot!=state.manager_slot)
+        throw FormatError("world12: settings result has no current window owner");
+    const bool close=action.request==FlowRequest::settings_close;
+    if(action.request==FlowRequest::settings_action){if(!settings_->pending()||*settings_->pending()!=action.settings_action)throw FormatError("world12: settings write does not match pending view");}
+    else if(action.request==FlowRequest::settings_file_action){if(!save_load_||!save_load_->pending()||*save_load_->pending()!=action.file_action||action.file_action.file_kind!=SaveLoadFileKind::settings)throw FormatError("world12: settings file does not match pending view");}
+    else if(!close||!settings_->close_requested())throw FormatError("world12: settings close does not match pending view");
+    auto previous=desktop_->state(),next=parent.desktop;
+    previous.revision=next.revision;previous.drawer_handles=next.drawer_handles;previous.layout_snap=next.layout_snap;previous.shortcut_bar_always=next.shortcut_bar_always;
+    // Formatting switches can alter these Source-derived desktop flags, but
+    // must never replace the manager, date, finances, item chain or world IDs.
+    previous.decorated_background=next.decorated_background;previous.gradient_text=next.gradient_text;
+    if(desk_json(previous)!=desk_json(next))throw FormatError("world12: settings changed unrelated desktop state");
+    validate_preparation_context(parent);
+    World12SettingsView out;out.desktop=std::make_unique<DesktopScreen>(data_,parent.desktop,render_reference());out.preparation=std::make_unique<PreparationState>(std::move(parent));out.close=close;
+    if(!close){out.settings=std::make_unique<SettingsScreen>(*settings_);if(action.request==FlowRequest::settings_file_action)out.settings->acknowledge_file(std::move(state));else out.settings->acknowledge(std::move(state));}
+    return out;
+}
+void StartupFlow::finish_world12_settings(World12SettingsView view) noexcept {
+    desktop_=std::move(view.desktop);preparation_=std::move(view.preparation);settings_=std::move(view.settings);save_load_.reset();
+    if(view.close){settings_owner_sequence_=0;settings_desk_owner_={};settings_release_barrier_=false;}
+    else settings_desk_owner_.revision=settings_->state().revision;
 }
 
 void StartupFlow::acknowledge_desk(DeskState state) {

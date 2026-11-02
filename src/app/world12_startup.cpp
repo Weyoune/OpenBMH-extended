@@ -6,10 +6,31 @@
 #include <limits>
 namespace bmh::app::world12 {
 StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,std::unique_ptr<Session>& session,
-    const std::filesystem::path& data,uint32_t seed,uint64_t scope,const PendingOfferHooks& hooks,const StartupTurnHooks* turn,const AdvertisingRenewalPresenter& advertising,const ConstructionNoticeHook& construction,const SeasonTicketCompensationNoticeHook& compensation)try {
+    const std::filesystem::path& data,uint32_t seed,uint64_t scope,const PendingOfferHooks& hooks,const StartupTurnHooks* turn,const AdvertisingRenewalPresenter& advertising,const ConstructionNoticeHook& construction,const SeasonTicketCompensationNoticeHook& compensation,std::optional<ui::SettingsSoundCapabilities> sound)try {
     if(action.request==ui::FlowRequest::load_game){
         if(session)throw FormatError("world12: setup load cannot replace an active startup session");
         const auto resources=load_runtime_resources(data);flow.open_world12_file_dialog(ui::SaveLoadMode::load,resources.german,save_info_reader(resources.german));return {};
+    }
+    if(action.request==ui::FlowRequest::settings_action||action.request==ui::FlowRequest::settings_file_action||action.request==ui::FlowRequest::settings_close) {
+        if(!session||(!flow.in_settings()&&action.request!=ui::FlowRequest::settings_file_action)||!action.settings_owner_sequence||flow.settings_owner_sequence()!=action.settings_owner_sequence||
+           session->settings_sequence()!=action.settings_owner_sequence||flow.settings_owner_revision()!=session->revision())throw FormatError("world12: settings command has no matching window owner");
+        auto staged=std::make_unique<Session>(*session);std::optional<std::filesystem::path> path;Bytes bytes;
+        if(action.request==ui::FlowRequest::settings_action) {
+            if(!flow.pending_settings()||*flow.pending_settings()!=action.settings_action)throw FormatError("world12: settings write differs from pending input");
+            staged->apply_settings(action.settings_action,action.settings_owner_sequence);
+        }else if(action.request==ui::FlowRequest::settings_file_action) {
+            if(!flow.pending_file()||*flow.pending_file()!=action.file_action)throw FormatError("world12: settings file differs from pending input");
+            path=checked_settings_path(flow.save_directory(),action.file_action);std::optional<Bytes> incoming;
+            if(action.file_action.action==ui::SaveLoadAction::load){if(std::filesystem::file_size(*path)!=180)throw FormatError("world12: EIN must contain exactly 180 bytes");incoming=read_file(*path);}
+            bytes=staged->prepare_settings_file(action.file_action,action.settings_owner_sequence,incoming);
+        }
+        // Close does not change settings bytes; project its final state before
+        // retiring the window. All view allocation precedes external I/O.
+        auto state=staged->settings_view();
+        if(action.request==ui::FlowRequest::settings_close){staged->close_settings(action.settings_owner_sequence,staged->revision());state.revision=staged->revision();}
+        auto parent=staged->preparation_view(data);auto view=flow.prepare_world12_settings_result(std::move(state),std::move(parent),action);
+        if(path&&action.file_action.action==ui::SaveLoadAction::save)publish_settings(*path,bytes,action.file_action.overwrite);
+        session.swap(staged);flow.finish_world12_settings(std::move(view));return {};
     }
     if(action.request==ui::FlowRequest::file_action){
         if(!flow.pending_file()||*flow.pending_file()!=action.file_action)throw FormatError("world12: file command has no matching dialog owner");
@@ -84,6 +105,10 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
             auto staged=std::make_unique<Session>(*session);staged->apply_desktop(action.desk_action,data);
             auto desk=ui::world12_initial_desktop(data,staged->snapshot(),staged->reference(),staged->rules(),staged->options(),staged->revision());
             flow.acknowledge_desk(std::move(desk));session.swap(staged);return {};
+        }
+        if(action.desk_action.kind==ui::DeskRequestKind::open_menu&&action.desk_action.menu_kind==19){
+            auto staged=std::make_unique<Session>(*session);auto view=staged->open_settings(action.desk_action,sound);
+            flow.show_settings(std::move(view),staged->settings_sequence(),action.desk_action);session.swap(staged);return {};
         }
         if(action.desk_action.kind==ui::DeskRequestKind::open_menu&&action.desk_action.menu_kind==53){
             session->validate_file_owner(action.desk_action.manager_slot,action.desk_action.revision);
@@ -175,8 +200,9 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
         session.swap(staged);return {};
     }
     if(action.request==ui::FlowRequest::contracts_closed&&session&&!flow.in_preparation_menu()){session->close_contracts();return {};}
+    if(action.request==ui::FlowRequest::submenu_closed&&session&&flow.in_settings())return {};
     if(action.request==ui::FlowRequest::submenu_closed&&session&&!flow.in_preparation_menu()){if(session->preparation_open())session->close_preparation();return {};}
     if(action.request!=ui::FlowRequest::none&&action.request!=ui::FlowRequest::submenu_opened&&action.request!=ui::FlowRequest::submenu_closed)throw FormatError("world12: this frontend action has no typed owner yet");
     return {};
-}catch(const std::exception& error){if(action.request==ui::FlowRequest::advertising_action&&flow.pending_advertising_action())flow.reject_advertising_action(error.what());if(action.request==ui::FlowRequest::contract_action&&flow.pending_contract_action())flow.reject_contract_action(error.what());if(action.request==ui::FlowRequest::environment_action&&flow.pending_environment())flow.reject_environment_action(error.what());if(action.request==ui::FlowRequest::mailbox_action&&flow.pending_mailbox())flow.reject_mailbox(error.what());if(action.request==ui::FlowRequest::mailbox_closed&&flow.pending_mailbox_close())flow.reject_mailbox_close(error.what());if(action.request==ui::FlowRequest::file_action&&flow.pending_file()&&*flow.pending_file()==action.file_action)flow.reject_file_action(error.what());if(action.request==ui::FlowRequest::desk_action||action.request==ui::FlowRequest::kickoff)flow.reject_desk_action(error.what());else if(action.request==ui::FlowRequest::submenu_action&&flow.matches_pending_preparation(action.submenu_action))flow.reject_preparation_action(error.what());return {StartupProgress::idle,error.what()};}
+}catch(const std::exception& error){if(action.request==ui::FlowRequest::settings_action)flow.reject_settings(error.what());if(action.request==ui::FlowRequest::settings_file_action&&flow.pending_file())flow.reject_settings_file(error.what());if(action.request==ui::FlowRequest::settings_close)flow.reject_settings_close(error.what());if(action.request==ui::FlowRequest::advertising_action&&flow.pending_advertising_action())flow.reject_advertising_action(error.what());if(action.request==ui::FlowRequest::contract_action&&flow.pending_contract_action())flow.reject_contract_action(error.what());if(action.request==ui::FlowRequest::environment_action&&flow.pending_environment())flow.reject_environment_action(error.what());if(action.request==ui::FlowRequest::mailbox_action&&flow.pending_mailbox())flow.reject_mailbox(error.what());if(action.request==ui::FlowRequest::mailbox_closed&&flow.pending_mailbox_close())flow.reject_mailbox_close(error.what());if(action.request==ui::FlowRequest::file_action&&flow.pending_file()&&*flow.pending_file()==action.file_action)flow.reject_file_action(error.what());if(action.request==ui::FlowRequest::desk_action||action.request==ui::FlowRequest::kickoff)flow.reject_desk_action(error.what());else if(action.request==ui::FlowRequest::submenu_action&&flow.matches_pending_preparation(action.submenu_action))flow.reject_preparation_action(error.what());return {StartupProgress::idle,error.what()};}
 }

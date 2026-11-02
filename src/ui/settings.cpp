@@ -144,12 +144,15 @@ SettingsState settings_from_game(const GameState& g, int manager, uint64_t revis
 }
 
 SettingsScreen::SettingsScreen(const std::filesystem::path& data, SettingsState state, int origin_item_id)
+    : SettingsScreen(data,std::move(state),origin_item_id,load_le(asset_path(data,"BMH.exe"))) {}
+
+SettingsScreen::SettingsScreen(const std::filesystem::path& data, SettingsState state, int origin_item_id, const LeImage& reference)
     : state_(std::move(state)), origin_item_id_(origin_item_id),
       background_(load_vga(asset_path(data / "KB", "129.VGA"))),
       atlas_(load_vga(asset_path(data / "KB", "15.VGA"))),
       button_atlas_(load_vga(asset_path(data / "KB", "0.VGA"))),
       font_(load_font(asset_path(data / "F", "BMH3.FNT"))),
-      exe_(load_le(asset_path(data, "BMH.exe"))), sprite_font_(data) {
+      exe_(reference), sprite_font_(data,reference) {
     if (state_.manager_slot < 0 || state_.manager_slot > 3 ||
         background_.width != 320 || background_.height != 240 ||
         atlas_.width != 138 || atlas_.height != 18 ||
@@ -291,9 +294,12 @@ bool SettingsScreen::click(int x, int y, bool right) {
 
 SettingsReadmeScreen::SettingsReadmeScreen(const std::filesystem::path& data,
                                            bool decorated_background)
+    : SettingsReadmeScreen(data,decorated_background,load_le(asset_path(data,"BMH.exe"))) {}
+
+SettingsReadmeScreen::SettingsReadmeScreen(const std::filesystem::path& data, bool decorated_background, const LeImage& reference)
     : background_(decorated_background ? load_vga(asset_path(data / "KB", "129.VGA")) : Image(320, 240)),
       font_(load_font(asset_path(data / "F", "BMH3.FNT"))),
-      exe_(load_le(asset_path(data, "BMH.exe"))),
+      exe_(reference),
       texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
       decorated_background_(decorated_background) {
     if (background_.width != 320 || background_.height != 240)

@@ -21,6 +21,11 @@ AiMatchProjection AiMatchProjection::create(const World& world,const std::vector
     for(const auto& manager:world.managers)if(std::find(requested.begin(),requested.end(),manager.club)!=requested.end())throw std::invalid_argument("world12: human manager projection is not integrated");
     if(runtime_dimensions.big_squad_teams<32)throw std::invalid_argument("world12: legacy match workspace is unavailable");
     AiMatchProjection projection;projection.original_managers_=world.managers;projection.original_development_balance_=world.development_balance;projection.original_trend_rotation_=world.trend_rotation;projection.state=base;auto& state=projection.state;state.manager_teams.clear();state.players.clear();state.player_name_offsets.clear();state.player_names.clear();state.player_cards.clear();state.player_bonus.clear();state.live_matches.clear();state.live_scene=false;state.last_shooter=0xfff;state.projected_match_clubs.clear();state.development_balance=world.development_balance;state.trend_rotation=world.trend_rotation;
+    if(world.economy&&world.economy->presentation_options){
+        state.memory.add_block(layout::LeaguePresentationOptions,180);
+        for(uint32_t i=0;i<180;++i)state.memory.set8(layout::LeaguePresentationOptions+i,(*world.economy->presentation_options)[i]);
+        state.live_scene=(state.memory.u8(layout::LeaguePresentationOptions+13)&1)==0;
+    }
     projection.original_settings_=world.settings;
     projection.original_player_statistics_=world.player_statistics;
     state.player_statistics.clear();state.title_history.clear();

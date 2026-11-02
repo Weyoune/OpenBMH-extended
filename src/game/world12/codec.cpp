@@ -200,7 +200,7 @@ J encode_economy(const std::optional<CareerEconomy>& input) {
             {"facility_history",numbers(m.facility_history)},{"financial_history",std::move(history)}});
     }
     for(const auto& m:input->messages)messages.emplace_back(O{{"recipients",id(m.recipients)},{"read_by",id(m.read_by)},{"date",int(m.date)},{"text",numbers(m.text)}});
-    return O{{"pools",encode_pools(input->pools)},{"advertising_group",input->advertising_group?J(int(*input->advertising_group)):J(nullptr)},{"week",int(input->week)},{"managers",std::move(managers)},{"messages",std::move(messages)},{"recipient_mask",id(input->recipient_mask)}};
+    return O{{"presentation_options",input->presentation_options?J(numbers(*input->presentation_options)):J(nullptr)},{"pools",encode_pools(input->pools)},{"advertising_group",input->advertising_group?J(int(*input->advertising_group)):J(nullptr)},{"week",int(input->week)},{"managers",std::move(managers)},{"messages",std::move(messages)},{"recipient_mask",id(input->recipient_mask)}};
 }
 std::optional<CareerEconomy> decode_economy(const J& input,uint32_t version) {
     if(std::holds_alternative<std::nullptr_t>(input.value))return {};
@@ -211,6 +211,8 @@ std::optional<CareerEconomy> decode_economy(const J& input,uint32_t version) {
     else if(const auto found=input.object()->find("advertising_group");found!=input.object()->end()&&!std::holds_alternative<std::nullptr_t>(found->second.value))throw FormatError("world12: older schema cannot restore advertising group");
     const auto numbers=[](const J& j,auto& output){const auto& a=array(j);if(a.size()!=output.size())throw FormatError("world12: invalid economy row dimensions");
         using T=typename std::remove_reference_t<decltype(output)>::value_type;for(size_t i=0;i<a.size();++i)output[i]=T(number(a[i],std::numeric_limits<T>::max()));};
+    if(version>=31){const auto& value=field(input,"presentation_options");if(value.array())numbers(value,result.presentation_options.emplace());else if(!std::holds_alternative<std::nullptr_t>(value.value))throw FormatError("world12: invalid presentation options");}
+    else if(const auto found=input.object()->find("presentation_options");found!=input.object()->end()&&!std::holds_alternative<std::nullptr_t>(found->second.value))throw FormatError("world12: older schema cannot restore presentation options");
     const auto& managers=array(field(input,"managers"));if(managers.size()!=4)throw FormatError("world12: invalid economy manager count");
     for(size_t i=0;i<4;++i){const auto& j=managers[i];auto& m=result.managers[i];
         if(!j.object())throw FormatError("world12: invalid economy manager record");

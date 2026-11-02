@@ -2268,7 +2268,7 @@ void StartupFlow::show_settings(SettingsState state, uint64_t owner_sequence, De
     if (owner_sequence && (owner.kind != DeskRequestKind::open_menu || owner.menu_kind != 19 ||
         owner.item_id < 0 || owner.revision + 1 != state.revision))
         throw FormatError("settings view requires its authenticated desk owner");
-    auto screen = std::make_unique<SettingsScreen>(data_, std::move(state), owner.item_id);
+    auto screen = std::make_unique<SettingsScreen>(data_, std::move(state), owner.item_id,render_reference());
     desktop_->resolve_local_menu();
     settings_ = std::move(screen);
     settings_owner_sequence_ = owner_sequence;
@@ -2401,7 +2401,7 @@ void StartupFlow::reject_mailbox(std::string reason) {
 
 void StartupFlow::acknowledge_settings(SettingsState state, DeskState desk, PreparationState preparation) {
     if (!settings_ || !settings_->pending() || !desktop_ || !engine_attached_ ||
-        desk.source != "engine_projection" || state.manager_slot != desktop_->state().manager_slot ||
+        (desk.source != "engine_projection" && desk.source != "world12") || desk.source != desktop_->state().source || state.manager_slot != desktop_->state().manager_slot ||
         state.manager_slot != settings_->pending()->manager_slot ||
         settings_->pending()->revision == std::numeric_limits<uint64_t>::max() ||
         state.revision != settings_->pending()->revision + 1 || desk.revision != state.revision ||

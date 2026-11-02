@@ -3,7 +3,9 @@
 #include "app/world12_session.hpp"
 #include "ui/save_load.hpp"
 namespace bmh::app::world12 {
-// Validates a single regular FBM target confined to the configured save directory.
+// Validates regular targets confined to the configured save directory.
+std::filesystem::path checked_settings_path(const std::filesystem::path&,const ui::SaveLoadRequest&);
+void publish_settings(const std::filesystem::path&,const Bytes&,bool overwrite);
 std::filesystem::path checked_menu_layout_path(const std::filesystem::path& directory,const ui::SaveLoadRequest&);
 void publish_menu_layout(const std::filesystem::path&,const Bytes&,bool overwrite);
 std::filesystem::path checked_game_path(const std::filesystem::path& directory,const ui::SaveLoadRequest&);

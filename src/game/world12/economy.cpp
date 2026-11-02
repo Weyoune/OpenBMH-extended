@@ -88,6 +88,7 @@ void write_coupon(GameState& g,size_t local,const PoolsCoupon& c) {
 void initialize_career_economy(CareerSnapshot& state,const GameState& reference){
     state.validate();if(state.world.economy||!state.world.settings||state.date||state.season||state.world.managers.size()!=state.world.settings->planned_managers||state.desktop)throw std::invalid_argument("world12: economy requires fresh pre-desktop initialization");
     CareerEconomy e;e.week=reference.memory.u8(layout::Savestate_Layout_ExecutableField);
+    if(reference.memory.has(layout::LeaguePresentationOptions)&&reference.memory.has(layout::LeaguePresentationOptions+179)){e.presentation_options.emplace();for(uint32_t i=0;i<180;++i)(*e.presentation_options)[i]=reference.memory.u8(layout::LeaguePresentationOptions+i);}
     if(reference.memory.has(layout::AdGroupId))e.advertising_group=reference.memory.u8(layout::AdGroupId);
     if(reference.memory.has(layout::Coupon)&&reference.memory.has(layout::Coupon+99)) {e.pools.emplace();for(size_t n=0;n<4;++n)e.pools->managers[n]=read_coupon(reference,n);for(uint32_t n=0;n<11;++n)e.pools->previous_outcomes[n]=reference.memory.u8(layout::MatchdaySetup_EvaluatePoolsCoupon_RuntimeField+n);}
     const std::array<uint8_t,4> identity{0,1,2,3};for(size_t n=0;n<4;++n)e.managers[n]=read_manager(reference,n,identity);
@@ -118,6 +119,7 @@ void capture_career_economy(World& world,const AiMatchProjection& projection){
     if(!world.economy||!world.markets)throw std::invalid_argument("world12: career economy/market is missing");
     const auto map=seats(projection);const auto& g=projection.state;auto& e=*world.economy;
     if(e.pools){for(size_t n=0;n<projection.human_managers();++n)e.pools->managers[map[n]]=read_coupon(g,n);for(uint32_t n=0;n<11;++n)e.pools->previous_outcomes[n]=g.memory.u8(layout::MatchdaySetup_EvaluatePoolsCoupon_RuntimeField+n);}
+    if(e.presentation_options)for(uint32_t i=0;i<180;++i)(*e.presentation_options)[i]=g.memory.u8(layout::LeaguePresentationOptions+i);
     e.week=g.memory.u8(layout::Savestate_Layout_ExecutableField);
     if(e.advertising_group)e.advertising_group=g.memory.u8(layout::AdGroupId);
     for(uint8_t n=0;n<projection.human_managers();++n){const auto had_monthly=e.managers[map[n]].monthly.has_value();const auto had_depreciation=e.managers[map[n]].depreciation.has_value();e.managers[map[n]]=read_manager(g,n,map);if(!had_monthly)e.managers[map[n]].monthly.reset();if(!had_depreciation)e.managers[map[n]].depreciation.reset();}

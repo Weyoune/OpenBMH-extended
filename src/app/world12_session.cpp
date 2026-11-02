@@ -170,7 +170,8 @@ void Session::play_prepared_matches(uint64_t revision,const HumanRoundHooks& hoo
             c.referee_properties.assign(event.referee_properties.begin(),event.referee_properties.end());
             c.teams_prepared=true;
             c.pools_selected=candidate.world.economy&&candidate.world.economy->pools&&event.pools_matches&&std::find(event.pools_matches->begin(),event.pools_matches->end(),match.fixture)!=event.pools_matches->end();
-            c.presentation_buttons.assign(0xb4,1);conditions.push_back(std::move(c));}
+            if(!candidate.world.economy||!candidate.world.economy->presentation_options)throw FormatError("world12: match presentation options are unknown in this old career");
+            const auto& options=*candidate.world.economy->presentation_options;c.presentation_buttons.assign(options.begin(),options.end());conditions.push_back(std::move(c));}
         if(group.league)leagues.push_back({{event.day,*group.league,group.round},std::move(conditions)});
         else cups.push_back({*group.cup,group.source_entry,group.revision,std::move(conditions)});
     }

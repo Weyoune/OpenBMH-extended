@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "world12_fixture.hpp"
 #include "app/world12_startup.hpp"
+#include "app/settings_request_source.hpp"
 #include "app/world12_pending.hpp"
 #include "app/world12_desktop.hpp"
 #include "app/world12_save_load.hpp"
@@ -849,6 +850,60 @@ void actual_mailbox(const std::filesystem::path& data,const CareerSnapshot& base
     if(!output.empty())std::filesystem::copy_file(file,output/"after.FBM",std::filesystem::copy_options::overwrite_existing);
     std::cout<<"Actual Original mailbox shortcut, shared/private recipients, keep/refusal/delete, physical holes, actor-only close, RNG-neutral snapshots and stale rollback passed\n";
 }
+void actual_settings(ui::StartupFlow& flow,std::unique_ptr<session_app::Session>& session,const std::filesystem::path& data,const std::filesystem::path& output) {
+    const auto directory=flow.save_directory();
+    const auto send=[&](const ui::FlowResult& action){const auto result=session_app::serve_startup(flow,action,session,data,91,session->scope());if(!result.error.empty())throw std::runtime_error("settings GUI: "+result.error);};
+    const auto capture=[&](const char* name){if(output.empty())return;std::filesystem::create_directories(output);const auto frame=flow.render();const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));std::ofstream image(output/(std::string(name)+".ppm"),std::ios::binary);image<<"P6\n320 240\n255\n";for(auto pixel:frame.pixels){const auto c=palette.argb[pixel];image.put(char(c>>16));image.put(char(c>>8));image.put(char(c));}write_savegame(output/(std::string(name)+".FBM"),make_save(session->snapshot()));};
+    const auto open=[&]{const auto& items=flow.desktop()->state().items;const auto icon=std::find_if(items.begin(),items.end(),[](const auto& item){return item.kind==19&&!item.disabled;});check(icon!=items.end(),"Original settings icon unavailable");send(flow.click(icon->x+icon->width/2,icon->y+icon->height/2));};
+    open();check(flow.screen_name()=="settings"&&session->preparation_open(),"typed settings did not open Original screen");capture("settings-before");
+    const auto first_sequence=session->settings_sequence();
+    const auto write=[&](int row,int col){const auto action=flow.click(68+col*24,27+row*10);check(action.request==ui::FlowRequest::settings_action,"settings hitbox did not emit Source write");return action;};
+    ui::FlowResult last;
+    for(const auto [row,col]:{std::pair{3,5},std::pair{4,5},std::pair{2,5},std::pair{0,8}}){
+        const auto before=session->snapshot();auto p=project_manager_desktop(before,session->reference());const auto revision=session->revision();auto expected_revision=revision;std::string error;
+        last=write(row,col);if(!app::apply_settings_request_source(p.state,session->rules(),std::nullopt,true,last.settings_action,expected_revision,error))throw std::runtime_error("actual Source settings "+std::to_string(row)+","+std::to_string(col)+": "+error);
+        send(last);const auto after=session->snapshot();auto expected=before;expected.world.economy->presentation_options=after.world.economy->presentation_options;
+        check(after==expected&&session->revision()==revision+1,"settings edit changed finances/date/streams/other managers");
+        check((*after.world.economy->presentation_options)[row*9+col]==p.state.memory.u8(layout::LeaguePresentationOptions+uint32_t(row*9+col)),"typed settings value differs from shared Source kernel");
+        const auto projected=project_manager_desktop(after,session->reference());check(projected.state.memory.u8(layout::LeaguePresentationOptions+uint32_t(row*9+col))==(*after.world.economy->presentation_options)[row*9+col],"saved settings were lost in Core projection");
+    }
+    capture("settings-edited");const auto edited=session->snapshot();
+    rejects([&]{session->apply_settings(last.settings_action,first_sequence);},"stale settings request replayed");check(session->snapshot()==edited,"settings replay changed game state");
+    auto blocked=last.settings_action;blocked.revision=session->revision();blocked.expected_raw=*session->snapshot().world.economy->presentation_options;blocked.row=7;blocked.column=7;
+    rejects([&]{session->apply_settings(blocked,first_sequence);},"unowned wall-clock deadline was edited");
+    send(flow.click(20,218));check(flow.screen_name()=="save_load","Original EIN save button did not open dialog");flow.text("SettingsQA");send(flow.send_key("ENTER"));
+    const auto path=directory/"SettingsQA.EIN";check(read_file(path)==Bytes(edited.world.economy->presentation_options->begin(),edited.world.economy->presentation_options->end()),"EIN save altered raw Source cells");
+    send(write(2,5));check(session->snapshot()!=edited,"settings restore fixture did not change raster");send(flow.click(20,205));check(flow.screen_name()=="save_load","Original EIN load button did not open dialog");send(flow.send_key("ENTER"));
+    check(session->snapshot()==edited,"EIN restore changed gameplay or did not recover settings");capture("settings-loaded");
+    const auto valid_bytes=read_file(path);
+    send(flow.click(20,218));flow.text("SettingsQA");send(flow.send_key("ENTER"));check(!flow.pending_file()&&read_file(path)==valid_bytes,"EIN overwrote before confirmation");send(flow.send_key("ENTER"));check(read_file(path)==valid_bytes,"confirmed EIN overwrite changed raw cells");
+    for(int kind=0;kind<2;++kind){
+        auto corrupt=valid_bytes;if(kind==0)corrupt.pop_back();else corrupt[7*9+7]^=1;
+        {std::ofstream file(path,std::ios::binary);file.write(reinterpret_cast<const char*>(corrupt.data()),std::streamsize(corrupt.size()));}
+        send(flow.click(20,205));const auto before=session->snapshot();const auto revision=session->revision();const auto action=flow.send_key("ENTER");
+        const auto result=session_app::serve_startup(flow,action,session,data,91,session->scope());
+        check(!result.error.empty()&&session->snapshot()==before&&session->revision()==revision&&!flow.pending_file(),"invalid EIN changed live gameplay or kept stale file request");
+        capture(kind==0?"settings-short-ein-refused":"settings-unowned-ein-refused");send(flow.send_key("ESC"));check(flow.screen_name()=="settings"&&session->preparation_open(),"cancelled EIN dialog retired parent settings owner");
+        {std::ofstream file(path,std::ios::binary);file.write(reinterpret_cast<const char*>(valid_bytes.data()),std::streamsize(valid_bytes.size()));}
+    }
+    const auto saved=read_save(make_save(session->snapshot()));check(saved==session->snapshot(),"settings matrix did not survive typed FBM roundtrip");
+    send(flow.click(0,0,true));check(flow.screen_name()=="desktop"&&!session->preparation_open(),"settings close did not restore owned desktop");capture("settings-desktop");
+    check(flow.desktop()->state().layout_snap==((*session->snapshot().world.economy->presentation_options)[3*9+5]==0),"settings raster has no desktop consumer");
+    open();auto retired=last.settings_action;retired.revision=session->revision();retired.expected_raw=*session->snapshot().world.economy->presentation_options;
+    rejects([&]{session->apply_settings(retired,first_sequence);},"retired settings window accepted a retimed request");send(flow.click(0,0,true));
+    if(!output.empty())std::filesystem::copy_file(path,output/"SettingsQA.EIN",std::filesystem::copy_options::overwrite_existing);
+    std::filesystem::remove(path);
+    std::cout<<"Actual Original settings: Source grid and limits, desktop consumers, EIN raw save/load, FBM persistence, no finances/date/RNG changes and retired-window replay guard passed\n";
+}
+void actual_settings_fixture(const std::filesystem::path& data,const CareerSnapshot& base,const std::filesystem::path& output) {
+    const auto directory=std::filesystem::temp_directory_path()/("openbmh-settings-gui-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);
+    struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code e;std::filesystem::remove_all(path,e);}} cleanup{directory};
+    const auto resources=session_app::load_runtime_resources(data);
+    write_savegame(directory/"Fixture.FBM",make_save(base));ui::StartupFlow flow(data,directory,ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> loaded;
+    flow.click(60,215);auto action=flow.click(240,215);auto result=session_app::serve_startup(flow,action,loaded,data,91,99);check(result.error.empty(),"settings fixture setup load failed");
+    action=flow.send_key("ENTER");result=session_app::serve_startup(flow,action,loaded,data,91,99);check(result.error.empty()&&loaded,"settings fixture did not restore typed career");
+    actual_settings(flow,loaded,data,output);
+}
 void actual_layout_files(const std::filesystem::path& data,const CareerSnapshot& fixture,const std::filesystem::path& output) {
     const auto directory=std::filesystem::temp_directory_path()/("openbmh-menu-files-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);
     struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code ignored;std::filesystem::remove_all(path,ignored);}} cleanup{directory};
@@ -1404,6 +1459,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     actual_stadium_financial_notices(data,session->snapshot(),output.empty()?output:output/"stadium-notices");
     actual_desktop_actions(data,session->snapshot(),output.empty()?output:output/"desktop-single");
     actual_layout_files(data,session->snapshot(),output.empty()?output:output/"layout-single");
+    actual_settings_fixture(data,session->snapshot(),output.empty()?output:output/"settings-single");
     actual_toto_fixture(data,session->snapshot(),output.empty()?output:output/"toto-empty");
     actual_save_load(flow,session,data,output);
     ui::StartupFlow mixed(data,{},ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> multi;
@@ -1426,6 +1482,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     actual_advertising(mixed,multi,data,output.empty()?output:output/"advertising-mixed");
     actual_desktop_actions(data,multi->snapshot(),output.empty()?output:output/"desktop-mixed");
     actual_layout_files(data,multi->snapshot(),output.empty()?output:output/"layout-mixed");
+    actual_settings_fixture(data,multi->snapshot(),output.empty()?output:output/"settings-mixed");
     actual_stadium(mixed,multi,data,output.empty()?output:output/"stadium-mixed");
     actual_mailbox(data,multi->snapshot(),output.empty()?output:output/"mailbox");
     {
@@ -1438,6 +1495,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
         actual_advertising(mixed,multi,data,output.empty()?output:output/"advertising-german");
         actual_desktop_actions(data,multi->snapshot(),output.empty()?output:output/"desktop-german");
         actual_layout_files(data,multi->snapshot(),output.empty()?output:output/"layout-german");
+        actual_settings_fixture(data,multi->snapshot(),output.empty()?output:output/"settings-german");
         actual_stadium(mixed,multi,data,output.empty()?output:output/"stadium-german");
     }
     actual_four_managers(data,output);
@@ -1447,6 +1505,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
 }
 }
 int main(int argc,char** argv)try {
+    if(argc==5&&std::string(argv[3])=="--settings-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_settings_fixture(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--layout-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_layout_files(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--desktop-only"){actual_desktop_actions(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--stadium-only"){actual_stadium_saved(argv[1],argv[4],argv[2]);return 0;}

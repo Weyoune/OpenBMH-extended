@@ -67,6 +67,7 @@ std::optional<uint32_t> settings_source_refusal(const GameState& state,
 class SettingsScreen {
 public:
     SettingsScreen(const std::filesystem::path& data, SettingsState state, int origin_item_id = -1);
+    SettingsScreen(const std::filesystem::path& data, SettingsState state, int origin_item_id, const LeImage& reference);
     Image render() const;
     bool click(int x, int y, bool right = false);
     bool pointer_down(int x, int y, bool right = false);
@@ -110,6 +111,7 @@ private:
 class SettingsReadmeScreen {
 public:
     SettingsReadmeScreen(const std::filesystem::path& data, bool decorated_background);
+    SettingsReadmeScreen(const std::filesystem::path& data, bool decorated_background, const LeImage& reference);
     Image render() const;
     bool pointer_down(bool left_or_right);
     bool close_requested() const { return close_requested_; }

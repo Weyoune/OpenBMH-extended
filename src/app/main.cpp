@@ -1770,7 +1770,8 @@ int main(int argc, char** argv) {
                         ui::GameEndRenderOptions{owner.plain_background,owner.gradient_text,true})==PendingOfferAnswer::unsupported)
                         throw FormatError("compensation notice presenter stopped");
                 };
-                const auto result=app::world12::serve_startup(flow,r,world_session,data,seed,1,r.request==ui::FlowRequest::kickoff?make_pending_offer_hooks(flow.render()):PendingOfferHooks{},nullptr,advertising,construction,compensation);
+                const auto result=app::world12::serve_startup(flow,r,world_session,data,seed,1,r.request==ui::FlowRequest::kickoff?make_pending_offer_hooks(flow.render()):PendingOfferHooks{},nullptr,advertising,construction,compensation,ui::SettingsSoundCapabilities{playback.original_ready()&&playback.available(),playback.original_ready()&&playback.available()});
+                if(world_session&&world_session->snapshot().world.economy&&world_session->snapshot().world.economy->presentation_options){const auto& options=*world_session->snapshot().world.economy->presentation_options;playback.set_original_options({music_enabled&&(options[5]&0x7f)==0,true,(options[6]&0x7f)==0});}
                 if(!result.error.empty())std::fprintf(stderr,"world12: %s\n",result.error.c_str());
                 dirty=true;return;
             }
