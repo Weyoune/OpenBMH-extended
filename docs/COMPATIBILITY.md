@@ -194,3 +194,10 @@ file invalidate an already owned calendar/weather/match receipt during the
 inclusive season-day 110–230 interval. The native Classic career's bulk-loader
 behavior is unchanged. EIN remains the original 180-byte format; no assets,
 source calendar dates, competition scores or random states are synthesized.
+
+## Host file overwrite confirmation
+
+The file picker reuses the Original overwrite question and Ja/Nein button
+layout. A separate Yes click or Enter confirms; repeated double-clicks do not.
+OpenBMH deviates from the original: host file operations use the shared dialog's
+system identity because the picker does not own a live manager portrait projection.
