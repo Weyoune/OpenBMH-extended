@@ -111,7 +111,7 @@ int main()try {
         rejects([&]{AiMatchProjection::create_for_humans(old_snapshot,{previous.managers[0].club},ref,{3,3,false,true});},"missing historical state was silently regenerated for scoring");
     }
     for(uint8_t mode:{1,2,3})for(uint8_t duration:{1,5})for(uint8_t difficulty:{0,9}) {
-        auto state=initialized(data,{false,true,true},ref,de,en,mode,duration,difficulty,4);const auto dates=calendar(state.world.catalogue);owner_app::ManagerActionOwner owner{81,0};
+        auto state=initialized(data,{false,true,true},ref,de,en,mode,duration,difficulty,3);const auto dates=calendar(state.world.catalogue);owner_app::ManagerActionOwner owner{81,0};
         owner_app::prepare_initial_competitions(state,owner,owner,dates,{de,en},ref);
         const auto sales=owner_app::initialize_first_season_manager_services(state,owner,owner,ref);const auto& m=state.world.managers[0];
         check(sales.watcom_draws>=25&&m.career->season_services->tickets_sold>0,"lower-English ticket/reset stage omitted required draws/sales");
