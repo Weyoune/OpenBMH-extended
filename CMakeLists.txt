@@ -383,6 +383,9 @@ set(BMH_TEST_RESCHEDULE_TESTS_INPUT_1 "" CACHE PATH "External input 1 for resche
 bmh_add_data_test(NAME reschedule_tests REQUIRED_OPTIONS BMH_TEST_RESCHEDULE_TESTS_INPUT_1 COMMAND reschedule_tests "${BMH_DATA}"
     "${BMH_TEST_RESCHEDULE_TESTS_INPUT_1}")
 
+add_executable(environment_profile_tests tests/environment_profile_tests.cpp)
+target_link_libraries(environment_profile_tests PRIVATE bmhcore)
+add_test(NAME environment_profile_tests COMMAND environment_profile_tests)
 add_executable(environment_tests tests/environment_tests.cpp)
 target_link_libraries(environment_tests PRIVATE bmhcore)
 add_test(NAME environment_tests COMMAND environment_tests)
