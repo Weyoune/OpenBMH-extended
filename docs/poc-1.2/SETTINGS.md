@@ -57,8 +57,9 @@ ownership. See the intentional Extended-only import decision in
 [compatibility](../COMPATIBILITY.md). Unknown saved indoor policy is explicit
 when admitting a German indoor date, without borrowing a current template.
 
-This connects the switch and disabled-date progression. Simulation and visible
-ownership of an enabled indoor tournament remain a separate completion gate.
+This switch and disabled-date progression also feed the [persistent indoor
+owner](INDOOR.md). Source selection, group/knockout scoring and saved date passes
+are implemented separately from final native presentation and played-career QA.
 
 ## Desktop time limit
 

@@ -33,7 +33,8 @@ DesktopEntryOutcome begin_scheduled_desks(CareerSnapshot& state,ManagerActionOwn
     for(const auto& group:candidate.prepared_event->groups)for(const auto& match:group.matches) {
         auto p=group.european?AiMatchProjection::create_for_european(candidate,participants(candidate.world,match.fixture),reference,policy):AiMatchProjection::create_for_humans(candidate,participants(candidate.world,match.fixture),reference,policy);
         const auto home=int(p.local_club(match.fixture.home)),away=int(p.local_club(match.fixture.away));
-        const uint8_t type=group.league?0:group.european?uint8_t(*group.european)+1:group.cup==DomesticCup::league_cup?12:
+        p.state.indoor=group.indoor;
+        const uint8_t type=group.indoor?12:group.league?0:group.european?uint8_t(*group.european)+1:group.cup==DomesticCup::league_cup?12:
             group.cup==DomesticCup::german_supercup||group.cup==DomesticCup::english_supercup?9:1;
         prepare_team(p.state,home,match_competition_class(type),0);prepare_team(p.state,away,match_competition_class(type),1);
         auto_lineup(p.state,home,100);auto_lineup(p.state,away,100);
@@ -42,10 +43,11 @@ DesktopEntryOutcome begin_scheduled_desks(CareerSnapshot& state,ManagerActionOwn
     for(const auto& membership:candidate.world.membership)for(const auto club:membership.clubs)
         if(candidate.world.clubs.at(club).match_flags&1) {
             auto p=AiMatchProjection::create_for_humans(candidate,participants(candidate.world,{club,club}),reference,policy);
-            auto_lineup(p.state,int(p.local_club(club)),100);p.commit_match_state(candidate.world);
+            p.state.indoor=std::any_of(candidate.prepared_event->groups.begin(),candidate.prepared_event->groups.end(),[](const auto& group){return group.indoor;});auto_lineup(p.state,int(p.local_club(club)),100);p.commit_match_state(candidate.world);
         }
     std::vector<ClubId> humans;for(const auto& manager:candidate.world.managers)humans.push_back(manager.club);
     auto p=AiMatchProjection::create_for_humans(candidate,humans,reference,policy);auto& local=p.state;
+    local.indoor=std::any_of(candidate.prepared_event->groups.begin(),candidate.prepared_event->groups.end(),[](const auto& group){return group.indoor;});
     cycle_manager_options(local);
     local.memory.add_block(layout::CurrentMatchday,4);local.memory.add_block(layout::NextDeskManager,humans.size()*2);
     for(size_t i=0;i<candidate.desktop->manager_order.size();++i){size_t n=0;

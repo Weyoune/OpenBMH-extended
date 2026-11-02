@@ -234,3 +234,12 @@ slot retained for simulation. Fresh manager requests for the hidden tier are
 rejected before setup changes or random draws. Existing careers are not
 reclassified by this UI restriction. The typed country selector keeps its
 country catalogue ownership and the same four visible English divisions.
+
+### Shared English matches on German indoor dates
+
+OpenBMH deviates from the original: the shared career processes coincident
+English outdoor appointments before the Source German indoor passes on the same
+calendar date. Both retain their real fixtures, scoring modes and lineups. Only
+the indoor programme repeats its Source three/two passes; ordinary results and
+daily services occur once. The pending pass/calendar ownership persists in the
+typed snapshot. See [indoor ownership](poc-1.2/INDOOR.md).

@@ -50,4 +50,6 @@ Synthetic tests cover mixed German/English cup days, atomic rollback with concur
 
 The [shared European owner](EUROPEAN_CAMPAIGNS.md) separately retains full knockout/group programmes and uses actual Core scoring.
 
-Still required: final visible match/after-match integration, supercup participant selection, indoor/national competition adapters, source-compatible premiums/title/manager records, complete application progression and native multiplayer QA.
+The [German indoor owner](INDOOR.md) separately retains its Source five invitations, Masters and same-date passes through the common Core engine.
+
+Still required: final visible match/after-match integration, supercup participant selection, national competition adapters, source-compatible premiums/title/manager records, complete application progression and native multiplayer QA.

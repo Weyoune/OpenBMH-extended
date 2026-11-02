@@ -23,7 +23,20 @@ std::optional<DayTicket> prepare_day(const CareerSnapshot& state){
     if(cursor.next_day==cursor.schedule.days)return std::nullopt;
     if(cursor.next_day>cursor.schedule.days)throw std::invalid_argument("world12: invalid calendar cursor");
     DayTicket ticket;ticket.day=cursor.next_day;ticket.revision=cursor.revision;ticket.others=admitted_other_appointments(state,ticket.day);
-    for(const auto&a:cursor.schedule.leagues_on(ticket.day)){if(state.league_rounds.at(a.league.value)+1!=a.round)throw std::invalid_argument("world12: league cursor disagrees with calendar");ticket.leagues.push_back({a,league_fixtures(state.world,a.league,a.round)});}
+    // OpenBMH deviates from the original: shared English outdoor fixtures
+    // precede Hall passes on a coincident date, with no repeated daily service.
+    const bool hall=std::any_of(ticket.others.begin(),ticket.others.end(),german_indoor_appointment);
+    bool ordinary_already=false;
+    if(hall){
+        if(!state.world.indoor)throw FormatError("world12: indoor campaign is unknown in this older snapshot");
+        ticket.indoor_date=true;const auto next=cursor.schedule.others_on(uint16_t(ticket.day+1));ticket.indoor_total=std::any_of(next.begin(),next.end(),german_indoor_appointment)?3:2;
+        if(state.world.indoor->date_pass){const auto& pass=*state.world.indoor->date_pass;if(pass.day!=ticket.day||pass.total!=ticket.indoor_total)throw FormatError("world12: indoor date pass belongs to another calendar cell");ticket.indoor_completed=pass.completed;ordinary_already=pass.ordinary_completed;}
+        const bool ordinary=!cursor.schedule.leagues_on(ticket.day).empty()||std::any_of(ticket.others.begin(),ticket.others.end(),[](const auto& appointment){return !german_indoor_appointment(appointment);});
+        ticket.indoor_ordinary_phase=ordinary&&!ordinary_already;
+        if(ticket.indoor_ordinary_phase)std::erase_if(ticket.others,german_indoor_appointment);
+        else {std::erase_if(ticket.others,[](const auto& appointment){return !german_indoor_appointment(appointment);});ticket.indoor=prepare_indoor_groups(*state.world.indoor);}
+    }
+    if(!hall||ticket.indoor_ordinary_phase)for(const auto&a:cursor.schedule.leagues_on(ticket.day)){if(state.league_rounds.at(a.league.value)+1!=a.round)throw std::invalid_argument("world12: league cursor disagrees with calendar");ticket.leagues.push_back({a,league_fixtures(state.world,a.league,a.round)});}
     std::set<DomesticCup> scheduled;
     for(const auto& appointment:ticket.others) if(const auto required=domestic_cups_on(appointment))
         for(auto cup:*required) {
@@ -48,19 +61,21 @@ void commit_league_day(CareerSnapshot& state,const DayTicket& ticket,const std::
     commit_day(state,ticket,completed,{});
 }
 DayPresentation commit_day(CareerSnapshot& state,const DayTicket& ticket,const std::vector<CompletedLeagueRound>& completed,
-    const std::vector<CupLegResult>& cup_results,const std::vector<EuropeanResults>& european_results,const LeImage* shared_rules){
+    const std::vector<CupLegResult>& cup_results,const std::vector<EuropeanResults>& european_results,const LeImage* shared_rules,const std::optional<IndoorResults>& indoor_results,const GameState* indoor_reference){
     const auto expected=prepare_day(state);if(!expected||*expected!=ticket)throw std::invalid_argument("world12: stale or changed day ticket");
     size_t required_count=0;std::vector<EuropeanCompetition> shared;
     for(const auto& appointment:ticket.others) {
         const auto required=domestic_cups_on(appointment);
         if(required)required_count+=required->size();
         else if(const auto european=european_cups_on(appointment))shared.insert(shared.end(),european->begin(),european->end());
-        else throw std::invalid_argument("world12: indoor/shared/national transaction is required before advancing this day");
+        else if(!german_indoor_appointment(appointment))throw std::invalid_argument("world12: shared/national transaction is required before advancing this day");
     }
     if(required_count!=ticket.cups.size() || cup_results.size()!=ticket.cups.size())
         throw std::invalid_argument("world12: complete installed domestic cup stages and results are required");
     if(european_results.size()!=shared.size()||(!shared.empty()&&!shared_rules))throw FormatError("world12: complete European results/source owner is required");
     for(size_t i=0;i<shared.size();++i)if(european_results[i].competition!=shared[i])throw FormatError("world12: European result order/competition does not match calendar");
+    const bool needs_indoor=!ticket.indoor.empty();
+    if(needs_indoor!=indoor_results.has_value()||(needs_indoor&&(!shared_rules||!indoor_reference)))throw FormatError("world12: complete indoor result/reference owner is required");
     if(state.date==std::numeric_limits<uint32_t>::max()||state.calendar->revision==std::numeric_limits<uint64_t>::max())throw std::overflow_error("world12: date/revision exhausted");
     if(completed.size()!=ticket.leagues.size())throw std::invalid_argument("world12: incomplete day results");
     // Validate the entire result batch before writing any table or cursor.
@@ -88,8 +103,16 @@ DayPresentation commit_day(CareerSnapshot& state,const DayTicket& ticket,const s
     WatcomRandom european_random(staged.watcom_seed);
     for(const auto& result:european_results)commit_european_results(staged.world,result,*shared_rules,european_random,staged.season);
     staged.watcom_seed=european_random.seed();presentation.watcom_draws=european_random.calls();
+    if(indoor_results){const auto outcome=commit_indoor_results(staged,*indoor_results,*indoor_reference,*shared_rules);presentation.game_draws+=outcome.game_draws;presentation.watcom_draws+=outcome.watcom_draws;}
     for(const auto& round:completed){for(size_t m=0;m<round.results.size();++m)staged.results.result(staged.world.catalogue,round.league,round.round,int(m))=round.results[m];staged.league_rounds[round.league.value]=round.round;}
-    ++staged.calendar->next_day;++staged.calendar->revision;++staged.date;
+    bool next_date=true;
+    if(ticket.indoor_date){
+        if(!staged.world.indoor->date_pass)staged.world.indoor->date_pass=IndoorDatePass{ticket.day,0,ticket.indoor_total,false};
+        auto& pass=*staged.world.indoor->date_pass;
+        if(ticket.indoor_ordinary_phase)pass.ordinary_completed=true;else ++pass.completed;
+        next_date=pass.completed==pass.total;if(next_date)staged.world.indoor->date_pass.reset();
+    }
+    ++staged.calendar->revision;if(next_date){++staged.calendar->next_day;++staged.date;}
     validate_cup_programmes(staged.world,staged.cups);
     state=std::move(staged);
     return presentation;

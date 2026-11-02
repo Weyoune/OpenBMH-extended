@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 #include "game/world12/european_campaign.hpp"
+#include "game/world12/indoor.hpp"
 #include "game/world12/catalogue.hpp"
 #include "formats/m3d.hpp"
 #include "game/long_career.hpp"
@@ -272,6 +273,7 @@ struct World {
     std::optional<CareerSettings> settings={};
     std::optional<InitialCompetitionFields> initial_competitions={};
     std::optional<EuropeanCampaigns> european_campaigns={};
+    std::optional<IndoorSeason> indoor;
     std::optional<TransferMarket> transfer_market={};
     int32_t development_balance=0;
     uint8_t trend_rotation=0;

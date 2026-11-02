@@ -73,6 +73,12 @@ namespace bmh {
 // Writes the results of a cup group (current leg) back into the result array in memory.
 void store_cup_results(GameState& g, const MatchGroup& grp);
 
+struct IndoorTournamentCompletion {
+    uint8_t ordinal=0,strength=0;
+    std::array<uint16_t,4> places{};
+};
+using IndoorTournamentCompletionHook=std::function<void(const GameState&,const IndoorTournamentCompletion&)>;
+
 // AdvanceCup for knockout stages: after a matchday of cup `id` the legs played go up;
 // after the first leg of a two-legged tie the pairs turn round (home and away swapped,
 // the results moved to the other leg's array). After a complete round the winners
@@ -82,7 +88,8 @@ void store_cup_results(GameState& g, const MatchGroup& grp);
 // finals remain outside this routine.
 // The indoor tournament draws its next tournament at the end (game generator, `game`).
 void advance_cup(GameState& g, int id, WatcomRandom& rand, MinuteReport& report, GameRandom* game = nullptr,
-                 const SeasonCupDrawHook& cup_draw = {}, const CompetitionWinnerHook& winner = {});
+                 const SeasonCupDrawHook& cup_draw = {}, const CompetitionWinnerHook& winner = {},
+                 const IndoorTournamentCompletionHook& indoor_complete = {});
 
 // The end of the fifth indoor tournament: the field of the Masters (MastersQualification2,
 // IndoorStandingsFromGame(0)), see cup.cpp.

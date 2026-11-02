@@ -62,10 +62,11 @@ void CareerSnapshot::validate()const{
     }
     for(const auto& squad:world.national_squads)if(squad.nominated_on>date)throw FormatError("world12: national nomination is in the future");
     world.validate();results.validate(world.catalogue);validate_cup_programmes(world,cups);for(size_t i=0;i<kLeagueSlots;++i)if(league_rounds[i]>world.catalogue.leagues[i].rounds())throw FormatError("world12: round cursor past season end");
-    if(calendar){calendar->schedule.validate(world.catalogue);if(calendar->next_day>calendar->schedule.days)throw FormatError("world12: invalid calendar cursor");std::array<uint8_t,kLeagueSlots> expected{};for(const auto&a:calendar->schedule.leagues)if(a.day<calendar->next_day)expected[a.league.value]=a.round;if(expected!=league_rounds)throw FormatError("world12: saved rounds disagree with committed calendar days");for(uint32_t l=0;l<kLeagueSlots;++l)for(int r=1;r<=world.catalogue.leagues[l].rounds();++r)for(int m=0;m<world.catalogue.leagues[l].clubs/2;++m)if(results.result(world.catalogue,{l},r,m).played!=(r<=league_rounds[l]))throw FormatError("world12: saved scores disagree with committed rounds");}
+    if(calendar){calendar->schedule.validate(world.catalogue);if(calendar->next_day>calendar->schedule.days)throw FormatError("world12: invalid calendar cursor");std::array<uint8_t,kLeagueSlots> expected{};for(const auto&a:calendar->schedule.leagues)if(a.day<calendar->next_day||(a.day==calendar->next_day&&world.indoor&&world.indoor->date_pass&&world.indoor->date_pass->ordinary_completed))expected[a.league.value]=a.round;if(expected!=league_rounds)throw FormatError("world12: saved rounds disagree with committed calendar days");for(uint32_t l=0;l<kLeagueSlots;++l)for(int r=1;r<=world.catalogue.leagues[l].rounds();++r)for(int m=0;m<world.catalogue.leagues[l].clubs/2;++m)if(results.result(world.catalogue,{l},r,m).played!=(r<=league_rounds[l]))throw FormatError("world12: saved scores disagree with committed rounds");}
+    if(world.indoor&&world.indoor->date_pass){const auto& pass=*world.indoor->date_pass;if(!calendar||pass.day!=calendar->next_day)throw FormatError("world12: indoor passes have no matching saved calendar owner");const auto today=admitted_other_appointments(*this,calendar->next_day);if(std::none_of(today.begin(),today.end(),german_indoor_appointment))throw FormatError("world12: saved indoor passes were suppressed or detached from their appointment");}
     validate_prepared_event(*this);
 }
-Savegame make_save(const CareerSnapshot& snapshot){snapshot.validate();const bool european=snapshot.prepared_event&&std::any_of(snapshot.prepared_event->groups.begin(),snapshot.prepared_event->groups.end(),[](const auto& group){return group.european.has_value();});Savegame save;save.version="O1.2";save.key=0;save.checksum_ok=true;save.stream={'O','B','M','H','1','2','S',uint8_t(european?'H':snapshot.prepared_event?(snapshot.prepared_event->pools_matches?'G':snapshot.prepared_event->desk_phase!=PreparedEvent::DeskPhase::unstarted?'F':snapshot.prepared_event->gates_booked?'E':'D'):snapshot.desktop&&!snapshot.desktop->manager_order.empty()?'C':snapshot.progress?'B':'A')};
+Savegame make_save(const CareerSnapshot& snapshot){snapshot.validate();const bool indoor=snapshot.prepared_event&&std::any_of(snapshot.prepared_event->groups.begin(),snapshot.prepared_event->groups.end(),[](const auto& group){return group.indoor;});const bool european=snapshot.prepared_event&&std::any_of(snapshot.prepared_event->groups.begin(),snapshot.prepared_event->groups.end(),[](const auto& group){return group.european.has_value();});Savegame save;save.version="O1.2";save.key=0;save.checksum_ok=true;save.stream={'O','B','M','H','1','2','S',uint8_t(indoor?'I':european?'H':snapshot.prepared_event?(snapshot.prepared_event->pools_matches?'G':snapshot.prepared_event->desk_phase!=PreparedEvent::DeskPhase::unstarted?'F':snapshot.prepared_event->gates_booked?'E':'D'):snapshot.desktop&&!snapshot.desktop->manager_order.empty()?'C':snapshot.progress?'B':'A')};
     const auto put=[&](uint64_t v,int width=4){for(int i=0;i<width;++i)save.stream.push_back(uint8_t(v>>(i*8)));};auto world=encode_world(snapshot.world);put(world.size());put(snapshot.date);put(snapshot.season);put(snapshot.watcom_seed);put(std::bit_cast<uint32_t>(snapshot.game_seed));save.stream.insert(save.stream.end(),world.begin(),world.end());for(auto round:snapshot.league_rounds)put(round,1);
     for(const auto&league:snapshot.results.leagues)for(const auto&r:league){put(r.played?1:0,1);put(r.home,1);put(r.away,1);}
     put(snapshot.calendar?1:0,1);if(snapshot.calendar){const auto&cursor=*snapshot.calendar;put(cursor.schedule.days,2);put(cursor.next_day,2);put(cursor.revision,8);put(cursor.schedule.leagues.size());put(cursor.schedule.others.size());for(const auto&a:cursor.schedule.leagues){put(a.day,2);put(a.league.value);put(a.round,1);}for(const auto&a:cursor.schedule.others){put(a.day,2);put(uint8_t(a.domain),1);put(a.source_entry,2);}}
@@ -89,20 +90,20 @@ Savegame make_save(const CareerSnapshot& snapshot){snapshot.validate();const boo
     if(ordered){put(snapshot.desktop->manager_order.size(),1);for(auto seat:snapshot.desktop->manager_order)put(seat,1);put(*snapshot.desktop->matchday_number,2);}
     if(snapshot.prepared_event) {
         const auto& event=*snapshot.prepared_event;put(event.day,2);put(event.calendar_revision,8);
-        if(european||event.desk_phase!=PreparedEvent::DeskPhase::unstarted){put(uint8_t(event.desk_phase),1);put(event.gates_booked?1:0,1);}
+        if(indoor||european||event.desk_phase!=PreparedEvent::DeskPhase::unstarted){put(uint8_t(event.desk_phase),1);put(event.gates_booked?1:0,1);}
         for(auto property:event.referee_properties)put(property,1);put(event.groups.size(),1);
         for(const auto& group:event.groups) {
-            put(group.european?2:group.cup?1:0,1);put(group.league?group.league->value:group.european?uint32_t(*group.european):uint32_t(*group.cup));
+            put(group.indoor?3:group.european?2:group.cup?1:0,1);put(group.indoor?group.indoor_tournament:group.league?group.league->value:group.european?uint32_t(*group.european):uint32_t(*group.cup));
             put(group.source_entry,1);put(group.round,1);put(group.leg,1);put(group.flags,1);put(group.revision,8);put(group.matches.size(),1);
             for(const auto& match:group.matches){put(match.fixture.home.value);put(match.fixture.away.value);put(uint8_t(match.temperature),1);put(match.rain,1);put(match.referee,1);put(uint8_t(match.referee_country),1);if(event.gates_booked)put(*match.spectators);}
         }
-        if(european)put(event.pools_matches?1:0,1);
+        if(indoor||european)put(event.pools_matches?1:0,1);
         if(event.pools_matches){put(event.pools_matches->size(),1);for(const auto& fixture:*event.pools_matches){put(fixture.home.value);put(fixture.away.value);}}
     }
     for(auto byte:save.stream)save.checksum=uint8_t(save.checksum+byte);return save;
 }
 CareerSnapshot read_save(const Savegame& save){
-    if(save.version!="O1.2"||!save.checksum_ok)throw FormatError("world12: incompatible or damaged save");const auto&raw=save.stream;if(raw.size()<28||(std::string(raw.begin(),raw.begin()+8)!="OBMH12S4"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12S5"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12S6"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12S7"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12S8"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12S9"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SA"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SB"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SC"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SD"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SE"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SF"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SG"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SH"))throw FormatError("world12: unknown development save schema");size_t at=8;
+    if(save.version!="O1.2"||!save.checksum_ok)throw FormatError("world12: incompatible or damaged save");const auto&raw=save.stream;if(raw.size()<28||(std::string(raw.begin(),raw.begin()+8)!="OBMH12S4"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12S5"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12S6"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12S7"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12S8"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12S9"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SA"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SB"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SC"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SD"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SE"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SF"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SG"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SH"&&std::string(raw.begin(),raw.begin()+8)!="OBMH12SI"))throw FormatError("world12: unknown development save schema");size_t at=8;
     const auto get=[&](int width=4){if(at+size_t(width)>raw.size())throw FormatError("world12: truncated save field");uint64_t value=0;for(int i=0;i<width;++i)value|=uint64_t(raw[at++])<<(8*i);return value;};
     auto size=get();if(size>32*1024*1024)throw FormatError("world12: world stream too large");CareerSnapshot state;state.date=uint32_t(get());state.season=uint32_t(get());state.watcom_seed=uint32_t(get());state.game_seed=std::bit_cast<int32_t>(uint32_t(get()));if(at+size>raw.size())throw FormatError("world12: truncated world stream");state.world=decode_world(Bytes(raw.begin()+at,raw.begin()+at+size));at+=size;for(auto&round:state.league_rounds)round=uint8_t(get(1));state.results=SeasonResults::empty(state.world.catalogue);
     for(auto&league:state.results.leagues)for(auto&r:league){auto played=get(1);if(played>1)throw FormatError("world12: invalid result flag");r={played!=0,uint8_t(get(1)),uint8_t(get(1))};}
@@ -139,7 +140,7 @@ CareerSnapshot read_save(const Savegame& save){
     }
     if(raw[7]>='D') {
         PreparedEvent event;event.gates_booked=raw[7]=='E';event.day=uint16_t(get(2));event.calendar_revision=get(8);
-        if(raw[7]>='F'){const auto phase=get(1),gates=get(1);if((raw[7]!='H'&&phase<1)||phase>2||gates>1)throw FormatError("world12: invalid prepared desk phase");event.desk_phase=PreparedEvent::DeskPhase(phase);event.gates_booked=gates!=0;}
+        if(raw[7]>='F'){const auto phase=get(1),gates=get(1);if((raw[7]<'H'&&phase<1)||phase>2||gates>1)throw FormatError("world12: invalid prepared desk phase");event.desk_phase=PreparedEvent::DeskPhase(phase);event.gates_booked=gates!=0;}
 
         for(auto& property:event.referee_properties)property=uint8_t(get(1));
         const auto groups=get(1);if(groups<1||groups>32)throw FormatError("world12: invalid prepared group count");
@@ -147,13 +148,14 @@ CareerSnapshot read_save(const Savegame& save){
             PreparedGroup group;const auto kind=get(1);const auto competition=uint32_t(get());
             if(kind==0)group.league=LeagueId{competition};else if(kind==1&&competition<=4)group.cup=DomesticCup(competition);
             else if(raw[7]>='H'&&kind==2&&competition>=1&&competition<=3)group.european=EuropeanCompetition(competition);
+            else if(raw[7]>='I'&&kind==3&&competition<=5){group.indoor=true;group.indoor_tournament=uint8_t(competition);}
             else throw FormatError("world12: invalid prepared competition identity");
             group.source_entry=uint8_t(get(1));group.round=uint8_t(get(1));group.leg=uint8_t(get(1));group.flags=uint8_t(get(1));group.revision=get(8);
             const auto matches=get(1);if(matches<1||matches>32)throw FormatError("world12: invalid prepared fixture count");
             for(uint64_t m=0;m<matches;++m){PreparedFixture match;match.fixture={{uint32_t(get())},{uint32_t(get())}};match.temperature=std::bit_cast<int8_t>(uint8_t(get(1)));match.rain=uint8_t(get(1));match.referee=uint8_t(get(1));match.referee_country=Country(get(1));if(event.gates_booked)match.spectators=uint32_t(get());group.matches.push_back(match);}
             event.groups.push_back(std::move(group));
         }
-        const auto pools_present=raw[7]=='H'?get(1):raw[7]=='G'?1u:0u;
+        const auto pools_present=raw[7]>='H'?get(1):raw[7]=='G'?1u:0u;
         if(pools_present>1)throw FormatError("world12: invalid European event pools presence");
         if(pools_present) {
             const auto count=get(1);if(count>11)throw FormatError("world12: saved pools count exceeds eleven");

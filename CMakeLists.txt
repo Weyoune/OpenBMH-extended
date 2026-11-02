@@ -1251,6 +1251,8 @@ add_library(bmhworld12 STATIC
     src/game/world12/manager_finance.cpp
     src/game/world12/manager_tactics.cpp
     src/game/world12/manager_creation.cpp
+    src/game/world12/indoor_match.cpp
+    src/game/world12/indoor.cpp
     src/game/world12/european_campaign.cpp
     src/game/world12/european.cpp
     src/game/world12/initialization.cpp
@@ -1383,6 +1385,9 @@ add_test(NAME world12_standings_tests COMMAND world12_standings_tests)
 add_executable(world12_season_transition_tests tests/world12_season_transition_tests.cpp)
 target_link_libraries(world12_season_transition_tests PRIVATE bmhworld12)
 add_test(NAME world12_season_transition_tests COMMAND world12_season_transition_tests)
+add_executable(world12_indoor_tests tests/world12_indoor_tests.cpp)
+target_link_libraries(world12_indoor_tests PRIVATE bmhworld12_app)
+add_test(NAME world12_indoor_tests COMMAND world12_indoor_tests)
 add_executable(world12_european_match_tests tests/world12_european_match_tests.cpp)
 target_link_libraries(world12_european_match_tests PRIVATE bmhworld12_app)
 add_test(NAME world12_european_match_tests COMMAND world12_european_match_tests)

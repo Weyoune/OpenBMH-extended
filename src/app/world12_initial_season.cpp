@@ -37,6 +37,7 @@ InitialCompetitionOutcome prepare_initial_competitions(CareerSnapshot& state,Man
     }
     candidate.world.initial_competitions=std::move(fields);
     candidate.world.european_campaigns=initial_european_campaigns(candidate.world,sources.german);
+    if(candidate.world.catalogue.scope.germany)candidate.world.indoor=initial_indoor_season(candidate.world,sources.german,reference);
     candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();
     CountryCupRanking germany,england;
     for(auto country:{Country::germany,Country::england})if(candidate.world.catalogue.selectable(country))for(uint8_t local=0;local<5;++local)

@@ -513,7 +513,8 @@ void observe_cup_draw(const GameState& g, int entry, SeasonCupDrawPhase phase,
 }  // namespace
 
 void advance_cup(GameState& g, int id, WatcomRandom& rand, MinuteReport& report, GameRandom* game,
-                 const SeasonCupDrawHook& cup_draw, const CompetitionWinnerHook& winner_display) {
+                 const SeasonCupDrawHook& cup_draw, const CompetitionWinnerHook& winner_display,
+                 const IndoorTournamentCompletionHook& indoor_complete) {
     StaticMemory& mem = g.memory;
     int entry = find_cup(mem, id);
     if (entry < 0) return;
@@ -631,6 +632,13 @@ void advance_cup(GameState& g, int id, WatcomRandom& rand, MinuteReport& report,
             // Cup_AdvanceCup_RuntimeField3, clubs of the first two leagues only), then the next tournament is
             // drawn; after five tournaments the Masters follow
             int held = mem.u8(::bmh::layout::Cup_AdvanceCup_RuntimeField4);
+            if(indoor_complete){
+                static constexpr uint8_t order[4]={0,2,1,3};
+                if(winners.size()!=4){report.fail("indoor completion requires four classified clubs");return;}
+                IndoorTournamentCompletion completed;completed.ordinal=uint8_t(held);completed.strength=mem.u8(layout::Cup_AdvanceCup_RuntimeField3);
+                for(size_t i=0;i<4;++i)completed.places[i]=winners[order[i]];
+                indoor_complete(g,completed);
+            }
             if (held > 4) {
                 // the end of the Masters: CompetitionWinnerScreen(0, 7, winner) shows the winner (unless
                 // switched off, Cup_AdvanceCup_RuntimeField; no draws) and clears CareerSession_BeginFriendlyOpponentTable_ExecutableField2;

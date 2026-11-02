@@ -26,6 +26,7 @@ AttendanceOutcome book_event_attendance(CareerSnapshot& state,ManagerActionOwner
         if(!row.empty())candidate.world.players.at(row.player).attributes.w364&=~0x1000u;
     GameRandom game(candidate.game_seed);WatcomRandom random(candidate.watcom_seed);AttendanceOutcome out;
     for(const auto& group:candidate.prepared_event->groups)for(const auto& match:group.matches) {
+        if(group.indoor){out.spectators.push_back(10000);continue;}
         std::vector<ClubId> clubs;for(const auto& manager:candidate.world.managers)clubs.push_back(manager.club);
         for(auto club:{match.fixture.home,match.fixture.away})if(std::find(clubs.begin(),clubs.end(),club)==clubs.end())clubs.push_back(club);
         auto p=group.european?AiMatchProjection::create_for_european(candidate,clubs,reference,

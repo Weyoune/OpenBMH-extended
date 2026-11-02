@@ -20,13 +20,13 @@ LeImage source(bool english) {
     byte(layout::LeagueSizes,english?20:18);
     for(uint32_t l=0;l<4;++l){byte(layout::Career_BuildStadium_RuntimeField4+l,5);for(uint32_t i=0;i<22;++i)byte(layout::Career_BuildStadium_RuntimeField+l*23+i,1);}
     for(uint32_t i=0;i<22;++i){byte(layout::Career_BuildStadium_RuntimeField2+i*5,2);byte(layout::Career_BuildStadium_RuntimeField3+i*5,5);}
-    const auto cups=bmh::test::world12::country_rules(english);for(uint32_t i=0;i<36*40;++i)byte(layout::CupTable+i,cups.u8(layout::CupTable+i));return exe;
+    const auto cups=bmh::test::world12::country_rules(english);for(uint32_t i=0;i<36*40;++i)byte(layout::CupTable+i,cups.u8(layout::CupTable+i));if(!english)for(uint32_t i=0;i<5;++i){byte(layout::Career_CompetitionPointers_RuntimeField4+i,cups.u8(layout::Career_CompetitionPointers_RuntimeField4+i));byte(layout::Career_CompetitionPointers_RuntimeField5+i,cups.u8(layout::Career_CompetitionPointers_RuntimeField5+i));}return exe;
 }
 GameState reference() {
     GameState g;g.club_ids.resize(445);g.team_flags.resize(445);g.team_morale.resize(445);g.formations.resize(0x580);g.manager_records.resize(5*0xb0c);g.manager_options.resize(20);g.manager_ratings.resize(240);g.tactics.resize(4*0x840);
     const uint8_t depth[]={0,5,5,5,5,10,10,10,10,17,17};
     for(size_t m=0;m<4;++m){g.manager_options[m*5]=1;for(size_t mode=0;mode<2;++mode)for(size_t f=0;f<8;++f)for(size_t r=0;r<11;++r){const auto at=m*0x160+mode*0xb0+f*22+r;g.formations[at]=depth[r];g.formations[at+11]=uint8_t(r%9);}}
-    g.memory.add_block(layout::EnvironmentYouthTeams,4*0x24);g.memory.add_block(layout::Career_CompetitionPointersEnglish_ExecutableField5,4);g.memory.set_pointer(layout::Career_CompetitionPointersEnglish_ExecutableField5,layout::Career_CompetitionPointersEnglish_RuntimeField14+16);return g;
+    g.memory.add_block(layout::Cup_AdvanceCup_RuntimeField7,2);g.memory.set16(layout::Cup_AdvanceCup_RuntimeField7,0);g.memory.add_block(layout::EnvironmentYouthTeams,4*0x24);g.memory.add_block(layout::Career_CompetitionPointersEnglish_ExecutableField5,4);g.memory.set_pointer(layout::Career_CompetitionPointersEnglish_ExecutableField5,layout::Career_CompetitionPointersEnglish_RuntimeField14+16);return g;
 }
 World master() {
     auto world=bmh::test::world12::complete_world();uint32_t player=1000000,club=2000000;

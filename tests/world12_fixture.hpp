@@ -10,7 +10,7 @@ namespace bmh::test::world12 {
 // Older-schema fixtures must actually omit fields their writer did not know.
 inline void omit_recent_manager_records(bmh::cli::Json& root) {
     root.object()->erase("amateur_slots");
-    root.object()->erase("european_campaigns");
+    root.object()->erase("european_campaigns");root.object()->erase("indoor");
     auto& managers=std::get<bmh::cli::Json::Array>(root.object()->at("managers").value);
     for(auto& manager:managers) {
         auto& match=manager.object()->at("match_state");
@@ -25,7 +25,7 @@ inline void omit_recent_manager_records(bmh::cli::Json& root) {
 inline void omit_recent_manager_records(bmh::world12::World& world) {
     world.amateur_slots.reset();
     for(auto& manager:world.managers)if(manager.career&&manager.career->season_services)manager.career->season_services->promotion_tail_flags.reset();
-    world.european_campaigns.reset();
+    world.european_campaigns.reset();world.indoor.reset();
     for(auto& manager:world.managers)if(manager.match_state)manager.match_state->attendance.reset();
     for(auto& manager:world.managers)if(manager.career){manager.career->cup_titles.reset();manager.career->strengths_display_word.reset();manager.career->pairings_display_byte.reset();manager.career->table_display_word.reset();manager.career->other_games_view.reset();manager.career->camp_focus.reset();manager.career->stadium_curve_flags.reset();}
     if(world.economy)world.economy->presentation_options.reset();
@@ -78,6 +78,11 @@ inline LeImage country_rules(bool english) {
     european(20,3,32,4,191,21,255,0,1,0,2);
     european(21,3,2,1,140,0,20);
     for(uint8_t group=0;group<4;++group)european(uint8_t(31+group),2,4,6,227,18,16,group==3?0:uint8_t(32+group),4,group,8);
+    if(!english){
+        european(25,11,4,3,0,27,255,26,2,0,4);european(26,11,4,3,0,27,255,0,2,1,4);european(27,11,4,1,12,28,25,0,1,0,4);european(28,11,2,1,8,0,27,29,2,0,4);european(29,11,2,1,8,0,27,0,2,1,4);
+        const uint8_t teams[]={0,4,8,12,14},scores[]={0,6,12,14,15};image.patch(layout::Career_CompetitionPointers_RuntimeField4,scores,5);image.patch(layout::Career_CompetitionPointers_RuntimeField5,teams,5);
+    }
+
     return image;
 }
 }

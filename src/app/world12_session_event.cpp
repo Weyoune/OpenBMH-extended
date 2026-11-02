@@ -24,7 +24,10 @@ void Session::advance_to_next_desktop(const ui::DeskRequest& request,const std::
         staged.play_prepared_matches(staged.revision(),matches);
     }else staged.finish_initial_day(request);
     for(size_t n=0;n<32;++n) {
-        staged.seek_saved_event(staged.revision(),data,clock);
+        // Indoor Source passes own another event on the same date. Ordinary
+        // English fixtures already committed once; no daily service repeats.
+        const bool same_date_pass=staged.state_.world.indoor&&staged.state_.world.indoor->date_pass&&staged.state_.progress&&staged.state_.progress->phase==ProgressPhase::scheduled_event;
+        if(!same_date_pass)staged.seek_saved_event(staged.revision(),data,clock);
         const auto ticket=prepare_day(staged.state_);
         if(!ticket||staged.state_.progress->phase!=ProgressPhase::scheduled_event)
             throw FormatError("world12: closing season needs its awards and annual desktop owner");
