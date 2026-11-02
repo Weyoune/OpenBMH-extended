@@ -175,6 +175,19 @@ std::optional<CareerPlayerPools> decode_free_players(const J& input) {
     refs("domestic",result.domestic);refs("foreign",result.foreign);return result;
 }
 
+J encode_pools(const std::optional<CareerPools>& input) {
+    if(!input)return J(nullptr);A managers,previous;
+    for(const auto& c:input->managers){A tips;for(auto v:c.tips)tips.emplace_back(int(v));managers.emplace_back(O{{"stake",id(c.stake)},{"winnings",id(c.winnings)},{"tips",std::move(tips)},{"correct",int(c.correct)},{"voided",c.voided}});}
+    for(auto v:input->previous_outcomes)previous.emplace_back(int(v));return O{{"appointment",input->appointment?J(O{{"season",id(input->appointment->first)},{"day",id(input->appointment->second)}}):J(nullptr)},{"managers",std::move(managers)},{"previous",std::move(previous)}};
+}
+std::optional<CareerPools> decode_pools(const J& input) {
+    if(std::holds_alternative<std::nullptr_t>(input.value))return {};CareerPools pools;
+    const auto& appointment=field(input,"appointment");if(appointment.object())pools.appointment=std::make_pair(number(field(appointment,"season")),number(field(appointment,"day")));else if(!std::holds_alternative<std::nullptr_t>(appointment.value))throw FormatError("world12: invalid pools appointment");
+    const auto& managers=array(field(input,"managers"));const auto& previous=array(field(input,"previous"));
+    if(managers.size()!=4||previous.size()!=11)throw FormatError("world12: invalid pools dimensions");
+    for(size_t i=0;i<4;++i){const auto& j=managers[i];auto& c=pools.managers[i];c.stake=number(field(j,"stake"),400000);if(c.stake&&c.stake<10000)throw FormatError("world12: invalid pools stake");c.winnings=number(field(j,"winnings"),4294967295u);c.correct=uint8_t(number(field(j,"correct"),11));c.voided=boolean(field(j,"voided"));const auto& tips=array(field(j,"tips"));if(tips.size()!=11)throw FormatError("world12: invalid pools tips");for(size_t n=0;n<11;++n)c.tips[n]=uint8_t(number(tips[n],2));}
+    for(size_t n=0;n<11;++n)pools.previous_outcomes[n]=uint8_t(number(previous[n],2));return pools;
+}
 J encode_economy(const std::optional<CareerEconomy>& input) {
     if(!input)return nullptr;
     const auto numbers=[](const auto& values){A out;for(auto v:values)out.push_back(id(v));return out;};
@@ -187,11 +200,13 @@ J encode_economy(const std::optional<CareerEconomy>& input) {
             {"facility_history",numbers(m.facility_history)},{"financial_history",std::move(history)}});
     }
     for(const auto& m:input->messages)messages.emplace_back(O{{"recipients",id(m.recipients)},{"read_by",id(m.read_by)},{"date",int(m.date)},{"text",numbers(m.text)}});
-    return O{{"advertising_group",input->advertising_group?J(int(*input->advertising_group)):J(nullptr)},{"week",int(input->week)},{"managers",std::move(managers)},{"messages",std::move(messages)},{"recipient_mask",id(input->recipient_mask)}};
+    return O{{"pools",encode_pools(input->pools)},{"advertising_group",input->advertising_group?J(int(*input->advertising_group)):J(nullptr)},{"week",int(input->week)},{"managers",std::move(managers)},{"messages",std::move(messages)},{"recipient_mask",id(input->recipient_mask)}};
 }
 std::optional<CareerEconomy> decode_economy(const J& input,uint32_t version) {
     if(std::holds_alternative<std::nullptr_t>(input.value))return {};
     CareerEconomy result;result.week=uint8_t(number(field(input,"week"),11));result.recipient_mask=number(field(input,"recipient_mask"),4294967295u);
+    if(version>=30)result.pools=decode_pools(field(input,"pools"));
+    else if(const auto found=input.object()->find("pools");found!=input.object()->end()&&!std::holds_alternative<std::nullptr_t>(found->second.value))throw FormatError("world12: older schema cannot restore pools coupons");
     if(version>=28){const auto& value=field(input,"advertising_group");if(value.integer())result.advertising_group=uint8_t(number(value,255));else if(!std::holds_alternative<std::nullptr_t>(value.value))throw FormatError("world12: invalid advertising group");}
     else if(const auto found=input.object()->find("advertising_group");found!=input.object()->end()&&!std::holds_alternative<std::nullptr_t>(found->second.value))throw FormatError("world12: older schema cannot restore advertising group");
     const auto numbers=[](const J& j,auto& output){const auto& a=array(j);if(a.size()!=output.size())throw FormatError("world12: invalid economy row dimensions");

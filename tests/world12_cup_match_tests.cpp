@@ -51,6 +51,10 @@ void finals() {
         const auto result=simulate_and_settle_domestic_cup_round(state,base,stage,source,{conditions(17)},{3,6,false,true},game,random,hooks);
         const auto repeated=simulate_and_settle_domestic_cup_round(repeat,base,stage,source,{conditions(17)},{3,6,false,true},again_game,again_random,hooks);
         check(state==repeat&&result==repeated&&game.seed()==again_game.seed()&&random.seed()==again_random.seed(),"cup simulation changed across identical replay");
+        auto watched=before;auto observation=conditions(17);observation.pools_selected=true;GameRandom watch_game(31);WatcomRandom watch_random(seed);
+        const auto receipt=simulate_and_settle_domestic_cup_round(watched,base,stage,source,{observation},{3,6,false,true},watch_game,watch_random,hooks);
+        check(watched==state&&receipt.scores==result.scores&&receipt.end_minutes==result.end_minutes&&watch_game.seed()==game.seed()&&watch_random.seed()==random.seed()&&receipt.pools.size()==1&&receipt.pools[0].fixture==stage.rounds.back().fixtures[0],"Toto observation changed cup scoring, state or RNG");
+        if(receipt.end_minutes[0]>94)check(receipt.pools[0].outcome==0,"Toto used extra-time/shootout winner instead of the regulation draw");
         check(result.scores.size()==1&&result.end_minutes[0]>=90&&result.end_minutes[0]<=124&&result.game_draws&&result.watcom_draws,
               "cup did not run its actual scoring phases");
         check(state.cups==before.cups&&state.date==before.date&&state.league_rounds==before.league_rounds,

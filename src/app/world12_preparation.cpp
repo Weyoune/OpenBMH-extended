@@ -134,6 +134,7 @@ ui::PreparationState Session::preparation_view(const std::filesystem::path& data
     auto view=ui::world12_preparation(data,state_,resources_.reference,resources_.german,options_,owner_.revision);
     if(view.bank){view.bank->last_tip=bank_tip_;view.bank->property_notice=bank_property_notice_;view.bank->credit_notice=bank_credit_notice_;}
     if(preparation_menu_==22)view.stadium=stadium_view(data);
+    if(preparation_menu_==13)view.toto=toto_view(data);
     return view;
 }
 }

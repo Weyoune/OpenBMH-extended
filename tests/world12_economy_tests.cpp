@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "world12_fixture.hpp"
+#include "fixture_tables.hpp"
 #include "game/world12/economy.hpp"
 #include "game/world12/manager_tactics.hpp"
 #include "game/world12/codec.hpp"
+#include "game/world12/pools.hpp"
 #include "game/messages.hpp"
 #include "game/bank_robbery.hpp"
 #include "cli/json.hpp"
+#include "formats/textd.hpp"
 #include <iostream>
 #include <algorithm>
 namespace {
@@ -84,6 +87,33 @@ void advertising_groups(CareerSnapshot state,const GameState& rules) {
     install_career_economy(projection,state.world);capture_career_economy(state.world,projection);
     check(!state.world.economy->advertising_group,"ordinary projection initialized an unknown bundle counter");
 }
+void pools_settlement(CareerSnapshot state,const GameState& rules) {
+    set_fixture_tables(bmh::test::authored_fixture_tables());
+    state.world.economy->pools.emplace();auto& ledger=*state.world.economy->pools;ledger.previous_outcomes.fill(2);
+    PreparedEvent event;event.day=uint16_t(state.date);event.desk_phase=PreparedEvent::DeskPhase::complete;event.pools_matches.emplace();
+    auto fixtures=league_fixtures(state.world,{0},1);const auto extra=league_fixtures(state.world,{1},1);fixtures.insert(fixtures.end(),extra.begin(),extra.begin()+2);event.pools_matches=fixtures;
+    check(fixtures.size()==11,"synthetic settlement requires eleven real catalogue fixtures");
+    std::vector<PoolsMatchOutcome> receipts;for(const auto& f:fixtures)receipts.push_back({f,0});
+    TextDb texts;texts.strings.assign(TEXT_COUNT,"Synthetic pools notice");
+    for(int hits:{8,9,10,11}) {
+        auto before=state;auto& pools=*before.world.economy->pools;pools.appointment=std::make_pair(before.season,before.date);
+        pools.managers[1].stake=10000;pools.managers[1].winnings=1234;pools.managers[1].correct=5;
+        for(int n=0;n<11;++n)pools.managers[1].tips[size_t(n)]=uint8_t(n<hits?0:1);
+        pools.managers[3].stake=10000;pools.managers[3].winnings=4321;pools.managers[3].correct=4;
+        auto& german=before.world.managers[0];auto& english=before.world.managers[1];german.finance->balance=1000000;german.finance->credit=0;english.finance->balance=0;english.finance->credit=0;
+        const auto seed=before.watcom_seed;const auto game=before.game_seed;auto settled=before;settle_scheduled_pools(settled,event,receipts,rules,texts);
+        const auto winnings=hits<9?0u:hits==9?100000u:hits==10?200000u:500000u;
+        check(settled.world.managers[0].finance->balance==1000000-10000+int32_t(winnings)&&settled.world.economy->pools->managers[1].winnings==winnings&&settled.world.economy->pools->managers[1].correct==hits&&settled.world.economy->pools->managers[1].stake==0,"Toto quota/hits/account publication differs from Core");
+        check(settled.world.managers[1].finance->balance==0&&settled.world.economy->pools->managers[3].stake==0&&settled.world.economy->pools->managers[3].winnings==4321&&settled.world.economy->pools->managers[3].correct==4&&settled.world.economy->messages.size()==before.world.economy->messages.size()+1,"insufficient funds lost old result or failed to post one notice");
+        check(!settled.world.economy->pools->appointment&&settled.watcom_seed==seed&&settled.game_seed==game&&read_save(make_save(settled))==settled,"settlement lost owner/save or consumed RNG");
+        const auto accepted=settled;settle_scheduled_pools(settled,event,receipts,rules,texts);check(settled==accepted,"pools settled a cleared stake twice");
+        auto invalid=receipts;invalid[1]=invalid[0];rejects([&]{settle_scheduled_pools(settled,event,invalid,rules,texts);},"duplicate regulation receipt accepted");check(settled==accepted,"invalid receipt changed saved pools");
+    }
+    const auto raw=encode_world(state.world);auto old=cli::parse_json(std::string(raw.begin(),raw.end()));old.object()->at("version")=29;auto text=cli::dump_json(old);
+    rejects([&]{decode_world(Bytes(text.begin(),text.end()));},"schema29 discarded known coupons");old.object()->at("economy").object()->erase("pools");text=cli::dump_json(old);state.world=decode_world(Bytes(text.begin(),text.end()));
+    auto projection=AiMatchProjection::create_for_humans(state,{state.world.managers[0].club,state.world.managers[1].club},rules,{1,3,false,true});install_career_economy(projection,state.world);capture_career_economy(state.world,projection);
+    check(!state.world.economy->pools,"ordinary projection invented older coupons");
+}
 void depreciation(CareerSnapshot state,const GameState& rules) {
     state.world.economy->managers[1].depreciation=0x87654321u;
     state.world.economy->managers[3].depreciation=7654321;
@@ -116,6 +146,7 @@ int main()try {
     portfolios(state,rules);
     depreciation(state,rules);
     advertising_groups(state,rules);
+    pools_settlement(state,rules);
     auto& economy=*state.world.economy;auto& de=economy.managers[1];auto& en=economy.managers[3];
     de.deposit=2000000;de.interest_income=123;de.overdraft_interest=456;
     de.loans[4]={100,120,12,10,2,24};de.loans[3]={200,240,24,10,2,48};

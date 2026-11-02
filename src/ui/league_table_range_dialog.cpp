@@ -50,10 +50,14 @@ LeagueTableRangeDialog::LeagueTableRangeDialog(const std::filesystem::path& data
 LeagueTableRangeDialog::LeagueTableRangeDialog(const std::filesystem::path& data_directory,
                                                Image backdrop,
                                                TableRangeDialogProfile profile, bool toto)
+    : LeagueTableRangeDialog(data_directory,std::move(backdrop),profile,toto,load_le(asset_path(data_directory,"BMH.exe"))) {}
+LeagueTableRangeDialog::LeagueTableRangeDialog(const std::filesystem::path& data_directory,Image backdrop,TotoStakeDialogProfile profile,const LeImage& reference)
+    : LeagueTableRangeDialog(data_directory,std::move(backdrop),TableRangeDialogProfile{::bmh::layout::LeagueTableRangeDialog_Backdrop_ExecutableField,10000,400000,0,profile.text_mode,profile.x,profile.y},true,reference) {}
+LeagueTableRangeDialog::LeagueTableRangeDialog(const std::filesystem::path& data_directory,Image backdrop,TableRangeDialogProfile profile,bool toto,const LeImage& reference)
     : backdrop_(std::move(backdrop)),
       calculator_art_(load_vga(asset_path(data_directory / "KB", "6.VGA"))),
       body_(load_font(asset_path(data_directory / "F", "BMH3.FNT"))),
-      exe_(load_le(asset_path(data_directory, "BMH.exe"))),
+      exe_(reference),
       texts_(load_textd(asset_path(data_directory, "TEXTD.BLK"))),
       profile_(profile), x_(profile.x), y_(profile.y) {
     if ((!toto && profile_.title_textd_address != ::bmh::layout::CareerSession_CurrentLeagueTableDispatch_ExecutableField && profile_.title_textd_address != ::bmh::layout::CareerSession_CurrentLeagueTableDispatch_ExecutableField2) ||

@@ -190,7 +190,20 @@ struct ManagerEconomy {
     std::array<std::array<uint32_t,52>,4> financial_history{};
     bool operator==(const ManagerEconomy&)const=default;
 };
+struct PoolsCoupon {
+    uint32_t stake=0,winnings=0;
+    std::array<uint8_t,11> tips{};
+    uint8_t correct=0;bool voided=false;
+    bool operator==(const PoolsCoupon&)const=default;
+};
+struct CareerPools {
+    std::optional<std::pair<uint32_t,uint32_t>> appointment; // season, day owning pending stakes.
+    std::array<PoolsCoupon,4> managers{};
+    std::array<uint8_t,11> previous_outcomes{};
+    bool operator==(const CareerPools&)const=default;
+};
 struct CareerEconomy {
+    std::optional<CareerPools> pools; // Unknown in older development careers.
     std::optional<uint8_t> advertising_group; // Source bundle counter; unknown in older worlds.
     uint8_t week=0;
     std::array<ManagerEconomy,4> managers{};

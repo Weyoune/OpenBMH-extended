@@ -105,6 +105,13 @@ AiLeagueRoundOutcome run_ai_league_matches(World& world,const GameState& base,co
     bmh::MatchEngine engine(local,groups,staged_game,staged_random,conditions[0].referee_properties);
     engine.month=conditions[0].month;engine.buttons=conditions[0].presentation_buttons;engine.leave_screens=!human_mode||(hooks&&hooks->decline_unpresented_events);
     if(hooks&&hooks->live_event)engine.live_event=[&](const bmh::LiveMatchEvent& event){hooks->live_event(projection,engine,event);};
+    std::vector<size_t> pool_rows;for(size_t m=0;m<conditions.size();++m)if(conditions[m].pools_selected)pool_rows.push_back(m);
+    if(pool_rows.size()>11)throw FormatError("world12: pools receipt exceeds eleven fixtures");
+    if(!pool_rows.empty()) {
+        local.memory.add_block(layout::DeskActions_SubmitPoolsCoupon_RuntimeField,44);local.memory.add_block(layout::MatchdaySetup_EvaluatePoolsCoupon_RuntimeField,11);local.memory.add_block(layout::CareerSession_DispatchToto_RuntimeField,1);
+        for(size_t n=0;n<pool_rows.size();++n){const auto m=pool_rows[n];local.memory.set16(layout::DeskActions_SubmitPoolsCoupon_RuntimeField+uint32_t(n*4),uint16_t(m*2));local.memory.set16(layout::DeskActions_SubmitPoolsCoupon_RuntimeField+uint32_t(n*4+2),uint16_t(m*2+1));}
+        local.pools_open=true;
+    }
     bmh::MinuteReport report;
     bmh::play_matchday(engine,local,groups,conditions[0].presentation_buttons,staged_game,staged_random,report,
         hooks&&hooks->after_minute?std::function<void(int)>([&](int minute){hooks->after_minute(projection,engine,minute);}):std::function<void(int)>{});
@@ -119,6 +126,11 @@ AiLeagueRoundOutcome run_ai_league_matches(World& world,const GameState& base,co
     if(game.seed()!=initial_game_seed || game.calls()!=initial_game_calls || random.seed()!=initial_watcom_seed || random.calls()!=initial_watcom_calls)
         throw std::invalid_argument("world12: random stream ownership changed during the match");
     AiLeagueRoundOutcome outcome;outcome.game_draws=staged_game.calls()-initial_game_calls;outcome.watcom_draws=staged_random.calls()-initial_watcom_calls;
+    if(!pool_rows.empty()) {
+        if(local.pools_open||local.memory.u8(layout::CareerSession_DispatchToto_RuntimeField)!=pool_rows.size())throw FormatError("world12: Core did not evaluate the selected pools fixtures");
+        for(size_t n=0;n<pool_rows.size();++n){const auto value=local.memory.u8(layout::MatchdaySetup_EvaluatePoolsCoupon_RuntimeField+uint32_t(n));if(value>2)throw FormatError("world12: invalid Core pools outcome");outcome.pools.push_back({fixtures[pool_rows[n]],value});}
+    }
+    if(cup)cup_out->pools=outcome.pools;
     if(cup){cup_out->scores=finished.cup_results;cup_out->end_minutes=finished.end_minute;cup_out->game_draws=outcome.game_draws;cup_out->watcom_draws=outcome.watcom_draws;}
     else for(size_t m=0;m<fixtures.size();++m)outcome.matches.push_back({fixtures[m],{true,uint8_t(finished.results[m]>>4),uint8_t(finished.results[m]&15)},finished.end_minute[m],0,0,settle});
     projection.commit_match_state(world);game=staged_game;random=staged_random;return outcome;

@@ -1,7 +1,8 @@
 # Economic state, daily interest and weekly settlement
 
 World schema **16** added an optional career economy. The current writer uses
-schema29, including [stadium curve preferences](STADIUM.md) and the earlier
+schema30, including [Toto coupons and settlement](TOTO.md),
+[stadium curve preferences](STADIUM.md) and the earlier
 [advertising bundle counter](ADVERTISING.md). Schema17
 added planned stand targets/flags and the submitted plan; schema1–16 source packs and
 older development snapshots remain readable; no missing account fields are

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "app/world12_session.hpp"
+#include <algorithm>
+#include "game/world12/pools.hpp"
 #include "app/world12_desktop.hpp"
 #include "ui/desktop.hpp"
 #include "app/world12_pending.hpp"
@@ -19,7 +21,7 @@
 namespace bmh::app::world12 {
 using namespace bmh::world12;
 RuntimeResources load_runtime_resources(const std::filesystem::path& data) {
-    RuntimeResources r;r.master=decode_world(read_file(ui::asset_path(data,"WORLD12.JSON")));
+    RuntimeResources r;r.texts=std::make_shared<TextDb>(load_textd(ui::asset_path(data,"TEXTD.BLK")));r.master=decode_world(read_file(ui::asset_path(data,"WORLD12.JSON")));
     r.german=load_reference_le(ui::asset_path(data,"BMH.exe"),DataProfile{});
     r.english=load_reference_le(ui::asset_path(data,"RULES-EN.DAT"),DataProfile{});
     if(!r.english.u8(layout::LeagueStrengthRanges+1))throw FormatError("world12: English strength rules are incomplete; re-export RULES-EN.DAT");
@@ -32,6 +34,7 @@ RuntimeResources load_runtime_resources(const std::filesystem::path& data) {
         throw FormatError("world12: REFEREES.JSON missing; rebuild the standalone data package with current tools");
     const auto referees=decode_referee_catalogue(read_file(ui::asset_path(data,"REFEREES.JSON")));
     r.referee_properties=referees.properties;r.referee_names=referees.names;
+    r.reference.texts=r.texts.get();
     install_bank_credit_rules(r.reference,r.german);
     install_environment_rules(r.german);
     std::vector<uint16_t> de(366),en(366);for(uint32_t day=0;day<366;++day){de[day]=r.german.u16(layout::CompetitionCalendar+day*2);en[day]=r.english.u16(layout::CompetitionCalendar+day*2);}
@@ -166,6 +169,7 @@ void Session::play_prepared_matches(uint64_t revision,const HumanRoundHooks& hoo
             c.temperature=match.temperature;c.rain=match.rain;c.referee=match.referee;c.spectators=*match.spectators;
             c.referee_properties.assign(event.referee_properties.begin(),event.referee_properties.end());
             c.teams_prepared=true;
+            c.pools_selected=candidate.world.economy&&candidate.world.economy->pools&&event.pools_matches&&std::find(event.pools_matches->begin(),event.pools_matches->end(),match.fixture)!=event.pools_matches->end();
             c.presentation_buttons.assign(0xb4,1);conditions.push_back(std::move(c));}
         if(group.league)leagues.push_back({{event.day,*group.league,group.round},std::move(conditions)});
         else cups.push_back({*group.cup,group.source_entry,group.revision,std::move(conditions)});
@@ -174,10 +178,12 @@ void Session::play_prepared_matches(uint64_t revision,const HumanRoundHooks& hoo
     candidate.prepared_event.reset();
     const HumanProjectionPolicy policy{settings.mode,settings.difficulty,settings.foreign_rule,true};
     auto staged_owner=owner_;
-    if(!cups.empty())play_domestic_cup_day(candidate,staged_owner,{owner_.scope,revision},ticket,resources_.reference,
-        {resources_.german,resources_.english},cups,policy,hooks);
-    else {AiDayOwner league_owner{owner_.scope,revision};play_league_day(candidate,league_owner,{owner_.scope,revision},ticket,
-        resources_.reference,leagues,policy,hooks);staged_owner.revision=league_owner.revision;}
+    std::vector<PoolsMatchOutcome> receipts;
+    if(!cups.empty()) {const auto result=play_domestic_cup_day(candidate,staged_owner,{owner_.scope,revision},ticket,resources_.reference,
+        {resources_.german,resources_.english},cups,policy,hooks);for(const auto& round:result.cups)receipts.insert(receipts.end(),round.pools.begin(),round.pools.end());}
+    else {AiDayOwner league_owner{owner_.scope,revision};const auto result=play_league_day(candidate,league_owner,{owner_.scope,revision},ticket,
+        resources_.reference,leagues,policy,hooks);staged_owner.revision=league_owner.revision;for(const auto& round:result.leagues)receipts.insert(receipts.end(),round.pools.begin(),round.pools.end());}
+    if(candidate.world.economy&&candidate.world.economy->pools){if(!resources_.texts)throw FormatError("world12: Toto settlement needs owned Source texts");settle_scheduled_pools(candidate,event,receipts,resources_.reference,*resources_.texts);}
     if(state_!=before||owner_.revision!=revision)throw FormatError("world12: prepared match owner changed during calculation");
     state_=std::move(candidate);owner_=staged_owner;
 }

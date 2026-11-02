@@ -77,10 +77,19 @@ void capture_mailbox(CareerEconomy& e,const GameState& g,const std::array<uint8_
     e.recipient_mask=global_mask(g.memory.u32(layout::MailboxRecipientMask));
 }
 }
+namespace {
+PoolsCoupon read_coupon(const GameState& g,size_t local) {
+    const auto at=layout::Coupon+uint32_t(local*20);PoolsCoupon c;const auto raw=g.memory.u32(at);c.stake=raw&0x7fffffffu;c.voided=(raw&0x80000000u)!=0;c.winnings=g.memory.u32(at+4);c.correct=g.memory.u8(at+19);for(uint32_t n=0;n<11;++n)c.tips[n]=g.memory.u8(at+8+n);return c;
+}
+void write_coupon(GameState& g,size_t local,const PoolsCoupon& c) {
+    const auto at=layout::Coupon+uint32_t(local*20);g.memory.set32(at,c.stake|(c.voided?0x80000000u:0));g.memory.set32(at+4,c.winnings);g.memory.set8(at+19,c.correct);for(uint32_t n=0;n<11;++n)g.memory.set8(at+8+n,c.tips[n]);
+}
+}
 void initialize_career_economy(CareerSnapshot& state,const GameState& reference){
     state.validate();if(state.world.economy||!state.world.settings||state.date||state.season||state.world.managers.size()!=state.world.settings->planned_managers||state.desktop)throw std::invalid_argument("world12: economy requires fresh pre-desktop initialization");
     CareerEconomy e;e.week=reference.memory.u8(layout::Savestate_Layout_ExecutableField);
     if(reference.memory.has(layout::AdGroupId))e.advertising_group=reference.memory.u8(layout::AdGroupId);
+    if(reference.memory.has(layout::Coupon)&&reference.memory.has(layout::Coupon+99)) {e.pools.emplace();for(size_t n=0;n<4;++n)e.pools->managers[n]=read_coupon(reference,n);for(uint32_t n=0;n<11;++n)e.pools->previous_outcomes[n]=reference.memory.u8(layout::MatchdaySetup_EvaluatePoolsCoupon_RuntimeField+n);}
     const std::array<uint8_t,4> identity{0,1,2,3};for(size_t n=0;n<4;++n)e.managers[n]=read_manager(reference,n,identity);
     // Initial reference mail must be empty: do not import an unrelated career.
     if(reference.mailbox.size()!=kMailboxEntries*kMailboxEntry||std::any_of(reference.mailbox.begin(),reference.mailbox.end(),[](auto b){return b!=0;}))throw std::invalid_argument("world12: initial economy reference contains mailbox state");
@@ -89,6 +98,7 @@ void initialize_career_economy(CareerSnapshot& state,const GameState& reference)
 void install_career_economy(AiMatchProjection& projection,const World& world){
     if(!world.economy||!world.markets)throw std::invalid_argument("world12: career economy/market is missing");
     const auto map=seats(projection);auto& g=projection.state;const auto& e=*world.economy;
+    if(e.pools){g.memory.add_block(layout::Coupon,100);for(size_t n=0;n<4;++n)write_coupon(g,n,e.pools->managers[map[n]]);for(uint32_t n=0;n<11;++n)g.memory.set8(layout::MatchdaySetup_EvaluatePoolsCoupon_RuntimeField+n,e.pools->previous_outcomes[n]);}
     if(e.advertising_group){g.memory.add_block(layout::AdGroupId,1);g.memory.set8(layout::AdGroupId,*e.advertising_group);}
     g.memory.add_block(layout::Savestate_Layout_ExecutableField,1);g.memory.set8(layout::Savestate_Layout_ExecutableField,e.week);
     g.stocks.assign(world.markets->stocks.begin(),world.markets->stocks.end());g.memory.add_block(layout::FundBlock,world.markets->funds.size());
@@ -107,6 +117,7 @@ void install_career_economy(AiMatchProjection& projection,const World& world){
 void capture_career_economy(World& world,const AiMatchProjection& projection){
     if(!world.economy||!world.markets)throw std::invalid_argument("world12: career economy/market is missing");
     const auto map=seats(projection);const auto& g=projection.state;auto& e=*world.economy;
+    if(e.pools){for(size_t n=0;n<projection.human_managers();++n)e.pools->managers[map[n]]=read_coupon(g,n);for(uint32_t n=0;n<11;++n)e.pools->previous_outcomes[n]=g.memory.u8(layout::MatchdaySetup_EvaluatePoolsCoupon_RuntimeField+n);}
     e.week=g.memory.u8(layout::Savestate_Layout_ExecutableField);
     if(e.advertising_group)e.advertising_group=g.memory.u8(layout::AdGroupId);
     for(uint8_t n=0;n<projection.human_managers();++n){const auto had_monthly=e.managers[map[n]].monthly.has_value();const auto had_depreciation=e.managers[map[n]].depreciation.has_value();e.managers[map[n]]=read_manager(g,n,map);if(!had_monthly)e.managers[map[n]].monthly.reset();if(!had_depreciation)e.managers[map[n]].depreciation.reset();}

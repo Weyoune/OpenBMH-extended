@@ -14,6 +14,7 @@ struct AiLeagueConditions {
     // The event owner has already switched competition cards and squad status.
     // Repeating prepare_team after a manager edited the lineup loses that state.
     bool teams_prepared=false;
+    bool pools_selected=false;
 };
 struct AiLeagueOutcome {
     Fixture fixture;
@@ -22,9 +23,14 @@ struct AiLeagueOutcome {
     uint64_t game_draws=0,watcom_draws=0;
     bool settled=false;
 };
+struct PoolsMatchOutcome {
+    Fixture fixture;uint8_t outcome=0;
+    bool operator==(const PoolsMatchOutcome&)const=default;
+};
 struct AiLeagueRoundOutcome {
     std::vector<AiLeagueOutcome> matches;
     uint64_t game_draws=0,watcom_draws=0;
+    std::vector<PoolsMatchOutcome> pools;
 };
 struct HumanRoundHooks {
     // Trusted synchronous presenters; group storage must stay stable while

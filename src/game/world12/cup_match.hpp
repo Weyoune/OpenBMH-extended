@@ -7,6 +7,7 @@ struct CupRoundOutcome {
     std::vector<uint16_t> scores;
     std::vector<uint8_t> end_minutes;
     uint64_t game_draws=0,watcom_draws=0;
+    std::vector<PoolsMatchOutcome> pools;
     bool operator==(const CupRoundOutcome&)const=default;
 };
 // Actual shared Core phases, including extra time/shootouts, player development,

@@ -28,6 +28,7 @@ struct TotoMatchState {
 struct TotoState {
     int manager_slot = -1, runtime_club = -1;
     uint64_t revision = 0;
+    uint64_t request_id_base=0;
     std::string source, manager_name, club_name;
     int32_t balance = 0;
     uint32_t stake = 0;
@@ -48,6 +49,8 @@ struct TotoRequest {
     uint64_t revision = 0;
     uint32_t stake = 0;
     std::array<uint8_t, 11> tips{};
+    uint64_t request_id=0;
+    bool operator==(const TotoRequest&)const=default;
 };
 
 TotoState toto_from_game(const GameState&, uint64_t revision);
@@ -57,6 +60,7 @@ std::string toto_request_json(const TotoRequest&);
 class TotoScreen {
 public:
     TotoScreen(const std::filesystem::path&, TotoState);
+    TotoScreen(const std::filesystem::path&,TotoState,const LeImage& reference);
     Image render() const;
     TotoRequest click(int x, int y, bool right = false);
     TotoRequest key(std::string_view);
@@ -85,6 +89,7 @@ private:
     SpriteFont sprite_font_;
     std::array<uint8_t, 11> tips_{};
     uint32_t stake_ = 0;
+    uint64_t next_request_id_=0;
     std::string feedback_;
     std::optional<TotoRequest> pending_;
     std::optional<LeagueTableRangeDialog> calculator_;

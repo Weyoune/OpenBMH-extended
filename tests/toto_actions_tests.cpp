@@ -5,6 +5,7 @@
 #include <cstdlib>
 
 #include "game/desk_actions.hpp"
+#include "app/toto_request_source.hpp"
 
 using namespace bmh;
 
@@ -49,6 +50,11 @@ int main() {
     g.memory.set8(::bmh::layout::CareerSession_DispatchToto_RuntimeField, 10);
     check(!submit_pools_coupon(g, 0, 50000, tips), "coupon requires all eleven matches");
     check(g.memory.u32(::bmh::layout::Coupon) == stake_before, "unavailable coupon preserves stake");
+    g.memory.add_block(layout::ActiveManager,1);g.memory.set8(layout::CareerSession_DispatchToto_RuntimeField,11);
+    ui::TotoRequest request;request.kind=ui::TotoRequestKind::submit;request.manager_slot=0;request.runtime_club=12;request.revision=7;request.stake=10000;request.tips=tips;
+    uint64_t revision=7;std::string error;const auto records=g.manager_records;
+    check(app::apply_toto_request_source(g,request,revision,error)&&revision==8&&g.memory.u32(layout::Coupon)==10000&&g.manager_records==records,"shared Toto submission stores a quote without charging money");
+    check(!app::apply_toto_request_source(g,request,revision,error)&&revision==8&&g.memory.u32(layout::Coupon)==10000,"shared Toto stale revision rejected");
     std::puts("toto actions: stake, eleven 1/X/2 picks, original boundaries and atomic rejection OK");
     return 0;
 }

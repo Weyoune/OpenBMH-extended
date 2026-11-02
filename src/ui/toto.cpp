@@ -109,7 +109,7 @@ std::string toto_state_json(const TotoState& s) {
 
 std::string toto_request_json(const TotoRequest& r) {
     std::ostringstream out;
-    out << "{\"kind\":" << json_quote(r.kind == TotoRequestKind::submit ? "submit" : "none")
+    out << "{\"request_id\":" << r.request_id << ",\"kind\":" << json_quote(r.kind == TotoRequestKind::submit ? "submit" : "none")
         << ",\"manager_slot\":" << r.manager_slot << ",\"runtime_club\":" << r.runtime_club
         << ",\"revision\":" << r.revision << ",\"stake\":" << r.stake << ",\"tips\":[";
     for (size_t i = 0; i < r.tips.size(); ++i) { if (i) out << ','; out << int(r.tips[i]); }
@@ -118,11 +118,13 @@ std::string toto_request_json(const TotoRequest& r) {
 }
 
 TotoScreen::TotoScreen(const std::filesystem::path& data, TotoState state)
+    : TotoScreen(data,std::move(state),load_le(asset_path(data,"BMH.exe"))) {}
+TotoScreen::TotoScreen(const std::filesystem::path& data,TotoState state,const LeImage& reference)
     : state_(std::move(state)), data_(data),
       background_(load_vga(asset_path(data / "KB", "49.VGA"))),
       widgets_(load_vga(asset_path(data / "KB", "0.VGA"))),
-      exe_(load_le(asset_path(data, "BMH.exe"))), texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
-      font_(load_font(asset_path(data / "F", "BMH3.FNT"))), sprite_font_(data), stake_(state_.stake) {
+      exe_(reference), texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
+      font_(load_font(asset_path(data / "F", "BMH3.FNT"))), sprite_font_(data,reference), stake_(state_.stake),next_request_id_(state_.request_id_base) {
     for (size_t i = 0; i < state_.matches.size() && i < tips_.size(); ++i) tips_[i] = state_.matches[i].pick;
     if (background_.width != 320 || background_.height != 240 || state_.manager_slot < 0 ||
         (state_.available && state_.matches.size() != 11))
@@ -207,13 +209,14 @@ Image TotoScreen::render() const {
 void TotoScreen::open_calculator() {
     calculator_.emplace(data_, render(), TotoStakeDialogProfile{
         state_.gradient ? TableRangeTextMode::source_gradient : TableRangeTextMode::flat,
-        calculator_x_, calculator_y_});
+        calculator_x_, calculator_y_},exe_);
     calculator_clock_valid_ = false; calculator_clock_reset_ = true;
 }
 TotoRequest TotoScreen::submit() {
     if (pending_ || !state_.available) return {};
     TotoRequest r{TotoRequestKind::submit, state_.manager_slot, state_.runtime_club, state_.revision, stake_, tips_};
-    pending_ = r; feedback_.clear(); return r;
+    if(next_request_id_==UINT64_MAX)throw FormatError("toto: request identifier exhausted");
+    r.request_id=next_request_id_++;pending_ = r; feedback_.clear(); return r;
 }
 TotoRequest TotoScreen::click(int x, int y, bool right) {
     if (pending_) return {};

@@ -849,6 +849,45 @@ void actual_mailbox(const std::filesystem::path& data,const CareerSnapshot& base
     if(!output.empty())std::filesystem::copy_file(file,output/"after.FBM",std::filesystem::copy_options::overwrite_existing);
     std::cout<<"Actual Original mailbox shortcut, shared/private recipients, keep/refusal/delete, physical holes, actor-only close, RNG-neutral snapshots and stale rollback passed\n";
 }
+void actual_toto_fixture(const std::filesystem::path& data,const CareerSnapshot& fixture,const std::filesystem::path& output) {
+    const auto directory=std::filesystem::temp_directory_path()/("openbmh-toto-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);
+    struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code ignored;std::filesystem::remove_all(path,ignored);}} cleanup{directory};
+    write_savegame(directory/"Toto.FBM",make_save(fixture));ui::StartupFlow flow(data,directory,ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> session;
+    const auto send=[&](const ui::FlowResult& action){const auto result=session_app::serve_startup(flow,action,session,data,91,96);if(!result.error.empty())throw std::runtime_error("Toto GUI: "+result.error);};
+    flow.click(60,215);send(flow.click(240,215));send(flow.send_key("ENTER"));
+    const auto capture=[&](const char* name){if(output.empty())return;std::filesystem::create_directories(output);const auto frame=flow.render();const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));std::ofstream image(output/(std::string(name)+".ppm"),std::ios::binary);image<<"P6\n320 240\n255\n";for(auto pixel:frame.pixels){const auto color=palette.argb[pixel];image.put(char(color>>16));image.put(char(color>>8));image.put(char(color));}write_savegame(output/(std::string(name)+".FBM"),make_save(session->snapshot()));};
+    const auto open=[&]{const auto& items=flow.desktop()->state().items;const auto icon=std::find_if(items.begin(),items.end(),[](const auto& i){return i.kind==13;});check(icon!=items.end(),"Toto icon missing");send(flow.click(icon->x+icon->width/2,icon->y+icon->height/2));};
+    const auto initial=session->snapshot();open();check(flow.toto()&&session->snapshot()==initial,"Toto opening changed gameplay");capture("toto-before");
+    if(!flow.toto()->state().available){check(flow.toto()->state().matches.size()<11,"unavailable Toto had a full coupon");send(flow.send_key("ESC"));check(flow.screen_name()=="desktop"&&!session->preparation_open(),"unavailable Toto did not close");return;}
+    const auto actor=*session->snapshot().desktop->active_seat;
+    for(int n=0;n<11;++n)send(flow.click(265,24+n*15));
+    send(flow.send_key("E"));check(flow.in_toto_calculator(),"Toto stake calculator did not open");uint64_t units=100;
+    const auto present=[&]{(void)flow.render();send(flow.after_toto_present(units));};present();
+    for(char digit:std::string("10000")){send(flow.send_key(std::string(1,digit)));present();units+=4;send(flow.tick_toto_source_units(units));present();present();}
+    send(flow.send_key("ENTER"));present();units+=4;send(flow.tick_toto_source_units(units));present();present();check(!flow.in_toto_calculator(),"Toto stake calculator did not finish its Source Present phases");capture("toto-draft");
+    const auto before=session->snapshot();const auto action=flow.send_key("ENTER");check(action.request==ui::FlowRequest::submenu_action&&std::holds_alternative<ui::TotoRequest>(action.submenu_action),"Toto did not submit the confirmed coupon");
+    const auto request=std::get<ui::TotoRequest>(action.submenu_action);check(request.stake==10000&&std::all_of(request.tips.begin(),request.tips.end(),[](auto pick){return pick==1;}),"Toto did not submit home tips and 10k stake");send(action);
+    const auto booked=session->snapshot();const auto& coupon=booked.world.economy->pools->managers[actor];
+    check(coupon.stake==10000&&coupon.tips==request.tips&&booked.world.managers==before.world.managers&&booked.watcom_seed==before.watcom_seed&&booked.game_seed==before.game_seed&&booked.date==before.date&&read_save(make_save(booked))==booked,"Toto submission charged money, drew RNG or lost saved tips");capture("toto-submitted");
+    const auto revision=session->revision();rejects([&]{session->apply_toto(request);},"Toto request replay accepted");check(session->snapshot()==booked&&session->revision()==revision,"replayed Toto changed gameplay");send(flow.send_key("ESC"));
+    open();check(flow.toto()->state().stake==10000,"reopened Toto lost stake");auto retired=request;retired.revision=session->revision();rejects([&]{session->apply_toto(retired);},"retired Toto window request accepted");send(flow.send_key("ESC"));
+    auto paid=*session;auto no_bet_state=paid.snapshot();no_bet_state.world.economy->pools->managers[actor].stake=0;no_bet_state.world.economy->pools->appointment.reset();
+    const auto resources=session_app::load_runtime_resources(data);auto no_bet=session_app::Session::resume(resources,no_bet_state,97,paid.revision());
+    const auto play=[&](session_app::Session& owner){
+        for(;;){const auto desk=ui::world12_initial_desktop(data,owner.snapshot(),owner.reference(),owner.rules(),owner.options(),owner.revision());ui::DeskRequest next;next.kind=ui::DeskRequestKind::advance_turn;next.manager_slot=desk.manager_slot;next.revision=owner.revision();
+            if(owner.snapshot().desktop->initial_event->offer){PendingOfferHooks decline;decline.answer=[](const GameState&,const PendingOfferQuestion&){return PendingOfferAnswer::yes;};decline.select_transfer=[](const GameState&,const TransferOfferListView&){return PendingOfferTransferChoice{PendingOfferTransferChoiceKind::decline,-1};};decline.notice=[](const GameState&,const PendingOfferNotice&){};owner.resolve_pending(data,next,decline);next.revision=owner.revision();}
+            const auto& event=*owner.snapshot().desktop->initial_event;if(size_t(event.manager_position)+1<event.manager_order.size())owner.advance_manager(next);else {owner.finish_scheduled_desks(next);break;}}
+        owner.book_scheduled_attendance(owner.revision(),data);HumanRoundHooks hooks;hooks.decline_unpresented_events=true;owner.play_prepared_matches(owner.revision(),hooks);
+    };
+    play(paid);play(no_bet);
+    const auto& after=paid.snapshot();const auto& control=no_bet.snapshot();const auto& result=after.world.economy->pools->managers[actor];
+    int hits=0;for(size_t n=0;n<11;++n)hits+=request.tips[n]==after.world.economy->pools->previous_outcomes[n];
+    const auto win=hits<9?0u:request.stake*(hits==9?10u:hits==10?20u:50u);
+    const auto person=[&](const CareerSnapshot& value)->const Manager&{return *std::find_if(value.world.managers.begin(),value.world.managers.end(),[&](const auto& m){return m.seat==actor;});};
+    check(after.results==control.results&&after.cups==control.cups&&after.game_seed==control.game_seed&&after.watcom_seed==control.watcom_seed&&after.date==control.date&&result.stake==0&&result.correct==hits&&result.winnings==win&&person(after).finance->balance==person(control).finance->balance-int32_t(request.stake)+int32_t(win),"real match/Toto settlement differs from same-seed control or charged wrong quota");
+    check(read_save(make_save(after))==after,"paid Toto failed save roundtrip");if(!output.empty())write_savegame(output/"toto-paid.FBM",make_save(after));
+    std::cout<<"Actual Toto GUI: home tips, Source stake calculator, save/reopen/stale tokens, real same-seed league scoring and exactly-once quota settlement passed\n";
+}
 void actual_scheduled_desks(session_app::Session& session,const session_app::RuntimeResources& resources,
     const std::filesystem::path& data,const std::filesystem::path& output,const std::string& label,
     const PendingOfferHooks* offers=nullptr) {
@@ -1246,6 +1285,9 @@ void actual_pending_multiplayer(const std::filesystem::path& data,const std::fil
     check(session->snapshot().date==date+1&&read_save(make_save(session->snapshot()))==session->snapshot(),
           "mode-III forced-offer sequence failed saved real-match continuation");
     if(!output.empty())write_savegame(output/"mode3-forced-finals-computed.FBM",make_save(session->snapshot()));
+    session->seek_saved_event(session->revision(),data,clock);session->prepare_scheduled_weather(session->revision());session->begin_scheduled_desks(session->revision());
+    check(session->snapshot().prepared_event->pools_matches&&session->snapshot().prepared_event->pools_matches->size()==11,"mode-III next league event lacks a full Toto selection");
+    actual_toto_fixture(data,session->snapshot(),output.empty()?output:output/"toto-live");
     std::cout<<"Actual mode-III later event: forced Source offer chance per manager, existing loan excluded/retained, explicit decline decisions, stored coupon and real final scoring passed\n";
 }
 void actual(const std::filesystem::path& data,const std::filesystem::path& output) {
@@ -1281,6 +1323,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     actual_advertising_renewals(data,session->snapshot(),output.empty()?output:output/"advertising-renewals");
     actual_stadium(flow,session,data,output.empty()?output:output/"stadium-single");
     actual_stadium_financial_notices(data,session->snapshot(),output.empty()?output:output/"stadium-notices");
+    actual_toto_fixture(data,session->snapshot(),output.empty()?output:output/"toto-empty");
     actual_save_load(flow,session,data,output);
     ui::StartupFlow mixed(data,{},ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> multi;
     mixed.click(resources.german.u16(layout::Setup_FormatError_RuntimeField3+6*2)+10,resources.german.u8(layout::Setup_FormatError_RuntimeField4+6)+10);

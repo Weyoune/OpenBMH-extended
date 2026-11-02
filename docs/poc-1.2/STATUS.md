@@ -594,3 +594,12 @@ and both random streams before GUI acknowledgement. Schema29 retains curve
 preferences; the existing global random checkpoint feeds the Source workspace.
 See [stadium ownership and validation](STADIUM.md). General live/calendar,
 remaining management views and annual release gates are still open.
+
+## Toto
+
+The Original coupon, stake calculator and submitted bets now have typed desktop
+ownership. Schema30 retains per-seat stakes/tips/results and their season/day.
+Actual Core regulation receipts from supported league/cup programmes feed the
+Original end-of-event charge and quota settlement. GUI/save, replay protection,
+same-seed real scoring and financial checks accompany the implementation. See
+[Toto ownership](TOTO.md). The general visible turn and release gates remain open.

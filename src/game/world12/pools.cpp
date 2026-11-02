@@ -2,6 +2,8 @@
 #include "game/world12/pools.hpp"
 #include "game/world12/match_projection.hpp"
 #include "game/matchday_setup.hpp"
+#include "game/world12/economy.hpp"
+#include <set>
 #include <algorithm>
 namespace bmh::world12 {
 void prepare_scheduled_pools(CareerSnapshot& state,const GameState& reference,WatcomRandom& random) {
@@ -38,4 +40,22 @@ void prepare_scheduled_pools(CareerSnapshot& state,const GameState& reference,Wa
     if(state!=before||random.seed()!=seed||random.calls()!=calls)throw FormatError("world12: pools preparation changed its source owner");
     state=std::move(candidate);random=staged;
 }
+void settle_scheduled_pools(CareerSnapshot& state,const PreparedEvent& event,const std::vector<PoolsMatchOutcome>& receipts,const GameState& reference,const TextDb& texts) {
+    state.validate();if(!state.world.economy||!state.world.economy->pools)throw FormatError("world12: pools settlement has no saved coupon owner");
+    if(!event.pools_matches||event.desk_phase!=PreparedEvent::DeskPhase::complete||state.prepared_event||!state.world.settings)throw FormatError("world12: pools settlement has no completed appointment");
+    const auto& ledger=*state.world.economy->pools;
+    if(ledger.appointment&&*ledger.appointment!=std::make_pair(state.season,uint32_t(event.day)))throw FormatError("world12: pools stakes belong to another appointment");
+    const auto& matches=*event.pools_matches;if(ledger.appointment&&matches.size()!=11)throw FormatError("world12: pending Toto stake has no full coupon");if(receipts.size()!=matches.size())throw FormatError("world12: incomplete pools regulation receipts");
+    const auto before=state;auto candidate=state;std::vector<ClubId> clubs;for(const auto& m:candidate.world.managers)clubs.push_back(m.club);
+    for(const auto& f:matches)for(auto id:{f.home,f.away})if(std::find(clubs.begin(),clubs.end(),id)==clubs.end())clubs.push_back(id);
+    const auto& settings=*candidate.world.settings;auto p=AiMatchProjection::create_for_humans(candidate,clubs,reference,{settings.mode,settings.difficulty,settings.foreign_rule,true});install_career_economy(p,candidate.world);auto& g=p.state;g.texts=&texts;g.date=event.day;
+    g.memory.add_block(layout::DeskActions_SubmitPoolsCoupon_RuntimeField,44);g.memory.add_block(layout::CareerSession_DispatchToto_RuntimeField,1);g.memory.set8(layout::CareerSession_DispatchToto_RuntimeField,uint8_t(matches.size()));
+    MatchGroup group;group.desc.assign(0xd0,0);group.desc[0]=1;group.desc[2]=uint8_t(matches.size());
+    for(size_t n=0;n<matches.size();++n){const auto& f=matches[n];const auto found=std::find_if(receipts.begin(),receipts.end(),[&](const auto& row){return row.fixture==f;});
+        if(found==receipts.end()||found->outcome>2||std::count_if(receipts.begin(),receipts.end(),[&](const auto& row){return row.fixture==f;})!=1)throw FormatError("world12: invalid or duplicate pools receipt");
+        const auto home=p.local_club(f.home),away=p.local_club(f.away);g.memory.set16(layout::DeskActions_SubmitPoolsCoupon_RuntimeField+uint32_t(n*4),uint16_t(home));g.memory.set16(layout::DeskActions_SubmitPoolsCoupon_RuntimeField+uint32_t(n*4+2),uint16_t(away));g.memory.set8(layout::MatchdaySetup_EvaluatePoolsCoupon_RuntimeField+uint32_t(n),found->outcome);group.fixtures.push_back(int(home));group.fixtures.push_back(int(away));}
+    settle_pools_coupon(g,{group});p.commit_match_state(candidate.world);capture_career_economy(candidate.world,p);candidate.world.economy->pools->appointment.reset();candidate.validate();
+    if(state!=before)throw FormatError("world12: pools settlement changed its source owner");state=std::move(candidate);
+}
+
 }

@@ -1731,6 +1731,7 @@ bool StartupFlow::matches_pending_preparation(const PreparationRequest& request)
     if(const auto* r=std::get_if<BankRequest>(&request))return bank_&&bank_->pending()&&*bank_->pending()==*r;
     if(const auto* r=std::get_if<TrainingCampRequest>(&request))return training_camp_&&training_camp_->pending()&&training_camp_request_json(*training_camp_->pending())==training_camp_request_json(*r);
     if(const auto* r=std::get_if<StadiumRequest>(&request))return matches_pending_stadium(*r);
+    if(const auto* r=std::get_if<TotoRequest>(&request))return toto_&&toto_->pending()&&*toto_->pending()==*r;
     return false;
 }
 

@@ -11,6 +11,7 @@
 #include "app/contract_request_source.hpp"
 #include "app/advertising_request_source.hpp"
 #include "app/stadium_request_source.hpp"
+#include "app/toto_request_source.hpp"
 #include "app/stadium_projection_source.hpp"
 
 #include <stdexcept>
@@ -7269,18 +7270,7 @@ bool CareerSession::dispatch_stadium(const ui::StadiumRequest& request,uint64_t&
 bool CareerSession::dispatch_toto(const ui::TotoRequest& request, uint64_t& revision, std::string& error) {
     if (balance_draft_ || balance_dispatch_active_ || strengths_owner_ || strengths_dispatch_active_ ||
         top_scorers_owner_ || top_scorers_dispatch_active_ || stadium_.block_expansion || other_games_owner_ || other_games_dispatch_active_) { error = "strengths_active"; return false; }
-    const int active = int(g_.memory.u8(::bmh::layout::ActiveManager));
-    if (request.kind != ui::TotoRequestKind::submit || request.manager_slot != active || request.manager_slot < 0 ||
-        size_t(request.manager_slot) >= g_.manager_teams.size() ||
-        request.runtime_club != g_.manager_teams[size_t(request.manager_slot)] || request.revision != revision) {
-        error = "stale_manager_or_revision"; return false;
-    }
-    if (g_.memory.u8(::bmh::layout::CareerSession_DispatchToto_RuntimeField) != 11) { error = "toto_coupon_requires_eleven_matches"; return false; }
-    if (!submit_pools_coupon(g_, request.manager_slot, request.stake, request.tips)) {
-        error = "invalid_toto_coupon"; return false;
-    }
-    ++revision;
-    return true;
+    return apply_toto_request_source(g_,request,revision,error);
 }
 
 }  // namespace bmh::app

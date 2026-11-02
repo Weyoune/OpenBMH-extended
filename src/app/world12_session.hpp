@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
+#include <memory>
+#include "formats/textd.hpp"
 #include "app/world12_initial_season.hpp"
 #include "app/world12_first_event.hpp"
 #include "app/world12_clock.hpp"
@@ -11,6 +13,7 @@
 #include "app/contract_source_types.hpp"
 #include "app/stadium_source_types.hpp"
 #include "ui/stadium.hpp"
+#include "ui/toto.hpp"
 #include "app/world12_advertising.hpp"
 #include "ui/advertising.hpp"
 #include "formats/le.hpp"
@@ -29,6 +32,7 @@ struct RuntimeResources {
     std::vector<uint8_t> referee_properties;
     std::vector<std::string> referee_names;
     bmh::world12::SeasonCalendar calendar;
+    std::shared_ptr<const TextDb> texts;
 };
 // Explicit reference layout is a Core workspace, never legacy admission of the
 // dual-world package. Actual club/player data comes exclusively from WORLD12.
@@ -77,6 +81,9 @@ public:
     ui::ContractsState contracts_view(const std::filesystem::path& data)const;
     ui::ContractActionResult apply_contract(const std::filesystem::path& data,const ui::ContractRequest&);
     void close_contracts();
+    void open_toto(const ui::DeskRequest&,const std::filesystem::path& data);
+    ui::TotoState toto_view(const std::filesystem::path& data)const;
+    void apply_toto(const ui::TotoRequest&);
     void open_stadium(const ui::DeskRequest&,const std::filesystem::path& data);
     ui::StadiumState stadium_view(const std::filesystem::path& data)const;
     void apply_stadium(const std::filesystem::path& data,const ui::StadiumRequest&,const ConstructionNoticeHook& notice={},const SeasonTicketCompensationNoticeHook& compensation={});
@@ -117,5 +124,6 @@ private:
     uint64_t advertising_generation_=0,advertising_request_=0;
     StadiumSourceRuntime stadium_;
     uint64_t next_stadium_scope_=1;
+    uint64_t toto_generation_=0,toto_request_=0;
 };
 }
