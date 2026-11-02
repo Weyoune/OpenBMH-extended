@@ -21,12 +21,14 @@ int main()try {
     auto custom=bytes;custom[16+6]=1;check(app::validate_menu_layout_source(custom,error),"valid custom backlink normalized or rejected");
     auto empty=bytes;empty[5]=0;check(app::validate_menu_layout_source(empty,error),"Source empty layout rejected");
     const auto path=std::filesystem::absolute(directory/"View.MEN");ui::SaveLoadRequest request;request.action=ui::SaveLoadAction::save;request.file_kind=ui::SaveLoadFileKind::menu_layout;request.origin_item_id=53;request.path=path;
-    check(files::checked_menu_layout_path(directory,request)==path,"confined MEN path rejected");files::publish_menu_layout(path,bytes,false);check(read_file(path)==bytes,"published MEN differs from exact source payload");
+    // macOS temporary directories can be reached through /var -> /private/var.
+    const auto canonical_path=std::filesystem::canonical(directory)/path.filename();
+    check(files::checked_menu_layout_path(directory,request)==canonical_path,"confined MEN path rejected");files::publish_menu_layout(path,bytes,false);check(read_file(path)==bytes,"published MEN differs from exact source payload");
     rejects([&]{files::checked_menu_layout_path(directory,request);},"existing MEN accepted without overwrite confirmation");
     rejects([&]{files::publish_menu_layout(path,custom,false);},"exclusive publication replaced an existing MEN");check(read_file(path)==bytes,"failed exclusive MEN publish changed previous target");
     files::publish_menu_layout(path,custom,true);check(read_file(path)==custom,"confirmed overwrite lost custom source bytes");
     rejects([&]{files::publish_menu_layout(path,invalid,true);},"malformed MEN published");check(read_file(path)==custom,"malformed overwrite destroyed old MEN");
-    request.overwrite=true;check(files::checked_menu_layout_path(directory,request)==path,"confirmed regular MEN overwrite rejected");
+    request.overwrite=true;check(files::checked_menu_layout_path(directory,request)==canonical_path,"confirmed regular MEN overwrite rejected");
     auto outside=request;outside.path=directory.parent_path()/"Other.MEN";rejects([&]{files::checked_menu_layout_path(directory,outside);},"MEN escaped configured root");
     auto wrong=request;wrong.origin_item_id=52;rejects([&]{files::checked_menu_layout_path(directory,wrong);},"wrong source handle accepted");wrong=request;wrong.path=directory/"View.FBM";rejects([&]{files::checked_menu_layout_path(directory,wrong);},"FBM reached MEN loader");
     const auto blocked=directory/"Blocked.MEN";std::filesystem::create_directory(blocked);rejects([&]{files::publish_menu_layout(blocked,bytes,true);},"MEN publication replaced a directory");check(std::filesystem::is_directory(blocked),"failed MEN publication removed a directory");
