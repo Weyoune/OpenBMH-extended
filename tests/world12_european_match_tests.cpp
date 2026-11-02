@@ -2,6 +2,8 @@
 #include "world12_fixture.hpp"
 #include "fixture_tables.hpp"
 #include "app/world12_european.hpp"
+#include "app/world12_weather.hpp"
+#include "game/calendar.hpp"
 #include "game/world12/manager_tactics.hpp"
 #include <algorithm>
 #include <iostream>
@@ -27,5 +29,11 @@ void full_programme(){const auto base=reference();const auto source=bmh::test::w
             check(state.calendar->next_day==day+1&&state.date==uint32_t(day+1)&&owner.revision==old_owner.revision+1,"European day did not publish one date/revision");const auto saved=state;state=read_save(make_save(state));check(state==saved,"real European match state lost on save/reload");
             if(!day){auto repeated=before;auto repeat_owner=old_owner;const auto again=application::play_competition_day(repeated,repeat_owner,repeat_owner,ticket,base,{source,source},{},{},requests,{3,6,false,true},hooks);check(repeated==state&&again.game_draws==outcome.game_draws&&again.watcom_draws==outcome.watcom_draws,"real European matches changed on identical replay");}}
         check(count==264&&abstract>0,"actual Core campaign programme omitted Source matches/abstract clubs");for(const auto& c:*state.world.european_campaigns)check(c.complete&&c.winner.valid(),"real Core programme did not crown all three winners");for(const auto& [id,club]:initial.world.clubs)if(!club.league.valid())check(state.world.clubs.at(id).roster==club.roster,"rating-only club acquired an invented roster");std::cout<<"Real Core European programme human="<<human<<": "<<count<<" matches, "<<abstract<<" abstract team appearances, all boundaries saved\n";}}
+void weather_persistence(){const auto base=reference();const auto source=bmh::test::world12::country_rules(false);auto state=fixture(base,true);for(auto& appointment:state.calendar->schedule.others)++appointment.day;state.calendar->next_day=1;state.date=1;state.desktop.emplace();ManagerDesktop desk;desk.seat=3;state.desktop->managers={desk};state.desktop->manager_order={3};state.desktop->matchday_number=77;const auto epoch=calendar_epoch();state.progress=CareerProgress{ProgressPhase::scheduled_event,DayEntry::plain_day,0,0,uint16_t(epoch.year),uint8_t(epoch.weekday),3};state.validate();const auto before=state;application::ManagerActionOwner owner{77,1};
+    const auto weather=application::prepare_event_weather(state,owner,owner,std::vector<uint8_t>(50,0x24),{source,source});check(weather.matches.size()==56&&state.prepared_event&&state.prepared_event->groups.size()==3&&owner.revision==2&&state.date==before.date&&state.calendar==before.calendar,"European weather lost its distinct Source groups/date owner");
+    auto file=make_save(state);check(file.stream[7]=='H'&&read_save(file)==state,"unstarted European weather did not roundtrip in SH");auto bad=state;bad.prepared_event->groups.back().european=EuropeanCompetition::uefa_cup;rejects([&]{make_save(bad);});auto truncated=file;truncated.stream.pop_back();rejects([&]{read_save(truncated);});
+    state.prepared_event->desk_phase=PreparedEvent::DeskPhase::complete;state.prepared_event->pools_matches.emplace();file=make_save(state);check(read_save(file)==state,"European known-empty pools/complete desk phase lost on save");state.prepared_event->gates_booked=true;for(auto& group:state.prepared_event->groups)for(auto& match:group.matches)match.spectators=20000;file=make_save(state);check(read_save(file)==state,"European booked gates were lost in SH");
 }
-int main()try{set_fixture_tables(bmh::test::authored_fixture_tables());full_programme();return 0;}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
+
+}
+int main()try{set_fixture_tables(bmh::test::authored_fixture_tables());full_programme();weather_persistence();return 0;}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
