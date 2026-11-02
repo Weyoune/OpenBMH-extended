@@ -36,5 +36,6 @@ restoration, with current-schema save roundtrips. A real Linux SDL drag and save
 is compared with the checked snapshot plus the normal four manual-save W draws.
 Screenshots and matching FBMs remain private.
 
-Separate MEN layout-file import/export and settings windows remain separate
-owners. This packet does not finish the visible turn driver or Beta release gates.
+[MEN layout-file import/export](MENU_LAYOUT_FILES.md) now has its own checked
+file owner. Settings windows, the visible turn driver and Beta release gates
+remain separate work.

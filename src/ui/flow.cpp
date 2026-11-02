@@ -735,6 +735,23 @@ void StartupFlow::open_world12_file_dialog(SaveLoadMode mode,const LeImage& refe
     if(desktop_)desktop_->resolve_local_menu();
     world12_reference_=std::move(owned_reference);save_load_=std::move(next);
 }
+void StartupFlow::open_world12_layout_dialog(SaveLoadMode mode,const DeskRequest& request,const LeImage& reference) {
+    if(!world12_reference_||!desktop_||desktop_->state().source!="world12"||in_preparation_menu()||in_readonly_view()||
+       !desktop_->pending()||*desktop_->pending()!=request||request.kind!=DeskRequestKind::open_menu||request.menu_kind!=53||
+       request.item_id!=53||request.value!=(mode==SaveLoadMode::load?0:1)||!desktop_->state().menu_layout_shortcut||desktop_->state().menu_layout_shortcut->id!=request.item_id)
+        throw FormatError("world12: layout dialog has no matching shortcut owner");
+    auto screen=std::make_unique<SaveLoadScreen>(data_,save_directory_,mode,request.manager_slot,request.revision,desktop_->render(),desktop_->state().gradient_text,SaveLoadFileKind::menu_layout,request.item_id,reference);
+    desktop_->resolve_local_menu();save_load_=std::move(screen);
+}
+StartupFlow::World12DesktopView StartupFlow::prepare_world12_layout_result(DeskState state,const LeImage& reference,const SaveLoadRequest& request)const {
+    if(!world12_reference_||!desktop_||!save_load_||!save_load_->pending()||*save_load_->pending()!=request||request.file_kind!=SaveLoadFileKind::menu_layout||request.origin_item_id!=53||
+       state.source!="world12"||state.revision!=request.revision+1||state.manager_slot!=request.manager_slot||!desktop_->state().menu_layout_shortcut||desktop_->state().menu_layout_shortcut->id!=request.origin_item_id)
+        throw FormatError("world12: layout acknowledgement has no matching file owner");
+    validate_desk_state(state);auto expected=desktop_->state();expected.revision=state.revision;expected.items=state.items;
+    expected.layout_records=state.layout_records;expected.folder_icon_slots=state.folder_icon_slots;expected.mailbox_shortcut=state.mailbox_shortcut;expected.menu_layout_shortcut=state.menu_layout_shortcut;
+    if(desk_json(expected)!=desk_json(state))throw FormatError("world12: layout acknowledgement changed non-layout state");
+    World12DesktopView out;out.reference=std::make_unique<LeImage>(reference);out.teams=state.manager_teams;out.desktop=std::make_unique<DesktopScreen>(data_,std::move(state),reference);return out;
+}
 StartupFlow::World12DesktopView StartupFlow::prepare_world12_file_result(DeskState state,const LeImage& reference,const SaveLoadRequest& request)const {
     if(!save_load_||!save_load_->pending()||*save_load_->pending()!=request||request.file_kind!=SaveLoadFileKind::game||state.source!="world12"||state.revision<=request.revision)
         throw FormatError("world12: stale file result owner");

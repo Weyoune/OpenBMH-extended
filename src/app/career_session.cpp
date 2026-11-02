@@ -13,6 +13,7 @@
 #include "app/stadium_request_source.hpp"
 #include "app/toto_request_source.hpp"
 #include "app/desktop_request_source.hpp"
+#include "app/menu_layout_source.hpp"
 #include "app/stadium_projection_source.hpp"
 
 #include <stdexcept>
@@ -6912,29 +6913,7 @@ bool CareerSession::dispatch_menu_layout(const ui::SaveLoadRequest& request, uin
     const int source_item = g_.memory.u8(base + 53u * 16u + 12u) == 72 ? 53 : -1;
     if (source_item != request.origin_item_id) { error = "menu_layout_source_handle_unavailable"; return false; }
 
-    const auto validate_payload = [&](const Bytes& bytes) -> bool {
-        if (bytes.size() != kLayoutBytes) { error = "menu_layout_wrong_size"; return false; }
-        // Bound the forward traversal before asking the desk projector to
-        // validate geometry, kinds, and remaining source fields. Native layouts
-        // may contain valid custom back-links; Source load does not normalize them.
-        std::array<bool, kDeskItemCount> seen{};
-        const int head = bytes[5];
-        // CopyN permits an empty linked drawer (head == 0).
-        if (head == 0) return true;
-        if (head < 1 || head >= kDeskItemCount) { error = "menu_layout_invalid_head"; return false; }
-        int item = head;
-        for (int steps = 0; steps < kDeskItemCount; ++steps) {
-            if (item <= 0 || item >= kDeskItemCount || seen[size_t(item)]) {
-                error = "menu_layout_invalid_chain"; return false;
-            }
-            seen[size_t(item)] = true;
-            const size_t at = size_t(item) * 16;
-            item = bytes[at + 5];
-            if (item == 0) return true;
-            if (item == 0xff) { error = "menu_layout_invalid_chain_terminator"; return false; }
-        }
-        error = "menu_layout_chain_cycle"; return false;
-    };
+    const auto validate_payload=[&](const Bytes& bytes){return validate_menu_layout_source(bytes,error);};
 
     if (request.action == ui::SaveLoadAction::load) {
         Bytes payload;

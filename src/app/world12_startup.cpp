@@ -12,7 +12,18 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
         const auto resources=load_runtime_resources(data);flow.open_world12_file_dialog(ui::SaveLoadMode::load,resources.german,save_info_reader(resources.german));return {};
     }
     if(action.request==ui::FlowRequest::file_action){
-        if(!flow.pending_file()||*flow.pending_file()!=action.file_action||action.file_action.file_kind!=ui::SaveLoadFileKind::game)throw FormatError("world12: file command has no matching dialog owner");
+        if(!flow.pending_file()||*flow.pending_file()!=action.file_action)throw FormatError("world12: file command has no matching dialog owner");
+        if(action.file_action.file_kind==ui::SaveLoadFileKind::menu_layout) {
+            if(!session)throw FormatError("world12: layout file has no current career");
+            const auto& request=action.file_action;const auto path=checked_menu_layout_path(flow.save_directory(),request);
+            auto staged=std::make_unique<Session>(*session);std::optional<Bytes> incoming;if(request.action==ui::SaveLoadAction::load){if(std::filesystem::file_size(path)!=54*16)throw FormatError("world12: MEN file must contain exactly 864 bytes");incoming=read_file(path);}
+            const auto payload=staged->prepare_menu_layout(request,incoming);
+            auto desk=ui::world12_initial_desktop(data,staged->snapshot(),staged->reference(),staged->rules(),staged->options(),staged->revision());
+            auto view=flow.prepare_world12_layout_result(std::move(desk),staged->rules(),request);
+            if(request.action==ui::SaveLoadAction::save)publish_menu_layout(path,payload,request.overwrite);
+            session.swap(staged);flow.finish_world12_desktop(std::move(view));return {};
+        }
+        if(action.file_action.file_kind!=ui::SaveLoadFileKind::game)throw FormatError("world12: unsupported file kind");
         const auto& request=action.file_action;const auto path=checked_game_path(flow.save_directory(),request);
         if(session)session->validate_file_owner(request.manager_slot,request.revision);
         if(request.action==ui::SaveLoadAction::save){
@@ -73,6 +84,11 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
             auto staged=std::make_unique<Session>(*session);staged->apply_desktop(action.desk_action,data);
             auto desk=ui::world12_initial_desktop(data,staged->snapshot(),staged->reference(),staged->rules(),staged->options(),staged->revision());
             flow.acknowledge_desk(std::move(desk));session.swap(staged);return {};
+        }
+        if(action.desk_action.kind==ui::DeskRequestKind::open_menu&&action.desk_action.menu_kind==53){
+            session->validate_file_owner(action.desk_action.manager_slot,action.desk_action.revision);
+            if(action.desk_action.value!=0&&action.desk_action.value!=1)throw FormatError("world12: invalid layout file mode");
+            flow.open_world12_layout_dialog(action.desk_action.value==0?ui::SaveLoadMode::load:ui::SaveLoadMode::save,action.desk_action,session->rules());return {};
         }
         if(action.desk_action.kind==ui::DeskRequestKind::open_menu&&action.desk_action.menu_kind==63){
             auto staged=std::make_unique<Session>(*session);staged->open_mailbox(action.desk_action);flow.show_mailbox(staged->mailbox_view());session.swap(staged);return {};

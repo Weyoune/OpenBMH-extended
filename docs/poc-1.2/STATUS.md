@@ -611,3 +611,11 @@ ticket-price mutations. Shared byte-level validation preserves unrelated records
 canonical manager ownership, Source bounds and masks. Existing layout/tactics/
 career fields retain changes through saves without new gameplay schema. Widget
 removal retains the physical-release barrier. See [desktop actions](DESKTOP_ACTIONS.md).
+
+## MEN layout files
+
+The final Original quickbar cell now loads/saves exact MEN desktop layouts for
+the active typed manager. Shared payload checks and the checked-byte publisher
+reject malformed data and preserve the old file/session on failed publication.
+Custom backlinks, empty layouts and recovery remain Source-compatible. See
+[layout files](MENU_LAYOUT_FILES.md). Other file/settings and release owners remain open.

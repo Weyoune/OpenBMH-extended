@@ -134,6 +134,8 @@ public:
     void show_world12_preparation(PreparationState,int menu_kind);
     void open_world12_file_dialog(SaveLoadMode,const LeImage&,SaveLoadInfoReader);
     struct World12DesktopView {std::unique_ptr<DesktopScreen> desktop;std::unique_ptr<LeImage> reference;std::vector<int> teams;};
+    void open_world12_layout_dialog(SaveLoadMode,const DeskRequest&,const LeImage&);
+    World12DesktopView prepare_world12_layout_result(DeskState,const LeImage&,const SaveLoadRequest&)const;
     World12DesktopView prepare_world12_file_result(DeskState,const LeImage&,const SaveLoadRequest&)const;
     World12DesktopView prepare_world12_manager_result(DeskState,const LeImage&,const DeskRequest&)const;
     World12DesktopView prepare_world12_turn_result(DeskState,const LeImage&,const DeskRequest&)const;

@@ -42,6 +42,7 @@ public:
     Session(RuntimeResources,ui::SetupOptions,uint32_t seed,uint64_t scope);
     static Session resume(RuntimeResources,bmh::world12::CareerSnapshot,uint64_t scope,uint64_t revision);
     const ui::SetupOptions& options()const{return options_;}
+    Bytes prepare_menu_layout(const ui::SaveLoadRequest&,const std::optional<Bytes>& incoming=std::nullopt);
     Savegame prepare_manual_save(const ui::SaveLoadRequest&);
     void validate_file_owner(int manager_slot,uint64_t revision)const;
     bool preparation_open()const{return preparation_menu_.has_value();}

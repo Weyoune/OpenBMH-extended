@@ -849,6 +849,31 @@ void actual_mailbox(const std::filesystem::path& data,const CareerSnapshot& base
     if(!output.empty())std::filesystem::copy_file(file,output/"after.FBM",std::filesystem::copy_options::overwrite_existing);
     std::cout<<"Actual Original mailbox shortcut, shared/private recipients, keep/refusal/delete, physical holes, actor-only close, RNG-neutral snapshots and stale rollback passed\n";
 }
+void actual_layout_files(const std::filesystem::path& data,const CareerSnapshot& fixture,const std::filesystem::path& output) {
+    const auto directory=std::filesystem::temp_directory_path()/("openbmh-menu-files-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);
+    struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code ignored;std::filesystem::remove_all(path,ignored);}} cleanup{directory};
+    write_savegame(directory/"Start.FBM",make_save(fixture));ui::StartupFlow flow(data,directory,ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> session;
+    const auto serve=[&](const ui::FlowResult& action){return session_app::serve_startup(flow,action,session,data,91,100);};
+    const auto send=[&](const ui::FlowResult& action){const auto result=serve(action);if(!result.error.empty())throw std::runtime_error("layout file GUI: "+result.error);};
+    flow.click(60,215);send(flow.click(240,215));send(flow.send_key("ENTER"));const auto initial=session->snapshot();const auto actor=*initial.desktop->active_seat;
+    const auto bytes=[&](const CareerSnapshot& state){Bytes out;const auto& desk=*std::find_if(state.desktop->managers.begin(),state.desktop->managers.end(),[&](const auto& d){return d.seat==actor;});for(const auto& row:desk.layout)out.insert(out.end(),row.begin(),row.end());return out;};const auto original=bytes(initial);
+    const auto capture=[&](const char* name){if(output.empty())return;std::filesystem::create_directories(output);const auto frame=flow.render();const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));std::ofstream image(output/(std::string(name)+".ppm"),std::ios::binary);image<<"P6\n320 240\n255\n";for(auto pixel:frame.pixels){const auto color=palette.argb[pixel];image.put(char(color>>16));image.put(char(color>>8));image.put(char(color));}write_savegame(output/(std::string(name)+".FBM"),make_save(session->snapshot()));};
+    const auto open=[&](bool save){if(flow.desktop()->state_json().find("\"shortcut_bar_visible\":false")!=std::string::npos)flow.move(1,239);const auto action=flow.click(292,220,!save);check(action.request==ui::FlowRequest::desk_action&&action.desk_action.menu_kind==53&&action.desk_action.value==(save?1:0),"last Source quickbar cell did not emit its load/save mode");send(action);check(flow.screen_name()=="save_load","layout file chooser did not open");};
+    capture("layout-before");open(true);check(flow.text("View"),"layout filename input failed");capture("layout-save-dialog");const auto saved_request=flow.send_key("ENTER");check(saved_request.request==ui::FlowRequest::file_action&&saved_request.file_action.file_kind==ui::SaveLoadFileKind::menu_layout,"layout chooser did not emit MEN save");send(saved_request);
+    const auto path=directory/"View.MEN";check(std::filesystem::file_size(path)==864&&read_file(path)==original&&session->snapshot()==initial,"MEN save changed gameplay/layout or did not preserve exact bytes");capture("layout-saved");
+    const auto& items=flow.desktop()->state().items;const auto icon=*std::find_if(items.begin(),items.end(),[](const auto& i){return i.kind==19;});send(flow.pointer_down(icon.x+8,icon.y+8,true));flow.move(93,113);send(flow.click(93,113,true));check(bytes(session->snapshot())!=original,"layout fixture icon did not move");capture("layout-modified");
+    open(false);capture("layout-load-dialog");const auto loaded_request=flow.send_key("ENTER");send(loaded_request);check(session->snapshot()==initial&&bytes(session->snapshot())==original,"MEN load failed to restore exactly the active seat while preserving gameplay");capture("layout-loaded");
+    const auto accepted=session->snapshot();const auto revision=session->revision();rejects([&]{session->prepare_menu_layout(loaded_request.file_action,original);},"accepted layout load replayed");check(session->snapshot()==accepted&&session->revision()==revision,"layout replay changed session");
+    open(true);flow.text("View");send(flow.send_key("ENTER"));check(!flow.pending_file()&&read_file(path)==original,"layout overwrite happened without confirmation");capture("layout-overwrite-confirmation");send(flow.send_key("ENTER"));check(session->snapshot()==initial&&read_file(path)==original,"confirmed MEN overwrite changed bytes or gameplay");
+    const auto write=[&](const Bytes& content){std::ofstream out(path,std::ios::binary|std::ios::trunc);out.write(reinterpret_cast<const char*>(content.data()),std::streamsize(content.size()));};
+    for(int invalid=0;invalid<3;++invalid){auto bad=original;if(invalid==0)bad.pop_back();else if(invalid==1)bad[5]=54;else bad[size_t(bad[5])*16+5]=bad[5];write(bad);open(false);const auto before=session->snapshot();const auto rev=session->revision();const auto result=serve(flow.send_key("ENTER"));check(!result.error.empty()&&session->snapshot()==before&&session->revision()==rev&&!flow.pending_file(),"invalid MEN size/head/cycle published state or left a pending command");capture(invalid==0?"layout-bad-size":invalid==1?"layout-bad-head":"layout-bad-cycle");send(flow.send_key("ESC"));}
+    for(int variant=0;variant<2;++variant){auto native=original;if(variant==0)native[size_t(native[5])*16+6]=native[5];else native[5]=0;write(native);open(false);send(flow.send_key("ENTER"));check(bytes(session->snapshot())==native&&session->snapshot().world==initial.world,"native custom-backlink/empty layout was normalized or changed gameplay");capture(variant==0?"layout-custom-links":"layout-empty");}
+    write(original);open(false);send(flow.send_key("ENTER"));check(session->snapshot()==initial,"empty layout failed to recover through the Source shortcut");
+    write(original);open(true);flow.text("Blocked");std::filesystem::create_directory(directory/"Blocked.MEN");send(flow.send_key("ENTER"));const auto result=serve(flow.send_key("ENTER"));check(!result.error.empty()&&session->snapshot()==initial&&std::filesystem::is_directory(directory/"Blocked.MEN"),"blocked MEN publication changed destination or session");send(flow.send_key("ESC"));
+    open(false);auto corrupt=original;const auto first=size_t(corrupt[5]);corrupt[first*16+12]=255;write(corrupt);const auto before=session->snapshot();const auto rev=session->revision();const auto rejected=serve(flow.send_key("ENTER"));check(!rejected.error.empty()&&session->snapshot()==before&&session->revision()==rev,"invalid visible MEN geometry/type passed renderer validation");send(flow.send_key("ESC"));write(original);
+    if(!output.empty())std::filesystem::copy_file(path,output/"View.MEN",std::filesystem::copy_options::overwrite_existing);
+    std::cout<<"Actual MEN GUI: Source shortcut load/save, exact 864-byte layout roundtrip, overwrite, stale/malformed/failed-render rollback and blocked publication passed\n";
+}
 void actual_desktop_actions(const std::filesystem::path& data,const CareerSnapshot& fixture,const std::filesystem::path& output) {
     const auto directory=std::filesystem::temp_directory_path()/("openbmh-desktop-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);
     struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code ignored;std::filesystem::remove_all(path,ignored);}} cleanup{directory};
@@ -1378,6 +1403,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     actual_stadium(flow,session,data,output.empty()?output:output/"stadium-single");
     actual_stadium_financial_notices(data,session->snapshot(),output.empty()?output:output/"stadium-notices");
     actual_desktop_actions(data,session->snapshot(),output.empty()?output:output/"desktop-single");
+    actual_layout_files(data,session->snapshot(),output.empty()?output:output/"layout-single");
     actual_toto_fixture(data,session->snapshot(),output.empty()?output:output/"toto-empty");
     actual_save_load(flow,session,data,output);
     ui::StartupFlow mixed(data,{},ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> multi;
@@ -1399,6 +1425,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     actual_contracts(mixed,multi,data,output.empty()?output:output/"contracts-mixed");
     actual_advertising(mixed,multi,data,output.empty()?output:output/"advertising-mixed");
     actual_desktop_actions(data,multi->snapshot(),output.empty()?output:output/"desktop-mixed");
+    actual_layout_files(data,multi->snapshot(),output.empty()?output:output/"layout-mixed");
     actual_stadium(mixed,multi,data,output.empty()?output:output/"stadium-mixed");
     actual_mailbox(data,multi->snapshot(),output.empty()?output:output/"mailbox");
     {
@@ -1410,6 +1437,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
         actual_contracts(mixed,multi,data,output.empty()?output:output/"contracts-german");
         actual_advertising(mixed,multi,data,output.empty()?output:output/"advertising-german");
         actual_desktop_actions(data,multi->snapshot(),output.empty()?output:output/"desktop-german");
+        actual_layout_files(data,multi->snapshot(),output.empty()?output:output/"layout-german");
         actual_stadium(mixed,multi,data,output.empty()?output:output/"stadium-german");
     }
     actual_four_managers(data,output);
@@ -1419,6 +1447,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
 }
 }
 int main(int argc,char** argv)try {
+    if(argc==5&&std::string(argv[3])=="--layout-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_layout_files(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--desktop-only"){actual_desktop_actions(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--stadium-only"){actual_stadium_saved(argv[1],argv[4],argv[2]);return 0;}
     const auto resources=synthetic();

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "app/world12_save_load.hpp"
+#include "app/menu_layout_source.hpp"
 #include "game/save.hpp"
 #include "game/calendar.hpp"
 #include "game/world12/desktop_projection.hpp"
@@ -58,10 +59,13 @@ Savegame Session::prepare_manual_save(const ui::SaveLoadRequest& request){
     if(state_!=before||owner_.revision!=revision)throw FormatError("world12: save owner changed during preparation");
     state_=std::move(candidate);++owner_.revision;return save;
 }
-std::filesystem::path checked_game_path(const std::filesystem::path& directory,const ui::SaveLoadRequest& request){
-    if(request.file_kind!=ui::SaveLoadFileKind::game||request.origin_item_id!=-1||!request.path.is_absolute()||request.path.filename().empty())throw FormatError("world12: invalid game file request");
+namespace {
+std::filesystem::path checked_file_path(const std::filesystem::path& directory,const ui::SaveLoadRequest& request,
+    ui::SaveLoadFileKind kind,const char* suffix) {
+    if(request.file_kind!=kind||!request.path.is_absolute()||request.path.filename().empty()||
+       (kind==ui::SaveLoadFileKind::game?request.origin_item_id!=-1:request.origin_item_id!=53))throw FormatError("world12: invalid file request owner");
     auto extension=request.path.extension().string();std::transform(extension.begin(),extension.end(),extension.begin(),[](unsigned char c){return char(std::tolower(c));});
-    if(extension!=".fbm")throw FormatError("world12: expected an FBM game file");
+    if(extension!=suffix)throw FormatError("world12: unexpected saved-file extension");
     const auto root=std::filesystem::canonical(directory);const auto parent=std::filesystem::canonical(request.path.parent_path());
     if(!std::filesystem::equivalent(root,parent))throw FormatError("world12: game file is outside the configured save directory");
     const auto target=parent/request.path.filename();std::error_code ec;const auto status=std::filesystem::symlink_status(target,ec);
@@ -72,8 +76,14 @@ std::filesystem::path checked_game_path(const std::filesystem::path& directory,c
     if(request.action==ui::SaveLoadAction::save&&exists&&!request.overwrite)throw FormatError("world12: overwrite confirmation required");
     return target;
 }
-void publish_game_save(const std::filesystem::path& target,const Savegame& save,bool overwrite){
-    const auto expected=bmh::world12::read_save(save);const auto bytes=savegame_bytes(save);static std::atomic<uint64_t> serial{0};std::filesystem::path temporary;
+}
+std::filesystem::path checked_game_path(const std::filesystem::path& directory,const ui::SaveLoadRequest& request){return checked_file_path(directory,request,ui::SaveLoadFileKind::game,".fbm");}
+std::filesystem::path checked_menu_layout_path(const std::filesystem::path& directory,const ui::SaveLoadRequest& request){return checked_file_path(directory,request,ui::SaveLoadFileKind::menu_layout,".men");}
+
+namespace {
+void publish_checked_bytes(const std::filesystem::path& target,const Bytes& bytes,bool overwrite,
+    const std::function<void(const std::filesystem::path&)>& verify) {
+    static std::atomic<uint64_t> serial{0};std::filesystem::path temporary;
 #ifdef _WIN32
     HANDLE file=INVALID_HANDLE_VALUE;
     for(int n=0;n<100&&file==INVALID_HANDLE_VALUE;++n){temporary=target.parent_path()/(L".openbmh-save-"+std::to_wstring(GetCurrentProcessId())+L"-"+std::to_wstring(++serial)+L".tmp");file=CreateFileW(temporary.c_str(),GENERIC_WRITE,0,nullptr,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,nullptr);if(file==INVALID_HANDLE_VALUE&&GetLastError()!=ERROR_FILE_EXISTS)throw std::system_error(int(GetLastError()),std::system_category(),"create save temporary");}
@@ -91,7 +101,8 @@ void publish_game_save(const std::filesystem::path& target,const Savegame& save,
         size_t done=0;while(done<bytes.size()){const auto wrote=::write(file,bytes.data()+done,bytes.size()-done);if(wrote<0&&errno==EINTR)continue;if(wrote<=0)io_error("write save temporary");done+=size_t(wrote);}
         if(::fsync(file))io_error("flush save temporary");if(::close(file)){file=-1;io_error("close save temporary");}file=-1;
 #endif
-        if(bmh::world12::read_save(load_savegame(temporary))!=expected)throw FormatError("world12: temporary save verification differs");
+        if(read_file(temporary)!=bytes)throw FormatError("world12: temporary file verification differs");
+        verify(temporary);
 #ifdef _WIN32
         if(!MoveFileExW(temporary.c_str(),target.c_str(),MOVEFILE_WRITE_THROUGH|(overwrite?MOVEFILE_REPLACE_EXISTING:0)))throw std::system_error(int(GetLastError()),std::system_category(),"publish game save");
 #else
@@ -107,6 +118,16 @@ void publish_game_save(const std::filesystem::path& target,const Savegame& save,
         std::error_code ignored;std::filesystem::remove(temporary,ignored);throw;
     }
 }
+}
+void publish_game_save(const std::filesystem::path& target,const Savegame& save,bool overwrite) {
+    const auto expected=bmh::world12::read_save(save);const auto bytes=savegame_bytes(save);
+    publish_checked_bytes(target,bytes,overwrite,[&](const auto& path){if(bmh::world12::read_save(load_savegame(path))!=expected)throw FormatError("world12: temporary save verification differs");});
+}
+void publish_menu_layout(const std::filesystem::path& target,const Bytes& bytes,bool overwrite) {
+    std::string error;if(!validate_menu_layout_source(bytes,error))throw FormatError(error);
+    publish_checked_bytes(target,bytes,overwrite,[](const auto& path){std::string error;if(!validate_menu_layout_source(read_file(path),error))throw FormatError(error);});
+}
+
 ui::SaveLoadInfoReader save_info_reader(LeImage rules){return [rules=std::move(rules)](const std::filesystem::path& path){
     const auto state=bmh::world12::read_save(load_savegame(path));const auto date=ui::desk_date(state.date,rules);
     ui::SaveLoadInfo info;const auto filename=path.stem().u8string();info.path.assign(filename.begin(),filename.end());const auto two=[](int n){return (n<10?"0":"")+std::to_string(n);};info.date=two(date.day)+"."+two(date.month)+"."+std::to_string(date.year);
