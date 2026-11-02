@@ -71,6 +71,10 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
         if(action.desk_action.kind==ui::DeskRequestKind::open_menu&&action.desk_action.menu_kind==63){
             auto staged=std::make_unique<Session>(*session);staged->open_mailbox(action.desk_action);flow.show_mailbox(staged->mailbox_view());session.swap(staged);return {};
         }
+        if(action.desk_action.kind==ui::DeskRequestKind::open_menu&&action.desk_action.menu_kind==24){
+            auto staged=std::make_unique<Session>(*session);auto view=staged->open_environment(action.desk_action,data);
+            auto parent=staged->preparation_view(data);flow.show_environment(std::move(view),action.desk_action,std::move(parent));session.swap(staged);return {};
+        }
         if(action.desk_action.kind==ui::DeskRequestKind::open_menu&&(action.desk_action.menu_kind==10||action.desk_action.menu_kind==11)){
             session->validate_file_owner(action.desk_action.manager_slot,action.desk_action.revision);
             flow.open_world12_file_dialog(action.desk_action.menu_kind==10?ui::SaveLoadMode::load:ui::SaveLoadMode::save,session->rules(),save_info_reader(session->rules()));return {};
@@ -85,8 +89,16 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
         else staged->apply_preparation(action.submenu_action);
         auto view=staged->preparation_view(data);flow.acknowledge_preparation(std::move(view));session.swap(staged);return {};
     }
+    if(action.request==ui::FlowRequest::environment_action){
+        if(!session||!flow.pending_environment()||*flow.pending_environment()!=action.environment_action)
+            throw FormatError("world12: environment request has no matching view owner");
+        auto staged=std::make_unique<Session>(*session);const auto changed=staged->apply_environment(action.environment_action);
+        auto view=staged->environment_view(data);std::optional<ui::PreparationState> parent;
+        if(changed)parent=staged->preparation_view(data);
+        flow.acknowledge_environment(std::move(view),std::move(parent));session.swap(staged);return {};
+    }
     if(action.request==ui::FlowRequest::submenu_closed&&session&&!flow.in_preparation_menu()){if(session->preparation_open())session->close_preparation();return {};}
     if(action.request!=ui::FlowRequest::none&&action.request!=ui::FlowRequest::submenu_opened&&action.request!=ui::FlowRequest::submenu_closed)throw FormatError("world12: this frontend action has no typed owner yet");
     return {};
-}catch(const std::exception& error){if(action.request==ui::FlowRequest::mailbox_action&&flow.pending_mailbox())flow.reject_mailbox(error.what());if(action.request==ui::FlowRequest::mailbox_closed&&flow.pending_mailbox_close())flow.reject_mailbox_close(error.what());if(action.request==ui::FlowRequest::file_action&&flow.pending_file()&&*flow.pending_file()==action.file_action)flow.reject_file_action(error.what());if(action.request==ui::FlowRequest::desk_action||action.request==ui::FlowRequest::kickoff)flow.reject_desk_action(error.what());else if(action.request==ui::FlowRequest::submenu_action&&flow.matches_pending_preparation(action.submenu_action))flow.reject_preparation_action(error.what());return {StartupProgress::idle,error.what()};}
+}catch(const std::exception& error){if(action.request==ui::FlowRequest::environment_action&&flow.pending_environment())flow.reject_environment_action(error.what());if(action.request==ui::FlowRequest::mailbox_action&&flow.pending_mailbox())flow.reject_mailbox(error.what());if(action.request==ui::FlowRequest::mailbox_closed&&flow.pending_mailbox_close())flow.reject_mailbox_close(error.what());if(action.request==ui::FlowRequest::file_action&&flow.pending_file()&&*flow.pending_file()==action.file_action)flow.reject_file_action(error.what());if(action.request==ui::FlowRequest::desk_action||action.request==ui::FlowRequest::kickoff)flow.reject_desk_action(error.what());else if(action.request==ui::FlowRequest::submenu_action&&flow.matches_pending_preparation(action.submenu_action))flow.reject_preparation_action(error.what());return {StartupProgress::idle,error.what()};}
 }

@@ -144,14 +144,17 @@ std::string environment_request_json(const EnvironmentRequest& r) {
 }
 
 EnvironmentScreen::EnvironmentScreen(const std::filesystem::path& data, EnvironmentView state, Image underlay)
-    : state_(std::move(state)), exe_(load_le(asset_path(data, "BMH.exe"))),
+    : EnvironmentScreen(data,std::move(state),std::move(underlay),load_le(asset_path(data,"BMH.exe"))) {}
+EnvironmentScreen::EnvironmentScreen(const std::filesystem::path& data, EnvironmentView state, Image underlay,const LeImage& reference)
+    : state_(std::move(state)), exe_(reference),
       texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
       background_(load_vga(asset_path(data / "KB", "129.VGA"))),
       tiles_(load_vga(asset_path(data / "KB", "19.VGA"))), panel_(load_vga(asset_path(data / "KB", "56.VGA"))),
       letters_(load_vga(asset_path(data / "KB", "54.VGA"))),
-      badge_atlas_(load_vga(asset_path(data / (generic_badge(state_.runtime_club) ? "KB" : "W"),
-          generic_badge(state_.runtime_club) ? "0.VGA" : std::to_string(state_.badge_sprite >> 3) + ".VGA"))),
+      badge_atlas_(load_vga(state_.badge_atlas.empty()?asset_path(data / (generic_badge(state_.runtime_club) ? "KB" : "W"),
+          generic_badge(state_.runtime_club) ? "0.VGA" : std::to_string(state_.badge_sprite >> 3) + ".VGA"):asset_path(data,state_.badge_atlas))),
       font_(load_font(asset_path(data / "F", "BMH3.FNT"))) {
+    next_request_id_=state_.request_id_base+1;
     if (state_.manager_slot < 0 || state_.manager_slot > 3 || state_.runtime_club < 0 ||
         underlay.width != 320 || underlay.height != 240 || background_.width != 320 ||
         background_.height != 240 || tiles_.width != 306 || tiles_.height != 111 ||
@@ -293,6 +296,7 @@ void EnvironmentScreen::acknowledge(EnvironmentView updated) {
     const bool unchanged = pending_ && updated.revision == state_.revision &&
         environment_view_json(updated) == environment_view_json(state_);
     if (!pending_ || pending_->manager_slot != updated.manager_slot || pending_->runtime_club != updated.runtime_club ||
+        updated.request_id_base!=state_.request_id_base||
         pending_->revision != state_.revision || (!unchanged && updated.revision != state_.revision + 1) ||
         updated.owner.manager_slot != state_.owner.manager_slot || updated.owner.menu_kind != 24 ||
         updated.owner.revision != updated.revision)

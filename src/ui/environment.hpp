@@ -23,8 +23,10 @@ struct EnvironmentView {
     int manager_slot = -1;
     int runtime_club = -1;
     uint64_t revision = 0;
+    uint64_t request_id_base = 0;
     std::string club_name;
     uint16_t badge_sprite = 0;
+    std::string badge_atlas;
     std::array<std::string, 6> cost_text{};
     std::array<std::string, 3> youth_position_text{}, youth_league_text{};
     bool decorated_background = true;
@@ -53,6 +55,7 @@ std::string environment_request_json(const EnvironmentRequest&);
 class EnvironmentScreen {
 public:
     EnvironmentScreen(const std::filesystem::path& data, EnvironmentView state, Image underlay);
+    EnvironmentScreen(const std::filesystem::path& data, EnvironmentView state, Image underlay,const LeImage& reference);
     Image render() const;
     bool pointer_down(int x, int y, bool right = false);
     EnvironmentRequest release(int x, int y, bool right = false);

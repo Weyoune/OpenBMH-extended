@@ -485,6 +485,42 @@ void actual_camp(ui::StartupFlow& flow,std::unique_ptr<session_app::Session>& se
     send(flow.send_key("ESC"));check(flow.screen_name()=="desktop"&&!session->preparation_open(),"camp abort did not release menu owner");
     std::cout<<"Actual camp GUI: derived focus/edit, Original map and booking, global player/morale/board effects, Core fees/RNG, save/replay/duplicate limits and reentry passed\n";
 }
+void actual_environment(ui::StartupFlow& flow,std::unique_ptr<session_app::Session>& session,const std::filesystem::path& data,const std::filesystem::path& output) {
+    const auto initial=session->snapshot();const auto actor=*initial.desktop->active_seat;
+    const auto send=[&](const ui::FlowResult& action){const auto result=session_app::serve_startup(flow,action,session,data,91,session->scope());if(!result.error.empty())throw std::runtime_error("environment GUI: "+result.error);};
+    const auto capture=[&](const char* name){if(output.empty())return;std::filesystem::create_directories(output);const auto frame=flow.render();
+        const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));std::ofstream image(output/(std::string(name)+".ppm"),std::ios::binary);image<<"P6\n320 240\n255\n";
+        for(auto pixel:frame.pixels){const auto color=palette.argb[pixel];image.put(char(color>>16));image.put(char(color>>8));image.put(char(color));}
+        write_savegame(output/(std::string(name)+".FBM"),make_save(session->snapshot()));};
+    const auto open=[&]{const auto& items=flow.desktop()->state().items;const auto icon=std::find_if(items.begin(),items.end(),[](const auto& item){return item.kind==24&&!item.disabled;});check(icon!=items.end(),"Original environment icon unavailable");send(flow.click(icon->x+icon->width/2,icon->y+icon->height/2));};
+    open();check(flow.in_environment()&&session->preparation_open()&&session->snapshot()==initial,"environment opening changed gameplay or did not acquire its menu");capture("environment-before");
+    ui::EnvironmentRequest last;
+    for(int item=0;item<6;++item) {
+        const auto view=session->environment_view(data);const auto level=(view.values.level[size_t(item)]+1)%7;
+        const auto before=session->snapshot();const auto revision=session->revision();auto expected=project_manager_desktop(before,session->reference());
+        check(set_environment(expected.state,view.manager_slot,item,level)==EnvironmentResult::changed,"actual Core environment edit unavailable");
+        const int x=session->rules().u8(layout::Environment_FormatError_RuntimeField+uint32_t(item))-9+level*9+1;
+        const int y=session->rules().u8(layout::Environment_FormatError_RuntimeField2+uint32_t(item))+1;
+        const auto action=flow.click(x,y);check(action.request==ui::FlowRequest::environment_action,"Original level hitbox did not emit its environment request");send(action);last=action.environment_action;
+        const auto& manager=*std::find_if(session->snapshot().world.managers.begin(),session->snapshot().world.managers.end(),[&](const auto& m){return m.seat==actor;});
+        const auto& previous=*std::find_if(before.world.managers.begin(),before.world.managers.end(),[&](const auto& m){return m.seat==actor;});
+        check(uint32_t(manager.career->environment.monthly[size_t(item)])==expected.state.memory.u32(layout::Spending+uint32_t(view.manager_slot*0x24+item*4))&&
+              manager.finance==previous.finance&&
+              session->revision()==revision+1&&session->snapshot().game_seed==initial.game_seed&&session->snapshot().watcom_seed==initial.watcom_seed&&session->snapshot().date==initial.date,
+              "environment lost Core budget, one revision or RNG/date neutrality");
+        const auto accepted=session->snapshot();rejects([&]{session->apply_environment(last);},"environment level replay accepted");check(session->snapshot()==accepted,"stale environment level changed the career");
+    }
+    capture("environment-after");const auto changed=session->snapshot();const auto revision=session->revision();
+    const auto unchanged=flow.click(session->rules().u8(layout::Environment_FormatError_RuntimeField+5)-9+last.level*9+1,
+        session->rules().u8(layout::Environment_FormatError_RuntimeField2+5)+1);send(unchanged);
+    check(session->snapshot()==changed&&session->revision()==revision,"unchanged environment click published another revision");last=unchanged.environment_action;
+    check(read_save(make_save(changed))==changed,"environment budgets failed save roundtrip");
+    send(flow.send_key("ESC"));check(flow.screen_name()=="desktop"&&!session->preparation_open(),"environment close did not release its owner");
+    open();const auto reopened=session->snapshot();rejects([&]{session->apply_environment(last);},"closed environment window's unchanged request was replayed after reopening");
+    check(session->snapshot()==reopened&&session->environment_view(data).values.monthly==flow.environment()->state().values.monthly,"environment reopen changed budgets");
+    send(flow.send_key("ESC"));
+    std::cout<<"Actual environment GUI: all six Original level controls, Core monthly budgets, no immediate cash/RNG/date change, save/reload and retired-window replay guard passed\n";
+}
 void actual_save_load(ui::StartupFlow& flow,std::unique_ptr<session_app::Session>& session,const std::filesystem::path& data,const std::filesystem::path& output) {
     const auto directory=flow.save_directory();const auto path=directory/"Resume.FBM";
     const auto send=[&](ui::StartupFlow& ui,const ui::FlowResult& action,std::unique_ptr<session_app::Session>& owner){const auto result=session_app::serve_startup(ui,action,owner,data,91,owner?owner->scope():71);if(!result.error.empty())throw std::runtime_error("file input: "+result.error);};
@@ -970,6 +1006,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     actual_management(flow,session,data,output);
     actual_bank(flow,session,data,output.empty()?output:output/"bank-single");
     actual_camp(flow,session,data,output.empty()?output:output/"camp-single");
+    actual_environment(flow,session,data,output.empty()?output:output/"environment-single");
     actual_save_load(flow,session,data,output);
     ui::StartupFlow mixed(data,{},ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> multi;
     mixed.click(resources.german.u16(layout::Setup_FormatError_RuntimeField3+6*2)+10,resources.german.u8(layout::Setup_FormatError_RuntimeField4+6)+10);
@@ -986,6 +1023,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     actual_management(mixed,multi,data,output.empty()?output:output/"mixed-management");
     actual_bank(mixed,multi,data,output.empty()?output:output/"bank-mixed");
     actual_camp(mixed,multi,data,output.empty()?output:output/"camp-mixed");
+    actual_environment(mixed,multi,data,output.empty()?output:output/"environment-mixed");
     actual_mailbox(data,multi->snapshot(),output.empty()?output:output/"mailbox");
     actual_four_managers(data,output);
     actual_pending(data,output.empty()?output:output/"pending");

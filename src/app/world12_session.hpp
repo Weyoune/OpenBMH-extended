@@ -12,6 +12,7 @@
 #include "ui/manager.hpp"
 #include "ui/world12_manager_selection.hpp"
 #include "ui/preparation.hpp"
+#include "ui/environment.hpp"
 #include "game/pending_offer.hpp"
 namespace bmh::ui {struct DeskRequest;struct SaveLoadRequest;struct MailboxState;struct MailboxActionRequest;struct MailboxCloseRequest;}
 namespace bmh::app::world12 {
@@ -63,6 +64,9 @@ public:
     ui::MailboxState mailbox_view()const;
     void edit_mailbox(const ui::MailboxActionRequest&);
     void close_mailbox(const ui::MailboxCloseRequest&);
+    ui::EnvironmentView open_environment(const ui::DeskRequest&,const std::filesystem::path& data);
+    ui::EnvironmentView environment_view(const std::filesystem::path& data)const;
+    bool apply_environment(const ui::EnvironmentRequest&);
     void open_preparation(const ui::DeskRequest&);
     void apply_preparation(const ui::PreparationRequest&);
     void apply_bank(const std::filesystem::path& data,const ui::BankRequest&);
@@ -86,5 +90,8 @@ private:
     std::optional<int> bank_tip_;
     std::optional<ui::BankState::PropertyNotice> bank_property_notice_;
     std::optional<ui::BankState::CreditNotice> bank_credit_notice_;
+    std::optional<ui::DeskRequest> environment_owner_;
+    uint64_t environment_request_=0;
+    uint64_t environment_generation_=0;
 };
 }

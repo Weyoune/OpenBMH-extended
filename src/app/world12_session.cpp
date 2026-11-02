@@ -7,6 +7,7 @@
 #include "game/world12/codec.hpp"
 #include "game/career.hpp"
 #include "game/bank_credit.hpp"
+#include "game/environment.hpp"
 #include "game/calendar.hpp"
 #include "game/week.hpp"
 #include "game/schedule.hpp"
@@ -32,6 +33,7 @@ RuntimeResources load_runtime_resources(const std::filesystem::path& data) {
     const auto referees=decode_referee_catalogue(read_file(ui::asset_path(data,"REFEREES.JSON")));
     r.referee_properties=referees.properties;r.referee_names=referees.names;
     install_bank_credit_rules(r.reference,r.german);
+    install_environment_rules(r.german);
     std::vector<uint16_t> de(366),en(366);for(uint32_t day=0;day<366;++day){de[day]=r.german.u16(layout::CompetitionCalendar+day*2);en[day]=r.english.u16(layout::CompetitionCalendar+day*2);}
     const auto epoch=calendar_epoch_from_executable(r.german);const auto aligned=align_source_calendar(en,int(r.english.runtime_policy()->weekday),epoch.weekday,366);
     r.calendar=SeasonCalendar::from_sources(r.master.catalogue,de,aligned.entries);return r;

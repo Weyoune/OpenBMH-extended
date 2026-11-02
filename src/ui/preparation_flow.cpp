@@ -1429,8 +1429,9 @@ Image StartupFlow::render() const {
            desktop_ ? desktop_->render() : manager_ ? manager_->render() : setup_.render();
 }
 
-void StartupFlow::show_environment(EnvironmentView state, const DeskRequest& owner) {
-    if (!desktop_ || !engine_attached_ || !preparation_ || in_preparation_menu() || in_readonly_view() ||
+void StartupFlow::show_environment(EnvironmentView state, const DeskRequest& owner,std::optional<PreparationState> parent) {
+    if(parent){validate_preparation_context(*parent);if(!desktop_||parent->desktop.source!="world12"||desk_json(parent->desktop)!=desk_json(desktop_->state()))throw FormatError("world12: environment parent differs from its desktop");}
+    if (!desktop_ || !engine_attached_ || (!preparation_&&!parent) || in_preparation_menu() || in_readonly_view() ||
         matchday_results_ || !desktop_->pending() || *desktop_->pending() != owner ||
         owner.kind != DeskRequestKind::open_menu || owner.menu_kind != 24 ||
         owner.manager_slot != desktop_->state().manager_slot || owner.revision != desktop_->state().revision ||
@@ -1438,8 +1439,9 @@ void StartupFlow::show_environment(EnvironmentView state, const DeskRequest& own
         state.revision != owner.revision || state.runtime_club < 0 || desktop_->state().national_team)
         throw FormatError("environment: expected ordinary club desk menu 24 and matching projection");
     state.owner = owner;
+    auto next = std::make_unique<EnvironmentScreen>(data_, std::move(state), desktop_->render(),render_reference());
     desktop_->resolve_local_menu();
-    auto next = std::make_unique<EnvironmentScreen>(data_, std::move(state), desktop_->render());
+    if(parent)preparation_=std::make_unique<PreparationState>(std::move(*parent));
     environment_owner_ = owner;
     environment_ = std::move(next);
 }

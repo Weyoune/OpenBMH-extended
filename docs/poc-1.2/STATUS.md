@@ -62,6 +62,14 @@ retained together; schema27 stores the actual four focus bytes and preserves old
 unknown state. Real single/mixed GUI-input tests cover booking and guarded
 reentry. See [training camps](TRAINING_CAMP.md).
 
+## Environment
+
+The Original youth/co-trainer/doctor/physio monthly budget controls now use a typed
+manager/modal owner and the existing Core setter. Single/mixed GUI-input probes
+cover all six controls, saved budgets, unchanged acknowledgements, no immediate
+cash/RNG/date effects and stale input after reopening. See
+[environment ownership](ENVIRONMENT.md).
+
 
 Completed foundation:
 

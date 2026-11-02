@@ -245,7 +245,7 @@ public:
     }
     void acknowledge_advertising(AdvertisingState, DeskState, PreparationState);
     void reject_advertising_action(std::string reason);
-    void show_environment(EnvironmentView, const DeskRequest& owner);
+    void show_environment(EnvironmentView, const DeskRequest& owner,std::optional<PreparationState> parent={});
     const EnvironmentScreen* environment() const { return environment_.get(); }
     const EnvironmentRequest* pending_environment() const {
         return environment_ && environment_->pending() ? &*environment_->pending() : nullptr;
