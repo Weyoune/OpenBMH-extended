@@ -21,7 +21,7 @@ InitialCompetitionOutcome prepare_initial_competitions(CareerSnapshot& state,Man
         throw std::invalid_argument("world12: unsupported Champions League qualifier layout");
     const auto before=state;auto candidate=state;GameRandom game(state.game_seed);WatcomRandom random(state.watcom_seed);
     const auto settings=*candidate.world.settings;std::vector<ClubId> clubs;
-    for(auto group:{TableGroup::germany,TableGroup::england,TableGroup::europe})for(auto league:candidate.world.catalogue.table_leagues(group))
+    for(auto group:{TableGroup::germany,TableGroup::england,TableGroup::europe})for(auto league:candidate.world.catalogue.simulation_leagues(group))
         clubs.insert(clubs.end(),candidate.world.membership[league.value].clubs.begin(),candidate.world.membership[league.value].clubs.end());
     for(auto club:clubs) {
         const bool human=std::any_of(candidate.world.managers.begin(),candidate.world.managers.end(),[&](const auto& m){return m.club==club;});
