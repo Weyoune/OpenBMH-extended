@@ -85,6 +85,8 @@ int main()try {
         owner_app::initialize_first_season_manager_services(second_service,second_owner,{74,0},ref);
         check(service==second_service&&owner.revision==1&&sales.tickets.size()==service.world.managers.size()&&sales.watcom_draws>0,"initial ticket/reset services changed across repeat or lost owner/receipt");
         check(service.game_seed==prepared.game_seed&&service.world.initial_competitions->manager_services_complete,"ticket/reset stage changed G or lost completion marker");
+        check(service.transfers.has_value(),"fresh Source transfer balance remains unknown before any auction");
+        for(const auto& manager:service.world.managers)check(service.transfers->balance[manager.seat]==0&&service.transfers->history[manager.seat].empty(),"fresh transfer balance/history differs from Source reset");
         for(const auto& manager:service.world.managers){check(manager.career->season_services&&manager.career->season_services->tickets_sold>0&&manager.career->season_services->ticket_income>0,"initial tickets missing");
             check(manager.career->season_services->strength_history_count==0&&manager.match_state->goal_notices==0&&manager.match_state->tax_policy==0,"initial seasonal flags/history were not reset");
             for(const auto& row:manager.tactics->backing->scalar_rows)check(row[6]==0&&row[15]>=20&&row[15]<=50,"initial tactical reset/familiarity not retained");}

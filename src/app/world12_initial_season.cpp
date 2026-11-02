@@ -2,6 +2,7 @@
 #include "app/world12_initial_season.hpp"
 #include "game/world12/european.hpp"
 #include "game/world12/match_projection.hpp"
+#include "game/world12/market_auctions.hpp"
 #include "game/season.hpp"
 #include "game/lineup.hpp"
 #include <algorithm>
@@ -105,6 +106,7 @@ InitialManagerServicesOutcome initialize_first_season_manager_services(bmh::worl
         const auto loans=layout::Career_CareerManagersEnd_RuntimeField;projected.state.memory.add_block(loans,24);for(size_t i=0;i<12;++i)projected.state.memory.set16(loans+uint32_t(i*2),0xfff);
         MinuteReport report;reset_manager_season(projected.state,0,random,report);if(report.unsupported)throw std::invalid_argument(report.reason);
         projected.commit_match_state(candidate.world,true);
+        capture_transfer_history(candidate,projected);
     }
     for(auto& [id,club]:candidate.world.clubs)if(club.league.valid())club.fairplay_points=0;
     candidate.results=SeasonResults::empty(candidate.world.catalogue);candidate.world.initial_competitions->manager_services_complete=true;candidate.watcom_seed=random.seed();candidate.validate();
