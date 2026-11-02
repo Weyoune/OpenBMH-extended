@@ -12,6 +12,7 @@
 #include "formats/le.hpp"
 #include "formats/textd.hpp"
 #include "game/table.hpp"
+#include "game/world12/identity.hpp"
 #include "ui/league_family_request.hpp"
 #include "ui/sprite_font.hpp"
 
@@ -34,6 +35,7 @@ struct LeagueTableRow {
     int points = 0;
     int previous_rank = 0;
     uint32_t form_bits = 0;       // packed Uint8T result chain
+    std::optional<uint8_t> rank_color; // Typed country-aware palette; absent retains Source rule.
     bool operator==(const LeagueTableRow&) const = default;
 };
 
@@ -74,6 +76,30 @@ struct LeagueTableState {
     bool operator==(const LeagueTableState&) const = default;
 };
 
+struct World12TableIdentity {
+    uint8_t manager=0; bmh::world12::ClubId club;
+    uint64_t revision=0,scope=0,sequence=0;
+    bool operator==(const World12TableIdentity&)const=default;
+};
+enum class World12TableAction:uint8_t {close,select_league,next_group,control,team_info};
+struct World12TableRequest {
+    World12TableIdentity identity;
+    World12TableAction action=World12TableAction::close;
+    bmh::world12::LeagueId league;
+    bmh::world12::ClubId team;
+    int value=-1;
+    bool operator==(const World12TableRequest&)const=default;
+};
+struct World12TableState {
+    World12TableIdentity identity;
+    LeagueTableState table;
+    std::string subtitle;
+    bmh::world12::TableGroup group=bmh::world12::TableGroup::germany;
+    std::array<bool,3> groups{};
+    std::vector<bmh::world12::LeagueId> leagues;
+    std::vector<bmh::world12::ClubId> clubs; // canonical IDs parallel to displayed ranks
+};
+
 LeagueTableState league_table_from_game(const bmh::GameState&, int manager_slot, int league_id);
 LeagueTableState league_table_from_game(const bmh::GameState&, int manager_slot, int league_id,
                                        const LeagueTableProjectionContext&);
@@ -94,7 +120,12 @@ public:
     LeagueTableScreen(const std::filesystem::path& data,
                       std::array<LeagueTableState, 9> tables, int initial_league,
                       OpponentMode);
-    const LeagueTableState& state() const { return tables_[size_t(selected_league_)]; }
+    LeagueTableScreen(const std::filesystem::path&,World12TableState,const LeImage& reference);
+    const std::optional<World12TableState>& world12_state()const{return world12_;}
+    const std::optional<World12TableRequest>& pending_world12_action()const{return world12_pending_;}
+    void reject_world12_action(std::string);
+    std::optional<std::pair<int,int>> world12_league_center(bmh::world12::LeagueId)const;
+    const LeagueTableState& state() const { return world12_?world12_->table:tables_[size_t(selected_league_)]; }
     int selected_league() const { return selected_league_; }
     bool close_requested() const { return close_requested_; }
     const std::optional<LeagueFamilyRequest>& pending_family_action() const { return pending_family_action_; }
@@ -112,6 +143,13 @@ public:
     bool key(std::string_view key);
 
 private:
+    LeagueTableScreen(const std::filesystem::path&,const LeImage& reference);
+    std::optional<World12TableState> world12_;
+    std::optional<World12TableRequest> world12_pending_;
+    Image country_atlas_;
+    std::pair<int,int> world12_league_cell(size_t)const;
+    int world12_hit_at(int,int,bool)const;
+    bool post_world12_hit(int);
     std::array<LeagueTableState, 9> tables_;
     Font font_;
     Image desktop_background_;

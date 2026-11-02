@@ -1790,7 +1790,73 @@ int main(int argc, char** argv) {
                     app::ClubModalServices services;services.club_projection=provider;
                     return present_club_information(services,0)&&running;
                 };
-                const auto result=app::world12::serve_startup(flow,r,world_session,data,seed,1,r.request==ui::FlowRequest::kickoff?make_pending_offer_hooks(flow.render()):PendingOfferHooks{},nullptr,advertising,construction,compensation,ui::SettingsSoundCapabilities{playback.original_ready()&&playback.available(),playback.original_ready()&&playback.available()},settings_notice,club_information);
+                const app::world12::TableRangePresenter table_range=[&](const ui::TableRangeDialogProfile& profile,const Image& backdrop)
+                    -> std::optional<ui::TableRangeDialogOutcome> {
+                    ui::LeagueTableRangeDialog dialog(data,backdrop,profile,season_exe);
+                    std::deque<std::string> keys;
+                    Uint32 clock_anchor=SDL_GetTicks();
+                    std::optional<ui::TableRangeDialogOutcome> outcome;
+                    const auto show=[&] {
+                        do {
+                            present_season(dialog.render(),"OpenBMH - extended_table_range");
+                            outcome=dialog.after_present();
+                            // Source restores the underlay after the updated modal
+                            // Present. That distinct final Present delivers exit.
+                        }while(!outcome&&dialog.waiting_for_exit_present());
+                        clock_anchor=SDL_GetTicks();
+                    };
+                    const auto expire_range=[&] {
+                        //BalanceFromGame polls raw event8 before its next input. Keep its
+                        //key/N waits and accepted value owner; expose cancellation
+                        //only after the restored backdrop has actually been shown.
+                        if(!dialog.source_input_ready() || !poll_process_timer(true,true) ||
+                           !dialog.cancel_from_source_event())return false;
+                        show();
+                        return true;
+                    };
+                    show();
+                    while(running&&!outcome) {
+                        if(expire_range())break;
+                        SDL_Event input;
+                        while(quit_confirmation.poll(&input)) {
+                            if(input.type==SDL_QUIT){running=false;break;}
+                            if(expire_range())break;
+                            bool changed=false;
+                            if(input.type==SDL_TEXTINPUT) {
+                                for(char c:std::string_view(input.text.text))if(c>='0'&&c<='9')keys.emplace_back(1,c);
+                            } else if(input.type==SDL_KEYDOWN) {
+                                if(input.key.keysym.sym==SDLK_RETURN)keys.push_back("ENTER");
+                                else if(input.key.keysym.sym==SDLK_BACKSPACE)keys.push_back("BACKSPACE");
+                                else if(input.key.keysym.sym==SDLK_SPACE)keys.push_back("SPACE");
+                            } else if(input.type==SDL_MOUSEMOTION)changed=dialog.move(input.motion.x,input.motion.y);
+                            else if(input.type==SDL_MOUSEBUTTONDOWN&&
+                                    (input.button.button==SDL_BUTTON_LEFT||input.button.button==SDL_BUTTON_RIGHT))
+                                changed=dialog.pointer_down(input.button.x,input.button.y,input.button.button==SDL_BUTTON_RIGHT);
+                            else if(input.type==SDL_MOUSEBUTTONUP&&
+                                    (input.button.button==SDL_BUTTON_LEFT||input.button.button==SDL_BUTTON_RIGHT))
+                                changed=dialog.pointer_up(input.button.x,input.button.y,input.button.button==SDL_BUTTON_RIGHT);
+                            // A drag-only release does not restart an existing Source wait.
+                            if(changed&&input.type!=SDL_MOUSEBUTTONUP)show();
+                            if(outcome)break;
+                        }
+                        if(!running||outcome)break;
+                        while(!keys.empty()&&dialog.source_input_ready()) {
+                            if(expire_range())break;
+                            const auto key=std::move(keys.front());keys.pop_front();
+                            if(dialog.key(key))show();
+                            if(outcome)break;
+                        }
+                        const Uint32 now=SDL_GetTicks(),units=Uint32(now-clock_anchor)/20;
+                        if(units) {
+                            clock_anchor+=units*20;
+                            if(dialog.tick_source_units(units))show();
+                        }
+                        SDL_Delay(10);
+                    }
+                    if(!outcome)return {};
+                    return *outcome;
+                };
+                const auto result=app::world12::serve_startup(flow,r,world_session,data,seed,1,r.request==ui::FlowRequest::kickoff?make_pending_offer_hooks(flow.render()):PendingOfferHooks{},nullptr,advertising,construction,compensation,ui::SettingsSoundCapabilities{playback.original_ready()&&playback.available(),playback.original_ready()&&playback.available()},settings_notice,club_information,table_range);
                 if(result.error.empty()&&(result.progress==app::world12::StartupProgress::prepared||
                    (r.request==ui::FlowRequest::file_action&&r.file_action.file_kind==ui::SaveLoadFileKind::game&&r.file_action.action==ui::SaveLoadAction::load))) {
                     world_process_timer.reset();process_timer_frame.reset();

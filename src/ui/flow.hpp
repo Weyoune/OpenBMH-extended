@@ -54,7 +54,7 @@ struct CareerInitializationResult {
     std::vector<InitializedManager> managers;
     PreparationState preparation;
 };
-enum class FlowRequest { none, load_game, manager_confirmed, new_career, kickoff, desk_action, end_session, submenu_opened, submenu_closed, contracts_closed, submenu_action, file_action, results_closed, mailbox_action, mailbox_closed, settings_action, settings_close, settings_file_action, friendly_action, national_friendly_selected, contract_action, advertising_action, environment_action, join_options, join_manager, join_cancel, league_pairings_action, strengths_action, top_scorers_action, balance_action, other_games_action, league_family_action, opportunities_action, statistics_menu_action, statistics_rankings_action, analytics_action, statistics_page_action, reschedule_action };
+enum class FlowRequest { none, load_game, manager_confirmed, new_career, kickoff, desk_action, end_session, submenu_opened, submenu_closed, contracts_closed, submenu_action, file_action, results_closed, mailbox_action, mailbox_closed, settings_action, settings_close, settings_file_action, friendly_action, national_friendly_selected, contract_action, advertising_action, environment_action, join_options, join_manager, join_cancel, league_pairings_action, strengths_action, top_scorers_action, balance_action, other_games_action, league_family_action, opportunities_action, statistics_menu_action, statistics_rankings_action, analytics_action, statistics_page_action, reschedule_action, world12_table_action };
 enum class StatisticsPageActionKind : uint8_t { close, alltime, world_cup };
 struct StatisticsPageAction { DeskRequest owner{}; int page=-1; StatisticsPageActionKind kind=StatisticsPageActionKind::close; int nation=-1; bool relative=false; bool operator==(const StatisticsPageAction&) const = default; };
 struct FlowResult {
@@ -86,6 +86,7 @@ struct FlowResult {
     OtherGamesRequest other_games_action{};
     LeagueFamilyRequest league_family_action{};
     RescheduleAction reschedule_action{};
+    World12TableRequest world12_table_action{};
 };
 
 class StartupFlow {
@@ -161,6 +162,13 @@ public:
     bool in_results_view() const { return bool(matchday_results_); }
     bool in_settings() const { return bool(settings_ && !save_load_); }
     bool settings_readme_release_pending() const { return settings_readme_release_barrier_; }
+    const LeagueTableScreen* world12_table_screen()const{return league_table_&&league_table_->world12_state()?league_table_.get():nullptr;}
+    const World12TableRequest* pending_world12_table()const{const auto* screen=world12_table_screen();return screen&&screen->pending_world12_action()?&*screen->pending_world12_action():nullptr;}
+    void show_world12_tables(World12TableState,PreparationState,const DeskRequest&);
+    struct World12TableView {std::unique_ptr<DesktopScreen> desktop;std::unique_ptr<PreparationState> preparation;std::unique_ptr<LeagueTableScreen> screen;};
+    World12TableView prepare_world12_table_result(World12TableState,PreparationState,const World12TableRequest&,bool closed)const;
+    void finish_world12_tables(World12TableView)noexcept;
+    void reject_world12_table(std::string reason);
     void show_league_tables(std::array<LeagueTableState, 9> tables, int initial_league);
     void show_family_league_tables(std::array<LeagueTableState, 9> tables, int initial_league,
         StrengthsIdentity identity, std::optional<PreparationState> preparation = {});
@@ -434,6 +442,7 @@ public:
     const NewCareerRequest* pending_career() const { return pending_.get(); }
     const ManagerChoice* pending_manager() const { return awaiting_context_ ? &confirmed_.back() : nullptr; }
 private:
+    FlowResult finish_world12_table_input(bool changed);
     FlowResult finish_statistics_rankings_input(bool changed);
     FlowResult finish_analytics_input(bool changed);
     bool joining_ = false, join_options_pending_ = false, join_choice_pending_ = false;

@@ -201,3 +201,18 @@ The file picker reuses the Original overwrite question and Ja/Nein button
 layout. A separate Yes click or Enter confirms; repeated double-clicks do not.
 OpenBMH deviates from the original: host file operations use the shared dialog's
 system identity because the picker does not own a live manager portrait projection.
+
+
+## Extended typed table preferences and intervals
+
+OpenBMH deviates from the original: older development snapshots did not expose
+the typed table menu or retain its display word. On first entry, its unknown
+value initializes to the Original new-career default `0x11`; no gameplay history
+is inferred. World schema 33 then retains all sixteen preference bits.
+
+Changing to another typed league starts its own valid current-round interval,
+so a 38-round English selection cannot spill into an 18-round group. Same-league
+selection retains the existing view. The standalone typed table closes without
+the unintegrated legacy family teardown/random stir. Legacy table controls and
+rendering retain their existing path. See [country tables](poc-1.2/TABLES.md) for
+supported controls, scope policy, ownership checks and remaining family actions.

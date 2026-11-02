@@ -51,6 +51,8 @@ LeagueTableRangeDialog::LeagueTableRangeDialog(const std::filesystem::path& data
                                                Image backdrop,
                                                TableRangeDialogProfile profile, bool toto)
     : LeagueTableRangeDialog(data_directory,std::move(backdrop),profile,toto,load_le(asset_path(data_directory,"BMH.exe"))) {}
+LeagueTableRangeDialog::LeagueTableRangeDialog(const std::filesystem::path& data,Image backdrop,TableRangeDialogProfile profile,const LeImage& reference)
+    : LeagueTableRangeDialog(data,std::move(backdrop),profile,false,reference) {}
 LeagueTableRangeDialog::LeagueTableRangeDialog(const std::filesystem::path& data_directory,Image backdrop,TotoStakeDialogProfile profile,const LeImage& reference)
     : LeagueTableRangeDialog(data_directory,std::move(backdrop),TableRangeDialogProfile{::bmh::layout::LeagueTableRangeDialog_Backdrop_ExecutableField,10000,400000,0,profile.text_mode,profile.x,profile.y},true,reference) {}
 LeagueTableRangeDialog::LeagueTableRangeDialog(const std::filesystem::path& data_directory,Image backdrop,TableRangeDialogProfile profile,bool toto,const LeImage& reference)

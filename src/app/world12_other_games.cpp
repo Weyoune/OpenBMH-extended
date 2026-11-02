@@ -3,6 +3,7 @@
 #include "game/world12/desktop_projection.hpp"
 #include "ui/desktop.hpp"
 #include "ui/other_games.hpp"
+#include "app/world12_visible_menu.hpp"
 #include <algorithm>
 namespace bmh::app::world12 {
 namespace {
@@ -10,14 +11,7 @@ bmh::world12::Manager& actor(bmh::world12::CareerSnapshot& state,uint8_t seat) {
     auto found=std::find_if(state.world.managers.begin(),state.world.managers.end(),[&](const auto& m){return m.seat==seat;});
     if(found==state.world.managers.end()||!found->career)throw FormatError("world12: competition manager state is unavailable");return *found;
 }
-bool visible_menu(const ui::DeskState& desk,int id,int kind) {
-    for(const auto& item:desk.items)if(item.id==id&&item.kind==kind&&!item.disabled)return true;
-    if(id<1||id>30)return false;
-    const auto& row=desk.layout_records[size_t(id)];const size_t folder=row[13]&0x7f;
-    if(row[12]!=kind||folder>=3||row[5]!=0xff||row[6]!=0xff||(row[1]&0x10))return false;
-    if(std::find(desk.folder_icon_slots[folder].begin(),desk.folder_icon_slots[folder].end(),uint8_t(id))==desk.folder_icon_slots[folder].end())return false;
-    return std::any_of(desk.items.begin(),desk.items.end(),[&](const auto& item){return item.kind==50+int(folder)&&!item.disabled;});
-}
+
 
 }
 ui::OtherGamesState Session::other_games_page(const bmh::world12::CareerSnapshot& state,
@@ -36,7 +30,7 @@ ui::OtherGamesState Session::open_other_games(const ui::DeskRequest& request) {
         throw FormatError("world12: invalid competition overview owner");
     const auto p=bmh::world12::project_manager_desktop(state_,resources_.reference);
     const auto desk=ui::desk_from_game(p.state,resources_.german,owner_.revision);
-    if(!visible_menu(desk,request.item_id,5))throw FormatError("world12: competition overview icon is not enabled");
+    if(!visible_world12_menu(desk,request.item_id,5))throw FormatError("world12: competition overview icon is not enabled");
     auto candidate=state_;const auto seat=*candidate.desktop->active_seat;
     // CupGroupOverview begins with detail and participant zero, even for a
     // previous save whose display byte was not yet represented by its schema.

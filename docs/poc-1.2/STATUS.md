@@ -691,3 +691,21 @@ W draws. Player cards, club statistics and category changes remain hidden until
 their typed owners are ready. Remaining competition/live/annual/three-season
 Beta gates remain open. Screenshots and saves are private under
 `bmh_4k_ui/docs/qa/extended-club-information`.
+
+
+## Country-aware Original tables
+
+[League tables](TABLES.md) now have a typed desktop/window owner, Germany/England/
+Europe selectors and all thirteen actual league sizes. Disabled England retains
+only its Premier-League fallback under Europe. The existing Original renderer
+shows stored ranks/results/form; Source footer filters and two-stage numeric
+ranges use each league's own limits. Visible rows open the owned roster inspector.
+World schema 33 retains the active manager's original table display word.
+
+Model tests compare 224 queries with Original calculations. Actual input checks
+cover navigation, ranges, cancellation, saves and stale owners; separate views use
+real Core-computed league results. The selector markers are centred using the
+actual frame height and subtitles retain the ordinal dot/space. KI forecast and
+pairings/strength family switches stay hidden until their owners are connected.
+Remaining management/live/calendar/competition/annual/three-season Beta gates
+remain open; this is not a playable release qualification.

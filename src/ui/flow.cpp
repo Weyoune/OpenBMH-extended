@@ -17,6 +17,7 @@ FlowResult StartupFlow::move_action(int x, int y) {
         const bool changed=family_table_range_dialog_->move(x,y);
         return {changed};
     }
+    if(world12_table_screen())return {league_table_->move(x,y)};
     if(other_games_)return {other_games_->move(x,y)};
     if(balance_)return {balance_->move(x,y)};
     if(top_scorers_)return {top_scorers_->move(x,y)};
@@ -427,6 +428,7 @@ FlowResult StartupFlow::click(int x, int y, bool right, bool double_click) {
         }
         return finish_readonly_input(changed);
     }
+    if(world12_table_screen())return finish_world12_table_input(league_table_->click(x,y,right));
     if (league_table_) {
         const bool changed = right ? league_table_->key("ESC") : league_table_->click(x, y);
         if(const auto* family=pending_league_family_action()) {

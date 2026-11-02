@@ -60,6 +60,7 @@ public:
 
     LeagueTableRangeDialog(const std::filesystem::path& data_directory,Image backdrop,
                            TotoStakeDialogProfile profile,const LeImage& reference);
+    LeagueTableRangeDialog(const std::filesystem::path&,Image,TableRangeDialogProfile,const LeImage& reference);
     Image render() const;
 
     // Source mouse event 2 is handled on button-down. pointer_up only ends a

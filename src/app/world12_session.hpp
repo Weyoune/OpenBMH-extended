@@ -16,6 +16,8 @@
 #include "ui/toto.hpp"
 #include "ui/settings.hpp"
 #include "ui/world12_other_games.hpp"
+#include "ui/world12_table.hpp"
+#include "ui/league_table_range_dialog.hpp"
 #include "app/world12_club_information.hpp"
 #include "app/world12_process_timer.hpp"
 #include "app/world12_advertising.hpp"
@@ -41,6 +43,7 @@ struct RuntimeResources {
 // Explicit reference layout is a Core workspace, never legacy admission of the
 // dual-world package. Actual club/player data comes exclusively from WORLD12.
 RuntimeResources load_runtime_resources(const std::filesystem::path& directory);
+using TableRangePresenter=std::function<std::optional<ui::TableRangeDialogOutcome>(const ui::TableRangeDialogProfile&,const Image&)>;
 class Session {
 public:
     Session(RuntimeResources,ui::SetupOptions,uint32_t seed,uint64_t scope);
@@ -75,6 +78,9 @@ public:
     void play_prepared_matches(uint64_t expected_revision,const bmh::world12::HumanRoundHooks&);
 
     PendingOfferResult resolve_pending(const std::filesystem::path&,const ui::DeskRequest&,const PendingOfferHooks&);
+    ui::World12TableState open_tables(const ui::DeskRequest&);
+    ui::World12TableState tables_view()const;
+    bool apply_tables(const ui::World12TableRequest&,const std::filesystem::path& data={},const ClubInformationPresenter& club={},const TableRangePresenter& range={});
     ui::OtherGamesState open_other_games(const ui::DeskRequest&);
     ui::OtherGamesState other_games_view()const;
     bool apply_other_games(const ui::OtherGamesRequest&,const std::filesystem::path& data={},const ClubInformationPresenter& presenter={}); // true retires the window.
@@ -147,6 +153,10 @@ private:
     std::optional<ui::DeskRequest> settings_owner_;
     std::optional<ui::SettingsSoundCapabilities> settings_sound_;
     void validate_settings_owner(uint64_t sequence,uint64_t revision)const;
+    uint64_t table_generation_=0;
+    std::optional<ui::World12TableIdentity> table_owner_;
+    ui::World12TableSelection table_selection_;
+    ui::World12TableState table_page(const bmh::world12::CareerSnapshot&,const ui::World12TableIdentity&,const ui::World12TableSelection&)const;
     uint64_t other_games_generation_=0;
     std::optional<ui::World12OtherGamesIdentity> other_games_owner_;
     ui::World12OtherSelection other_games_selection_;

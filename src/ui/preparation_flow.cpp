@@ -658,6 +658,34 @@ void StartupFlow::reject_strengths(std::string reason) {
     strengths_->reject_action(std::move(reason));
 }
 
+FlowResult StartupFlow::finish_world12_table_input(bool changed){
+    if(const auto* request=pending_world12_table()){FlowResult out{changed,FlowRequest::world12_table_action};out.world12_table_action=*request;return out;}return {changed};
+}
+void StartupFlow::show_world12_tables(World12TableState page,PreparationState parent,const DeskRequest& owner){
+    if(!desktop_||!world12_reference_||desktop_->state().source!="world12"||!engine_attached_||in_preparation_menu()||in_readonly_view()||
+       !desktop_->pending()||*desktop_->pending()!=owner||owner.kind!=DeskRequestKind::open_menu||owner.menu_kind!=0||
+       owner.revision!=desktop_->state().revision||owner.manager_slot!=desktop_->state().manager_slot||page.identity.revision!=owner.revision+1||
+       parent.desktop.revision!=page.identity.revision||page.identity.club!=desktop_->state().managers.at(size_t(owner.manager_slot)).world_club)
+        throw FormatError("world12: table opening lacks its desktop owner");
+    auto before=desktop_->state();before.revision=parent.desktop.revision;if(desk_json(before)!=desk_json(parent.desktop))throw FormatError("world12: table opening changed unrelated desktop fields");
+    validate_preparation_context(parent);World12TableView next;
+    next.screen=std::make_unique<LeagueTableScreen>(data_,std::move(page),render_reference());next.desktop=std::make_unique<DesktopScreen>(data_,parent.desktop,render_reference());next.preparation=std::make_unique<PreparationState>(std::move(parent));finish_world12_tables(std::move(next));
+}
+StartupFlow::World12TableView StartupFlow::prepare_world12_table_result(World12TableState page,PreparationState parent,const World12TableRequest& request,bool closed)const {
+    const auto* screen=world12_table_screen();const auto* pending=pending_world12_table();
+    if(!screen||!pending||*pending!=request||screen->world12_state()->identity!=request.identity||!desktop_||!world12_reference_||
+       parent.desktop.source!="world12"||closed!=(request.action==World12TableAction::close))throw FormatError("world12: table result has no matching window");
+    auto identity=request.identity;++identity.revision;++identity.sequence;
+    if(page.identity!=identity||parent.desktop.revision!=identity.revision)throw FormatError("world12: table result has stale revision/sequence");
+    auto before=desktop_->state();before.revision=parent.desktop.revision;
+    if(request.action==World12TableAction::team_info){before.strength=parent.desktop.strength;before.warnings[5]=parent.desktop.warnings[5];before.warnings[6]=parent.desktop.warnings[6];for(size_t i=0;i<before.rank_curves.size();++i)before.rank_curves[i].strength=parent.desktop.rank_curves[i].strength;}
+    if(desk_json(before)!=desk_json(parent.desktop))throw FormatError("world12: table navigation changed unrelated desktop fields");
+    validate_preparation_context(parent);World12TableView next;if(!closed)next.screen=std::make_unique<LeagueTableScreen>(data_,std::move(page),render_reference());
+    next.desktop=std::make_unique<DesktopScreen>(data_,parent.desktop,render_reference());next.preparation=std::make_unique<PreparationState>(std::move(parent));return next;
+}
+void StartupFlow::finish_world12_tables(World12TableView next)noexcept{desktop_=std::move(next.desktop);preparation_=std::move(next.preparation);league_table_=std::move(next.screen);}
+void StartupFlow::reject_world12_table(std::string reason){if(!world12_table_screen())throw FormatError("world12: table rejection without window");league_table_->reject_world12_action(std::move(reason));}
+
 void StartupFlow::show_world12_other_games(OtherGamesState page,PreparationState parent,const DeskRequest& owner) {
     if(!desktop_||!world12_reference_||desktop_->state().source!="world12"||!engine_attached_||in_preparation_menu()||in_readonly_view()||
        !desktop_->pending()||*desktop_->pending()!=owner||owner.kind!=DeskRequestKind::open_menu||owner.menu_kind!=5||
@@ -953,6 +981,10 @@ FlowResult StartupFlow::process_timer_expired(int pointer_x, int pointer_y) {
         if (pending_friendly_action_ || !friendly_calendar_quote()) return {};
         return click(0, 0, true);
     }
+    if(engine_attached_&&world12_table_screen()){
+        if(pending_world12_table()||league_table_->source_mouse_wait_release_pending())return {};
+        return pointer_down(0,0,true);
+    }
     if (engine_attached_ && calendar_) {
         //CalendarCell returns0 on event8, including the reschedule caller. Keep an
         //owned command or physical release before cancelling its selection.
@@ -1091,6 +1123,7 @@ FlowResult StartupFlow::pointer_down(int x,int y,bool right) {
         if(changed)family_table_reset_clock_after_present_=true;
         return {changed};
     }
+    if(world12_table_screen())return finish_world12_table_input(league_table_->pointer_down(x,y,right));
     if(other_games_)return finish_other_games_input(other_games_->pointer_down(x,y,right));
     if(alltime_table_) {
         if(alltime_table_->pointer_down(x,y,right)) {

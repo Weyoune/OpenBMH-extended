@@ -243,18 +243,17 @@ std::string league_table_json(const LeagueTableState& state) {
     return out.str();
 }
 
-LeagueTableScreen::LeagueTableScreen(const std::filesystem::path& data,
-                                     std::array<LeagueTableState, 9> tables,
-                                     int initial_league)
-    : tables_(std::move(tables)), font_(load_font(asset_path(data / "F", "BMH3.FNT"))),
+LeagueTableScreen::LeagueTableScreen(const std::filesystem::path& data,const LeImage& reference)
+    : font_(load_font(asset_path(data / "F", "BMH3.FNT"))),
       desktop_background_(load_vga(asset_path(data / "KB", "129.VGA"))),
       background_(load_vga(asset_path(data / "KB", "56.VGA"))),
       widget_atlas_(load_vga(asset_path(data / "KB", "0.VGA"))),
-      selector_atlas_(load_vga(asset_path(data / "KB", "1.VGA"))),
-      exe_(load_le(asset_path(data, "BMH.exe"))),
-      texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
-      sprite_font_(data),
-      selected_league_(initial_league) {
+      selector_atlas_(load_vga(asset_path(data / "KB", "1.VGA"))),exe_(reference),
+      texts_(load_textd(asset_path(data,"TEXTD.BLK"))),sprite_font_(data,reference) {}
+LeagueTableScreen::LeagueTableScreen(const std::filesystem::path& data,
+                                     std::array<LeagueTableState,9> tables,int initial_league)
+    : LeagueTableScreen(data,load_le(asset_path(data,"BMH.exe"))) {
+    tables_=std::move(tables);selected_league_=initial_league;
     if (initial_league < 0 || initial_league >= bmh::kLeagueCount ||
         desktop_background_.width != 320 || desktop_background_.height != 240 ||
         background_.width != 318 || background_.height != 207)
@@ -303,6 +302,26 @@ LeagueTableScreen::LeagueTableScreen(const std::filesystem::path& data,
     for (auto& table : tables_) {
         if (!table.source_controls_projection) table.display_word = id.expected_family_word;
     }
+}
+
+LeagueTableScreen::LeagueTableScreen(const std::filesystem::path& data,World12TableState page,const LeImage& reference)
+    : LeagueTableScreen(data,reference) {
+    if(!page.identity.club.valid()||!page.identity.scope||page.identity.manager>3||page.table.manager_slot!=page.identity.manager||
+       page.table.league_id<0||page.table.league_id>=13||uint8_t(page.group)>2||!page.groups[size_t(page.group)]||
+       page.leagues.empty()||page.leagues.size()>5||page.table.rows.size()<2||page.table.rows.size()>20||
+       !page.table.source_controls_projection||page.table.source_normal_mode<0||page.table.source_normal_mode>1||page.table.retained_range_label_source_bytes.size()!=9||
+       page.clubs.size()!=page.table.rows.size()||page.table.header_text.empty()||page.table.league_name.empty()||
+       std::find(page.leagues.begin(),page.leagues.end(),bmh::world12::LeagueId{uint32_t(page.table.league_id)})==page.leagues.end())
+        throw FormatError("world12: invalid table projection/identity");
+    for(size_t row=0;row<page.clubs.size();++row)if(!page.clubs[row].valid()||page.table.rows[row].rank!=int(row)+1||
+       !page.table.rows[row].rank_color||page.table.rows[row].name.empty()||page.table.rows[row].runtime_team_id!=int(row)||page.table.rows[row].club_identity_key!=int(row)||
+       page.table.rows[row].games<0||page.table.rows[row].games>63||page.table.rows[row].wins<0||page.table.rows[row].draws<0||page.table.rows[row].losses<0||
+       page.table.rows[row].wins+page.table.rows[row].draws+page.table.rows[row].losses!=page.table.rows[row].games||
+       std::find(page.clubs.begin(),page.clubs.begin()+row,page.clubs[row])!=page.clubs.begin()+row)
+        throw FormatError("world12: invalid table club/rank mapping");
+    country_atlas_=load_vga(asset_path(data/"KB","SETUP12.VGA"));
+    if(country_atlas_.width!=204||country_atlas_.height!=80)throw FormatError("world12: missing Original country selectors");
+    selected_league_=page.table.league_id;league_group_=int(page.group);world12_=std::move(page);(void)render();
 }
 
 void LeagueTableScreen::text(Image& image, int x, int y, std::string_view value,
@@ -366,6 +385,7 @@ Image LeagueTableScreen::render() const {
                 original_text(exe_, ::bmh::layout::CareerSession_FormatError_TextPointer) + textd(::bmh::layout::CareerSession_FormatError_TextPointer4);
         }
     }
+    if(world12_){title=original_to_utf8(texts_[(layout::LeagueTable_OriginalToUtf8_TextPointer-layout::TextPointerTable)/4])+league_title;subtitle=world12_->subtitle;}
     const int title_width = sprite_font_.text_width(title);
     sprite_font_.draw(image, SpriteFont::centered_title_x(title_width), 13, title);
     if (!subtitle.empty()) sprite_font_.draw(image, 5, 235, subtitle);
@@ -376,7 +396,7 @@ Image LeagueTableScreen::render() const {
     // which use BMH3.FNT. Their column starts are x=0x1e,0x72,0xce,0xff.
     for (const auto& row : table.rows) {
         const int y = kFirstOriginalRowY + (row.rank - 1) * kOriginalRowHeight;
-        const auto rank_color = original_rank_color(table.league_id, row.rank - 1);
+        const auto rank_color = row.rank_color ? *row.rank_color : original_rank_color(table.league_id,row.rank-1);
         if (row.rank < 10) {
             text(image, 1, y, formatted_field(row.rank, 2) + original_text(exe_, ::bmh::layout::CupDraw_DrawGroupOverview_TextPointer2), rank_color, 24);
         } else {
@@ -439,6 +459,7 @@ Image LeagueTableScreen::render() const {
     // FriendlyMatchScreen's twelve original control buttons (FormatError3).
     const uint16_t word = uint16_t(table.display_word & ~uint16_t(0x80));
     for (int index = 0; index < 12; ++index) {
+        if(world12_&&(index==3||index>=10))continue;
         const int x = 1 + (index / 4) * 65;
         const int y = 176 + (index % 4) * 13;
         std::string label = texts_[size_t(73 + index)];
@@ -468,6 +489,17 @@ Image LeagueTableScreen::render() const {
                (word & (uint16_t(1) << index)) != 0);
     }
 
+    if(world12_){
+        selector(image,205,176,3);
+        // Reuse the supplied Original Germany/England/globe setup symbols.
+        copy_region(image,country_atlas_,int(world12_->group)*51,40,264,176,51,40,0xc0);
+        const char* label=world12_->group==bmh::world12::TableGroup::germany?"Deutschland":world12_->group==bmh::world12::TableGroup::england?"England":"Europa";
+        text(image,264,225,label,kHeading,54);
+        for(size_t row=0;row<world12_->leagues.size();++row){
+            const auto [x,y]=world12_league_cell(row);
+            copy_region(image,selector_atlas_,188,world12_->leagues[row].value==uint32_t(selected_league_)?8:0,x,y,8,8,0xc0);
+        }
+    }else {
     // Selector/Selector2: Source's league map and league-group selectors.
     selector(image, 205, 176, 3);
     selector(image, 262, 176, pressed_hit_ == 200 ? (league_group_ ^ 1) : league_group_);
@@ -482,6 +514,8 @@ Image LeagueTableScreen::render() const {
                         x, marker_y, 8, 8, 0xc0);
         }
     }
+    }
+    if(!rejection_.empty())text(image,5,235,rejection_,0xf7,310);
     return image;
 }
 
@@ -590,6 +624,11 @@ int LeagueTableScreen::hit_at(int x, int y, bool right) const {
 }
 
 bool LeagueTableScreen::pointer_down(int x, int y, bool right) {
+    if(world12_){
+        if(world12_pending_)return false;
+        const int hit=world12_hit_at(x,y,right);if(hit<0)return false;
+        if(hit<12){pressed_hit_=hit;return true;}return post_world12_hit(hit);
+    }
     if (opponent_mode_) {
         if (close_requested_ || right) return false;
         const int hit = hit_at(x,y);
@@ -620,7 +659,7 @@ bool LeagueTableScreen::pointer_down(int x, int y, bool right) {
 
 bool LeagueTableScreen::move(int x, int y) {
     if (pressed_hit_ < 0) return false;
-    if (hit_at(x, y, pressed_hit_ == 400) != pressed_hit_) {
+    if ((world12_?world12_hit_at(x,y,pressed_hit_==400):hit_at(x,y,pressed_hit_==400)) != pressed_hit_) {
         pressed_hit_ = -1;
         return true;
     }
@@ -678,6 +717,46 @@ bool LeagueTableScreen::activate_hit(int hit) {
     return false;
 }
 
+std::pair<int,int> LeagueTableScreen::world12_league_cell(size_t row)const{
+    const bool german=world12_->group==bmh::world12::TableGroup::germany;
+    const int tiers=german?4:int(world12_->leagues.size());
+    const int step=tiers==5?8:10;
+    const int content_height=(tiers-1)*step+8;
+    const int top=176+(int(exe_.u8(layout::LeaguePairings_Selector_RuntimeField))-content_height)/2;
+    if(german){
+        const auto league=world12_->leagues.at(row).value;
+        return {league==2?225:league==3?233:229,top+(league<2?int(league):league<4?2:3)*step};
+    }
+    return {229,top+int(row)*step};
+}
+std::optional<std::pair<int,int>> LeagueTableScreen::world12_league_center(bmh::world12::LeagueId league)const{
+    if(!world12_)return {};
+    const auto found=std::find(world12_->leagues.begin(),world12_->leagues.end(),league);
+    if(found==world12_->leagues.end())return {};
+    const auto [x,y]=world12_league_cell(size_t(found-world12_->leagues.begin()));return std::pair{x+4,y+4};
+}
+int LeagueTableScreen::world12_hit_at(int x,int y,bool right)const {
+    if(right)return 400;
+    for(int i=0;i<10;++i){if(i==3)continue;const int bx=1+(i/4)*65,by=176+(i%4)*13;if(x>=bx&&x<=bx+63&&y>=by&&y<=by+10)return i;}
+    if(x>=264&&x<315&&y>=176&&y<216)return 200;
+    for(size_t row=0;row<world12_->leagues.size();++row){const auto [cx,cy]=world12_league_cell(row);if(x>=cx&&x<cx+8&&y>=cy&&y<cy+8)return 300+int(row);}
+    if(y>28&&y<28+int(state().rows.size())*7&&x>0&&x<319)return 100+(y-29)/7;
+    return -1;
+}
+bool LeagueTableScreen::post_world12_hit(int hit){
+    World12TableRequest request;request.identity=world12_->identity;
+    if(hit==400)request.action=World12TableAction::close;
+    else if(hit==200)request.action=World12TableAction::next_group;
+    else if(hit>=300){request.action=World12TableAction::select_league;request.league=world12_->leagues.at(size_t(hit-300));}
+    else if(hit>=100){request.action=World12TableAction::team_info;request.team=world12_->clubs.at(size_t(hit-100));}
+    else {request.action=World12TableAction::control;request.value=hit;}
+    world12_pending_=request;rejection_.clear();return true;
+}
+void LeagueTableScreen::reject_world12_action(std::string reason){
+    if(!world12_pending_||reason.empty())throw FormatError("world12: no table action to reject");
+    world12_pending_.reset();pressed_hit_=-1;rejection_=std::move(reason);
+}
+
 void LeagueTableScreen::reject_family_action(std::string reason) {
     if (!family_ || !pending_family_action_ || reason.empty())
         throw FormatError("league table: no pending family rejection");
@@ -733,6 +812,12 @@ void LeagueTableScreen::acknowledge_friendly_own_club(const StrengthsIdentity& a
 }
 
 bool LeagueTableScreen::click(int x, int y, bool right) {
+    if(world12_){
+        if(world12_pending_||pressed_hit_<0)return false;
+        const int hit=pressed_hit_;pressed_hit_=-1;
+        if(world12_hit_at(x,y,right)!=hit)return true;
+        return post_world12_hit(hit);
+    }
     if (close_requested_) return false;
     if (opponent_mode_) {
         const int hit=pressed_hit_;
@@ -755,6 +840,7 @@ bool LeagueTableScreen::click(int x, int y, bool right) {
 }
 
 bool LeagueTableScreen::key(std::string_view value) {
+    if(world12_)return false;
     if (family_) {
         if (pending_family_action_) return false;
         // The Original table dispatch's key-to-close mapping is not established;

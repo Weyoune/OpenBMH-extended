@@ -9,6 +9,7 @@ describe deliberate changes; they are not a list of every known compatibility li
 - [src/app/main.cpp](../src/app/main.cpp): display the repository-owned title at its native resolution until a complete left/right click, without loading balls.
 - [src/app/quit_confirmation.hpp](../src/app/quit_confirmation.hpp): confirms application exit with a localized native dialog, with cancellation selected by default.
 - [src/app/world12_settings.cpp](../src/app/world12_settings.cpp): typed EIN import also honors the indoor-date refusal, so a file cannot invalidate owned event receipts.
+- [src/app/world12_tables.cpp](../src/app/world12_tables.cpp): pre-schema33 development saves did not represent this display word.
 - [src/app/world12_weather.cpp](../src/app/world12_weather.cpp): referee availability is scoped to each country's programme so the shared world can exceed 49 matches.
 - [src/game/career.cpp](../src/game/career.cpp): skips reserved calendar positions when assigning a joining manager to a club.
 - [src/game/career.hpp](../src/game/career.hpp): uses the supported player-generation ranges and excludes reserved calendar positions when assigning managers.
