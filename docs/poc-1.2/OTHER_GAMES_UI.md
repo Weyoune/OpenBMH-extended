@@ -21,9 +21,27 @@ With one country disabled, only that country's final remains and uses the origin
 
 `world12_other_games_state` projects the typed snapshot into the existing `OtherGamesScreen`. Original assets, sprite buttons, arrows, row text, crown markers, score phase/return-leg formatting and club-detail labels are reused. Club averages call the same Core helper as the legacy overview; rendering does not draw randomness or mutate the world.
 
-UI-local row tokens are mapped separately to global 32-bit club IDs. Requests carry a typed manager/club/revision/scope/sequence identity. Team-info requests carry the global club ID and never pass the local token as an engine ID. Legacy dispatch explicitly refuses typed requests. Read-only typed navigation supports the eight selectors, Original detail windows, complete view and stored domestic cup stages/rounds; the window owner must advance its sequence after accepted navigation.
+UI-local row tokens are mapped separately to global 32-bit club IDs. Requests carry a typed manager/club/revision/scope/sequence identity. Team-info requests carry the global club ID and never pass the local token as an engine ID. Legacy dispatch explicitly refuses typed requests. Typed navigation supports the eight selectors, Original detail windows, complete view and stored domestic cup stages/rounds. Repeating the active selector cycles blocks of sixteen participants; the arrows change rounds and wrap at the first/last planned round. Hidden compact-mode controls are rejected. The window owner advances its sequence after each accepted navigation.
 
 The existing single-edition projection/rendering path remains under its source layout. Its geometry/action tests still run against the supplied reference installation.
+
+## Session and desktop integration
+
+Menu kind 5 now opens through the typed Session from both an enabled desktop
+icon and its visible folder. The existing renderer receives the supplied runtime
+reference explicitly; opening it does not search for an original executable.
+The session stages the page, its parent desktop and renderer before publication.
+Actions authenticate the canonical manager/club, root revision/scope and window
+sequence. Reopening retires the old generation, including requests whose revision
+was subsequently changed to the current one. Closing restores the same desktop.
+Manual game saves cannot take ownership while this menu is open.
+
+World schema 32 adds the optional per-manager `other_games_view` Source byte.
+Older snapshots retain an unknown byte until Original menu entry initializes it
+to detail/participant zero (`0x80`). Selector paging and detail/complete changes
+retain the Source byte writes; round arrows reset only the local participant
+cursor. Game results, finances, date and both random streams remain unchanged
+by overview navigation. Active windows themselves are not serialized.
 
 ## QA and integration boundary
 
@@ -31,4 +49,18 @@ Data-free tests cover the selector order, scope removal, two independent scores,
 
 `world12_other_games_demo` exports seven Original-asset views from supplied private data. Its supercup scores are explicit **synthetic UI examples**, not played career results; generated images/Original content are kept only in the private QA repository.
 
-This is the typed overview and navigation adapter, not a completed GUI career hookup. Initial supercup participant selection and European/national competition owners remain pending. Their absence is displayed explicitly. No RNG, scores, cup winners or engine stage links are changed by opening or navigating this screen.
+The actual desktop hookup now has single-English and both mixed-country actor
+checks, including a frameless folder, all selectors, participant/round controls,
+future undrawn rounds, complete view, saves and stale-window rollback. A real
+Linux SDL load/click/save run compares the complete saved snapshot with the
+independently checked GUI result plus the four existing manual-save W draws.
+The milestone regression passed 167 tests, with 95 unavailable-special-fixture
+skips and no failures. Screenshots and matching saves are private under
+`bmh_4k_ui/docs/qa/extended-competition-overview`.
+
+Team-info clicks authenticate the visible canonical club but currently return an
+explicit unsupported notice; their detail window is not connected. European and
+national competition schedule/results owners and round-date presentation remain
+open. Missing competition data or a future undrawn round never receives invented
+fixtures, scores or dates. The seven-view demo above remains a separate synthetic
+UI probe, not evidence of a played career. Full live/annual/Beta gates remain open.

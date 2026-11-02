@@ -653,3 +653,22 @@ restart runtime time. Expiry uses existing Source close/event8 actions and Core
 validation; an unsupported last-day boundary preserves state and is not retried
 every frame at one revision. Remaining runtime time is not save data. R5 and the
 other management/live/competition/annual/Beta gates remain open.
+
+
+## Owned competition overview
+
+[Other games](OTHER_GAMES_UI.md) now opens from the actual typed desktop and
+visible icon folders. All eight selectors, Source participant paging, round
+arrows, detail/complete view and the two separated Super-Cup/Charity Shield
+finals display stored career fields. World schema 32 retains the per-manager
+Original display byte; canonical owner/revision/window guards protect navigation
+and reopening. The existing Original renderer is reused with an explicit runtime
+reference. Navigation changes no results, finances, dates or RNG streams.
+
+Validation: 167 local tests passed, 95 special-fixture skips, zero failures;
+the complete actual-data GUI suite covers single-English and both mixed-country
+actors. A native Linux SDL navigation/save run matches the full checked snapshot
+plus the existing manual-save W draws. Private screenshots and matching saves
+are in `bmh_4k_ui/docs/qa/extended-competition-overview`. Team-info windows,
+European/national schedule/results ownership, round-date presentation and the
+remaining live/annual/three-season release gates are still open.

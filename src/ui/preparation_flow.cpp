@@ -658,6 +658,37 @@ void StartupFlow::reject_strengths(std::string reason) {
     strengths_->reject_action(std::move(reason));
 }
 
+void StartupFlow::show_world12_other_games(OtherGamesState page,PreparationState parent,const DeskRequest& owner) {
+    if(!desktop_||!world12_reference_||desktop_->state().source!="world12"||!engine_attached_||in_preparation_menu()||in_readonly_view()||
+       !desktop_->pending()||*desktop_->pending()!=owner||owner.kind!=DeskRequestKind::open_menu||owner.menu_kind!=5||
+       owner.revision!=desktop_->state().revision||owner.manager_slot!=desktop_->state().manager_slot||!page.world12_identity||
+       page.world12_identity->revision!=owner.revision+1||parent.desktop.revision!=owner.revision+1||parent.desktop.source!="world12"||
+       page.world12_identity->club!=desktop_->state().managers.at(size_t(owner.manager_slot)).world_club)
+        throw FormatError("world12: competition overview has no matching desktop owner");
+    auto before=desktop_->state();before.revision=parent.desktop.revision;
+    if(desk_json(before)!=desk_json(parent.desktop))throw FormatError("world12: competition opening changed unrelated desktop state");
+    validate_preparation_context(parent);
+    World12OtherGamesView view;view.screen=std::make_unique<OtherGamesScreen>(data_,std::move(page),render_reference());
+    view.desktop=std::make_unique<DesktopScreen>(data_,parent.desktop,render_reference());view.preparation=std::make_unique<PreparationState>(std::move(parent));
+    finish_world12_other_games(std::move(view));
+}
+StartupFlow::World12OtherGamesView StartupFlow::prepare_world12_other_games_result(OtherGamesState page,PreparationState parent,const OtherGamesRequest& request,bool closed)const {
+    if(!other_games_||!desktop_||!world12_reference_||desktop_->state().source!="world12"||!other_games_->pending()||*other_games_->pending()!=request||
+       !request.world12_identity||request.world12_identity!=other_games_->state().world12_identity||!page.world12_identity||
+       page.identity!=OtherGamesIdentity{}||parent.desktop.source!="world12"||closed!=(request.action==OtherGamesAction::close))
+        throw FormatError("world12: competition result has no current view owner");
+    auto expected=*request.world12_identity;++expected.revision;++expected.sequence;
+    if(*page.world12_identity!=expected||parent.desktop.revision!=expected.revision)throw FormatError("world12: competition result has stale revision/sequence");
+    auto before=desktop_->state();before.revision=parent.desktop.revision;
+    if(desk_json(before)!=desk_json(parent.desktop))throw FormatError("world12: competition navigation changed unrelated desktop state");
+    validate_preparation_context(parent);World12OtherGamesView out;
+    if(!closed)out.screen=std::make_unique<OtherGamesScreen>(data_,std::move(page),render_reference());
+    out.desktop=std::make_unique<DesktopScreen>(data_,parent.desktop,render_reference());out.preparation=std::make_unique<PreparationState>(std::move(parent));return out;
+}
+void StartupFlow::finish_world12_other_games(World12OtherGamesView view)noexcept {
+    desktop_=std::move(view.desktop);preparation_=std::move(view.preparation);other_games_=std::move(view.screen);
+}
+
 void StartupFlow::show_other_games(OtherGamesState page, PreparationState preparation,
                                    const DeskRequest& owner) {
     if (!desktop_ || !engine_attached_ || in_preparation_menu() || in_readonly_view() ||

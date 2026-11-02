@@ -344,6 +344,10 @@ public:
     const BalanceScreen* balance() const { return balance_.get(); }
     const BalanceRequest* pending_balance() const { return balance_&&balance_->pending()?&*balance_->pending():nullptr; }
     void show_other_games(OtherGamesState, PreparationState, const DeskRequest& owner);
+    void show_world12_other_games(OtherGamesState,PreparationState,const DeskRequest&);
+    struct World12OtherGamesView {std::unique_ptr<DesktopScreen> desktop;std::unique_ptr<PreparationState> preparation;std::unique_ptr<OtherGamesScreen> screen;};
+    World12OtherGamesView prepare_world12_other_games_result(OtherGamesState,PreparationState,const OtherGamesRequest&,bool closed)const;
+    void finish_world12_other_games(World12OtherGamesView)noexcept;
     void acknowledge_other_games(OtherGamesState, PreparationState);
     void close_other_games(OtherGamesState, PreparationState);
     void reject_other_games(std::string reason);

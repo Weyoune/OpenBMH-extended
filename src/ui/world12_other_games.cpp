@@ -111,13 +111,15 @@ OtherGamesState world12_other_games_state(const bmh::world12::CareerSnapshot& sn
     if(available.size()>1)for(size_t i=0;i<available.size();++i)p.linked_pages.push_back({int(i),available[i]->source_entry,page,0,1});
     p.source_participant_count=int(stage.rounds.front().fixtures.size()*2)>>p.round;
     p.display_mode_toggle_available=p.source_participant_count>16;
+    // CupGroupOverview forces detail when this stage fits one detail window.
+    if(!p.display_mode_toggle_available)p.display_mode=OtherGamesDisplayMode::detail;
     if(selection.participant_offset<0||selection.participant_offset%16 || selection.participant_offset>=std::max(1,p.source_participant_count))throw FormatError("other games: invalid typed participant window");
-    state.source_participant_offset=selection.participant_offset;p.participant_offset=selection.mode==OtherGamesDisplayMode::detail?selection.participant_offset:0;
+    state.source_participant_offset=selection.participant_offset;p.participant_offset=p.display_mode==OtherGamesDisplayMode::detail?selection.participant_offset:0;
     if(p.source_participant_count>16)state.selector_labels[size_t(page)]+=" "+std::to_string(selection.participant_offset/16+1);
     if(p.round>=int(stage.rounds.size())) {p.fixtures_available=false;state.unavailable_message="Auslosung noch nicht erfolgt";return state;}
     const auto& round=stage.rounds[size_t(p.round)];
-    const size_t first=selection.mode==OtherGamesDisplayMode::detail?size_t(selection.participant_offset/2):0;
-    const size_t last=std::min(round.fixtures.size(),selection.mode==OtherGamesDisplayMode::detail?first+8:round.fixtures.size());
+    const size_t first=p.display_mode==OtherGamesDisplayMode::detail?size_t(selection.participant_offset/2):0;
+    const size_t last=std::min(round.fixtures.size(),p.display_mode==OtherGamesDisplayMode::detail?first+8:round.fixtures.size());
     for(size_t m=first;m<last;++m)add_fixture(state,world,round.fixtures[m],round.first_leg.empty()?std::nullopt:std::optional(round.first_leg[m]),
         round.second_leg.empty()?std::nullopt:std::optional(round.second_leg[m]),int(m));
     return state;
@@ -131,18 +133,23 @@ World12OtherSelection navigate_world12_other_games(const bmh::world12::CareerSna
         throw FormatError("other games: unexpected typed navigation value");
     switch(request.action) {
     case OtherGamesAction::select_competition:
+        if(current.projection.display_mode!=OtherGamesDisplayMode::detail)throw FormatError("other games: competition selector is not visible");
         if(request.value<0||request.value>=8||!enabled(snapshot.world,request.value))throw FormatError("other games: disabled selector");
-        selection={};selection.page=World12OtherPage(request.value);break;
-    case OtherGamesAction::previous_round:case OtherGamesAction::next_round:
-        if(!current.projection.round_arrows_visible)throw FormatError("other games: round arrows are disabled");
-        selection.round=current.projection.round;
-        if(selection.mode==OtherGamesDisplayMode::detail&&request.action==OtherGamesAction::next_round&&selection.participant_offset+16<current.projection.source_participant_count)selection.participant_offset+=16;
-        else if(selection.mode==OtherGamesDisplayMode::detail&&request.action==OtherGamesAction::previous_round&&selection.participant_offset>=16)selection.participant_offset-=16;
-        else {selection.round=std::clamp(selection.round+(request.action==OtherGamesAction::next_round?1:-1),0,current.projection.rounds-1);selection.participant_offset=0;}
+        if(request.value==int(selection.page)&&current.projection.source_participant_count>16&&current.projection.fixtures_available){
+            selection.participant_offset+=16;
+            if(selection.participant_offset>=current.projection.source_participant_count)selection.participant_offset=0;
+        }else {selection={};selection.page=World12OtherPage(request.value);}
         break;
-    case OtherGamesAction::select_linked_page:selection.stage=request.value;selection.round=-1;selection.participant_offset=0;break;
+    case OtherGamesAction::previous_round:case OtherGamesAction::next_round:
+        if(current.projection.display_mode!=OtherGamesDisplayMode::detail||!current.projection.round_arrows_visible)throw FormatError("other games: round arrows are disabled");
+        selection.round=(current.projection.round+current.projection.rounds+(request.action==OtherGamesAction::next_round?1:-1))%current.projection.rounds;
+        selection.participant_offset=0;
+        break;
+    case OtherGamesAction::select_linked_page:
+        if(current.projection.display_mode!=OtherGamesDisplayMode::detail||request.value<0||size_t(request.value)>=current.projection.linked_pages.size())throw FormatError("other games: stage selector is not visible");
+        selection.stage=request.value;selection.round=-1;selection.participant_offset=0;break;
     case OtherGamesAction::toggle_display_mode:
-        if(!current.projection.display_mode_toggle_available)throw FormatError("other games: display mode control is disabled");
+        if(!current.projection.display_mode_toggle_available||!current.projection.fixtures_available)throw FormatError("other games: display mode control is disabled");
         selection.mode=selection.mode==OtherGamesDisplayMode::detail?OtherGamesDisplayMode::compact:OtherGamesDisplayMode::detail;break;
     default:throw FormatError("other games: action belongs to the typed window owner");
     }

@@ -13,7 +13,7 @@ inline void omit_recent_manager_records(bmh::cli::Json& root) {
     for(auto& manager:managers) {
         auto& match=manager.object()->at("match_state");
         if(match.object())match.object()->erase("attendance");
-        auto& career=manager.object()->at("career");if(career.object()){career.object()->erase("camp_focus");career.object()->erase("stadium_curve_flags");}
+        auto& career=manager.object()->at("career");if(career.object()){career.object()->erase("other_games_view");career.object()->erase("camp_focus");career.object()->erase("stadium_curve_flags");}
     }
     const auto economy=root.object()->find("economy");
     if(economy!=root.object()->end()&&economy->second.object())economy->second.object()->erase("presentation_options");
@@ -22,7 +22,7 @@ inline void omit_recent_manager_records(bmh::cli::Json& root) {
 }
 inline void omit_recent_manager_records(bmh::world12::World& world) {
     for(auto& manager:world.managers)if(manager.match_state)manager.match_state->attendance.reset();
-    for(auto& manager:world.managers)if(manager.career){manager.career->camp_focus.reset();manager.career->stadium_curve_flags.reset();}
+    for(auto& manager:world.managers)if(manager.career){manager.career->other_games_view.reset();manager.career->camp_focus.reset();manager.career->stadium_curve_flags.reset();}
     if(world.economy)world.economy->presentation_options.reset();
     if(world.economy)for(auto& manager:world.economy->managers)manager.depreciation.reset();
 }

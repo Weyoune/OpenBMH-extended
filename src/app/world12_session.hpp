@@ -15,6 +15,7 @@
 #include "ui/stadium.hpp"
 #include "ui/toto.hpp"
 #include "ui/settings.hpp"
+#include "ui/world12_other_games.hpp"
 #include "app/world12_process_timer.hpp"
 #include "app/world12_advertising.hpp"
 #include "ui/advertising.hpp"
@@ -73,6 +74,9 @@ public:
     void play_prepared_matches(uint64_t expected_revision,const bmh::world12::HumanRoundHooks&);
 
     PendingOfferResult resolve_pending(const std::filesystem::path&,const ui::DeskRequest&,const PendingOfferHooks&);
+    ui::OtherGamesState open_other_games(const ui::DeskRequest&);
+    ui::OtherGamesState other_games_view()const;
+    bool apply_other_games(const ui::OtherGamesRequest&); // true retires the window.
     void open_mailbox(const ui::DeskRequest&);
     ui::MailboxState mailbox_view()const;
     void edit_mailbox(const ui::MailboxActionRequest&);
@@ -142,5 +146,9 @@ private:
     std::optional<ui::DeskRequest> settings_owner_;
     std::optional<ui::SettingsSoundCapabilities> settings_sound_;
     void validate_settings_owner(uint64_t sequence,uint64_t revision)const;
+    uint64_t other_games_generation_=0;
+    std::optional<ui::World12OtherGamesIdentity> other_games_owner_;
+    ui::World12OtherSelection other_games_selection_;
+    ui::OtherGamesState other_games_page(const bmh::world12::CareerSnapshot&,const ui::World12OtherGamesIdentity&,ui::World12OtherSelection)const;
 };
 }

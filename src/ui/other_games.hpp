@@ -16,6 +16,7 @@ namespace bmh::ui {
 class OtherGamesScreen {
 public:
     OtherGamesScreen(const std::filesystem::path& data, OtherGamesState state);
+    OtherGamesScreen(const std::filesystem::path& data, OtherGamesState state,const LeImage& reference);
 
     Image render() const;
     bool pointer_down(int x, int y, bool right = false);

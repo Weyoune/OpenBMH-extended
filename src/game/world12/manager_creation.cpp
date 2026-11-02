@@ -19,6 +19,8 @@ void put32(Bytes& data,size_t at,uint32_t n){for(size_t i=0;i<4;++i)data.at(at+i
 ManagerCareerState manager_career_state_from_legacy(const GameState& state,uint8_t seat,const std::vector<PlayerId>& players,bool season_services,const ManagerCareerState* previous) {
     const auto at=record(state,seat);ManagerCareerState result;
     const auto copy=[&](size_t offset,auto& output){std::copy_n(state.manager_records.begin()+at+offset,output.size(),output.begin());};
+    const auto other_view=layout::CareerSession_DispatchOtherGames_RuntimeField+uint32_t(seat);
+    if((!previous||previous->other_games_view)&&state.memory.has(other_view))result.other_games_view=state.memory.u8(other_view);
     const auto flags=layout::Flags+uint32_t(seat)*3+1;
     if((!previous||previous->stadium_curve_flags)&&state.memory.has(flags))result.stadium_curve_flags=state.memory.u8(flags);
     if(!previous||previous->camp_focus){result.camp_focus.emplace();copy(0xc1,*result.camp_focus);}
@@ -49,6 +51,8 @@ void install_manager_career_state(GameState& state,uint8_t seat,const ManagerCar
     const auto at=record(state,seat);
     std::array<uint16_t,5> attempts;attempts.fill(0xffff);
     for(size_t i=0;i<5;++i)if(input.poach_attempts[i].valid()){const auto found=std::find(players.begin(),players.end(),input.poach_attempts[i]);if(found==players.end()||found-players.begin()>=4095)throw std::invalid_argument("world12: unmapped poaching attempt");attempts[i]=uint16_t(found-players.begin());}
+    const auto other_view=layout::CareerSession_DispatchOtherGames_RuntimeField+uint32_t(seat);
+    if(input.other_games_view){state.memory.add_block(other_view,1);state.memory.set8(other_view,*input.other_games_view);}
     const auto flags=layout::Flags+uint32_t(seat)*3+1;
     if(input.stadium_curve_flags){state.memory.add_block(flags,1);state.memory.set8(flags,*input.stadium_curve_flags);}
     const auto copy=[&](size_t offset,const auto& values){std::copy(values.begin(),values.end(),state.manager_records.begin()+at+offset);};

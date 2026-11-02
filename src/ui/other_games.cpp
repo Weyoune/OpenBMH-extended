@@ -93,14 +93,16 @@ int linked_stage_count(const OtherGamesProjection& p) {
 } // namespace
 
 OtherGamesScreen::OtherGamesScreen(const std::filesystem::path& data, OtherGamesState state)
-    : exe_(load_le(asset_path(data, "BMH.exe"))),
+    : OtherGamesScreen(data,std::move(state),load_le(asset_path(data,"BMH.exe"))) {}
+OtherGamesScreen::OtherGamesScreen(const std::filesystem::path& data, OtherGamesState state,const LeImage& reference)
+    : exe_(reference),
       texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
       frame_(load_vga(asset_path(data / "KB", "129.VGA"))),
       panel_(load_vga(asset_path(data / "KB", "56.VGA"))),
       arrows_(load_vga(asset_path(data / "KB", "1.VGA"))),
       widgets_(load_vga(asset_path(data / "KB", "0.VGA"))),
       flags_(load_vga(asset_path(data / "KB", "24.VGA"))),
-      font_(load_font(asset_path(data / "F", "BMH3.FNT"))), sprite_(data), state_(std::move(state)) {
+      font_(load_font(asset_path(data / "F", "BMH3.FNT"))), sprite_(data,reference), state_(std::move(state)) {
     const auto& id = state_.identity;
     const auto& p = state_.projection;
     const bool typed=state_.world12_identity.has_value();

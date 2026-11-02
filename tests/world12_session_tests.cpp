@@ -997,6 +997,51 @@ void actual_process_timer(const std::filesystem::path& data,const CareerSnapshot
     if(!output.empty())std::filesystem::copy_file(directory/"Budget.EIN",output/"Budget.EIN",std::filesystem::copy_options::overwrite_existing);
     std::cout<<"Original desktop timer: H8/EIN, paused waits, ordinary menu expiry, canonical handoffs and once-per-revision unsupported last-day guard passed for "<<seats.size()<<" owners\n";
 }
+void competition_folder_owner(const std::filesystem::path& data,const CareerSnapshot& base) {
+    const auto resources=session_app::load_runtime_resources(data);auto fixture=base;const auto seat=*fixture.desktop->active_seat;
+    auto& rows=std::find_if(fixture.desktop->managers.begin(),fixture.desktop->managers.end(),[&](const auto& d){return d.seat==seat;})->layout;
+    int menu=-1,folder=-1;for(int i=1;i<54;++i){if(rows[i][12]==5)menu=i;if(rows[i][12]==50)folder=i;}
+    check(menu>0&&menu<=30&&folder>0,"competition/folder source records unavailable");
+    const auto unlink=[&](int id){if(rows[id][5]==255)return;const int prev=rows[id][6],next=rows[id][5];rows[prev][5]=uint8_t(next);if(next)rows[next][6]=uint8_t(prev);rows[id][5]=rows[id][6]=255;};
+    unlink(menu);unlink(folder);int tail=0;for(int count=0;rows[tail][5]&&count<54;++count)tail=rows[tail][5];
+    rows[tail][5]=uint8_t(folder);rows[folder][6]=uint8_t(tail);rows[folder][5]=0;rows[folder][0]=200;rows[folder][1]=0;rows[folder][2]=60;rows[folder][13]&=0x7f;rows[menu][13]=0;rows[menu][1]&=~0x10;
+    for(int i=1;i<=30;++i)if(i!=menu&&rows[i][5]==255&&(rows[i][13]&0x7f)==0)rows[i][13]=uint8_t((rows[i][13]&0x80)|2);
+    auto session=session_app::Session::resume(resources,fixture,122,20);const auto desk=ui::world12_initial_desktop(data,fixture,session.reference(),session.rules(),session.options(),session.revision());ui::DesktopScreen screen(data,desk,session.rules());
+    const auto request=screen.pointer_up(210,69,false);check(request.kind==ui::DeskRequestKind::open_menu&&request.menu_kind==5&&request.item_id==menu,"stored unframed competition icon did not emit its real item");
+    session.open_other_games(request);check(session.other_games_view().world12_identity->manager_slot==seat,"stored competition icon lost canonical owner");
+    auto hidden=fixture;auto& hidden_rows=std::find_if(hidden.desktop->managers.begin(),hidden.desktop->managers.end(),[&](const auto& d){return d.seat==seat;})->layout;hidden_rows[folder][1]|=0x10;
+    auto blocked=session_app::Session::resume(resources,hidden,122,20);const auto before=blocked.snapshot();rejects([&]{blocked.open_other_games(request);},"hidden folder authorized a competition icon");check(blocked.snapshot()==before&&blocked.revision()==20,"hidden folder refusal changed state");
+}
+void actual_competition_overview(const std::filesystem::path& data,const CareerSnapshot& base,const std::filesystem::path& output) {
+    competition_folder_owner(data,base);
+    const auto resources=session_app::load_runtime_resources(data);
+    const auto directory=std::filesystem::temp_directory_path()/("openbmh-competition-overview-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);
+    struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code ignored;std::filesystem::remove_all(path,ignored);}} cleanup{directory};
+    write_savegame(directory/"Fixture.FBM",make_save(base));ui::StartupFlow flow(data,directory,ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> session;
+    const auto send=[&](const ui::FlowResult& action){const auto result=session_app::serve_startup(flow,action,session,data,91,121);if(!result.error.empty())throw std::runtime_error("competition overview GUI: "+result.error);};
+    flow.click(60,215);send(flow.click(240,215));send(flow.send_key("ENTER"));
+    const auto capture=[&](const std::string& name){if(output.empty())return;std::filesystem::create_directories(output);const auto frame=flow.render();const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));std::ofstream file(output/(name+".ppm"),std::ios::binary);file<<"P6\n320 240\n255\n";for(auto pixel:frame.pixels){const auto c=palette.argb[pixel];file.put(char(c>>16));file.put(char(c>>8));file.put(char(c));}write_savegame(output/(name+".FBM"),make_save(session->snapshot()));};
+    const auto open=[&]{const auto& items=flow.desktop()->state().items;const auto icon=std::find_if(items.begin(),items.end(),[](const auto& item){return item.kind==5&&!item.disabled;});check(icon!=items.end(),"Original remaining-games icon missing");send(flow.click(icon->x+icon->width/2,icon->y+icon->height/2));};
+    const auto gameplay=[&](const CareerSnapshot& before){auto expected=before;const auto seat=*before.desktop->active_seat;auto& manager=*std::find_if(expected.world.managers.begin(),expected.world.managers.end(),[&](const auto& m){return m.seat==seat;});const auto& changed=*std::find_if(session->snapshot().world.managers.begin(),session->snapshot().world.managers.end(),[&](const auto& m){return m.seat==seat;});manager.career->other_games_view=changed.career->other_games_view;check(session->snapshot()==expected,"competition view changed gameplay/results/date/RNG/another manager");};
+    const auto initial=session->snapshot();open();check(flow.in_other_games()&&session->preparation_open(),"competition overview did not obtain its typed owner");gameplay(initial);capture("overview-before");
+    const auto select=[&](int page){const int x=2+(page/4)*90,y=177+(page%4)*13;check(flow.pointer_down(x,y).changed,"competition button did not hold");auto action=flow.click(x,y);check(action.request==ui::FlowRequest::other_games_action,"competition release did not emit typed action");return action;};
+    const auto first=*session->other_games_view().world12_identity;
+    for(int page=0;page<8;++page){const auto state=session->other_games_view();if(!state.projection.selectors[size_t(page)].active)continue;const auto before=session->snapshot();const auto action=select(page);send(action);gameplay(before);check(session->other_games_view().projection.competition==page,"country competition selector chose a legacy ID");capture("overview-page-"+std::to_string(page));}
+    send(select(0));auto page=session->other_games_view();const auto first_fixture=page.projection.rows.front().source_match;
+    auto more=select(0);send(more);check(session->other_games_view().projection.rows.front().source_match!=first_fixture,"repeated competition selector did not page matches");capture("overview-next-participants");
+    const auto after=session->snapshot();const auto revision=session->revision();rejects([&]{session->apply_other_games(more.other_games_action);},"competition navigation replayed");check(session->snapshot()==after&&session->revision()==revision,"replayed navigation changed state");
+    const auto button=[&](int x,int y){flow.pointer_down(x,y);auto result=flow.click(x,y);check(result.request==ui::FlowRequest::other_games_action,"Source overview control did not release");return result;};
+    send(button(210,219));check(session->other_games_view().projection.display_mode==ui::OtherGamesDisplayMode::compact,"complete overview did not open");capture("overview-complete");send(button(210,219));
+    send(button(290,190));check(!session->other_games_view().projection.fixtures_available,"future round manufactured fixtures");capture("overview-future-draw");
+    const auto waiting=session->snapshot();ui::SaveLoadRequest save;save.manager_slot=flow.desktop()->state().manager_slot;save.revision=session->revision();save.action=ui::SaveLoadAction::save;
+    rejects([&]{session->prepare_manual_save(save);},"file operation stole overview ownership");check(session->snapshot()==waiting,"rejected file changed overview career");
+    send(select(5));check(session->other_games_view().sections.size()==2,"combined supercups lost independent finals");capture("overview-two-finals");
+    const auto team=flow.pointer_down(20,70);check(team.request==ui::FlowRequest::other_games_action&&team.other_games_action.world12_team.valid(),"visible final lost canonical club request");const auto before_refusal=session->snapshot();const auto denied=session_app::serve_startup(flow,team,session,data,91,121);check(!denied.error.empty()&&session->snapshot()==before_refusal&&!flow.pending_other_games_action(),"unowned team-info changed state or stuck view");capture("overview-team-info-boundary");
+    const auto before_close=session->snapshot();const auto close=flow.pointer_down(310,230,true);send(close);gameplay(before_close);check(flow.screen_name()=="desktop"&&!session->preparation_open(),"owned overview close did not restore desktop");capture("overview-closed");
+    check(read_save(make_save(session->snapshot()))==session->snapshot(),"saved competition display byte did not roundtrip");
+    open();auto stale=more.other_games_action;stale.world12_identity->revision=session->revision();rejects([&]{session->apply_other_games(stale);},"retimed previous overview window accepted");check(session->other_games_view().world12_identity->sequence!=first.sequence,"reopened overview reused scope/sequence");send(flow.pointer_down(310,230,true));
+    std::cout<<"Actual competition overview: all selectors, participant/round/complete controls, two real finals, Source display bytes, canonical teams, stale/reopen/file guards and unchanged gameplay passed\n";
+}
 void actual_layout_files(const std::filesystem::path& data,const CareerSnapshot& fixture,const std::filesystem::path& output) {
     const auto directory=std::filesystem::temp_directory_path()/("openbmh-menu-files-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);
     struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code ignored;std::filesystem::remove_all(path,ignored);}} cleanup{directory};
@@ -1554,6 +1599,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     actual_desktop_actions(data,session->snapshot(),output.empty()?output:output/"desktop-single");
     actual_layout_files(data,session->snapshot(),output.empty()?output:output/"layout-single");
     actual_settings_fixture(data,session->snapshot(),output.empty()?output:output/"settings-single");
+    actual_competition_overview(data,session->snapshot(),output.empty()?output:output/"competition-single");
     actual_process_timer(data,session->snapshot(),output.empty()?output:output/"timer-single");
     actual_indoor_settings(data,session->snapshot(),output.empty()?output:output/"indoor-single");
     for(int day:{109,110,230,231})actual_indoor_settings(data,session->snapshot(),output.empty()?output:output/("indoor-boundary-"+std::to_string(day)),day);
@@ -1580,6 +1626,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     actual_desktop_actions(data,multi->snapshot(),output.empty()?output:output/"desktop-mixed");
     actual_layout_files(data,multi->snapshot(),output.empty()?output:output/"layout-mixed");
     actual_settings_fixture(data,multi->snapshot(),output.empty()?output:output/"settings-mixed");
+    actual_competition_overview(data,multi->snapshot(),output.empty()?output:output/"competition-mixed");
     actual_process_timer(data,multi->snapshot(),output.empty()?output:output/"timer-mixed");
     actual_indoor_settings(data,multi->snapshot(),output.empty()?output:output/"indoor-mixed");
     actual_stadium(mixed,multi,data,output.empty()?output:output/"stadium-mixed");
@@ -1595,6 +1642,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
         actual_desktop_actions(data,multi->snapshot(),output.empty()?output:output/"desktop-german");
         actual_layout_files(data,multi->snapshot(),output.empty()?output:output/"layout-german");
         actual_settings_fixture(data,multi->snapshot(),output.empty()?output:output/"settings-german");
+        actual_competition_overview(data,multi->snapshot(),output.empty()?output:output/"competition-german");
         actual_process_timer(data,multi->snapshot(),output.empty()?output:output/"timer-german");
         actual_indoor_settings(data,multi->snapshot(),output.empty()?output:output/"indoor-german");
         actual_stadium(mixed,multi,data,output.empty()?output:output/"stadium-german");
@@ -1608,6 +1656,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
 int main(int argc,char** argv)try {
     if(argc==5&&std::string(argv[3])=="--indoor-settings-only"){const auto resources=session_app::load_runtime_resources(argv[1]);const auto fixture=read_save(load_savegame(argv[4]));actual_indoor_settings(argv[1],fixture,std::filesystem::path(argv[2])/"initial");for(int day:{109,110,230,231})actual_indoor_settings(argv[1],fixture,std::filesystem::path(argv[2])/("boundary-"+std::to_string(day)),day);return 0;}
     if(argc==5&&std::string(argv[3])=="--timer-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_process_timer(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
+    if(argc==5&&std::string(argv[3])=="--competition-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_competition_overview(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--settings-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_settings_fixture(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--layout-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_layout_files(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--desktop-only"){actual_desktop_actions(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
