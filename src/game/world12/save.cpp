@@ -54,7 +54,8 @@ void CareerSnapshot::validate()const{
         const bool scheduled_desk=prepared_event&&prepared_event->desk_phase==PreparedEvent::DeskPhase::desks&&p.phase==ProgressPhase::scheduled_event;
         if(uint8_t(p.phase)>uint8_t(ProgressPhase::season_end)||uint8_t(p.entry)>1||p.epoch_year<1600||p.epoch_year>9999||p.epoch_weekday>6||p.last_manager>3||!calendar||!desktop||(!scheduled_desk&&(desktop->active_seat||desktop->initial_event||desktop->autosave_pending))||p.previous_date==0xffffffffu||date!=p.previous_date+1||date<p.season_start||date-p.season_start!=calendar->next_day||
            std::none_of(world.managers.begin(),world.managers.end(),[&](const auto& m){return m.seat==p.last_manager;}))throw FormatError("world12: invalid saved progression owner/clock");
-        const bool scheduled=!calendar->schedule.leagues_on(calendar->next_day).empty()||!admitted_other_appointments(*this,calendar->next_day).empty();
+        const bool scheduled=calendar->next_day<calendar->schedule.days&&
+            (!calendar->schedule.leagues_on(calendar->next_day).empty()||!admitted_other_appointments(*this,calendar->next_day).empty());
         if(p.phase==ProgressPhase::scheduled_event&&!scheduled)throw FormatError("world12: saved event has no calendar appointment");
         if(p.phase==ProgressPhase::post_event_market&&p.entry!=DayEntry::after_event)throw FormatError("world12: plain day cannot own an extra event market tick");
         const bool closing=date>0&&month_code(date)==7&&month_code(p.previous_date)!=7;

@@ -119,6 +119,13 @@ int main()try {
     auto interrupted=pending;app::ManagerActionOwner other{51,8};auto changing=hooks;changing.relations=[&](const CareerSnapshot& current){++other.revision;return hooks.relations(current);};rejects([&]{app::seek_next_event(interrupted,other,{51,8},rules,texts,changing);},"external owner change was overwritten");check(interrupted==pending&&other.revision>8,"interrupted search leaked staged dates or rewound owner");
     auto late=pending;app::ManagerActionOwner late_owner{51,8};auto bad_week=hooks;size_t weeks=0;bad_week.relations=[&](const CareerSnapshot& current){auto facts=hooks.relations(current);if(++weeks==5)--facts.date;return facts;};rejects([&]{app::seek_next_event(late,late_owner,late_owner,rules,texts,bad_week);},"late invalid week context was ignored");check(late==pending&&late_owner.revision==8&&weeks==5,"failed event search leaked earlier weeks/quiet dates");
     auto epoch=pending;epoch.progress->epoch_year++;app::ManagerActionOwner epoch_owner{51,8};rejects([&]{app::advance_clock_step(epoch,epoch_owner,epoch_owner,rules,texts,hooks);},"saved progression used unrelated calendar rules");
+    {
+        auto closing=pending;closing.date=365;closing.calendar->next_day=closing.calendar->schedule.days;
+        closing.progress->previous_date=364;closing.progress->phase=ProgressPhase::season_end;
+        for(const auto& league:closing.world.catalogue.leagues){closing.league_rounds[league.id.value]=uint8_t(league.rounds());for(auto& score:closing.results.leagues[league.id.value])score={true,1,1};}
+        closing.validate();check(read_save(make_save(closing))==closing,"exhausted-calendar annual boundary failed save/reopen");
+        auto event=closing;event.progress->phase=ProgressPhase::scheduled_event;rejects([&]{event.validate();},"exhausted calendar accepted a scheduled event owner");
+    }
     invalid=pending;invalid.progress->phase=ProgressPhase::season_end;rejects([&]{invalid.validate();},"annual owner accepted on an ordinary date");
     rejects([&]{app::seek_next_event(state,owner,owner,rules,texts,hooks);},"event search resumed past an owned scheduled event");check(state==ready&&owner.revision==revision,"ready event search advanced ownership");
     auto unfinished=initial;unfinished.desktop->initial_event->manager_position=0;unfinished.desktop->active_seat=1;app::ManagerActionOwner first_owner{51,7};const auto waiting=unfinished;rejects([&]{app::finish_initial_event(unfinished,first_owner,first_owner,rules,calendar_epoch());},"earlier manager was skipped");check(unfinished==waiting,"unfinished manager mutated clock");
