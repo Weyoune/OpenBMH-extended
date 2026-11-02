@@ -236,7 +236,7 @@ inline bool apply_desk_widget_source(GameState& g,const ui::DeskState& desk,cons
     const bool price=request.kind==ui::DeskRequestKind::change_ticket_price;
     if(!price&&request.kind!=ui::DeskRequestKind::change_option){error="unsupported_desk_widget";return false;}
     const int expected_kind=price?55:64;
-    const auto item=std::find_if(desk.items.begin(),desk.items.end(),[&](const auto& item){return item.id==request.item_id&&item.kind==expected_kind&&item.open&&!item.disabled;});
+    const auto item=std::find_if(desk.items.begin(),desk.items.end(),[&](const auto& item){return item.id==request.item_id&&item.kind==expected_kind&&!item.disabled;});
     if(request.menu_kind!=expected_kind||item==desk.items.end()){error="stale_or_closed_desk_widget";return false;}
     int value=request.value;
     if(!price){
