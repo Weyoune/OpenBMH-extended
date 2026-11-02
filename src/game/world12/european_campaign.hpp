@@ -53,6 +53,7 @@ struct EuropeanResults {
 struct EuropeanClubStatus {
     EuropeanCompetition competition=EuropeanCompetition::uefa_cup;
     bool entered=false,active=false,eliminated=false,holder=false,winner=false;
+    std::array<bool,3> held_titles{}; // A previous holder may enter a different current competition.
 };
 std::optional<std::vector<EuropeanCompetition>> european_cups_on(const OtherAppointment&);
 std::vector<EuropeanStageRules> european_programme_rules(const LeImage&,EuropeanCompetition);
