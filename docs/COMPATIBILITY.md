@@ -227,3 +227,10 @@ Original child screens, but does not invoke the unintegrated legacy family
 close-time random stir. Typed results contain no postponed-result records, so
 the postponed view is empty. Forecast and active weather/referee overlays remain
 unavailable until their actual RNG/presentation and live-event owners exist.
+
+The native Football Limited manager selector also uses the source's separate
+player-visible league count: four selectable divisions, with the fifth internal
+slot retained for simulation. Fresh manager requests for the hidden tier are
+rejected before setup changes or random draws. Existing careers are not
+reclassified by this UI restriction. The typed country selector keeps its
+country catalogue ownership and the same four visible English divisions.
