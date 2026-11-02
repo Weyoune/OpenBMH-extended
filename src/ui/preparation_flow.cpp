@@ -856,6 +856,12 @@ FlowResult StartupFlow::expire_timed_notice() {
     return {changed};
 }
 
+bool StartupFlow::process_timer_suspended()const {
+    // ApplySettingsFile pauses only game-file, settings and manager-join waits.
+    // MEN retains its existing key-input owner while the process clock runs.
+    return bool(settings_||settings_readme_||joining_||
+        (save_load_&&save_load_->file_kind()==SaveLoadFileKind::game));
+}
 FlowResult StartupFlow::process_timer_expired(int pointer_x, int pointer_y) {
     // This is Source event8, not keyboard ESC or a guessed screen coordinate.
     // Timed keyboard/calculator owners must finish before their outer poll.

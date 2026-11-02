@@ -870,8 +870,8 @@ void actual_settings(ui::StartupFlow& flow,std::unique_ptr<session_app::Session>
     }
     capture("settings-edited");const auto edited=session->snapshot();
     rejects([&]{session->apply_settings(last.settings_action,first_sequence);},"stale settings request replayed");check(session->snapshot()==edited,"settings replay changed game state");
-    auto blocked=last.settings_action;blocked.revision=session->revision();blocked.expected_raw=*session->snapshot().world.economy->presentation_options;blocked.row=7;blocked.column=7;
-    rejects([&]{session->apply_settings(blocked,first_sequence);},"unowned wall-clock deadline was edited");
+    auto blocked=last.settings_action;blocked.revision=session->revision();blocked.expected_raw=*session->snapshot().world.economy->presentation_options;blocked.row=17;blocked.column=4;blocked.operation=ui::SettingsEdit::toggle_binary;
+    rejects([&]{session->apply_settings(blocked,first_sequence);},"unowned secondary-league switch was edited");
     send(flow.click(20,218));check(flow.screen_name()=="save_load","Original EIN save button did not open dialog");flow.text("SettingsQA");send(flow.send_key("ENTER"));
     const auto path=directory/"SettingsQA.EIN";check(read_file(path)==Bytes(edited.world.economy->presentation_options->begin(),edited.world.economy->presentation_options->end()),"EIN save altered raw Source cells");
     send(write(2,5));check(session->snapshot()!=edited,"settings restore fixture did not change raster");send(flow.click(20,205));check(flow.screen_name()=="save_load","Original EIN load button did not open dialog");send(flow.send_key("ENTER"));
@@ -879,7 +879,7 @@ void actual_settings(ui::StartupFlow& flow,std::unique_ptr<session_app::Session>
     const auto valid_bytes=read_file(path);
     send(flow.click(20,218));flow.text("SettingsQA");send(flow.send_key("ENTER"));check(!flow.pending_file()&&read_file(path)==valid_bytes,"EIN overwrote before confirmation");send(flow.send_key("ENTER"));check(read_file(path)==valid_bytes,"confirmed EIN overwrite changed raw cells");
     for(int kind=0;kind<2;++kind){
-        auto corrupt=valid_bytes;if(kind==0)corrupt.pop_back();else corrupt[7*9+7]^=1;
+        auto corrupt=valid_bytes;if(kind==0)corrupt.pop_back();else corrupt[17*9+4]^=1;
         {std::ofstream file(path,std::ios::binary);file.write(reinterpret_cast<const char*>(corrupt.data()),std::streamsize(corrupt.size()));}
         send(flow.click(20,205));const auto before=session->snapshot();const auto revision=session->revision();const auto action=flow.send_key("ENTER");
         const auto result=session_app::serve_startup(flow,action,session,data,91,session->scope());
@@ -957,6 +957,45 @@ void actual_indoor_settings(const std::filesystem::path& data,const CareerSnapsh
         send(flow.click(0,0,true));capture("desktop");
     }
     std::cout<<"Original indoor settings day "<<day<<": controlled later-season boundary/notice, current EIN ownership, unchanged streams/finances and English League Cup retained\n";
+}
+void actual_process_timer(const std::filesystem::path& data,const CareerSnapshot& base,const std::filesystem::path& output) {
+    const auto resources=session_app::load_runtime_resources(data);auto fixture=base;fixture.world.settings->mode=1;(*fixture.world.economy->presentation_options)[7*9+7]=1;
+    const auto directory=std::filesystem::temp_directory_path()/("openbmh-process-time-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);
+    struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code e;std::filesystem::remove_all(path,e);}} cleanup{directory};
+    write_savegame(directory/"Fixture.FBM",make_save(fixture));ui::StartupFlow flow(data,directory,ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> session;
+    const auto send=[&](const ui::FlowResult& action){const auto result=session_app::serve_startup(flow,action,session,data,91,111);if(!result.error.empty())throw std::runtime_error("process timer GUI: "+result.error);};
+    flow.click(60,215);send(flow.click(240,215));send(flow.send_key("ENTER"));
+    ui::ProcessTimer clock;session_app::DesktopProcessTimer timer(clock);uint64_t now=0;
+    const auto observe=[&]{timer.observe(session->process_timer_context(),flow.process_timer_suspended(),now);};
+    const auto capture=[&](const std::string& name){if(output.empty())return;std::filesystem::create_directories(output);auto image=flow.render();if(const auto sample=clock.sample(now))ui::ProcessTimer::paint(image,*sample,session->rules());const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));std::ofstream file(output/(std::string(name)+".ppm"),std::ios::binary);file<<"P6\n320 240\n255\n";for(auto pixel:image.pixels){const auto c=palette.argb[pixel];file.put(char(c>>16));file.put(char(c>>8));file.put(char(c));}write_savegame(output/(std::string(name)+".FBM"),make_save(session->snapshot()));};
+    const auto open=[&](int kind){const auto& items=flow.desktop()->state().items;const auto icon=std::find_if(items.begin(),items.end(),[&](const auto& i){return i.kind==kind&&!i.disabled;});check(icon!=items.end(),"timed menu icon unavailable");send(flow.click(icon->x+icon->width/2,icon->y+icon->height/2));observe();};
+    observe();capture("timer-before");const auto initial=session->snapshot();
+    check(session->process_timer_context()->seat==*initial.desktop->active_seat&&clock.sample(now)->remaining_seconds==60,"timer context lost canonical actor or original minute");
+    if(!output.empty()&&size_t(initial.desktop->initial_event->manager_position)+1<initial.desktop->initial_event->manager_order.size()){auto expected=*session;ui::DeskRequest request;request.kind=ui::DeskRequestKind::advance_turn;request.manager_slot=flow.desktop()->state().manager_slot;request.revision=expected.revision();expected.advance_manager(request);write_savegame(output/"native-expected-next.FBM",make_save(expected.snapshot()));}
+    now=30;observe();check(clock.sample(now)->remaining_seconds==30,"ordinary desktop failed to consume time");
+    open(19);check(flow.process_timer_suspended()&&!clock.sample(3000),"settings did not pause owned process time");
+    send(flow.click(68+7*24,27+7*10));now=1000;observe();check(session->process_timer_context()->minutes==2&&!clock.sample(now),"H8 edit did not remain paused");capture("timer-settings");
+    send(flow.click(20,218));check(flow.process_timer_suspended(),"EIN chooser lost its settings pause");flow.text("Budget");send(flow.send_key("ENTER"));send(flow.click(68+7*24,27+7*10));
+    send(flow.click(20,205));send(flow.send_key("ENTER"));check(session->process_timer_context()->minutes==2,"EIN did not restore H8");
+    now=2000;send(flow.click(0,0,true));observe();check(clock.sample(now)==ui::ProcessTimer::Sample{90,75,false},"settings/file waits restarted time or consumed paused seconds");capture("timer-resumed");
+    auto expected=initial;expected.world.economy->presentation_options=session->snapshot().world.economy->presentation_options;check(session->snapshot()==expected,"H8/settings/file changed gameplay or RNG");
+    now=2010;observe();{std::ofstream bad(directory/"Bad.FBM",std::ios::binary);bad<<"not a save";}
+    open(10);check(flow.process_timer_suspended(),"game-file chooser did not pause time");const auto before_file=session->snapshot();const auto file_revision=session->revision();
+    const auto bad=flow.send_key("ENTER");check(!session_app::serve_startup(flow,bad,session,data,91,111).error.empty()&&session->snapshot()==before_file&&session->revision()==file_revision,"failed load changed timed career");
+    now=4000;observe();check(!clock.sample(now),"failed load consumed paused time");send(flow.send_key("ESC"));observe();check(clock.sample(now)->remaining_seconds==80,"failed/cancelled load reset the runtime budget");capture("timer-file-returned");
+    flow.move(1,239);send(flow.click(292,220));check(!flow.process_timer_suspended(),"MEN key wait unexpectedly paused the Original process clock");now+=5;observe();check(clock.sample(now)->remaining_seconds==75,"MEN chooser restarted time");send(flow.send_key("ESC"));
+    open(18);check(!flow.process_timer_suspended(),"normal tactics menu paused desktop time");now=4080;observe();check(clock.sample(now)->expired,"normal menu did not consume remaining budget");
+    send(flow.process_timer_expired());check(flow.screen_name()=="desktop"&&!session->preparation_open(),"Source expiry did not close ordinary submenu first");capture("timer-expired-desktop");
+    std::set<uint8_t> seats;
+    for(;;){observe();const auto before=session->snapshot();const auto revision=session->revision();const auto actor=*before.desktop->active_seat;seats.insert(actor);
+        check(timer.may_advance(revision),"new owned desktop expiry was suppressed");const auto expired=flow.process_timer_expired();check(expired.request==ui::FlowRequest::kickoff,"desktop timer did not emit Source kickoff event");timer.attempted_advance(revision);
+        const bool last=size_t(before.desktop->initial_event->manager_position)+1==before.desktop->initial_event->manager_order.size();
+        if(last){const auto result=session_app::serve_startup(flow,expired,session,data,91,111);check(!result.error.empty()&&session->snapshot()==before&&session->revision()==revision&&!flow.desktop()->pending(),"unowned last-day progression changed career or stuck the command");for(int n=0;n<100;++n){observe();check(!timer.may_advance(revision),"unchanged failed expiry retried forever");}capture("timer-last-owner-held");break;}
+        auto oracle=*session;oracle.advance_manager(expired.desk_action);send(expired);check(session->snapshot()==oracle.snapshot(),"timer handoff differs from complete Source manager-advance kernel");observe();check(*session->snapshot().desktop->active_seat!=actor&&clock.sample(now)->remaining_seconds==120,"next canonical manager did not receive a fresh budget");capture("timer-next-manager-"+std::to_string(session->snapshot().desktop->initial_event->manager_position));now+=120;
+    }
+    check(seats.size()==initial.desktop->initial_event->manager_order.size()-initial.desktop->initial_event->manager_position,"timer skipped or repeated an owner");
+    if(!output.empty())std::filesystem::copy_file(directory/"Budget.EIN",output/"Budget.EIN",std::filesystem::copy_options::overwrite_existing);
+    std::cout<<"Original desktop timer: H8/EIN, paused waits, ordinary menu expiry, canonical handoffs and once-per-revision unsupported last-day guard passed for "<<seats.size()<<" owners\n";
 }
 void actual_layout_files(const std::filesystem::path& data,const CareerSnapshot& fixture,const std::filesystem::path& output) {
     const auto directory=std::filesystem::temp_directory_path()/("openbmh-menu-files-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);
@@ -1156,6 +1195,7 @@ void actual_four_managers(const std::filesystem::path& data,const std::filesyste
     for(int n=0;n<3;++n)arrow(6);for(int n=0;n<2;++n)arrow(3);check(flow.options().managers==4&&flow.options().mode==1,"four-manager mode-I setup failed");
     const auto send=[&](const ui::FlowResult& action){const auto result=session_app::serve_startup(flow,action,session,data,91,74);if(!result.error.empty())throw std::runtime_error("four managers: "+result.error);};
     send(flow.click(10,10,true));for(int i=0;i<4;++i){if(i%2)flow.click(200,95);flow.click(10,10,true);send(flow.click(100,171));}
+    actual_process_timer(data,session->snapshot(),output.empty()?output:output/"timer-four");
     std::set<uint8_t> seen;
     for(int position=0;position<4;++position){const auto& snapshot=session->snapshot();check(snapshot.desktop->initial_event->manager_position==position&&snapshot.desktop->active_seat==snapshot.desktop->initial_event->manager_order[size_t(position)]&&snapshot.date==0,"four-manager UI lost current position/date");seen.insert(*snapshot.desktop->active_seat);
         if(!output.empty()){const auto file=output/("manager-"+std::to_string(position)+".FBM");write_savegame(file,make_save(snapshot));check(read_save(load_savegame(file))==snapshot,"four-manager cursor file differs");const auto image=flow.render();const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));std::ofstream f(output/("manager-"+std::to_string(position)+".ppm"),std::ios::binary);f<<"P6\n320 240\n255\n";for(auto p:image.pixels){const auto c=palette.argb[p];f.put(char(c>>16));f.put(char(c>>8));f.put(char(c));}}
@@ -1514,6 +1554,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     actual_desktop_actions(data,session->snapshot(),output.empty()?output:output/"desktop-single");
     actual_layout_files(data,session->snapshot(),output.empty()?output:output/"layout-single");
     actual_settings_fixture(data,session->snapshot(),output.empty()?output:output/"settings-single");
+    actual_process_timer(data,session->snapshot(),output.empty()?output:output/"timer-single");
     actual_indoor_settings(data,session->snapshot(),output.empty()?output:output/"indoor-single");
     for(int day:{109,110,230,231})actual_indoor_settings(data,session->snapshot(),output.empty()?output:output/("indoor-boundary-"+std::to_string(day)),day);
     actual_toto_fixture(data,session->snapshot(),output.empty()?output:output/"toto-empty");
@@ -1539,6 +1580,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     actual_desktop_actions(data,multi->snapshot(),output.empty()?output:output/"desktop-mixed");
     actual_layout_files(data,multi->snapshot(),output.empty()?output:output/"layout-mixed");
     actual_settings_fixture(data,multi->snapshot(),output.empty()?output:output/"settings-mixed");
+    actual_process_timer(data,multi->snapshot(),output.empty()?output:output/"timer-mixed");
     actual_indoor_settings(data,multi->snapshot(),output.empty()?output:output/"indoor-mixed");
     actual_stadium(mixed,multi,data,output.empty()?output:output/"stadium-mixed");
     actual_mailbox(data,multi->snapshot(),output.empty()?output:output/"mailbox");
@@ -1553,6 +1595,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
         actual_desktop_actions(data,multi->snapshot(),output.empty()?output:output/"desktop-german");
         actual_layout_files(data,multi->snapshot(),output.empty()?output:output/"layout-german");
         actual_settings_fixture(data,multi->snapshot(),output.empty()?output:output/"settings-german");
+        actual_process_timer(data,multi->snapshot(),output.empty()?output:output/"timer-german");
         actual_indoor_settings(data,multi->snapshot(),output.empty()?output:output/"indoor-german");
         actual_stadium(mixed,multi,data,output.empty()?output:output/"stadium-german");
     }
@@ -1564,6 +1607,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
 }
 int main(int argc,char** argv)try {
     if(argc==5&&std::string(argv[3])=="--indoor-settings-only"){const auto resources=session_app::load_runtime_resources(argv[1]);const auto fixture=read_save(load_savegame(argv[4]));actual_indoor_settings(argv[1],fixture,std::filesystem::path(argv[2])/"initial");for(int day:{109,110,230,231})actual_indoor_settings(argv[1],fixture,std::filesystem::path(argv[2])/("boundary-"+std::to_string(day)),day);return 0;}
+    if(argc==5&&std::string(argv[3])=="--timer-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_process_timer(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--settings-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_settings_fixture(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--layout-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_layout_files(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--desktop-only"){actual_desktop_actions(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}

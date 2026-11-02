@@ -97,6 +97,7 @@ public:
     FlowResult pointer_down(int x,int y,bool right=false);
     FlowResult process_timer_expired(int pointer_x = 0, int pointer_y = 0);
     bool timed_notice_open() const;
+    bool process_timer_suspended() const;
     FlowResult expire_timed_notice();
     // The synchronous SDL question presenter consumes the original nation-click UP.
     // Call only after that modal has returned; right-DOWN close keeps its barrier.

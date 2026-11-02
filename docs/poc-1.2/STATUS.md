@@ -641,3 +641,15 @@ use the Original timed manager notice in SDL, with interrupted/reentrant-owner
 protection. EIN import cannot bypass that calendar ownership. World31 is
 unchanged. H8/R5, enabled indoor simulation, the remaining management/live/annual
 owners and full Beta qualification are still open.
+
+
+## Desktop process time / H8
+
+H8 is now editable and persists through EIN/FBM. The SDL development entry binds
+the existing Original process timer to the typed canonical desk owner. Settings
+and game-file waits pause it; normal menu waits consume it. New managers receive
+fresh time, staged revisions keep the existing remainder, and accepted loads
+restart runtime time. Expiry uses existing Source close/event8 actions and Core
+validation; an unsupported last-day boundary preserves state and is not retried
+every frame at one revision. Remaining runtime time is not save data. R5 and the
+other management/live/competition/annual/Beta gates remain open.

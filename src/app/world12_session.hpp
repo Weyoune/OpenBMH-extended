@@ -15,6 +15,7 @@
 #include "ui/stadium.hpp"
 #include "ui/toto.hpp"
 #include "ui/settings.hpp"
+#include "app/world12_process_timer.hpp"
 #include "app/world12_advertising.hpp"
 #include "ui/advertising.hpp"
 #include "formats/le.hpp"
@@ -85,6 +86,7 @@ public:
     void close_contracts();
     ui::SettingsState open_settings(const ui::DeskRequest&,std::optional<ui::SettingsSoundCapabilities> sound=std::nullopt);
     ui::SettingsState settings_view()const;
+    std::optional<DesktopClockContext> process_timer_context()const;
     uint64_t settings_sequence()const{return settings_generation_;}
     struct SettingsRefusal {GameState state;uint32_t message_address;};
     std::optional<SettingsRefusal> settings_refusal(const ui::SettingsWriteRequest&,uint64_t sequence)const;

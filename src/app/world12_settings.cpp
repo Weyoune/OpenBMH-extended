@@ -8,9 +8,8 @@
 namespace bmh::app::world12 {
 namespace {
 bool deferred(size_t index) {
-    // H8 is the wall-clock deadline; R5 changes secondary-league admission.
-    // Their typed runtime owners are separate from presentation preferences.
-    return index==7*9+7||index==17*9+4;
+    // Secondary-league admission needs its own saved round/calendar owner.
+    return index==17*9+4;
 }
 void refresh(GameState& g,const LeImage& rules) {
     std::array<uint8_t,180> raw{};
@@ -19,6 +18,12 @@ void refresh(GameState& g,const LeImage& rules) {
         {g.memory.u8(layout::GameMode),g.memory.u32(layout::CompetitionSelection),0,0},rules);
     for(uint32_t i=0;i<180;++i)if(i!=5&&i!=6)g.memory.set8(layout::LeaguePresentationOptions+i,shown[i]);
 }
+}
+std::optional<DesktopClockContext> Session::process_timer_context()const {
+    if(!state_.desktop||!state_.desktop->active_seat||!state_.desktop->initial_event||
+       !state_.world.economy||!state_.world.economy->presentation_options)return {};
+    return DesktopClockContext{owner_.scope,owner_.revision,state_.date,state_.desktop->initial_event->matchday_number,
+        *state_.desktop->active_seat,(*state_.world.economy->presentation_options)[7*9+7]};
 }
 void Session::validate_settings_owner(uint64_t sequence,uint64_t revision)const {
     if(preparation_menu_!=19||!settings_owner_||sequence!=settings_generation_||!sequence||revision!=owner_.revision||revision==UINT64_MAX||
@@ -31,7 +36,6 @@ ui::SettingsState Session::settings_view()const {
     const auto p=bmh::world12::project_manager_desktop(state_,resources_.reference);
     auto view=ui::settings_from_game(p.state,settings_owner_->manager_slot,owner_.revision,resources_.german,settings_sound_);
     if(!view.display_cells)view.display_cells=view.cells;
-    (*view.display_cells)[7*9+7]=200;
     (*view.display_cells)[17*9+4]|=0x80;
     return view;
 }

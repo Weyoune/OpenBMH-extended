@@ -60,13 +60,38 @@ when admitting a German indoor date, without borrowing a current template.
 This connects the switch and disabled-date progression. Simulation and visible
 ownership of an enabled indoor tournament remain a separate completion gate.
 
-## Separate owners still required
+## Desktop time limit
 
-Two cells remain unavailable in this typed menu: H8 (the wall-clock desktop
-deadline) and R5 (secondary-league admission). EIN imports changing those cells
-are explicitly refused. The remaining cells still obey the existing native
-consumer whitelist and Original availability, rather than accepting every
-displayed coordinate.
+H8 now uses the existing Original process clock. Only its minute setting is saved;
+the monotonic timestamp and remaining time are process-owned. The context uses
+session scope, canonical manager seat, date and event identity, so normal staged
+Session copies and revisions cannot reset a manager's time. A new manager/event
+receives a fresh budget. A successful career load restarts runtime time, whereas
+a failed load retains the existing paused remainder.
+
+The Original top-row percentage raster is reused. Settings, EIN/readme and game
+save/load waits pause time; changing H8 applies only the final minute difference
+when the wait ends. Zero disables it and re-enabling from zero starts fresh.
+Other Original blank numeric values retain their existing inactive gate and
+nonzero delta semantics. MEN retains its existing key-input owner without
+pausing the clock. Normal management menus continue consuming time.
+
+Expiry uses `StartupFlow::process_timer_expired`, including the existing modal,
+calculator and mouse-release waits. It first unwinds supported management
+screens, then emits the Original desk event8 for the actual current manager.
+Existing Core turn validation remains in charge. An unfinished day/presenter
+boundary preserves the career and does not re-dispatch every frame at the same
+revision. Opening a new owned state permits a fresh validated attempt.
+
+This does not wire missing match/season presenters or make the development
+entry a completed playable Beta. Neither monotonic time nor runtime expiry
+receipts are serialized, and sampling consumes no gameplay random numbers.
+
+## Separate owner still required
+
+R5 (secondary-league admission) remains unavailable. EIN imports changing it are
+explicitly refused. Other cells retain the native consumer whitelist and
+Original availability, rather than accepting every displayed coordinate.
 
 The in-settings readme uses the explicit reference and the existing original
 file-availability behavior. General live-match settings ownership and complete
@@ -89,3 +114,9 @@ reject stale policy tickets, preserve real cup stops, and resume a quiet
 indoor-only date. Private boundary captures use a clearly identified controlled
 calendar with actual clubs/assets and no invented played scores, at season-two
 days 109/110/230/231; they are not multi-season playthrough evidence.
+
+Desktop-clock checks use controlled monotonic timestamps to cover cloned/staged
+sessions, canonical handoffs, settings and file waits, H8/EIN, raw disabled gates,
+failed load/cancel preservation, ordinary-menu expiry and one refused transition
+per revision. Actual SDL wall-clock observations are recorded separately from
+these deterministic simulations in the private QA evidence.

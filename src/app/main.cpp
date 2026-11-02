@@ -255,6 +255,7 @@ int main(int argc, char** argv) {
                 std::chrono::steady_clock::now()-process_clock_origin).count());
         };
         ui::ProcessTimer process_timer;
+        app::world12::DesktopProcessTimer world_process_timer(process_timer);
         struct ProcessTimerOwner {
             uint64_t session;
             int manager;
@@ -1778,7 +1779,15 @@ int main(int argc, char** argv) {
                     if(shown){press.reset();SDL_FlushEvents(SDL_MOUSEMOTION,SDL_MOUSEBUTTONUP);}
                     return shown;
                 };
+                if(r.request==ui::FlowRequest::desk_action&&r.desk_action.kind==ui::DeskRequestKind::open_menu&&
+                   (r.desk_action.menu_kind==10||r.desk_action.menu_kind==11||r.desk_action.menu_kind==19||r.desk_action.menu_kind==29)) {
+                    process_timer.pause(process_source_seconds());process_timer_frame.reset();
+                }
                 const auto result=app::world12::serve_startup(flow,r,world_session,data,seed,1,r.request==ui::FlowRequest::kickoff?make_pending_offer_hooks(flow.render()):PendingOfferHooks{},nullptr,advertising,construction,compensation,ui::SettingsSoundCapabilities{playback.original_ready()&&playback.available(),playback.original_ready()&&playback.available()},settings_notice);
+                if(result.error.empty()&&(result.progress==app::world12::StartupProgress::prepared||
+                   (r.request==ui::FlowRequest::file_action&&r.file_action.file_kind==ui::SaveLoadFileKind::game&&r.file_action.action==ui::SaveLoadAction::load))) {
+                    world_process_timer.reset();process_timer_frame.reset();
+                }
                 if(world_session&&world_session->snapshot().world.economy&&world_session->snapshot().world.economy->presentation_options){const auto& options=*world_session->snapshot().world.economy->presentation_options;playback.set_original_options({music_enabled&&(options[5]&0x7f)==0,true,(options[6]&0x7f)==0});}
                 if(!result.error.empty())std::fprintf(stderr,"world12: %s\n",result.error.c_str());
                 dirty=true;return;
@@ -3653,18 +3662,27 @@ int main(int argc, char** argv) {
             // SDLFlushEvents3's notice owns its wait. Keep the desk clock polling,
             // but hand its outer expiry back only after this notice restores.
             if(flow.timed_notice_open()) { poll_process_timer(!dirty,false); return; }
-            if (!session || !flow.desktop()) {
-                process_timer.stop(); process_timer_owner.reset(); process_timer_frame.reset();
-                return;
-            }
-            if (flow.screen_name() == "desktop") {
-                const auto& desk = flow.desktop()->state();
-                const ProcessTimerOwner owner{session->session_id(), desk.manager_slot, desk.day_counter};
-                const auto minutes = session->state().memory.u8(::bmh::layout::CareerSession_DispatchStrengths_ExecutableField);
-                if (!process_timer_owner || *process_timer_owner != owner) {
-                    process_timer.start(minutes, process_source_seconds()); process_timer_owner = owner;
-                } else if (process_timer.paused()) {
-                    process_timer.resume(minutes, process_source_seconds());
+            if(world12_development) {
+                world_process_timer.observe(world_session?world_session->process_timer_context():std::nullopt,
+                    flow.process_timer_suspended(),process_source_seconds());
+                if(process_timer.paused()||!process_timer.sample(process_source_seconds())) {
+                    if(process_timer_frame){process_timer_frame.reset();dirty=true;}
+                    return;
+                }
+            }else {
+                if (!session || !flow.desktop()) {
+                    process_timer.stop(); process_timer_owner.reset(); process_timer_frame.reset();
+                    return;
+                }
+                if (flow.screen_name() == "desktop") {
+                    const auto& desk = flow.desktop()->state();
+                    const ProcessTimerOwner owner{session->session_id(), desk.manager_slot, desk.day_counter};
+                    const auto minutes = session->state().memory.u8(::bmh::layout::CareerSession_DispatchStrengths_ExecutableField);
+                    if (!process_timer_owner || *process_timer_owner != owner) {
+                        process_timer.start(minutes, process_source_seconds()); process_timer_owner = owner;
+                    } else if (process_timer.paused()) {
+                        process_timer.resume(minutes, process_source_seconds());
+                    }
                 }
             }
             // ExpireQuestion's held controls and Source calculator waits own their
@@ -3696,7 +3714,11 @@ int main(int argc, char** argv) {
                 SDL_GetMouseState(&window_x,&window_y);
                 float logical_x=0,logical_y=0;
                 SDL_RenderWindowToLogical(renderer,window_x,window_y,&logical_x,&logical_y);
+                if(world12_development&&flow.screen_name()=="desktop"&&world_session&&
+                   !world_process_timer.may_advance(world_session->revision()))return;
                 const auto expired = flow.process_timer_expired(int(logical_x),int(logical_y));
+                if(world12_development&&expired.request==ui::FlowRequest::kickoff&&world_session)
+                    world_process_timer.attempted_advance(world_session->revision());
                 if (expired.request != ui::FlowRequest::none || expired.changed) handle(expired);
             }
         };
