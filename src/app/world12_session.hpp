@@ -9,6 +9,8 @@
 #include "app/world12_attendance.hpp"
 #include "app/world12_event.hpp"
 #include "app/contract_source_types.hpp"
+#include "app/world12_advertising.hpp"
+#include "ui/advertising.hpp"
 #include "formats/le.hpp"
 #include "ui/manager.hpp"
 #include "ui/world12_manager_selection.hpp"
@@ -73,6 +75,9 @@ public:
     ui::ContractsState contracts_view(const std::filesystem::path& data)const;
     ui::ContractActionResult apply_contract(const std::filesystem::path& data,const ui::ContractRequest&);
     void close_contracts();
+    ui::AdvertisingState open_advertising(const ui::DeskRequest&,const std::filesystem::path& data);
+    ui::AdvertisingState advertising_view(const std::filesystem::path& data)const;
+    AdvertisingSpendingResult apply_advertising(const std::filesystem::path& data,const ui::AdvertisingRequest&,const AdvertisingRenewalPresenter& presenter={});
     void open_preparation(const ui::DeskRequest&);
     void apply_preparation(const ui::PreparationRequest&);
     void apply_bank(const std::filesystem::path& data,const ui::BankRequest&);
@@ -104,5 +109,6 @@ private:
     bmh::world12::ClubId contract_club_;
     std::optional<uint8_t> contract_seat_;
     uint64_t contract_generation_=0,contract_request_=0,next_contract_quote_=1;
+    uint64_t advertising_generation_=0,advertising_request_=0;
 };
 }

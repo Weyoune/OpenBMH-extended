@@ -190,6 +190,7 @@ struct ManagerEconomy {
     bool operator==(const ManagerEconomy&)const=default;
 };
 struct CareerEconomy {
+    std::optional<uint8_t> advertising_group; // Source bundle counter; unknown in older worlds.
     uint8_t week=0;
     std::array<ManagerEconomy,4> managers{};
     std::vector<EconomyMessage> messages;

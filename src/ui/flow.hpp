@@ -239,7 +239,8 @@ public:
     uint64_t settings_owner_sequence() const { return settings_owner_sequence_; }
     const DeskRequest& settings_desk_owner() const { return settings_desk_owner_; }
     uint64_t settings_owner_revision() const { return settings_ ? settings_->state().revision : settings_desk_owner_.revision; }
-    void show_advertising(AdvertisingState state);
+    void show_advertising(AdvertisingState state,std::optional<PreparationState> parent={});
+    const AdvertisingScreen* advertising()const{return advertising_.get();}
     const AdvertisingRequest* pending_advertising_action() const {
         return advertising_ && advertising_->pending() ? &*advertising_->pending() : nullptr;
     }

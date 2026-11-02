@@ -1740,7 +1740,20 @@ int main(int argc, char** argv) {
             pitch_pointer.show({}, renderer);
             if(world12_development){
                 if(r.request==ui::FlowRequest::end_session){if(quit_confirmation.confirm())running=false;else flow.reject_desk_action("Beenden abgebrochen.");dirty=true;return;}
-                const auto result=app::world12::serve_startup(flow,r,world_session,data,seed,1,r.request==ui::FlowRequest::kickoff?make_pending_offer_hooks(flow.render()):PendingOfferHooks{});
+                const app::world12::AdvertisingRenewalPresenter advertising=[&](const GameState& staged,const AdvertisingRenewal& renewal) {
+                    using Answer=app::world12::AdvertisingRenewalAnswer;
+                    if(!running)return Answer::abort;
+                    const auto backdrop=flow.render();const int manager=staged.memory.u8(::bmh::layout::ActiveManager);
+                    if(renewal.status==AdvertisingRenewal::Status::offered) {
+                        const auto answer=present_pending_dialog(staged,ui::advertising_renewal_question_dialog(staged,manager,renewal),backdrop,"OpenBMH - advertising_renewal_question");
+                        return answer==PendingOfferAnswer::yes?Answer::renew:answer==PendingOfferAnswer::no?Answer::decline:Answer::abort;
+                    }
+                    if(renewal.status==AdvertisingRenewal::Status::declined_by_sponsor&&
+                       present_pending_dialog(staged,ui::advertising_renewal_notice_dialog(staged,manager,renewal),backdrop,"OpenBMH - advertising_renewal_notice")==PendingOfferAnswer::yes)
+                        return Answer::acknowledged;
+                    return Answer::abort;
+                };
+                const auto result=app::world12::serve_startup(flow,r,world_session,data,seed,1,r.request==ui::FlowRequest::kickoff?make_pending_offer_hooks(flow.render()):PendingOfferHooks{},nullptr,advertising);
                 if(!result.error.empty())std::fprintf(stderr,"world12: %s\n",result.error.c_str());
                 dirty=true;return;
             }

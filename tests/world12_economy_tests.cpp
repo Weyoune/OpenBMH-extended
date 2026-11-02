@@ -71,6 +71,19 @@ void portfolios(CareerSnapshot state,const GameState& rules) {
     check(markets==expected&&decode_world(encode_world(state.world))==state.world,
           "portfolio commit lost paid/holding identities, untouched seats, market history or save data");
 }
+void advertising_groups(CareerSnapshot state,const GameState& rules) {
+    state.world.economy->advertising_group=254;
+    auto projection=AiMatchProjection::create_for_humans(state,{state.world.managers[0].club,state.world.managers[1].club},rules,{1,3,false,true});
+    install_career_economy(projection,state.world);check(projection.state.memory.u8(layout::AdGroupId)==254,"advertising group lost high byte on projection");
+    projection.state.memory.set8(layout::AdGroupId,255);capture_career_economy(state.world,projection);
+    check(state.world.economy->advertising_group==255&&decode_world(encode_world(state.world))==state.world,"advertising group failed capture/save roundtrip");
+    const auto encoded=encode_world(state.world);auto old=cli::parse_json(std::string(encoded.begin(),encoded.end()));old.object()->at("version")=27;
+    auto text=cli::dump_json(old);rejects([&]{decode_world(Bytes(text.begin(),text.end()));},"schema27 discarded a known advertising counter");
+    old.object()->at("economy").object()->erase("advertising_group");text=cli::dump_json(old);state.world=decode_world(Bytes(text.begin(),text.end()));
+    check(!state.world.economy->advertising_group,"older economy invented a bundle counter");
+    install_career_economy(projection,state.world);capture_career_economy(state.world,projection);
+    check(!state.world.economy->advertising_group,"ordinary projection initialized an unknown bundle counter");
+}
 void depreciation(CareerSnapshot state,const GameState& rules) {
     state.world.economy->managers[1].depreciation=0x87654321u;
     state.world.economy->managers[3].depreciation=7654321;
@@ -102,6 +115,7 @@ int main()try {
     initialize_career_economy(state,rules);state.date=40;
     portfolios(state,rules);
     depreciation(state,rules);
+    advertising_groups(state,rules);
     auto& economy=*state.world.economy;auto& de=economy.managers[1];auto& en=economy.managers[3];
     de.deposit=2000000;de.interest_income=123;de.overdraft_interest=456;
     de.loans[4]={100,120,12,10,2,24};de.loans[3]={200,240,24,10,2,48};

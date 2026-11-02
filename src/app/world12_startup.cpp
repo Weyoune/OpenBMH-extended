@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "app/world12_startup.hpp"
+#include "formats/textd.hpp"
 #include "ui/world12_desktop.hpp"
 #include "app/world12_save_load.hpp"
 #include <limits>
 namespace bmh::app::world12 {
 StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,std::unique_ptr<Session>& session,
-    const std::filesystem::path& data,uint32_t seed,uint64_t scope,const PendingOfferHooks& hooks,const StartupTurnHooks* turn)try {
+    const std::filesystem::path& data,uint32_t seed,uint64_t scope,const PendingOfferHooks& hooks,const StartupTurnHooks* turn,const AdvertisingRenewalPresenter& advertising)try {
     if(action.request==ui::FlowRequest::load_game){
         if(session)throw FormatError("world12: setup load cannot replace an active startup session");
         const auto resources=load_runtime_resources(data);flow.open_world12_file_dialog(ui::SaveLoadMode::load,resources.german,save_info_reader(resources.german));return {};
@@ -75,6 +76,10 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
             auto staged=std::make_unique<Session>(*session);auto view=staged->open_environment(action.desk_action,data);
             auto parent=staged->preparation_view(data);flow.show_environment(std::move(view),action.desk_action,std::move(parent));session.swap(staged);return {};
         }
+        if(action.desk_action.kind==ui::DeskRequestKind::open_menu&&action.desk_action.menu_kind==21){
+            auto staged=std::make_unique<Session>(*session);auto view=staged->open_advertising(action.desk_action,data);auto parent=staged->preparation_view(data);
+            flow.show_advertising(std::move(view),std::move(parent));session.swap(staged);return {};
+        }
         if(action.desk_action.kind==ui::DeskRequestKind::open_menu&&action.desk_action.menu_kind==27){
             auto staged=std::make_unique<Session>(*session);auto view=staged->open_contracts(action.desk_action,data);auto parent=staged->preparation_view(data);
             flow.show_contracts(std::move(view),std::move(parent));session.swap(staged);return {};
@@ -101,6 +106,22 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
         if(changed)parent=staged->preparation_view(data);
         flow.acknowledge_environment(std::move(view),std::move(parent));session.swap(staged);return {};
     }
+    if(action.request==ui::FlowRequest::advertising_action){
+        if(!session||!flow.pending_advertising_action()||*flow.pending_advertising_action()!=action.advertising_action)
+            throw FormatError("world12: advertising command has no matching view owner");
+        const auto* original=session.get();const auto before=session->snapshot();const auto revision=session->revision();
+        const auto next=session->advertising_view(data).request_id_base;
+        auto staged=std::make_unique<Session>(*session);const auto result=staged->apply_advertising(data,action.advertising_action,advertising);
+        if(session.get()!=original||session->revision()!=revision||session->snapshot()!=before||
+           session->advertising_view(data).request_id_base!=next||!flow.pending_advertising_action()||*flow.pending_advertising_action()!=action.advertising_action)
+            throw FormatError("world12: advertising presenter changed its live session or view owner");
+        auto view=staged->advertising_view(data);auto parent=staged->preparation_view(data);auto desk=parent.desktop;
+        if(action.advertising_action.kind==ui::AdvertisingActionKind::set_spending&&result.message_address) {
+            const auto texts=load_textd(ui::asset_path(data,"TEXTD.BLK"));view.notification_text=ui::original_to_utf8(texts[(result.message_address-layout::TextPointerTable)/4]);
+            view.notification_warning=result.status==AdvertisingSpendingStatus::insufficient_funds;
+        }
+        flow.acknowledge_advertising(std::move(view),std::move(desk),std::move(parent));session.swap(staged);return {};
+    }
     if(action.request==ui::FlowRequest::contract_action){
         if(!session||!flow.pending_contract_action()||*flow.pending_contract_action()!=action.contract_action)
             throw FormatError("world12: contract command has no matching view owner");
@@ -119,5 +140,5 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
     if(action.request==ui::FlowRequest::submenu_closed&&session&&!flow.in_preparation_menu()){if(session->preparation_open())session->close_preparation();return {};}
     if(action.request!=ui::FlowRequest::none&&action.request!=ui::FlowRequest::submenu_opened&&action.request!=ui::FlowRequest::submenu_closed)throw FormatError("world12: this frontend action has no typed owner yet");
     return {};
-}catch(const std::exception& error){if(action.request==ui::FlowRequest::contract_action&&flow.pending_contract_action())flow.reject_contract_action(error.what());if(action.request==ui::FlowRequest::environment_action&&flow.pending_environment())flow.reject_environment_action(error.what());if(action.request==ui::FlowRequest::mailbox_action&&flow.pending_mailbox())flow.reject_mailbox(error.what());if(action.request==ui::FlowRequest::mailbox_closed&&flow.pending_mailbox_close())flow.reject_mailbox_close(error.what());if(action.request==ui::FlowRequest::file_action&&flow.pending_file()&&*flow.pending_file()==action.file_action)flow.reject_file_action(error.what());if(action.request==ui::FlowRequest::desk_action||action.request==ui::FlowRequest::kickoff)flow.reject_desk_action(error.what());else if(action.request==ui::FlowRequest::submenu_action&&flow.matches_pending_preparation(action.submenu_action))flow.reject_preparation_action(error.what());return {StartupProgress::idle,error.what()};}
+}catch(const std::exception& error){if(action.request==ui::FlowRequest::advertising_action&&flow.pending_advertising_action())flow.reject_advertising_action(error.what());if(action.request==ui::FlowRequest::contract_action&&flow.pending_contract_action())flow.reject_contract_action(error.what());if(action.request==ui::FlowRequest::environment_action&&flow.pending_environment())flow.reject_environment_action(error.what());if(action.request==ui::FlowRequest::mailbox_action&&flow.pending_mailbox())flow.reject_mailbox(error.what());if(action.request==ui::FlowRequest::mailbox_closed&&flow.pending_mailbox_close())flow.reject_mailbox_close(error.what());if(action.request==ui::FlowRequest::file_action&&flow.pending_file()&&*flow.pending_file()==action.file_action)flow.reject_file_action(error.what());if(action.request==ui::FlowRequest::desk_action||action.request==ui::FlowRequest::kickoff)flow.reject_desk_action(error.what());else if(action.request==ui::FlowRequest::submenu_action&&flow.matches_pending_preparation(action.submenu_action))flow.reject_preparation_action(error.what());return {StartupProgress::idle,error.what()};}
 }

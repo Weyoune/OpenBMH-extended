@@ -11,5 +11,5 @@ struct StartupTurnHooks {ClockHooks clock;bmh::world12::HumanRoundHooks matches;
 // Initial draw/ticket presentations and later management/day actions remain separate.
 StartupResult serve_startup(ui::StartupFlow&,const ui::FlowResult&,std::unique_ptr<Session>&,
     const std::filesystem::path& data,uint32_t seed,uint64_t scope,const PendingOfferHooks& hooks={},
-    const StartupTurnHooks* turn=nullptr);
+    const StartupTurnHooks* turn=nullptr,const AdvertisingRenewalPresenter& advertising={});
 }

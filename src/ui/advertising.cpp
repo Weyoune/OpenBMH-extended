@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "formats/executable_layout.hpp"
+#include "formats/badge_policy.hpp"
 #include "game/environment.hpp"
 #include "ui/advertising.hpp"
 #include "ui/game_end.hpp"
@@ -464,11 +465,13 @@ std::string advertising_state_json(const AdvertisingState& state, int selected_c
 
 AdvertisingScreen::AdvertisingScreen(const std::filesystem::path& data, AdvertisingState state,
                                      uint64_t request_id_seed)
-    : state_(std::move(state)), exe_(load_le(asset_path(data, "BMH.exe"))),
+    : AdvertisingScreen(data,std::move(state),request_id_seed,load_le(asset_path(data,"BMH.exe"))) {}
+AdvertisingScreen::AdvertisingScreen(const std::filesystem::path& data,AdvertisingState state,uint64_t request_id_seed,const LeImage& reference)
+    : state_(std::move(state)), exe_(reference),
       texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
       font_(load_font(asset_path(data / "F", "BMH3.FNT"))),
       large_font_(load_font(asset_path(data / "F", "BMH2.FNT"))),
-      sprite_font_(data),
+      sprite_font_(data,reference),
       desktop_(load_vga(asset_path(data / "KB", "129.VGA"))),
       art_(load_vga(asset_path(data / "KB", "4.VGA"))),
       logos_(load_vga(asset_path(data / "KB", "34.VGA"))),
@@ -493,7 +496,8 @@ AdvertisingScreen::AdvertisingScreen(const std::filesystem::path& data, Advertis
     (void)utf8_to_original(state_.spending_funds_text);
     (void)utf8_to_original(state_.merchandise_calculator_title);
     (void)utf8_to_original(state_.budget_calculator_title);
-    if (source_badge_fallback(state_.runtime_team_id)) badge_atlas_ = widgets_;
+    if(!state_.badge_atlas.empty())badge_atlas_=load_vga(asset_path(data,state_.badge_atlas));
+    else if (original_badge_fallback(state_.runtime_team_id,&exe_)) badge_atlas_ = widgets_;
     else badge_atlas_ = load_vga(asset_path(data / "W", std::to_string(state_.badge_sprite >> 3) + ".VGA"));
     for (const auto& value : {state_.finance_preview.income_text,
                               state_.finance_preview.expenses_text,

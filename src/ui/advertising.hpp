@@ -48,6 +48,8 @@ struct AdvertisingState {
     int manager_slot = -1;
     int runtime_team_id = -1;
     uint64_t revision = 0;
+    uint64_t request_id_base = 0; // Runtime-only owner range, not saved.
+    std::string badge_atlas;
     std::string club_name;         // owned UTF-8
     std::string title;             // original TEXTD title (Werbung)
     std::string manager_name;
@@ -104,6 +106,8 @@ class AdvertisingScreen {
 public:
     AdvertisingScreen(const std::filesystem::path& data, AdvertisingState state,
                       uint64_t request_id_seed = 1);
+    AdvertisingScreen(const std::filesystem::path& data,AdvertisingState state,
+                      uint64_t request_id_seed,const LeImage& reference);
     Image render() const;
     bool click(int x, int y);
     bool key(std::string_view key);

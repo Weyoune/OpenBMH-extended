@@ -588,6 +588,90 @@ void actual_contracts(ui::StartupFlow& flow,std::unique_ptr<session_app::Session
     open();const auto reopened=session->snapshot();auto retired=quote_request;retired.revision=session->revision();rejects([&]{session->apply_contract(data,retired);},"closed contracts window request replayed after reopening");check(session->snapshot()==reopened,"retired contracts request changed state");capture("contracts-reopened");send(flow.send_key("ESC"));
     std::cout<<"Actual contracts GUI: player child, Core demands/insurance/salary/personal and team bonuses, global identities, save roundtrips and quote/replay/window guards passed\n";
 }
+void actual_advertising(ui::StartupFlow& flow,std::unique_ptr<session_app::Session>& session,const std::filesystem::path& data,const std::filesystem::path& output) {
+    const auto initial=session->snapshot();
+    const auto send=[&](const ui::FlowResult& action){const auto result=session_app::serve_startup(flow,action,session,data,91,session->scope());if(!result.error.empty())throw std::runtime_error("advertising GUI: "+result.error);};
+    const auto capture=[&](const char* name){if(output.empty())return;std::filesystem::create_directories(output);const auto frame=flow.render();
+        const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));std::ofstream image(output/(std::string(name)+".ppm"),std::ios::binary);image<<"P6\n320 240\n255\n";
+        for(auto pixel:frame.pixels){const auto color=palette.argb[pixel];image.put(char(color>>16));image.put(char(color>>8));image.put(char(color));}
+        write_savegame(output/(std::string(name)+".FBM"),make_save(session->snapshot()));};
+    const auto open=[&]{const auto& items=flow.desktop()->state().items;const auto icon=std::find_if(items.begin(),items.end(),[](const auto& item){return item.kind==21&&!item.disabled;});check(icon!=items.end(),"Original advertising icon unavailable");send(flow.click(icon->x+icon->width/2,icon->y+icon->height/2));};
+    const auto click_target=[&](int slot){return flow.click(session->rules().u16(layout::Advertising_Click_RuntimeField3+uint32_t(slot*2))+2,session->rules().u16(layout::Advertising_Click_RuntimeField4+uint32_t(slot*2))+2);};
+    const auto verify=[&](const CareerSnapshot& before,auto& expected,const WatcomRandom& random){auto world=before.world;expected.commit_match_state(world);capture_career_economy(world,expected);
+        check(session->snapshot().world==world&&session->snapshot().watcom_seed==random.seed()&&session->snapshot().game_seed==before.game_seed&&session->snapshot().date==before.date,"advertising lost Core contracts, budgets, cash, mailbox, bundle counter or RNG");
+        check(read_save(make_save(session->snapshot()))==session->snapshot(),"advertising failed typed save roundtrip");};
+    open();check(flow.advertising()&&session->preparation_open()&&session->snapshot()==initial,"advertising opening changed gameplay");capture("advertising-before");
+    int board=-1;const auto view=session->advertising_view(data);
+    for(int slot=0;slot<14;++slot)if(std::any_of(view.offers[size_t(slot)].offers.begin(),view.offers[size_t(slot)].offers.end(),[](const auto& offer){return offer.can_accept;})){board=slot;break;}
+    check(board>=0,"actual career has no board advertising offer");send(click_target(board));check(flow.advertising()->offer_open(),"board click did not open Original offers");capture("advertising-offer");
+    const auto before=session->snapshot();auto expected=project_manager_desktop(before,session->reference());WatcomRandom random(before.watcom_seed);
+    const auto accept=flow.click(190,195);check(accept.request==ui::FlowRequest::advertising_action&&accept.advertising_action.kind==ui::AdvertisingActionKind::accept_offer,"offer button did not emit acceptance");
+    check(accept_advertising_offer(expected.state,accept.advertising_action.offer).status==AdvertisingOfferStatus::accepted,"actual Core board offer unavailable");
+    send(accept);verify(before,expected,random);capture("advertising-board-accepted");
+    const auto accepted=session->snapshot();rejects([&]{session->apply_advertising(data,accept.advertising_action);},"advertising offer replay accepted");check(session->snapshot()==accepted,"advertising replay changed state");
+    if(flow.advertising()->offer_open())send(flow.click(110,195));
+    for(int slot:{14,15}) {
+        const auto unchanged=session->snapshot();const auto offers=session->advertising_view(data).offers[size_t(slot)];
+        check(std::any_of(offers.offers.begin(),offers.offers.end(),[](const auto& offer){return offer.can_accept;}),"new career has no shirt/TV offer");
+        send(click_target(slot));capture(slot==14?"advertising-shirt":"advertising-tv");check(session->snapshot()==unchanged&&flow.advertising()->offer_open(),"shirt/TV offer navigation changed gameplay or did not open offers");
+        auto p=project_manager_desktop(unchanged,session->reference());WatcomRandom rng(unchanged.watcom_seed);const auto action=flow.click(190,195);
+        check(action.request==ui::FlowRequest::advertising_action&&action.advertising_action.kind==ui::AdvertisingActionKind::accept_offer&&action.advertising_action.offer.display_slot==slot,"shirt/TV did not submit its own offer");
+        check(accept_advertising_offer(p.state,action.advertising_action.offer).status==AdvertisingOfferStatus::accepted,"Core shirt/TV offer unavailable");send(action);verify(unchanged,p,rng);capture(slot==14?"advertising-shirt-accepted":"advertising-tv-accepted");
+        if(flow.advertising()->offer_open())send(flow.click(110,195));
+    }
+    ui::AdvertisingRequest retired;
+    for(int target:{17,18,16}) {
+        const auto observed=session->advertising_view(data).spending[size_t(target-16)];const uint32_t amount=target==16?1000u:observed.current_amount==5000?6000u:5000u;
+        send(click_target(target));check(flow.advertising()->spending_calculator_open(),"advertising spending calculator did not open");for(int n=0;n<10;++n)flow.send_key("BACKSPACE");check(flow.text(std::to_string(amount)),"advertising calculator refused digits");
+        const auto prior=session->snapshot();auto p=project_manager_desktop(prior,session->reference());WatcomRandom rng(prior.watcom_seed);const auto action=flow.send_key("ENTER");
+        check(action.request==ui::FlowRequest::advertising_action&&action.advertising_action.kind==ui::AdvertisingActionKind::set_spending&&action.advertising_action.spending.amount==amount,"spending calculator did not submit the confirmed amount");
+        const auto result=set_advertising_spending(p.state,action.advertising_action.spending,rng);check(result.status==AdvertisingSpendingStatus::accepted,"actual Core spending unavailable");send(action);verify(prior,p,rng);retired=action.advertising_action;
+        capture(target==16?"advertising-goods":target==17?"advertising-press":"advertising-fans");
+        if(result.message_address){const auto booked=session->snapshot();send(flow.send_key("ENTER"));check(session->snapshot()==booked,"advertising notice charged the purchase twice");}
+    }
+    capture("advertising-after");send(flow.send_key("ESC"));check(flow.screen_name()=="desktop"&&!session->preparation_open(),"advertising close lost its menu owner");
+    open();const auto reopened=session->snapshot();retired.revision=session->revision();rejects([&]{session->apply_advertising(data,retired);},"old advertising window request replayed after reopening");check(session->snapshot()==reopened,"retired advertising request changed state");send(flow.send_key("ESC"));
+    std::cout<<"Actual advertising GUI: Original board acceptance, shirt/TV browsers, press/fan budgets, goods delivery and cost, global bundle counter, Core world/RNG, saves and replay/window guards passed\n";
+}
+void actual_advertising_renewals(const std::filesystem::path& data,const CareerSnapshot& base,const std::filesystem::path& output) {
+    const auto directory=std::filesystem::temp_directory_path()/("openbmh-renewals-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);
+    struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code ignored;std::filesystem::remove_all(path,ignored);}} cleanup{directory};
+    for(int mode=0;mode<7;++mode) {
+        auto fixture=base;const auto actor=*fixture.desktop->active_seat;
+        auto& manager=*std::find_if(fixture.world.managers.begin(),fixture.world.managers.end(),[&](const auto& m){return m.seat==actor;});
+        manager.career->sponsors[1]={6000,0};auto& contract=manager.career->season_services->advertising_contracts[14];contract.fill(0);contract[6]=12;contract[7]=1;
+        if(mode==2)contract[8]=contract[9]=255;
+        write_savegame(directory/"Renew.FBM",make_save(fixture));ui::StartupFlow flow(data,directory,ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> session;
+        const auto send=[&](const ui::FlowResult& action){const auto result=session_app::serve_startup(flow,action,session,data,91,95);if(!result.error.empty())throw std::runtime_error("renewal GUI setup: "+result.error);};
+        flow.click(60,215);send(flow.click(240,215));send(flow.send_key("ENTER"));
+        const auto& items=flow.desktop()->state().items;const auto icon=std::find_if(items.begin(),items.end(),[](const auto& item){return item.kind==21;});send(flow.click(icon->x+icon->width/2,icon->y+icon->height/2));
+        const auto before=session->snapshot();const auto revision=session->revision();auto expected=project_manager_desktop(before,session->reference());const auto texts=load_textd(ui::asset_path(data,"TEXTD.BLK"));expected.state.texts=&texts;
+        WatcomRandom random(before.watcom_seed);const auto result=check_advertising_renewal(expected.state,0,14,random);
+        check(result.status==(mode==2?AdvertisingRenewal::Status::declined_by_sponsor:AdvertisingRenewal::Status::offered),"controlled renewal fixture did not reach expected Core status");
+        if(mode!=2)check(answer_advertising_renewal(expected.state,0,14,mode!=1),"controlled Core renewal answer unavailable");
+        const auto capture=[&](const std::string& name,const Image& frame){if(output.empty())return;std::filesystem::create_directories(output);const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));std::ofstream image(output/(name+".ppm"),std::ios::binary);image<<"P6\n320 240\n255\n";for(auto pixel:frame.pixels){const auto color=palette.argb[pixel];image.put(char(color>>16));image.put(char(color>>8));image.put(char(color));}write_savegame(output/(name+".FBM"),make_save(session->snapshot()));};
+        const auto name=std::string("renewal-")+std::to_string(mode);capture(name+"-before",flow.render());
+        int shown=0;session_app::AdvertisingRenewalPresenter presenter;
+        if(mode!=5)presenter=[&](const GameState& staged,const AdvertisingRenewal& renewal) {
+            ++shown;check(renewal.status==result.status,"visible renewal question differs from Core");
+            auto view=mode==2?ui::advertising_renewal_notice_dialog(staged,0,renewal):ui::advertising_renewal_question_dialog(staged,0,renewal);
+            const auto& person=*std::find_if(before.world.managers.begin(),before.world.managers.end(),[&](const auto& m){return m.seat==actor;});const auto& crest=before.world.crests.at(before.world.clubs.at(person.club).crest);
+            view.badge_sprite=crest.cell;view.badge_atlas=crest.path;view.badge_fallback=false;
+            ui::GameEndTaxDialog screen(data,view,{},flow.render(),session->rules());capture(name+"-dialog",screen.render());
+            if(mode==4||mode==6)session->close_preparation();
+            if(mode==6){ui::DeskRequest reopen;reopen.kind=ui::DeskRequestKind::open_menu;reopen.menu_kind=21;reopen.manager_slot=0;reopen.revision=revision;(void)session->open_advertising(reopen,data);}
+            using A=session_app::AdvertisingRenewalAnswer;return mode==2?A::acknowledged:mode==3?A::abort:mode==1?A::decline:A::renew;
+        };
+        const auto action=flow.click(session->rules().u16(layout::Advertising_Click_RuntimeField3+28)+2,session->rules().u16(layout::Advertising_Click_RuntimeField4+28)+2);
+        check(action.request==ui::FlowRequest::advertising_action&&action.advertising_action.kind==ui::AdvertisingActionKind::check_renewal,"expired shirt did not request renewal");
+        const auto applied=session_app::serve_startup(flow,action,session,data,91,95,{},nullptr,presenter);
+        check(shown==(mode==5?0:1),"renewal presenter call count changed");
+        if(mode>=3)check(!applied.error.empty()&&session->snapshot()==before&&session->revision()==revision&&session->preparation_open()==(mode!=4),"aborted/missing/reentrant presenter published sponsor state or lost external owner");
+        else {auto world=before.world;expected.commit_match_state(world);capture_career_economy(world,expected);check(applied.error.empty()&&session->snapshot().world==world&&session->snapshot().watcom_seed==random.seed()&&session->snapshot().game_seed==before.game_seed&&session->revision()==revision+1,"renewal/decline/refusal lost Core contract, mailbox or RNG state");check(read_save(make_save(session->snapshot()))==session->snapshot(),"renewal snapshot failed save roundtrip");}
+        capture(name+"-after",flow.render());send(flow.send_key("ESC"));check(flow.screen_name()=="desktop"&&!session->preparation_open(),"renewal fixture did not release its owner");
+    }
+    std::cout<<"Actual advertising renewal GUI: renew, manager decline, sponsor refusal/mail, cancelled/missing/reentrant presenter rollback, canonical crest and saved Core effects passed\n";
+}
 void actual_save_load(ui::StartupFlow& flow,std::unique_ptr<session_app::Session>& session,const std::filesystem::path& data,const std::filesystem::path& output) {
     const auto directory=flow.save_directory();const auto path=directory/"Resume.FBM";
     const auto send=[&](ui::StartupFlow& ui,const ui::FlowResult& action,std::unique_ptr<session_app::Session>& owner){const auto result=session_app::serve_startup(ui,action,owner,data,91,owner?owner->scope():71);if(!result.error.empty())throw std::runtime_error("file input: "+result.error);};
@@ -1075,6 +1159,8 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     actual_camp(flow,session,data,output.empty()?output:output/"camp-single");
     actual_environment(flow,session,data,output.empty()?output:output/"environment-single");
     actual_contracts(flow,session,data,output.empty()?output:output/"contracts-single");
+    actual_advertising(flow,session,data,output.empty()?output:output/"advertising-single");
+    actual_advertising_renewals(data,session->snapshot(),output.empty()?output:output/"advertising-renewals");
     actual_save_load(flow,session,data,output);
     ui::StartupFlow mixed(data,{},ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> multi;
     mixed.click(resources.german.u16(layout::Setup_FormatError_RuntimeField3+6*2)+10,resources.german.u8(layout::Setup_FormatError_RuntimeField4+6)+10);
@@ -1093,6 +1179,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     actual_camp(mixed,multi,data,output.empty()?output:output/"camp-mixed");
     actual_environment(mixed,multi,data,output.empty()?output:output/"environment-mixed");
     actual_contracts(mixed,multi,data,output.empty()?output:output/"contracts-mixed");
+    actual_advertising(mixed,multi,data,output.empty()?output:output/"advertising-mixed");
     actual_mailbox(data,multi->snapshot(),output.empty()?output:output/"mailbox");
     {
         PendingOfferHooks decline;decline.answer=[](const GameState&,const PendingOfferQuestion&){return PendingOfferAnswer::yes;};
@@ -1101,6 +1188,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
         const auto result=session_app::serve_startup(mixed,mixed.click(icon->x+icon->width/2,icon->y+icon->height/2),multi,data,91,72,decline);
         check(result.error.empty()&&multi->snapshot().world.manager_country(*multi->snapshot().desktop->active_seat)==Country::germany,"mixed contract handoff did not reach German manager");
         actual_contracts(mixed,multi,data,output.empty()?output:output/"contracts-german");
+        actual_advertising(mixed,multi,data,output.empty()?output:output/"advertising-german");
     }
     actual_four_managers(data,output);
     actual_pending(data,output.empty()?output:output/"pending");

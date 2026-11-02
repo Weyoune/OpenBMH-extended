@@ -2274,14 +2274,18 @@ void StartupFlow::show_settings(SettingsState state, uint64_t owner_sequence, De
     if (owner_sequence) settings_desk_owner_.revision = state.revision;
 }
 
-void StartupFlow::show_advertising(AdvertisingState state) {
+void StartupFlow::show_advertising(AdvertisingState state,std::optional<PreparationState> parent) {
+    if(parent){validate_preparation_context(*parent);if(!desktop_||parent->desktop.source!="world12"||desk_json(parent->desktop)!=desk_json(desktop_->state()))throw FormatError("world12: advertising parent differs from desktop");}
     if (!desktop_ || !engine_attached_ || in_preparation_menu() || in_readonly_view() || matchday_results_ ||
         !desktop_->pending() || desktop_->pending()->kind != DeskRequestKind::open_menu ||
         desktop_->pending()->menu_kind != 21 || state.manager_slot != desktop_->state().manager_slot ||
         state.runtime_team_id != desktop_->state().runtime_club || state.revision != desktop_->state().revision)
         throw FormatError("advertising view requires the active pending Original advertising menu");
-    auto screen = std::make_unique<AdvertisingScreen>(data_, std::move(state), advertising_generation_ << 32);
+    const auto seed=parent?state.request_id_base:advertising_generation_<<32;
+    auto screen = std::make_unique<AdvertisingScreen>(data_, std::move(state),seed,render_reference());
+    auto next_parent=parent?std::make_unique<PreparationState>(std::move(*parent)):nullptr;
     desktop_->resolve_local_menu();
+    if(next_parent)preparation_=std::move(next_parent);
     advertising_ = std::move(screen);
     ++advertising_generation_;
 }
@@ -2294,19 +2298,20 @@ void StartupFlow::acknowledge_advertising(AdvertisingState state, DeskState desk
     if (request.manager_slot != previous.manager_slot || request.runtime_club != previous.runtime_club ||
         request.revision != previous.revision || state.manager_slot != previous.manager_slot ||
         state.runtime_team_id != previous.runtime_club || state.revision != previous.revision + 1 ||
-        desk.source != "engine_projection" || desk.revision != state.revision ||
+        desk.source != previous.source || desk.revision != state.revision ||
         desk.manager_slot != previous.manager_slot || desk.runtime_club != previous.runtime_club ||
         desk.manager_teams != previous.manager_teams || desk.day_counter != previous.day_counter ||
         desk.season_index != previous.season_index || desk.season_day != previous.season_day ||
         desk.manager_name != previous.manager_name || desk.portrait != previous.portrait ||
-        desk.badge != previous.badge || desk.options != previous.options ||
+        desk.badge != previous.badge || desk.badge_atlas != previous.badge_atlas || desk.options != previous.options ||
         desk_json(preparation.desktop) != desk_json(desk))
         throw FormatError("advertising: mismatched acknowledgement context");
     validate_desk_state(desk);
     validate_preparation_context(preparation);
     auto next_desktop = std::make_unique<DesktopScreen>(data_, desk,render_reference());
     auto next_preparation = std::make_unique<PreparationState>(std::move(preparation));
-    auto next_advertising = std::make_unique<AdvertisingScreen>(data_, std::move(state), advertising_generation_ << 32);
+    const auto seed=desk.source=="world12"?state.request_id_base:advertising_generation_<<32;
+    auto next_advertising = std::make_unique<AdvertisingScreen>(data_, std::move(state),seed,render_reference());
     // Only contract acceptance resumes the next offer. Spending closes its calculator.
     if (request.kind == AdvertisingActionKind::accept_offer)
         (void)next_advertising->open_offers(request.offer.display_slot);

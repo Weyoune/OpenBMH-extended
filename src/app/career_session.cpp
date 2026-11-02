@@ -9,6 +9,7 @@
 #include "app/training_camp_request_source.hpp"
 #include "app/bank_request_source.hpp"
 #include "app/contract_request_source.hpp"
+#include "app/advertising_request_source.hpp"
 
 #include <stdexcept>
 #include <system_error>
@@ -5163,26 +5164,8 @@ std::optional<AdvertisingRenewal> CareerSession::dispatch_advertising_renewal(
         error = "Eine andere Session-Aktion oder ein konkurrierender Screen ist aktiv.";
         return std::nullopt;
     }
-    if (!presenter || request.kind != ui::AdvertisingActionKind::check_renewal ||
-        request.request_id == 0 || request.request_id <= last_advertising_request_id_ ||
-        request.manager_slot < 0 || request.manager_slot > 3 ||
-        !g_.memory.has(::bmh::layout::ActiveManager) || int(g_.memory.u8(::bmh::layout::ActiveManager)) != request.manager_slot ||
-        size_t(request.manager_slot) >= g_.manager_teams.size() ||
-        request.runtime_club != g_.manager_teams[size_t(request.manager_slot)] ||
-        request.revision != revision || revision == std::numeric_limits<uint64_t>::max() ||
-        request.renewal_display_slot < 0 || request.renewal_display_slot > 15 ||
-        request.renewal_contract_slot < 0 || request.renewal_contract_slot > 15 ||
-        request.offer != AdvertisingOfferRequest{} || request.spending != AdvertisingSpendingRequest{}) {
-        error = "Diese Werbeaktion ist nicht mehr aktuell.";
-        return std::nullopt;
-    }
-    const size_t record = size_t(request.manager_slot) * 0xb0c + 0xa34 +
-                          size_t(request.renewal_contract_slot) * 0x0c;
-    if (record + 12 > g_.manager_records.size() ||
-        !std::equal(request.renewal_expected_contract.begin(), request.renewal_expected_contract.end(),
-                    g_.manager_records.begin() + std::ptrdiff_t(record)) ||
-        (request.renewal_expected_contract[6] & 0x7f) == 0 || request.renewal_expected_contract[5] != 0) {
-        error = "Diese Vertragsverlängerung ist nicht mehr aktuell.";
+    if(!presenter||!validate_advertising_renewal_request_source(g_,request,revision,last_advertising_request_id_,error)) {
+        if(error.empty())error="Die Original-Verlängerungsfrage ist nicht verfügbar.";
         return std::nullopt;
     }
 
@@ -5323,54 +5306,7 @@ bool CareerSession::dispatch_advertising(const ui::AdvertisingRequest& request, 
     if (advertising_renewal_dispatch_active_) { error = "advertising_renewal_active"; return false; }
     if (balance_draft_ || balance_dispatch_active_ || strengths_owner_ || strengths_dispatch_active_ ||
         top_scorers_owner_ || top_scorers_dispatch_active_ || stadium_.block_expansion || other_games_owner_ || other_games_dispatch_active_) { error = "strengths_active"; return false; }
-    error.clear();
-    if (spending_result) *spending_result = {};
-    const int manager = request.manager_slot;
-    if (!g_.memory.has(::bmh::layout::ActiveManager) || manager < 0 || manager > 3 ||
-        size_t(manager) >= g_.manager_teams.size() || int(g_.memory.u8(::bmh::layout::ActiveManager)) != manager ||
-        request.runtime_club != g_.manager_teams[size_t(manager)] ||
-        request.revision != revision || revision == std::numeric_limits<uint64_t>::max() ||
-        request.request_id == 0 || request.request_id <= last_advertising_request_id_ ||
-        request.kind == ui::AdvertisingActionKind::check_renewal ||
-        request.renewal_display_slot != -1 || request.renewal_contract_slot != -1 ||
-        request.renewal_expected_contract != std::array<uint8_t, 12>{}) {
-        error = "Diese Werbeaktion ist nicht mehr aktuell.";
-        return false;
-    }
-    if (request.kind == ui::AdvertisingActionKind::accept_offer) {
-        if (request.offer.manager != manager || request.spending != AdvertisingSpendingRequest{}) {
-            error = "Das Werbeangebot enthält fremde Ausgabedaten.";
-            return false;
-        }
-        const auto result = accept_advertising_offer(g_, request.offer);
-        if (result.status != AdvertisingOfferStatus::accepted) {
-            error = result.status == AdvertisingOfferStatus::unsupported_extension
-                ? "Diese Vertragsverlängerung ist noch nicht verfügbar."
-                : "Dieses Werbeangebot kann nicht übernommen werden.";
-            return false;
-        }
-    } else if (request.kind == ui::AdvertisingActionKind::set_spending) {
-        if (request.spending.manager != manager || request.offer != AdvertisingOfferRequest{}) {
-            error = "Der Ausgabenauftrag enthält fremde Vertragsdaten.";
-            return false;
-        }
-        const auto result = set_advertising_spending(g_, request.spending, rand_);
-        if (spending_result) *spending_result = result;
-        if (result.status != AdvertisingSpendingStatus::accepted &&
-            result.status != AdvertisingSpendingStatus::no_change &&
-            result.status != AdvertisingSpendingStatus::insufficient_funds) {
-            error = "Dieser Werbeausgabenauftrag ist nicht mehr gültig.";
-            return false;
-        }
-        // Insufficient funds is an Original handled response: it clears the old
-        // merchandise amount, but neither books cash nor draws a delivery delay.
-    } else {
-        error = "Unbekannte Werbeaktion.";
-        return false;
-    }
-    last_advertising_request_id_ = request.request_id;
-    ++revision;
-    return true;
+    return apply_advertising_request_source(g_,rand_,request,revision,last_advertising_request_id_,error,spending_result);
 }
 
 bool CareerSession::dispatch_contract(const ui::ContractRequest& request, uint64_t& revision,

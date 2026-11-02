@@ -80,6 +80,7 @@ void capture_mailbox(CareerEconomy& e,const GameState& g,const std::array<uint8_
 void initialize_career_economy(CareerSnapshot& state,const GameState& reference){
     state.validate();if(state.world.economy||!state.world.settings||state.date||state.season||state.world.managers.size()!=state.world.settings->planned_managers||state.desktop)throw std::invalid_argument("world12: economy requires fresh pre-desktop initialization");
     CareerEconomy e;e.week=reference.memory.u8(layout::Savestate_Layout_ExecutableField);
+    if(reference.memory.has(layout::AdGroupId))e.advertising_group=reference.memory.u8(layout::AdGroupId);
     const std::array<uint8_t,4> identity{0,1,2,3};for(size_t n=0;n<4;++n)e.managers[n]=read_manager(reference,n,identity);
     // Initial reference mail must be empty: do not import an unrelated career.
     if(reference.mailbox.size()!=kMailboxEntries*kMailboxEntry||std::any_of(reference.mailbox.begin(),reference.mailbox.end(),[](auto b){return b!=0;}))throw std::invalid_argument("world12: initial economy reference contains mailbox state");
@@ -88,6 +89,7 @@ void initialize_career_economy(CareerSnapshot& state,const GameState& reference)
 void install_career_economy(AiMatchProjection& projection,const World& world){
     if(!world.economy||!world.markets)throw std::invalid_argument("world12: career economy/market is missing");
     const auto map=seats(projection);auto& g=projection.state;const auto& e=*world.economy;
+    if(e.advertising_group){g.memory.add_block(layout::AdGroupId,1);g.memory.set8(layout::AdGroupId,*e.advertising_group);}
     g.memory.add_block(layout::Savestate_Layout_ExecutableField,1);g.memory.set8(layout::Savestate_Layout_ExecutableField,e.week);
     g.stocks.assign(world.markets->stocks.begin(),world.markets->stocks.end());g.memory.add_block(layout::FundBlock,world.markets->funds.size());
     for(size_t n=0;n<world.markets->funds.size();++n)g.memory.set8(layout::FundBlock+uint32_t(n),world.markets->funds[n]);
@@ -106,6 +108,7 @@ void capture_career_economy(World& world,const AiMatchProjection& projection){
     if(!world.economy||!world.markets)throw std::invalid_argument("world12: career economy/market is missing");
     const auto map=seats(projection);const auto& g=projection.state;auto& e=*world.economy;
     e.week=g.memory.u8(layout::Savestate_Layout_ExecutableField);
+    if(e.advertising_group)e.advertising_group=g.memory.u8(layout::AdGroupId);
     for(uint8_t n=0;n<projection.human_managers();++n){const auto had_monthly=e.managers[map[n]].monthly.has_value();const auto had_depreciation=e.managers[map[n]].depreciation.has_value();e.managers[map[n]]=read_manager(g,n,map);if(!had_monthly)e.managers[map[n]].monthly.reset();if(!had_depreciation)e.managers[map[n]].depreciation.reset();}
     capture_mailbox(e,g,map);
 }

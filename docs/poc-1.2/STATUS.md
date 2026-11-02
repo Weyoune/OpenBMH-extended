@@ -576,3 +576,11 @@ world and RNG changes publish after the visible request is acknowledged.
 Private single-English and mixed-country input tests include save/reload and
 retired-window guards. See [contract ownership](CONTRACTS.md). These management
 packets do not complete the normal SDL turn driver or the Beta release gates.
+
+## Advertising
+
+Boards, shirt sponsorship, television rights, press/fan budgets and merchandise
+now have typed Original GUI/action ownership. Visible renewal/decline/refusal
+dialogs stage Core sponsor and mailbox effects and retain cancellation/reentry
+guards. Schema28 saves the actual global advertising-bundle counter rather than
+restarting it in each projection. See [advertising scope](ADVERTISING.md).
