@@ -112,6 +112,7 @@ AiLeagueRoundOutcome run_ai_league_matches(World& world,const GameState& base,co
         for(size_t n=0;n<pool_rows.size();++n){const auto m=pool_rows[n];local.memory.set16(layout::DeskActions_SubmitPoolsCoupon_RuntimeField+uint32_t(n*4),uint16_t(m*2));local.memory.set16(layout::DeskActions_SubmitPoolsCoupon_RuntimeField+uint32_t(n*4+2),uint16_t(m*2+1));}
         local.pools_open=true;
     }
+    if(hooks&&hooks->before_matchday)hooks->before_matchday(projection,engine);
     bmh::MinuteReport report;
     bmh::play_matchday(engine,local,groups,conditions[0].presentation_buttons,staged_game,staged_random,report,
         hooks&&hooks->after_minute?std::function<void(int)>([&](int minute){hooks->after_minute(projection,engine,minute);}):std::function<void(int)>{});

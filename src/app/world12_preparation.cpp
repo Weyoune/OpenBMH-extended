@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "app/world12_session.hpp"
 #include "app/preparation_actions.hpp"
+#include "app/world12_pitch_source.hpp"
 #include "app/training_camp_request_source.hpp"
 #include "game/world12/economy.hpp"
 #include "game/world12/desktop_projection.hpp"
@@ -31,51 +32,6 @@ void prepare_lineup(GameState& local,int manager,int club) {
     for(size_t row=0;row<11;++row){const auto slot=local.squad_slots.at(first+row);const auto id=slot&0xfff;const auto at=size_t(manager)*0x840+row*0x58;
         if(id==0xfff||size_t(id)>=local.players.size()||seen[id]||!(slot&0x8000)||(slot&0x4000)||int8_t(local.tactics.at(at+0x41))<0||int8_t(local.tactics.at(at+0x41))>19||int8_t(local.tactics.at(at+0x42))<0||int8_t(local.tactics.at(at+0x42))>8)
             throw FormatError("world12: incomplete prepared eleven");seen[id]=true;}
-}
-void pitch_action(GameState& local,const ui::PitchRequest& r,bool foreign_rule) {
-    if(r.indoor!=local.indoor)throw FormatError("world12: stale pitch mode");
-    const auto at=size_t(r.manager_slot)*0xb0c;const auto display=layout::CareerSession_AnyOf_ExecutableField+uint32_t(r.manager_slot*2);
-    const auto word=[&](size_t p){return uint16_t(local.manager_records.at(at+p)|uint16_t(local.manager_records.at(at+p+1))<<8);};
-    const std::array<uint16_t,3> takers{word(0xafc),word(0xafe),word(0xb08)};const auto old=local.memory.u16(display);const auto mode=local.memory.u8(layout::GameMode);
-    const bool editor=r.kind==ui::PitchRequestKind::open_set_piece_editor||r.kind==ui::PitchRequestKind::close_set_piece_editor||r.kind==ui::PitchRequestKind::set_piece_taker||r.kind==ui::PitchRequestKind::auto_set_piece_takers;
-    if(editor||r.kind==ui::PitchRequestKind::select_pitch_page||r.kind==ui::PitchRequestKind::set_player_order){
-        if(r.expected_display_word!=old||r.expected_set_piece_values!=takers||r.expected_set_piece_signature!=word(0xb0a)||r.expected_mode!=mode)throw FormatError("world12: stale pitch page/takers");
-    }
-    if(editor&&(word(0xb0a)!=0x3253||(r.kind!=ui::PitchRequestKind::open_set_piece_editor&&!(old&0x80))))throw FormatError("world12: inactive set-piece editor");
-    bool accepted=false;
-    switch(r.kind){
-    case ui::PitchRequestKind::move_player:
-        accepted=move_pitch_player_source(local,r.manager_slot,r.runtime_club,r.row,r.player_id,r.slot,r.old_depth,r.old_lane,r.new_depth,r.new_lane);break;
-    case ui::PitchRequestKind::swap_players:
-        row_identity(local,r.runtime_club,r.row,r.player_id,r.slot);row_identity(local,r.runtime_club,r.second_row,r.second_player,r.second_slot);
-        accepted=swap_pitch_roster_rows_source(local,r.manager_slot,r.runtime_club,r.row,r.second_row,r.slot,r.second_slot,foreign_rule);break;
-    case ui::PitchRequestKind::set_automatic_weight:
-        accepted=set_pitch_automatic_weight_source(local,r.manager_slot,r.runtime_club,r.weight_index,r.old_weights,r.new_weights);break;
-    case ui::PitchRequestKind::apply_formation:
-        accepted=apply_pitch_formation_source(local,r.manager_slot,r.runtime_club,r.formation,r.old_weights);break;
-    case ui::PitchRequestKind::save_formation:
-        accepted=save_pitch_formation_source(local,r.manager_slot,r.runtime_club,r.formation,r.old_weights,r.formation_positions);break;
-    case ui::PitchRequestKind::open_set_piece_editor: {
-        const auto next=uint16_t((old&0xff00)|((old&0x8f)|0x80));accepted=r.new_display_word==next&&normalize_pitch_set_piece_source(local,r.manager_slot,r.runtime_club);if(accepted)local.memory.set16(display,next);break;}
-    case ui::PitchRequestKind::close_set_piece_editor:
-        accepted=r.new_display_word==uint16_t(old&~uint16_t(0x80));if(accepted)local.memory.set16(display,r.new_display_word);break;
-    case ui::PitchRequestKind::set_piece_taker:
-        accepted=r.set_piece_selector>=2&&r.set_piece_selector<=4&&r.expected_set_piece_value==takers[size_t(r.set_piece_selector-2)]&&set_pitch_set_piece_taker_source(local,r.manager_slot,r.runtime_club,r.set_piece_selector,r.row,r.player_id,r.slot,r.expected_set_piece_value);break;
-    case ui::PitchRequestKind::auto_set_piece_takers:
-        accepted=auto_pitch_set_piece_takers_source(local,r.manager_slot,r.runtime_club,r.expected_set_piece_values);break;
-    case ui::PitchRequestKind::set_player_order:
-        row_identity(local,r.runtime_club,r.row,r.player_id,r.slot);
-        if(mode==1||(old&0x70)!=0x20||r.row>=11||r.order_aspect<0||r.order_aspect>3||r.new_order_value<2||r.new_order_value>40||r.new_order_value==r.expected_order_value||local.tactics.at(size_t(r.manager_slot)*0x840+size_t(r.row)*0x58+2+size_t(r.order_aspect))!=r.expected_order_value)break;
-        accepted=set_player_order_source(local,r.manager_slot,r.runtime_club,r.row,r.player_id,r.order_aspect,r.new_order_value);break;
-    case ui::PitchRequestKind::select_pitch_page: {
-        uint16_t next=old;
-        switch(r.page_control){case 0:next=uint16_t((old&~uint16_t(0x80))^3);break;case 1:next=uint16_t(old^12);break;case 2:next=uint16_t((old&0x8f)|0x10);break;case 3:if(mode!=1)next=uint16_t((old&0x8f)|0x20);else throw FormatError("world12: player orders unavailable in mode I");break;default:throw FormatError("world12: no authenticated opponent for marking page");}
-        // Page 2/3 clears editor bit 80, preserving the Original low-word mask.
-        if(r.page_control==2||r.page_control==3)next=uint16_t(next&~uint16_t(0x80));
-        accepted=r.new_display_word==next;if(accepted)local.memory.set16(display,next);break;}
-    default:throw FormatError("world12: unsupported pitch command");
-    }
-    if(!accepted)throw FormatError("world12: rejected stale or unavailable pitch command");
 }
 void capture_display(CareerSnapshot& candidate,const AiMatchProjection& projection) {
     for(size_t i=0;i<projection.human_managers();++i){const auto seat=projection.global_manager(uint8_t(i));auto& desk=*std::find_if(candidate.desktop->managers.begin(),candidate.desktop->managers.end(),[&](const auto& d){return d.seat==seat;});
@@ -112,7 +68,7 @@ void Session::apply_preparation(const ui::PreparationRequest& request) {
             if constexpr(std::is_same_v<R,ui::LineupRequest>){if(*preparation_menu_!=3||r.kind!=ui::LineupRequestKind::swap_players)throw FormatError("world12: invalid lineup command");
                 row_identity(local,r.runtime_club,r.first_row,r.first_player,r.first_slot);row_identity(local,r.runtime_club,r.second_row,r.second_player,r.second_slot);
                 if(!swap_pitch_roster_rows_source(local,r.manager_slot,r.runtime_club,r.first_row,r.second_row,r.first_slot,r.second_slot,state_.world.settings->foreign_rule))throw FormatError("world12: roster swap requires a separate injury/foreign-rule decision");}
-            else if constexpr(std::is_same_v<R,ui::PitchRequest>){if(*preparation_menu_!=3)throw FormatError("world12: pitch has no lineup owner");pitch_action(local,r,state_.world.settings->foreign_rule);}
+            else if constexpr(std::is_same_v<R,ui::PitchRequest>){if(*preparation_menu_!=3)throw FormatError("world12: pitch has no lineup owner");apply_world12_pitch_action(local,r,state_.world.settings->foreign_rule);}
             else {auto scratch=revision;std::string error;
                 if constexpr(std::is_same_v<R,ui::TacticsRequest>){if(*preparation_menu_!=18||!apply_tactics_request_source(local,resources_.german,r,scratch,error))throw FormatError(error.empty()?"world12: tactic menu mismatch":error);}
                 else {if(*preparation_menu_!=16||!apply_training_request_source(local,resources_.german,r,scratch,error))throw FormatError(error.empty()?"world12: training menu mismatch":error);}

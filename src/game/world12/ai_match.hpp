@@ -38,6 +38,9 @@ struct HumanRoundHooks {
     std::function<void(AiMatchProjection&,bmh::MatchEngine&,const bmh::LiveMatchEvent&)> live_event;
     std::function<void(AiMatchProjection&,bmh::MatchEngine&,int)> after_minute;
     bool decline_unpresented_events=false;
+    // Install immutable observation and synchronous input hooks before the real
+    // minute clock begins. It receives the same bounded identity projection.
+    std::function<void(AiMatchProjection&,bmh::MatchEngine&)> before_matchday;
 };
 // Actual Original scoring phases and AI events; no generated/test score input.
 // Conditions/formation tables come from the session owner. After-match economy,
