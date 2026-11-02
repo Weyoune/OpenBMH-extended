@@ -1948,6 +1948,7 @@ inline constexpr auto Weekly_FacilityDamage_TextPointer4 = 0xaeed0;
 inline constexpr auto Weekly_FacilityDamage_TextPointer5 = 0xaeed4;
 inline constexpr auto Weekly_Fail_TextPointer = 0xaee20;
 inline constexpr auto Weekly_InterestedManagers_RuntimeField = 0xa2544;
+inline constexpr auto WeeklyManagerStatusQuestion = 0xa11a4;
 inline constexpr auto Weekly_ManagerOffers_TextPointer = 0xaef90;
 inline constexpr auto Weekly_ManagerOffers_TextPointer2 = 0xaef94;
 inline constexpr auto Weekly_ManagerOffers_TextPointer3 = 0xaef98;

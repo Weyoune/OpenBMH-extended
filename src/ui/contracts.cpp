@@ -659,7 +659,7 @@ bool ContractsScreen::click(int x, int y, bool right) {
         for(size_t i=0;i<state_.players.size();++i) {
             const auto& p=state_.players[i];
             if(i&&(p.source.slot&0xc000)!=(state_.players[i-1].source.slot&0xc000))baseline+=2;
-            if(y>=baseline-7 && y<baseline+2){player_info_row_=p.row;return true;}baseline+=7;
+            if(state_.player_details_available&&y>=baseline-7 && y<baseline+2){player_info_row_=p.row;return true;}baseline+=7;
         }
     }
     return false;

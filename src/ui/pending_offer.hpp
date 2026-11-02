@@ -20,6 +20,7 @@ int pending_offer_owner_team(const GameState&, int manager);
 bool pending_offer_spare_buyer(const GameState&, int raw_offer_slot, int expected_team);
 TaxDialogProjection pending_offer_question_dialog(const GameState&,
                                                    const PendingOfferQuestion&);
+TaxDialogProjection weekly_offer_question_dialog(const GameState&,const WeeklyOfferQuestion&,const LeImage&);
 TaxDialogProjection loan_return_question_dialog(const GameState&, int manager,
                                                 std::string_view original_message);
 TaxDialogProjection advertising_renewal_question_dialog(const GameState&, int manager,

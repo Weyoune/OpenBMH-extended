@@ -38,6 +38,7 @@ struct ContractPlayer {
 
 struct ContractsState {
     bool gradient_text = true, decorated_background = true, mode_three = true;
+    bool player_details_available=true;
     uint32_t currency_numerator = 1, currency_denominator = 1;
     int manager_slot = -1;
     int runtime_club = -1;

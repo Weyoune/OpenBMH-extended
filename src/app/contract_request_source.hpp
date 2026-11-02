@@ -13,7 +13,7 @@ template<class QuoteRecord,class Unchanged>
 bool apply_contract_request_source(GameState& g,const TextDb& texts,WatcomRandom& random,
     const ui::ContractRequest& request,uint64_t& revision,std::optional<QuoteRecord>& quote_record,
     uint64_t& next_quote_id,uint64_t& last_request_id,ui::ContractActionResult& result,
-    std::string& error,Unchanged demands_unchanged) {
+    std::string& error,Unchanged demands_unchanged,int expired_row=-1) {
     const auto reject = [&](std::string message) { error = std::move(message); return false; };
     const auto original_text = [&](uint32_t address) {
         return ui::original_to_utf8(texts[(address - ::bmh::layout::TextPointerTable) / 4]);
@@ -50,7 +50,7 @@ bool apply_contract_request_source(GameState& g,const TextDb& texts,WatcomRandom
         GameState staged_game = g;
         WatcomRandom staged_rand = random;
         std::array<uint32_t, 4> demands{};
-        try { demands = contract_demands(staged_game, active, request.row, true, staged_rand); }
+        try { demands = contract_demands(staged_game, active, request.row, expired_row<0, staged_rand); }
         catch (const std::exception&) { return reject("Die Gehaltsforderungen konnten nicht ermittelt werden."); }
         if (!demands_unchanged(staged_game,g))
             return reject("Die Forderungsabfrage hat unerwartet den Spielstand verändert.");
@@ -131,7 +131,7 @@ bool apply_contract_request_source(GameState& g,const TextDb& texts,WatcomRandom
     bool accepted = false;
     try {
         accepted = contract_offer(staged_game, active, request.row, request.term_column,
-                                 request.monthly_salary, request.demand, false, false, staged_rand,
+                                 request.monthly_salary, request.demand, false, request.row==expired_row, staged_rand,
                                  &request.proposed_bonuses);
     } catch (const std::exception&) { return reject("Der Vertrag konnte nicht verhandelt werden."); }
     g = std::move(staged_game);

@@ -123,6 +123,13 @@ TaxDialogProjection pending_offer_question_dialog(const GameState& game,
     return out;
 }
 
+TaxDialogProjection weekly_offer_question_dialog(const GameState& game,const WeeklyOfferQuestion& question,const LeImage& reference){
+    auto body=question.original_message;if(body.empty()&&question.kind==15)body=reference.cstring(layout::WeeklyManagerStatusQuestion);
+    if(question.manager<0||question.manager>3||body.empty()||
+       (question.kind!=5&&(question.kind<10||question.kind>15)))throw FormatError("weekly offer UI: unsupported Source question owner/body");
+    TaxDialogProjection out;out.kind=TaxDialogKind::question;out.source_flags=1;out.source_manager_flags=uint8_t(question.manager);out.body=std::move(body);manager_identity(game,question.manager,out);return out;
+}
+
 TaxDialogProjection loan_return_question_dialog(const GameState& game, int manager,
                                                 std::string_view original_message) {
     if (manager < 0 || manager > 3 || original_message.empty())
