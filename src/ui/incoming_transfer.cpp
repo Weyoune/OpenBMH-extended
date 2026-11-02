@@ -81,8 +81,8 @@ int source_seller_team_token(const IncomingTransferDecisionState& state) {
     return token >= 0 ? (token & 0x0fff) : token;
 }
 
-bool source_neutral_seller_token(int token) {
-    return original_badge_fallback(token);
+bool source_neutral_seller_token(int token,const LeImage& reference) {
+    return original_badge_fallback(token,&reference);
 }
 } // namespace
 
@@ -312,7 +312,7 @@ IncomingTransferScreen::IncomingTransferScreen(const std::filesystem::path& data
     // SourceBadgeFallback chooses the neutral fallback from the raw team token before
     // indexing ClubBadgeSelectors. A real selector can itself be 90..137 and must still
     // load its W atlas, so do not classify seller art by selector value.
-    seller_badge_atlas_ = source_neutral_seller_token(source_seller_team_token(state_)) ||
+    seller_badge_atlas_ = source_neutral_seller_token(source_seller_team_token(state_),exe_) ||
         state_.seller_badge_sprite < 0 ? widgets_ :
         load_vga(state_.seller_badge_atlas.empty()?asset_path(data/"W",std::to_string(state_.seller_badge_sprite>>3)+".VGA"):asset_path(data,state_.seller_badge_atlas));
     notice_active_ = !state_.notice_text.empty();
@@ -440,7 +440,7 @@ Image IncomingTransferScreen::render_at_elapsed(uint64_t elapsed_ms) const {
     shadow_text(170, 39, text_at(texts_, ::bmh::layout::IncomingTransfer_RenderAtElapsed_TextPointer8), 0x6a);
     shadow_text(170, 46, state_.player_name, 0x5f);
     const bool source_neutral_badge =
-        source_neutral_seller_token(source_seller_team_token(state_));
+        source_neutral_seller_token(source_seller_team_token(state_),exe_);
     if (source_neutral_badge) {
         // SourceBadgeFallback passes seller|0x8000. These Source token families route
         // through FormatError(type 14): frame first, then the neutral KB0 tile.

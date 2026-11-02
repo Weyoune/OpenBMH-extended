@@ -10,6 +10,7 @@
 #include "game/national.hpp"
 #include "game/schedule.hpp"
 #include "game/career.hpp"
+#include <algorithm>
 #include <iostream>
 #include <stdexcept>
 
@@ -50,7 +51,7 @@ TeamStatisticsProjection fixture(){TeamStatisticsProjection p;
     p.runtime_team=0;p.league=0;p.league_row=0;p.table.league=0;p.table.size=18;
     p.original_team_name="TEST";p.original_league_name="TESTLIGA";
     p.source_badge_fallback=true;p.gradient_text=true;
-    p.active_manager_results.fill(0xff);p.source_averages={11,22,33,44,55};
+    std::fill(p.active_manager_results.begin(),p.active_manager_results.end(),0xff);p.source_averages={11,22,33,44,55};
     p.average_strength={50,60,70,80,65};return p;
 }
 }
@@ -126,7 +127,7 @@ int main(int argc,char**argv){try{
     }
     expected=pattern(exe);letters(expected,font,exe,6,176,textd(::bmh::layout::TeamStatistics_Render_TextPointer18)+"3:0,3:0,3:0"+textd(::bmh::layout::TeamStatistics_Render_TextPointer20)+"0:3,0:3,0:3",0x6c);
     region(actual,expected,6,171,204,6,"Source packed H2H tokens/series orientation");
-    p.active_manager_results.fill(0xff);p.active_manager_results[6]=0x30;
+    std::fill(p.active_manager_results.begin(),p.active_manager_results.end(),0xff);p.active_manager_results[6]=0x30;
     actual=show(p);expected=pattern(exe);
     letters(expected,font,exe,6,176,textd(::bmh::layout::TeamStatistics_Render_TextPointer18)+",3:0"+textd(::bmh::layout::TeamStatistics_Render_TextPointer20)+textd(::bmh::layout::TeamStatistics_Render_TextPointer19),0x6c);
     region(actual,expected,6,171,204,6,"Source H2H physical gap keeps leading comma, missing away uses noch keine");

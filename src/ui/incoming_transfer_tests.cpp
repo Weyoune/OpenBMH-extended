@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "formats/executable_layout.hpp"
+#include "formats/badge_policy.hpp"
 #include "ui/incoming_transfer.hpp"
+#include "ui/setup.hpp"
 #include "ui/source_notice_test_helpers.hpp"
 
 #include <cstdio>
@@ -173,20 +175,40 @@ int main(int argc, char** argv) {
         check(monitor_ink, "KB0 monitor crop has visible pixels");
         check(pool_tile_exact, "pool TV crop matches KB0 with Source transparency");
         check(frame_exact, "pool TV fallback has Source legacy routine border colors and bounds");
+        auto original_reference=bmh::load_le(asset_path(argv[1],"BMH.exe"));
+        const uint8_t neutral_gate[2]{138,0};
+        original_reference.patch(::bmh::layout::ForeignBadgeGateInstruction+3,neutral_gate,2);
+        check(bmh::original_badge_gate(original_reference)==138,"verified Original neutral crest fixture");
+        auto foreign_reference=original_reference;
+        const uint8_t foreign_gate[2]{90,0};
+        foreign_reference.patch(::bmh::layout::ForeignBadgeGateInstruction+3,foreign_gate,2);
+        check(bmh::original_badge_gate(foreign_reference)==90,"verified Diamond foreign crest fixture");
         auto neutral_badge_state = state;
         neutral_badge_state.seller = 100;
         neutral_badge_state.seller_team_token = 100;
         neutral_badge_state.seller_badge_sprite = 0; // The raw Source fallback precedes selector lookup.
-        IncomingTransferScreen neutral_badge(argv[1], neutral_badge_state);
+        // A window must retain its own edition even when another profile was
+        // installed before construction or is installed before its next render.
+        bmh::install_original_badge_policy(foreign_reference);
+        IncomingTransferScreen neutral_badge(argv[1], neutral_badge_state,true,original_reference);
         const auto neutral_frame = neutral_badge.render();
         check(neutral_frame.pixels[size_t(50) * 320 + 101] == 0x46 &&
               neutral_frame.pixels[size_t(89) * 320 + 140] == 0x40,
               "Source seller tokens 90..137 use legacy routine's framed neutral fallback before badge lookup");
         auto unused_selector_state = neutral_badge_state;
         unused_selector_state.seller_badge_sprite = 511;
-        IncomingTransferScreen unused_selector(argv[1], unused_selector_state);
+        IncomingTransferScreen unused_selector(argv[1], unused_selector_state,true,original_reference);
         check(unused_selector.render().pixels == neutral_frame.pixels,
               "neutral raw seller fallback does not consult or load its unused ba378 selector");
+        IncomingTransferScreen foreign_badge(argv[1],neutral_badge_state,true,foreign_reference);
+        bmh::install_original_badge_policy(original_reference);
+        const auto foreign_frame=foreign_badge.render();
+        const auto foreign_atlas=bmh::load_vga(std::filesystem::path(argv[1])/"W"/"0.VGA");
+        bool foreign_exact=true;
+        for(int y=0;y<38;++y)for(int x=0;x<38;++x)
+            foreign_exact&=foreign_frame.pixels[size_t(y+51)*320+size_t(x+102)]==foreign_atlas.pixels[size_t(y)*foreign_atlas.width+size_t(x)];
+        check(foreign_exact&&neutral_badge.render().pixels==neutral_frame.pixels,
+              "each seller window retains its own foreign or neutral crest policy after profile changes");
         auto selector_state = state;
         selector_state.seller = 20;
         selector_state.seller_team_token = 20;
