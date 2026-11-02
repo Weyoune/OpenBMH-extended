@@ -31,6 +31,8 @@
 
 #include "app/controller.hpp"
 #include "app/world12_startup.hpp"
+#include "app/world12_live_scope.hpp"
+#include "game/matchday_setup.hpp"
 #include "app/quit_confirmation.hpp"
 #include "launch/archive.hpp"
 #include "launch/file_dialog.hpp"
@@ -211,6 +213,7 @@ int main(int argc, char** argv) {
         std::unique_ptr<app::CareerSession> session;
         std::unique_ptr<app::world12::Session> world_session;
         uint64_t revision = 0;
+        uint64_t world_live_nonce=0;
         openbmh::audio::Playback playback;
         std::string audio_error;
         playback.initialize(audio_error);  // Audio is optional; the game continues without a device.
@@ -229,14 +232,16 @@ int main(int argc, char** argv) {
         if (!texture) throw FormatError(SDL_GetError());
         app::PitchPointer pitch_pointer;
         std::vector<uint32_t> pixels(320 * 240);
-        std::unique_ptr<ui::LiveMatchdayScreen> live_screen;if(!world12_development)live_screen=std::make_unique<ui::LiveMatchdayScreen>(data);
-        std::unique_ptr<ui::RealityReporterPanel> reality_reporter;if(!world12_development)reality_reporter=std::make_unique<ui::RealityReporterPanel>(data);
+        std::unique_ptr<ui::LiveMatchdayScreen> live_screen;
+        std::unique_ptr<ui::RealityReporterPanel> reality_reporter;
         std::unique_ptr<ui::SportschauIntro> sportschau_intro;if(!world12_development)sportschau_intro=std::make_unique<ui::SportschauIntro>(data);
         std::unique_ptr<ui::MatchdayIntro> matchday_intro;if(!world12_development)matchday_intro=std::make_unique<ui::MatchdayIntro>(data);
         std::unique_ptr<ui::SportschauEleven> sportschau_eleven;if(!world12_development)sportschau_eleven=std::make_unique<ui::SportschauEleven>(data);
         std::unique_ptr<ui::SportschauTeamInfo> sportschau_team_info;if(!world12_development)sportschau_team_info=std::make_unique<ui::SportschauTeamInfo>(data);
         std::unique_ptr<ui::CompetitionWinnerScreen> competition_winner;if(!world12_development)competition_winner=std::make_unique<ui::CompetitionWinnerScreen>(data);
         const auto season_exe = world12_development?load_reference_le(ui::asset_path(data,"BMH.exe"),DataProfile{}):load_le(ui::asset_path(data,"BMH.exe"));
+        live_screen=std::make_unique<ui::LiveMatchdayScreen>(data,season_exe);
+        reality_reporter=std::make_unique<ui::RealityReporterPanel>(data,season_exe);
         english_game = english_game || season_exe.u8(layout::LeagueSizes) == 20;
         app::QuitConfirmation quit_confirmation(window, english_game);
         try {
@@ -1793,6 +1798,604 @@ int main(int argc, char** argv) {
         };
         std::optional<Uint64> timed_notice_presented_at;
         std::optional<Uint8> timed_notice_release;
+        auto present_live_lineup = [&](int minute, MatchEngine& engine, std::vector<MatchGroup>& groups,
+                GameState& state, uint64_t& live_revision, int selected_team, int selected_opponent,
+                const app::LiveLineupDispatcher& dispatch, const app::LiveTacticsDispatcher& dispatch_tactic,
+                const app::LivePitchDispatcher& dispatch_pitch,
+                const app::LiveInterventionScopeDispatcher& dispatch_scope,
+                bool live_skipped, bool event_origin,
+                const std::function<ui::PitchExtras(uint64_t)>& pitch_projection={},
+                const std::function<app::ClubModalServices(uint64_t&)>& modal_services={}) -> bool {
+            const auto extras = [&] { return pitch_projection?pitch_projection(live_revision):
+                ui::pitch_extras_from_game(state,season_exe,live_revision,selected_opponent); };
+            const auto show_live_substitution_notice = [&](const app::LiveSubstitutionResult& result,
+                    const Image& backdrop, const char* parent_title) {
+                if (result.status != app::LiveSubstitutionStatus::source_notice) return;
+                if (result.manager_slot < 0 || result.source_text_address == 0)
+                    throw FormatError("live substitution notice has no Source owner or text");
+                const PendingOfferNotice notice{result.manager_slot, -1, result.source_text_address,
+                    message_text(state, result.source_text_address)};
+                const auto projection = ui::pending_offer_notice_dialog(state, notice);
+                if (present_pending_dialog(state, projection, backdrop,
+                        "OpenBMH - live_substitution_notice") == PendingOfferAnswer::unsupported)
+                    throw FormatError("live substitution notice presenter stopped");
+                SDL_FlushEvents(SDL_MOUSEMOTION, SDL_MOUSEBUTTONUP);
+                SDL_SetWindowTitle(window, window_title.c_str());
+            };
+            bool completed = false;
+            const int selected_manager = selected_team >= 0 ? state.manager_of(selected_team) : -1;
+            if ((event_origin || (!live_skipped && minute > 2)) && selected_team >= 0 && selected_manager >= 0) {
+                bool scope_started = false, scope_finished = false;
+                std::string scope_error;
+                try {
+                    if (!dispatch_scope(app::LiveInterventionBoundary::begin, 2,
+                            selected_manager, selected_team, scope_error))
+                        throw FormatError(scope_error.empty() ? "live intervention could not begin" : scope_error);
+                    scope_started = true;
+                    // FindManagerForClub selects the manager owned by
+                    // the clicked side. The live scope owns that
+                    // manager until Source menu completion or abort.
+                    auto lineup_state = state;
+                    if (lineup_state.memory.has(::bmh::layout::ActiveManager))
+                        lineup_state.memory.set8(::bmh::layout::ActiveManager, uint8_t(selected_manager));
+                    auto live_lineup = ui::lineup_from_game(lineup_state, season_exe, live_revision);
+                    live_lineup.in_match = true;
+                    live_lineup.entry_prepared = true;
+                    // The live menu owns the same native display word and both pages
+                    // as the desk. A separate team-sheet parent can hide a saved
+                    // pitch page and strand its navigation request after return.
+                    ui::PitchScreen screen(data, std::move(live_lineup),
+                        extras(),season_exe);
+                    const auto live_title = [&] {
+                        return (screen.extras().native_display_word & 8)
+                            ? "OpenBMH - live_pitch" : "OpenBMH - live_lineup";
+                    };
+                    SDL_SetWindowTitle(window, window_title.c_str());
+                    bool closed = false;
+                    const auto apply_live_pitch = [&](const ui::PitchRequest& action) {
+                        if (action.kind == ui::PitchRequestKind::none) return;
+                        pitch_pointer.show({}, renderer);
+                        if (action.kind == ui::PitchRequestKind::open_player_info) {
+                            try {
+                                if (action.row < 0 || size_t(action.row) >= screen.state().players.size() ||
+                                    screen.state().players.at(size_t(action.row)).player_id != action.player_id)
+                                    throw FormatError("live player information request is stale");
+                                if(!modal_services&&!session)throw FormatError("world12: live player-card ownership is not available");
+                                auto services = modal_services?modal_services(live_revision):session->live_club_modal_services(live_revision);
+                                const ClubPlayerDetailSelection selection{selected_team, action.player_id,
+                                    action.row, action.row, -1};
+                                if (!present_player_detail)
+                                    throw FormatError("live player information presenter stopped");
+                                const auto return_parent = present_player_detail(services, selection, screen.render());
+                                if (!return_parent) throw FormatError("live player information presenter stopped");
+                                if (*return_parent) closed = true;
+                            } catch (const std::exception& e) {
+                                std::fprintf(stderr, "live player information: %s\n", e.what());
+                            }
+                            screen.resolve_local_navigation();
+                        } else {
+                            const auto result = dispatch_pitch(action);
+                            if (result.status == app::LiveSubstitutionStatus::applied) {
+                                auto updated = ui::lineup_from_game(state, season_exe, live_revision);
+                                updated.in_match = true; updated.entry_prepared = true;
+                                screen.acknowledge(std::move(updated),
+                                    extras());
+                            } else if (result.status == app::LiveSubstitutionStatus::source_notice) {
+                                show_live_substitution_notice(result, screen.render(), live_title());
+                                auto updated = ui::lineup_from_game(state, season_exe, live_revision);
+                                updated.in_match = true; updated.entry_prepared = true;
+                                screen = ui::PitchScreen(data, std::move(updated),
+                                    extras(),season_exe);
+                            } else {
+                                screen.reject_action(result.error.empty()
+                                    ? "Der Spielerwechsel ist nicht freigegeben." : result.error);
+                            }
+                        }
+                        SDL_SetWindowTitle(window, window_title.c_str());
+                    };
+                    bool left_held = false, left_release_consumed = false, right_held = false;
+                    while (running && !closed) {
+                        pitch_pointer.show(screen.pointer_cursor(palette), renderer);
+                        const Image image = screen.render();
+                        for (size_t i = 0; i < pixels.size(); ++i)
+                            pixels[i] = palette.argb[image.pixels[i]];
+                        SDL_UpdateTexture(texture, nullptr, pixels.data(), 320 * 4);
+                        SDL_RenderClear(renderer);
+                        SDL_RenderCopy(renderer, texture, nullptr, nullptr);
+                        SDL_RenderPresent(renderer);
+                        SDL_Event modal;
+                        bool redrawn = false;
+                        while (quit_confirmation.poll(&modal)) {
+                            if (modal.type == SDL_QUIT) { running = false; closed = true; break; }
+                            if (modal.type == SDL_KEYDOWN && modal.key.keysym.sym == SDLK_ESCAPE) {
+                                screen.key("ESC"); closed = true; break;
+                            }
+                            if (modal.type == SDL_MOUSEBUTTONDOWN && modal.button.button == SDL_BUTTON_LEFT) {
+                                left_held = true;
+                                const auto action = screen.pointer_down(modal.button.x, modal.button.y);
+                                left_release_consumed = screen.take_source_down_release_barrier();
+                                // Native page/order controls act on DOWN. ACK before
+                                // polling another event; their UP cannot toggle twice.
+                                apply_live_pitch(action);
+                                redrawn = true;
+                            } else if (modal.type == SDL_MOUSEBUTTONUP && modal.button.button == SDL_BUTTON_LEFT && left_held) {
+                                left_held = false;
+                                if (!left_release_consumed)
+                                    apply_live_pitch(screen.click(modal.button.x, modal.button.y));
+                                left_release_consumed = false;
+                                redrawn = true;
+                            } else if (modal.type == SDL_MOUSEBUTTONDOWN && modal.button.button == SDL_BUTTON_RIGHT) {
+                                right_held = true;
+                                (void)screen.pointer_down(modal.button.x, modal.button.y, true);
+                                (void)screen.take_source_down_release_barrier();
+                                redrawn = true;
+                            } else if (modal.type == SDL_MOUSEBUTTONUP && modal.button.button == SDL_BUTTON_RIGHT && right_held) {
+                                right_held = false;
+                                // Mouse movement between DOWN and UP must not leave
+                                // a closed modal or an accepted request suspended.
+                                if (screen.close_requested()) closed = true;
+                                redrawn = true;
+                            } else if (modal.type == SDL_MOUSEMOTION) {
+                                redrawn |= screen.move(modal.motion.x, modal.motion.y);
+                            }
+                            if (closed) break;
+                        }
+                        if (!redrawn && !closed) SDL_Delay(8);
+                    }
+                    if (!running) {
+                        dispatch_scope(app::LiveInterventionBoundary::abort, 2, selected_manager,
+                            selected_team, scope_error);
+                        scope_finished = true;
+                    } else if (!dispatch_scope(app::LiveInterventionBoundary::finish, 2,
+                            selected_manager, selected_team, scope_error)) {
+                        std::fprintf(stderr, "live intervention finish: %s\n", scope_error.c_str());
+                        dispatch_scope(app::LiveInterventionBoundary::abort, 2,
+                            selected_manager, selected_team, scope_error);
+                        scope_finished = true;
+                    } else {
+                        scope_finished = true;
+                        completed = true;
+                    }
+                    pitch_pointer.show({}, renderer);
+                    SDL_SetWindowTitle(window, window_title.c_str());
+                } catch (const std::exception& e) {
+                    pitch_pointer.show({}, renderer);
+                    if (scope_started && !scope_finished)
+                        dispatch_scope(app::LiveInterventionBoundary::abort, 2,
+                            selected_manager, selected_team, scope_error);
+                    std::fprintf(stderr, "live lineup: %s\n", e.what());
+                    if (event_origin) throw;
+                }
+            }
+            return completed;
+        };
+
+        // Both career adapters use the same Original raster/scene presenters.
+        // The shared state lasts through the synchronous day; observers cannot
+        // outlive the numeric MatchEngine projection they receive.
+        struct LivePresentationState {
+            bool live_skipped=false;
+            ui::LiveScoreReveal live_score_reveal;
+            std::optional<ui::LiveChanceProjection> live_chance_context;
+            std::unique_ptr<ui::RealityFieldScreen> reality_field;
+            ui::RealityReporterLayoutState reality_layout;
+            Image reality_pristine,reality_surface;
+            Palette reality_colors;
+        };
+        struct LiveObservers {
+            app::LiveBallPresenter ball;
+            app::LiveChancePresenter chance;
+            app::LiveShotPresenter shot;
+            app::LiveSetPiecePresenter set_piece;
+            app::LiveBookingPresenter booking;
+            app::LiveShootoutPresenter shootout;
+            app::LiveRealityPresenter reality;
+        };
+        auto make_live_observers = [&](std::shared_ptr<LivePresentationState> live) {
+            LiveObservers observers;
+            observers.ball=[&, live](const LiveBallEvent& event, const std::vector<MatchGroup>& groups,
+                       const GameState& state) {
+                    if (!running || live->live_skipped) return;
+                    const auto frame = live->live_score_reveal.project(ui::live_matchday_frame(event.minute, groups, state));
+                    if (frame.matches.empty()) return;
+                    const auto present = [&](const Image& image) {
+                        for (size_t i = 0; i < pixels.size(); ++i) pixels[i] = palette.argb[image.pixels[i]];
+                        SDL_UpdateTexture(texture, nullptr, pixels.data(), 320 * 4);
+                        SDL_RenderClear(renderer);
+                        SDL_RenderCopy(renderer, texture, nullptr, nullptr);
+                        SDL_RenderPresent(renderer);
+                    };
+                    const int count = ui::LiveMatchdayScreen::ball_frame_count(event.displacement);
+                    const auto source_delay = [&](int pause) {
+                        const uint32_t address = ::bmh::layout::Main_FormatError_ExecutableFieldUnsigned + uint32_t(pause * 9);
+                        const int saved = state.memory.has(address) ? state.memory.u8(address) : 0;
+                        return (saved < 6 ? saved / 2 : saved) * 20;
+                    };
+                    for (int index = 0; index < count && running; ++index) {
+                        const std::string title = "OpenBMH - live_ball_" + std::to_string(event.minute) + "_" +
+                            std::to_string(event.group) + "_" + std::to_string(event.match) + "_" +
+                            std::to_string(event.displacement) + "_" + std::to_string(index);
+                        SDL_SetWindowTitle(window, window_title.c_str());
+                        const auto* chance = live->live_chance_context &&
+                            live->live_chance_context->minute == event.minute &&
+                            live->live_chance_context->group == event.group &&
+                            live->live_chance_context->match == event.match ? &*live->live_chance_context : nullptr;
+                        present(live_screen->render_ball(frame, event.displacement, index, chance));
+                        SDL_PumpEvents();
+                        SDL_Event quit_event;
+                        if (quit_confirmation.peep(&quit_event, 1, SDL_GETEVENT, SDL_QUIT, SDL_QUIT) > 0) {
+                            running = false;
+                            break;
+                        }
+                        // AdvanceStep(5) reads a252c; DecodeTaxAnimationScript2 uses 20ms ticks.
+                        // Retain key/mouse events for the live-minute input boundary.
+                        const int delay = live_frame_ms_explicit ? live_frame_ms :
+                            app::scene_frame_delay(source_delay(5));
+                        if (delay > 0) SDL_Delay(Uint32(delay));
+                    }
+                    if (running) {
+                        const int final_delay = live_frame_ms_explicit ? live_frame_ms : app::scene_frame_delay(source_delay(6));
+                        if (final_delay > 0) SDL_Delay(Uint32(final_delay));
+                        SDL_SetWindowTitle(window, window_title.c_str());
+                        present(live_screen->render(frame));
+                    }
+                };
+            observers.chance=[&, live](const LiveChanceEvent& event, const std::vector<MatchGroup>& groups,
+                       const GameState& state) {
+                    if (!running || live->live_skipped) return;
+                    const auto frame = ui::live_matchday_frame(event.minute, groups, state);
+                    live->live_score_reveal.observe(event.stage, frame);
+                    if (frame.matches.empty()) return;
+                    const auto chance = ui::live_chance_projection(event, groups, state, season_exe);
+                    if (event.stage == LiveChanceStage::preview) live->live_chance_context = chance;
+                    const std::string title = std::string("OpenBMH - live_chance_") +
+                        (event.stage == LiveChanceStage::preview ? "preview_" : "result_") +
+                        std::to_string(event.minute) + "_" + std::to_string(event.group) + "_" +
+                        std::to_string(event.match) + "_" + std::to_string(event.side) + "_" +
+                        std::to_string(event.kind) + "_" + std::to_string(int(event.goal));
+                    SDL_SetWindowTitle(window, window_title.c_str());
+                    const Image image = live_screen->render_chance(frame, chance);
+                    for (size_t i = 0; i < pixels.size(); ++i) pixels[i] = palette.argb[image.pixels[i]];
+                    SDL_UpdateTexture(texture, nullptr, pixels.data(), 320 * 4);
+                    SDL_RenderClear(renderer);
+                    SDL_RenderCopy(renderer, texture, nullptr, nullptr);
+                    SDL_RenderPresent(renderer);
+                    SDL_PumpEvents();
+                    SDL_Event quit_event;
+                    if (quit_confirmation.peep(&quit_event, 1, SDL_GETEVENT, SDL_QUIT, SDL_QUIT) > 0) {
+                        running = false;
+                        live->live_chance_context.reset();
+                        return;
+                    }
+                    const int pause = event.stage == LiveChanceStage::preview ? 12 : (event.goal ? 1 : 2);
+                    const uint32_t address = ::bmh::layout::Main_FormatError_ExecutableFieldUnsigned + uint32_t(pause * 9);
+                    const int saved = state.memory.has(address) ? state.memory.u8(address) : 0;
+                    const int delay = live_frame_ms_explicit ? live_frame_ms :
+                        app::scene_frame_delay((saved < 6 ? saved / 2 : saved) * 20);
+                    if (delay > 0) SDL_Delay(Uint32(delay));
+                    if (event.stage == LiveChanceStage::result) live->live_chance_context.reset();
+                };
+            observers.shot=[&, live](const LiveShotEvent& event, const std::vector<MatchGroup>& groups,
+                       const GameState& state) {
+                    if (!running || live->live_skipped) return;
+                    const auto frame = live->live_score_reveal.project(ui::live_matchday_frame(event.minute, groups, state));
+                    if (frame.matches.empty()) return;
+                    const auto frames = live_screen->render_shot(frame, event);
+                    const auto shot_colors = live_screen->shot_palette(palette, event, groups, state);
+                    const std::string identity = std::to_string(event.minute) + "_" +
+                        std::to_string(event.group) + "_" + std::to_string(event.match) + "_" +
+                        std::to_string(event.acting_side) + "_" + std::to_string(int(event.miss));
+                    for (size_t index = 0; index < frames.size() && running; ++index) {
+                        const std::string title = "OpenBMH - live_shot_" + identity + "_" + std::to_string(index);
+                        SDL_SetWindowTitle(window, window_title.c_str());
+                        for (size_t i = 0; i < pixels.size(); ++i) pixels[i] = shot_colors.argb[frames[index].pixels[i]];
+                        SDL_UpdateTexture(texture, nullptr, pixels.data(), 320 * 4);
+                        SDL_RenderClear(renderer);
+                        SDL_RenderCopy(renderer, texture, nullptr, nullptr);
+                        SDL_RenderPresent(renderer);
+                        SDL_PumpEvents();
+                        SDL_Event input;
+                        if (quit_confirmation.peep(&input, 1, SDL_GETEVENT, SDL_QUIT, SDL_QUIT) > 0) {
+                            running = false;
+                            return;
+                        }
+                        // Source waits Main_FormatError_RuntimeField vertical retraces after each frame (70 Hz).
+                        const int retraces = state.memory.has(::bmh::layout::Main_FormatError_RuntimeField) ?
+                            std::max(0, int(int8_t(state.memory.u8(::bmh::layout::Main_FormatError_RuntimeField)))) : 0;
+                        const int delay = live_frame_ms_explicit ? live_frame_ms : app::scene_frame_delay(retraces * 1000 / 70);
+                        if (delay > 0) SDL_Delay(Uint32(delay));
+                    }
+                    if (!running) return;
+                    if (!live_frame_ms_explicit) SDL_Delay(200); // LiveMatchdayFrame -> DecodeTaxAnimationScript2(10)
+                    if (app::match_sound_enabled(state))
+                        app::original_audio_command(playback, event.miss ? 20 : 19); // SetPieceAnimation, before its ACK.
+                    if (state.memory.has(::bmh::layout::Main_FormatError_RuntimeField5) && state.memory.u8(::bmh::layout::Main_FormatError_RuntimeField5) == 0) {
+                        // SDLFlushEvents2 accepts a fresh left/right press, not a keyboard skip.
+                        const std::string title = "OpenBMH - live_shot_wait_" + identity;
+                        SDL_SetWindowTitle(window, window_title.c_str());
+                        SDL_FlushEvents(SDL_MOUSEBUTTONDOWN, SDL_MOUSEBUTTONUP);
+                        SDL_Event input;
+                        bool acknowledged = false;
+                        while (running && !acknowledged) {
+                            while (quit_confirmation.poll(&input)) {
+                                if (input.type == SDL_QUIT) { running = false; break; }
+                                if (input.type == SDL_MOUSEBUTTONDOWN &&
+                                    (input.button.button == SDL_BUTTON_LEFT || input.button.button == SDL_BUTTON_RIGHT)) {
+                                    acknowledged = true;
+                                    break;
+                                }
+                            }
+                            if (!acknowledged && running) SDL_Delay(10);
+                        }
+                    } else {
+                        // AdvanceStep(15): the ordinary saved pause instead of a click.
+                        const int saved = state.memory.has(::bmh::layout::Main_FormatError_RuntimeField7) ? state.memory.u8(::bmh::layout::Main_FormatError_RuntimeField7) : 0;
+                        const int delay = live_frame_ms_explicit ? live_frame_ms : app::scene_frame_delay((saved < 6 ? saved / 2 : saved) * 20);
+                        if (delay > 0) SDL_Delay(Uint32(delay));
+                    }
+                };
+            observers.set_piece=[&, live](const LiveSetPieceEvent& event, const std::vector<MatchGroup>& groups,
+                       const GameState& state) {
+                    if (!running || live->live_skipped) return;
+                    const auto frame=live->live_score_reveal.project(ui::live_matchday_frame(event.minute,groups,state));
+                    if (frame.matches.empty()) return;
+                    const auto images=live_screen->render_set_piece(frame,event);
+                    LiveShotEvent palette_event;
+                    palette_event.group=event.group;palette_event.match=event.match;
+                    const auto colors=live_screen->shot_palette(palette,palette_event,groups,state);
+                    for (size_t index=0;index<images.size() && running;++index) {
+                        const std::string title="OpenBMH - live_set_piece_"+std::to_string(event.minute)+"_"+
+                            std::to_string(event.group)+"_"+std::to_string(event.match)+"_"+
+                            std::to_string(event.source_side)+"_"+std::to_string(event.kind)+"_"+
+                            std::to_string(index)+"_"+std::to_string(images.size());
+                        SDL_SetWindowTitle(window, window_title.c_str());
+                        for (size_t i=0;i<pixels.size();++i) pixels[i]=colors.argb[images[index].pixels[i]];
+                        SDL_UpdateTexture(texture,nullptr,pixels.data(),320*4);
+                        SDL_RenderClear(renderer);SDL_RenderCopy(renderer,texture,nullptr,nullptr);SDL_RenderPresent(renderer);
+                        SDL_PumpEvents();SDL_Event input;
+                        if (quit_confirmation.peep(&input,1,SDL_GETEVENT,SDL_QUIT,SDL_QUIT)>0) { running=false;return; }
+                        // FirstThen holds the first frame for 40 retraces; later frames
+                        // use saved Main_FormatError_RuntimeField2. Keyboard/mouse input remains for the minute hook.
+                        const int retraces=index==0?40:(state.memory.has(::bmh::layout::Main_FormatError_RuntimeField2)?state.memory.u8(::bmh::layout::Main_FormatError_RuntimeField2):0);
+                        const int delay=live_frame_ms_explicit?live_frame_ms:app::scene_frame_delay(retraces*1000/70);
+                        if (delay>0) SDL_Delay(Uint32(delay));
+                    }
+                    if (running && !live_frame_ms_explicit) SDL_Delay(200); // LiveMatchdayFrame
+                };
+            observers.booking=[&, live](const LiveBookingEvent& event, const std::vector<MatchGroup>& groups,
+                       const GameState& state) {
+                    if (!running || live->live_skipped) return;
+                    const auto frame=ui::live_matchday_frame(event.minute,groups,state);
+                    if (frame.matches.empty()) return;
+                    const auto booking=ui::live_booking_projection(event,groups,state,season_exe);
+                    const std::string title="OpenBMH - live_booking_"+std::to_string(event.minute)+"_"+
+                        std::to_string(event.group)+"_"+std::to_string(event.match)+"_"+
+                        std::to_string(event.side)+"_"+std::to_string(event.kind)+"_"+std::to_string(event.player);
+                    const auto present=[&](const Image& image) {
+                        for (size_t i=0;i<pixels.size();++i) pixels[i]=palette.argb[image.pixels[i]];
+                        SDL_UpdateTexture(texture,nullptr,pixels.data(),320*4);
+                        SDL_RenderClear(renderer);SDL_RenderCopy(renderer,texture,nullptr,nullptr);SDL_RenderPresent(renderer);
+                    };
+                    SDL_SetWindowTitle(window, window_title.c_str());present(live_screen->render_booking(frame,booking));
+                    if (event.kind != 2 && app::match_sound_enabled(state))
+                        app::original_audio_command(playback, 17); // EventImpl/SDLPumpEvents, no injury whistle.
+                    SDL_PumpEvents();SDL_Event input;
+                    if (quit_confirmation.peep(&input,1,SDL_GETEVENT,SDL_QUIT,SDL_QUIT)>0) { running=false;return; }
+                    const int pause=event.kind==0?3:4;
+                    const uint32_t address=::bmh::layout::Main_FormatError_ExecutableFieldUnsigned+uint32_t(pause*9);
+                    const int saved=state.memory.has(address)?state.memory.u8(address):0;
+                    const int delay=live_frame_ms_explicit?live_frame_ms:app::scene_frame_delay((saved<6?saved/2:saved)*20);
+                    if (delay>0) SDL_Delay(Uint32(delay));
+                    // EventImpl clears the box after its pause; no Source click wait here.
+                    SDL_SetWindowTitle(window, window_title.c_str());present(live_screen->render(frame));
+                };
+            observers.shootout=[&, live](const LiveShootoutEvent& event, const std::vector<MatchGroup>& groups,
+                       const GameState& state) {
+                    if (!running || live->live_skipped) return;
+                    const auto frame=ui::live_matchday_frame(event.minute,groups,state);
+                    if (frame.matches.empty()) return;
+                    const auto projection=ui::live_shootout_projection(event,groups,state,season_exe);
+                    const std::string title="OpenBMH - live_shootout_"+std::to_string(int(event.stage))+"_"+
+                        std::to_string(event.group)+"_"+std::to_string(event.match)+"_"+
+                        std::to_string(event.side)+"_"+std::to_string(event.round)+"_"+
+                        std::to_string(event.of)+"_"+std::to_string(event.player);
+                    SDL_SetWindowTitle(window, window_title.c_str());
+                    const auto image=live_screen->render_shootout(frame,projection);
+                    for (size_t i=0;i<pixels.size();++i) pixels[i]=palette.argb[image.pixels[i]];
+                    SDL_UpdateTexture(texture,nullptr,pixels.data(),320*4);
+                    SDL_RenderClear(renderer);SDL_RenderCopy(renderer,texture,nullptr,nullptr);SDL_RenderPresent(renderer);
+                    SDL_PumpEvents();SDL_Event input;
+                    if (quit_confirmation.peep(&input,1,SDL_GETEVENT,SDL_QUIT,SDL_QUIT)>0) { running=false;return; }
+                    const int repeats=event.stage==LiveShootoutStage::preview?4:2;
+                    const int saved=state.memory.has(::bmh::layout::Main_FormatError_RuntimeField6)?state.memory.u8(::bmh::layout::Main_FormatError_RuntimeField6):0;
+                    const int delay=live_frame_ms_explicit?live_frame_ms:app::scene_frame_delay((saved<6?saved/2:saved)*20);
+                    for (int i=0;i<repeats && running;++i) if (delay>0) SDL_Delay(Uint32(delay));
+                };
+            observers.reality=[&, live](const LiveRealityEvent& event, const std::vector<MatchGroup>& groups,
+                       const GameState& state) -> bool {
+                    if (!running || live->live_skipped) return false;
+                    const auto frame = ui::live_matchday_frame(event.minute,groups,state);
+                    const auto present = [&](const Image& image,const Palette& colors,const std::string& title) {
+                        SDL_SetWindowTitle(window, window_title.c_str());
+                        for (size_t i=0;i<pixels.size();++i) pixels[i]=colors.argb[image.pixels[i]];
+                        SDL_UpdateTexture(texture,nullptr,pixels.data(),320*4);
+                        SDL_RenderClear(renderer);SDL_RenderCopy(renderer,texture,nullptr,nullptr);SDL_RenderPresent(renderer);
+                    };
+                    const auto delay = [&](uint32_t address) {
+                        const int saved=state.memory.has(address)?state.memory.u8(address):0;
+                        const int ms=live_frame_ms_explicit?live_frame_ms:app::scene_frame_delay((saved<6?saved/2:saved)*20);
+                        if (ms>0) SDL_Delay(Uint32(ms));
+                    };
+                    const std::string identity=std::to_string(event.minute)+"_"+std::to_string(event.group)+"_"+
+                        std::to_string(event.match)+"_"+std::to_string(event.side);
+                    if (event.stage==LiveRealityStage::begin) {
+                        LiveChanceEvent header_event;header_event.minute=event.minute;
+                        header_event.group=event.group;header_event.match=event.match;header_event.side=event.side;
+                        const auto header=ui::live_chance_projection(header_event,groups,state,season_exe);
+                        live->reality_pristine=live_screen->render_reality(frame,header);
+                        live->reality_surface=live->reality_pristine;live->reality_layout={};
+                        live->reality_field=std::make_unique<ui::RealityFieldScreen>(data,
+                            state.memory.has(::bmh::layout::Main_FormatError_RuntimeField3)?state.memory.u8(::bmh::layout::Main_FormatError_RuntimeField3):0);
+                        LiveShotEvent colors_event;colors_event.group=event.group;colors_event.match=event.match;
+                        live->reality_colors=live_screen->shot_palette(palette,colors_event,groups,state);
+                        present(live->reality_surface,live->reality_colors,"OpenBMH - live_reality_begin_"+identity);
+                        return false;
+                    }
+                    if (event.stage==LiveRealityStage::settling) {
+                        live->reality_field.reset();
+                        const int ms=live_frame_ms_explicit?live_frame_ms:app::scene_frame_delay(200); // DecodeTaxAnimationScript2(10)
+                        if (ms>0) SDL_Delay(Uint32(ms));
+                        return false;
+                    }
+                    if (event.stage==LiveRealityStage::end) {
+                        present(live_screen->render(frame),palette,"OpenBMH - live_matchday");
+                        return false;
+                    }
+                    if (!live->reality_field) throw FormatError("Reality presentation: round without Source header");
+                    for (const auto& report:event.tick.reports)
+                        reality_reporter->append(live->reality_surface,live->reality_layout,report.text,frame.gradient_text);
+                    const std::string round_identity=identity+"_"+std::to_string(event.tick.round);
+                    if (event.tick.motion) {
+                        size_t index=0;
+                        for (const auto& motion:event.tick.motion->frames) {
+                            auto backdrop=live->reality_pristine;
+                            std::copy_n(live->reality_surface.pixels.begin(),320*129,backdrop.pixels.begin());
+                            live->reality_surface=live->reality_field->render(motion,backdrop);
+                            present(live->reality_surface,live->reality_colors,"OpenBMH - live_reality_round_"+
+                                round_identity+"_"+std::to_string(index++));
+                            delay(::bmh::layout::Main_FormatError_ExecutableField2); // RealityFieldScreen: the saved Reality speed
+                        }
+                        delay(::bmh::layout::Main_FormatError_ExecutableField+10*9); // AdvanceStep(10), after all eleven frames
+                    } else {
+                        present(live->reality_surface,live->reality_colors,"OpenBMH - live_reality_report_"+round_identity);
+                    }
+                    SDL_PumpEvents();SDL_Event input;
+                    if (quit_confirmation.peep(&input,1,SDL_GETEVENT,SDL_QUIT,SDL_QUIT)>0) {running=false;return true;}
+                    // Consume only the Source exit for this scene. Other input remains
+                    // queued for the existing live-minute/manager intervention boundary.
+                    if (quit_confirmation.peep(&input,1,SDL_PEEKEVENT,SDL_KEYDOWN,SDL_KEYDOWN)>0 &&
+                        input.key.keysym.sym==SDLK_ESCAPE) {
+                        quit_confirmation.peep(&input,1,SDL_GETEVENT,SDL_KEYDOWN,SDL_KEYDOWN);return true;
+                    }
+                    if (quit_confirmation.peep(&input,1,SDL_PEEKEVENT,SDL_MOUSEBUTTONDOWN,SDL_MOUSEBUTTONDOWN)>0 &&
+                        input.button.button==SDL_BUTTON_RIGHT) {
+                        quit_confirmation.peep(&input,1,SDL_GETEVENT,SDL_MOUSEBUTTONDOWN,SDL_MOUSEBUTTONDOWN);return true;
+                    }
+                    return false;
+                };
+            return observers;
+        };
+
+        auto make_world12_match_hooks = [&] {
+            auto live=std::make_shared<LivePresentationState>();
+            const auto observers=make_live_observers(live);
+            const auto open_lineup=[&,live](bmh::world12::AiMatchProjection& projection,MatchEngine& engine,
+                    int minute,int team,const std::optional<LiveMatchEvent>& event) {
+                std::unique_ptr<app::world12::LiveScope> scope;
+                const auto convert=[&](const app::world12::LiveEditOutcome& result) {
+                    app::LiveSubstitutionResult out;out.status=result.applied?app::LiveSubstitutionStatus::applied:
+                        result.notice?app::LiveSubstitutionStatus::source_notice:app::LiveSubstitutionStatus::rejected;
+                    out.source_text_address=result.notice;out.manager_slot=projection.state.manager_of(team);out.error=result.error;return out;
+                };
+                const app::LiveLineupDispatcher rows=[&](const ui::LineupRequest& action){
+                    if(!scope)throw FormatError("world12: missing live lineup scope");return convert(scope->apply(action));
+                };
+                const app::LivePitchDispatcher pitch=[&](const ui::PitchRequest& action){
+                    if(!scope)throw FormatError("world12: missing live pitch scope");return convert(scope->apply(action));
+                };
+                const app::LiveTacticsDispatcher tactics=[&](const ui::TacticsRequest& action,std::string& error){
+                    if(!scope){error="world12: missing live tactics scope";return false;}const auto outcome=scope->apply(action);error=outcome.error;return outcome.applied;
+                };
+                const app::LiveInterventionScopeDispatcher boundary=[&](app::LiveInterventionBoundary action,int mode,int manager,int club,std::string& error){
+                    try {
+                        if(club!=team||manager!=projection.state.manager_of(team)||mode!=2)throw FormatError("world12: changed live scope identity");
+                        if(action==app::LiveInterventionBoundary::begin){if(scope)throw FormatError("world12: nested live menu scope");scope=std::make_unique<app::world12::LiveScope>(projection,engine,season_exe,minute,team,mode,world_live_nonce,event);}
+                        else {if(!scope)throw FormatError("world12: retired live menu scope");if(action==app::LiveInterventionBoundary::finish)scope->finish();else scope->abort();scope.reset();}
+                        return true;
+                    }catch(const std::exception& exception){error=exception.what();return false;}
+                };
+                int opponent=-1;
+                for(const auto& group:engine.groups)for(int match=0;match<group.matches();++match){const auto home=group.fixtures.at(size_t(match)*2),away=group.fixtures.at(size_t(match)*2+1);if(home==team)opponent=away;else if(away==team)opponent=home;}
+                const auto extras=[&](uint64_t nonce) {
+                    auto view=ui::pitch_extras_from_game(projection.state,season_exe,nonce,opponent);
+                    const auto& world=world_session->snapshot().world;const auto& club=world.clubs.at(projection.global_club(uint32_t(team)));
+                    const auto& crest=world.crests.at(club.crest);view.badge_atlas=crest.path;view.badge=crest.cell;return view;
+                };
+                const bool completed=present_live_lineup(minute,engine,engine.groups,projection.state,world_live_nonce,
+                    team,opponent,rows,tactics,pitch,boundary,live->live_skipped,event.has_value(),extras);
+                if(event&&!completed)throw FormatError("world12: event lineup did not finish");
+                if(!running)throw FormatError("world12: match presentation interrupted");
+            };
+            bmh::world12::HumanRoundHooks hooks;
+            hooks.before_matchday=[&,observers](auto& projection,MatchEngine& engine) {
+                auto& state=projection.state;
+                const auto flag=[&](uint32_t at){return state.memory.has(at)?state.memory.u8(at):season_exe.u8(at);};
+                engine.live_desk_disabled=flag(layout::LiveDeskDisabled)!=0;
+                state.live_scene=uint8_t(1-flag(layout::CareerSession_DispatchLiveTactic_RuntimeField3))!=0;
+                engine.live_scene_visible=state.live_scene;engine.reality_rules=&season_exe;
+                state.live_matches.clear();
+                for(const auto& group:engine.groups)for(int match=0;match<group.matches();++match)
+                    select_live_match_source(state,group.fixtures.at(size_t(match)*2),group.fixtures.at(size_t(match)*2+1));
+                auto* owner=&projection;auto* clock=&engine;
+                engine.live_ball=[owner,clock,callback=observers.ball](const auto& event){callback(event,clock->groups,owner->state);};
+                engine.live_chance=[owner,clock,callback=observers.chance](const auto& event){callback(event,clock->groups,owner->state);};
+                engine.live_shot=[owner,clock,callback=observers.shot](const auto& event){callback(event,clock->groups,owner->state);};
+                engine.live_set_piece=[owner,clock,callback=observers.set_piece](const auto& event){callback(event,clock->groups,owner->state);};
+                engine.live_booking=[owner,clock,callback=observers.booking](const auto& event){callback(event,clock->groups,owner->state);};
+                engine.live_shootout=[owner,clock,callback=observers.shootout](const auto& event){callback(event,clock->groups,owner->state);};
+                engine.live_reality=[owner,clock,callback=observers.reality](const auto& event){return callback(event,clock->groups,owner->state);};
+                engine.original_sound=[&,owner](uint8_t id){app::original_match_audio_command(playback,owner->state,id);};
+            };
+            hooks.live_event=[open_lineup](auto& projection,auto& engine,const auto& event) {open_lineup(projection,engine,event.minute,event.team,event);};
+            hooks.after_minute=[&,live,open_lineup](auto& projection,MatchEngine& engine,int minute) {
+                if(!running)throw FormatError("world12: live minute interrupted");
+                const auto draw=[&] {if(!live->live_skipped){const auto frame=ui::live_matchday_frame(minute,engine.groups,projection.state);if(!frame.matches.empty())present_season(live_screen->render(frame),"OpenBMH - live_matchday");}};
+                draw();
+                const bool start=minute==1||(projection.state.indoor?minute==21:minute==46||minute==91||minute==106);
+                const auto open_tactics=[&](int team) {
+                    app::world12::LiveScope scope(projection,engine,season_exe,minute,team,8,world_live_nonce);
+                    ui::TacticsScreen screen(data,scope.tactics(),season_exe);bool closed=false;
+                    while(running&&!closed){present_season(screen.render(),"OpenBMH - live_tactics");SDL_Event input;bool changed=false;
+                        while(quit_confirmation.poll(&input)){
+                            if(input.type==SDL_QUIT){running=false;break;}
+                            ui::TacticsRequest action;
+                            if(input.type==SDL_MOUSEBUTTONDOWN&&(input.button.button==SDL_BUTTON_LEFT||input.button.button==SDL_BUTTON_RIGHT))action=screen.click(input.button.x,input.button.y,input.button.button==SDL_BUTTON_RIGHT);
+                            else if(input.type==SDL_KEYDOWN&&input.key.keysym.sym==SDLK_ESCAPE)action=screen.key("ESC");
+                            if(action.kind!=ui::TacticsRequestKind::none){const auto result=scope.apply(action);if(result.applied)screen.acknowledge(scope.tactics());else screen.reject_action(result.error);changed=true;}
+                            if(screen.close_requested()){closed=true;break;}
+                        }
+                        if(!changed&&!closed)SDL_Delay(8);
+                    }
+                    if(!running)throw FormatError("world12: live tactics interrupted");scope.finish();SDL_FlushEvents(SDL_MOUSEMOTION,SDL_MOUSEBUTTONUP);
+                };
+                SDL_Event input;
+                while(quit_confirmation.poll(&input)) {
+                    if(input.type==SDL_QUIT){running=false;throw FormatError("world12: live clock interrupted");}
+                    if(input.type==SDL_KEYDOWN&&input.key.keysym.sym==SDLK_ESCAPE){live->live_skipped=true;continue;}
+                    if(!start&&input.type==SDL_KEYDOWN&&!input.key.repeat&&input.key.keysym.sym==SDLK_p&&
+                        (season_exe.u8(layout::Main_Screen_RuntimeField)=='p'||season_exe.u8(layout::Main_Screen_RuntimeField)=='P')){
+                        bool resume=false;while(running&&!resume){while(quit_confirmation.poll(&input)){if(input.type==SDL_QUIT){running=false;break;}if(input.type==SDL_MOUSEBUTTONDOWN||(input.type==SDL_KEYDOWN&&input.key.keysym.sym==SDLK_p))resume=true;}if(!resume&&running)SDL_Delay(10);}
+                        if(!running)throw FormatError("world12: paused match interrupted");continue;
+                    }
+                    if(live->live_skipped)continue;
+                    if(const auto side=app::live_matchday_board_side(input,minute,projection.state.indoor)) {
+                        const auto frame=ui::live_matchday_frame(minute,engine.groups,projection.state);
+                        for(size_t row=0;row<frame.matches.size()&&row<4;++row){const int y=season_exe.u8(layout::LiveMatchday_Render_ExecutableFieldUnsigned+uint32_t(row));if(input.button.y<y||input.button.y>y+32)continue;
+                            const int team=*side==0?frame.matches[row].home_team:frame.matches[row].away_team;
+                            if(projection.state.manager_of(team)<0)break;
+                            if(input.button.button==SDL_BUTTON_RIGHT)open_tactics(team);else open_lineup(projection,engine,minute,team,{});
+                            press.reset();SDL_FlushEvents(SDL_MOUSEMOTION,SDL_MOUSEBUTTONUP);draw();break;
+                        }
+                    }
+                }
+                if(!live->live_skipped&&!projection.state.live_matches.empty()){
+                    const int delay=live_frame_ms_explicit?live_frame_ms:int(ui::live_delay_milliseconds(projection.state.memory.u8(layout::Main_FormatError_ExecutableField)));
+                    if(delay>0)SDL_Delay(Uint32(delay));
+                }
+            };
+            return hooks;
+        };
+
         auto handle = [&](const ui::FlowResult& r) {
             pitch_pointer.show({}, renderer);
             if(world12_development){
@@ -1943,175 +2546,10 @@ int main(int argc, char** argv) {
                 return;
             }
             dirty |= r.changed;
-            bool live_skipped = false;
+            auto live_presentation=std::make_shared<LivePresentationState>();
+            bool& live_skipped=live_presentation->live_skipped;
             uint64_t live_overview_sequence = 0;
             std::optional<Image> outcome_backdrop;
-            auto present_live_lineup = [&](int minute, MatchEngine& engine, std::vector<MatchGroup>& groups,
-                    GameState& state, uint64_t& live_revision, int selected_team, int selected_opponent,
-                    const app::LiveLineupDispatcher& dispatch, const app::LiveTacticsDispatcher& dispatch_tactic,
-                    const app::LivePitchDispatcher& dispatch_pitch,
-                    const app::LiveInterventionScopeDispatcher& dispatch_scope,
-                    bool live_skipped, bool event_origin) -> bool {
-                const auto show_live_substitution_notice = [&](const app::LiveSubstitutionResult& result,
-                        const Image& backdrop, const char* parent_title) {
-                    if (result.status != app::LiveSubstitutionStatus::source_notice) return;
-                    if (result.manager_slot < 0 || result.source_text_address == 0)
-                        throw FormatError("live substitution notice has no Source owner or text");
-                    const PendingOfferNotice notice{result.manager_slot, -1, result.source_text_address,
-                        message_text(state, result.source_text_address)};
-                    const auto projection = ui::pending_offer_notice_dialog(state, notice);
-                    if (present_pending_dialog(state, projection, backdrop,
-                            "OpenBMH - live_substitution_notice") == PendingOfferAnswer::unsupported)
-                        throw FormatError("live substitution notice presenter stopped");
-                    SDL_FlushEvents(SDL_MOUSEMOTION, SDL_MOUSEBUTTONUP);
-                    SDL_SetWindowTitle(window, window_title.c_str());
-                };
-                bool completed = false;
-                const int selected_manager = selected_team >= 0 ? state.manager_of(selected_team) : -1;
-                if ((event_origin || (!live_skipped && minute > 2)) && selected_team >= 0 && selected_manager >= 0) {
-                    bool scope_started = false, scope_finished = false;
-                    std::string scope_error;
-                    try {
-                        if (!dispatch_scope(app::LiveInterventionBoundary::begin, 2,
-                                selected_manager, selected_team, scope_error))
-                            throw FormatError(scope_error.empty() ? "live intervention could not begin" : scope_error);
-                        scope_started = true;
-                        // FindManagerForClub selects the manager owned by
-                        // the clicked side. The live scope owns that
-                        // manager until Source menu completion or abort.
-                        auto lineup_state = state;
-                        if (lineup_state.memory.has(::bmh::layout::ActiveManager))
-                            lineup_state.memory.set8(::bmh::layout::ActiveManager, uint8_t(selected_manager));
-                        auto live_lineup = ui::lineup_from_game(lineup_state, season_exe, live_revision);
-                        live_lineup.in_match = true;
-                        live_lineup.entry_prepared = true;
-                        // The live menu owns the same native display word and both pages
-                        // as the desk. A separate team-sheet parent can hide a saved
-                        // pitch page and strand its navigation request after return.
-                        ui::PitchScreen screen(data, std::move(live_lineup),
-                            ui::pitch_extras_from_game(state, season_exe, live_revision, selected_opponent));
-                        const auto live_title = [&] {
-                            return (screen.extras().native_display_word & 8)
-                                ? "OpenBMH - live_pitch" : "OpenBMH - live_lineup";
-                        };
-                        SDL_SetWindowTitle(window, window_title.c_str());
-                        bool closed = false;
-                        const auto apply_live_pitch = [&](const ui::PitchRequest& action) {
-                            if (action.kind == ui::PitchRequestKind::none) return;
-                            pitch_pointer.show({}, renderer);
-                            if (action.kind == ui::PitchRequestKind::open_player_info) {
-                                try {
-                                    if (action.row < 0 || size_t(action.row) >= screen.state().players.size() ||
-                                        screen.state().players.at(size_t(action.row)).player_id != action.player_id)
-                                        throw FormatError("live player information request is stale");
-                                    auto services = session->live_club_modal_services(live_revision);
-                                    const ClubPlayerDetailSelection selection{selected_team, action.player_id,
-                                        action.row, action.row, -1};
-                                    if (!present_player_detail)
-                                        throw FormatError("live player information presenter stopped");
-                                    const auto return_parent = present_player_detail(services, selection, screen.render());
-                                    if (!return_parent) throw FormatError("live player information presenter stopped");
-                                    if (*return_parent) closed = true;
-                                } catch (const std::exception& e) {
-                                    std::fprintf(stderr, "live player information: %s\n", e.what());
-                                }
-                                screen.resolve_local_navigation();
-                            } else {
-                                const auto result = dispatch_pitch(action);
-                                if (result.status == app::LiveSubstitutionStatus::applied) {
-                                    auto updated = ui::lineup_from_game(state, season_exe, live_revision);
-                                    updated.in_match = true; updated.entry_prepared = true;
-                                    screen.acknowledge(std::move(updated),
-                                        ui::pitch_extras_from_game(state, season_exe, live_revision, selected_opponent));
-                                } else if (result.status == app::LiveSubstitutionStatus::source_notice) {
-                                    show_live_substitution_notice(result, screen.render(), live_title());
-                                    auto updated = ui::lineup_from_game(state, season_exe, live_revision);
-                                    updated.in_match = true; updated.entry_prepared = true;
-                                    screen = ui::PitchScreen(data, std::move(updated),
-                                        ui::pitch_extras_from_game(state, season_exe, live_revision, selected_opponent));
-                                } else {
-                                    screen.reject_action(result.error.empty()
-                                        ? "Der Spielerwechsel ist nicht freigegeben." : result.error);
-                                }
-                            }
-                            SDL_SetWindowTitle(window, window_title.c_str());
-                        };
-                        bool left_held = false, left_release_consumed = false, right_held = false;
-                        while (running && !closed) {
-                            pitch_pointer.show(screen.pointer_cursor(palette), renderer);
-                            const Image image = screen.render();
-                            for (size_t i = 0; i < pixels.size(); ++i)
-                                pixels[i] = palette.argb[image.pixels[i]];
-                            SDL_UpdateTexture(texture, nullptr, pixels.data(), 320 * 4);
-                            SDL_RenderClear(renderer);
-                            SDL_RenderCopy(renderer, texture, nullptr, nullptr);
-                            SDL_RenderPresent(renderer);
-                            SDL_Event modal;
-                            bool redrawn = false;
-                            while (quit_confirmation.poll(&modal)) {
-                                if (modal.type == SDL_QUIT) { running = false; closed = true; break; }
-                                if (modal.type == SDL_KEYDOWN && modal.key.keysym.sym == SDLK_ESCAPE) {
-                                    screen.key("ESC"); closed = true; break;
-                                }
-                                if (modal.type == SDL_MOUSEBUTTONDOWN && modal.button.button == SDL_BUTTON_LEFT) {
-                                    left_held = true;
-                                    const auto action = screen.pointer_down(modal.button.x, modal.button.y);
-                                    left_release_consumed = screen.take_source_down_release_barrier();
-                                    // Native page/order controls act on DOWN. ACK before
-                                    // polling another event; their UP cannot toggle twice.
-                                    apply_live_pitch(action);
-                                    redrawn = true;
-                                } else if (modal.type == SDL_MOUSEBUTTONUP && modal.button.button == SDL_BUTTON_LEFT && left_held) {
-                                    left_held = false;
-                                    if (!left_release_consumed)
-                                        apply_live_pitch(screen.click(modal.button.x, modal.button.y));
-                                    left_release_consumed = false;
-                                    redrawn = true;
-                                } else if (modal.type == SDL_MOUSEBUTTONDOWN && modal.button.button == SDL_BUTTON_RIGHT) {
-                                    right_held = true;
-                                    (void)screen.pointer_down(modal.button.x, modal.button.y, true);
-                                    (void)screen.take_source_down_release_barrier();
-                                    redrawn = true;
-                                } else if (modal.type == SDL_MOUSEBUTTONUP && modal.button.button == SDL_BUTTON_RIGHT && right_held) {
-                                    right_held = false;
-                                    // Mouse movement between DOWN and UP must not leave
-                                    // a closed modal or an accepted request suspended.
-                                    if (screen.close_requested()) closed = true;
-                                    redrawn = true;
-                                } else if (modal.type == SDL_MOUSEMOTION) {
-                                    redrawn |= screen.move(modal.motion.x, modal.motion.y);
-                                }
-                                if (closed) break;
-                            }
-                            if (!redrawn && !closed) SDL_Delay(8);
-                        }
-                        if (!running) {
-                            dispatch_scope(app::LiveInterventionBoundary::abort, 2, selected_manager,
-                                selected_team, scope_error);
-                            scope_finished = true;
-                        } else if (!dispatch_scope(app::LiveInterventionBoundary::finish, 2,
-                                selected_manager, selected_team, scope_error)) {
-                            std::fprintf(stderr, "live intervention finish: %s\n", scope_error.c_str());
-                            dispatch_scope(app::LiveInterventionBoundary::abort, 2,
-                                selected_manager, selected_team, scope_error);
-                            scope_finished = true;
-                        } else {
-                            scope_finished = true;
-                            completed = true;
-                        }
-                        pitch_pointer.show({}, renderer);
-                        SDL_SetWindowTitle(window, window_title.c_str());
-                    } catch (const std::exception& e) {
-                        pitch_pointer.show({}, renderer);
-                        if (scope_started && !scope_finished)
-                            dispatch_scope(app::LiveInterventionBoundary::abort, 2,
-                                selected_manager, selected_team, scope_error);
-                        std::fprintf(stderr, "live lineup: %s\n", e.what());
-                        if (event_origin) throw;
-                    }
-                }
-                return completed;
-            };
             using RunningOverviewDispatcher = std::function<std::optional<app::CareerSession::LiveOverviewDispatch>(
                 const app::CareerSession::LiveOverviewAction&, std::string&,
                 const app::TransferOfferTeamInfoPresenter&)>;
@@ -2380,12 +2818,7 @@ int main(int argc, char** argv) {
                 }
                 return running && closed;
             };
-            ui::LiveScoreReveal live_score_reveal;
-            std::optional<ui::LiveChanceProjection> live_chance_context;
-            std::unique_ptr<ui::RealityFieldScreen> reality_field;
-            ui::RealityReporterLayoutState reality_layout;
-            Image reality_pristine, reality_surface;
-            Palette reality_colors;
+            auto live_observers=make_live_observers(live_presentation);
             const std::string message = app::serve_flow_request(flow, r, session, data, save_directory, seed, revision,
                 playback, audio_session, music_enabled,
                 [&](int minute, const std::vector<MatchGroup>& groups, const GameState& state) {
@@ -3144,290 +3577,13 @@ int main(int argc, char** argv) {
                     if (!running) return; // SDL_QUIT aborts the Source scope without failing the event.
                     if (!completed)
                         throw FormatError("The Source event line-up did not complete.");
-                }, [&](const LiveBallEvent& event, const std::vector<MatchGroup>& groups,
-                       const GameState& state) {
-                    if (!running || live_skipped) return;
-                    const auto frame = live_score_reveal.project(ui::live_matchday_frame(event.minute, groups, state));
-                    if (frame.matches.empty()) return;
-                    const auto present = [&](const Image& image) {
-                        for (size_t i = 0; i < pixels.size(); ++i) pixels[i] = palette.argb[image.pixels[i]];
-                        SDL_UpdateTexture(texture, nullptr, pixels.data(), 320 * 4);
-                        SDL_RenderClear(renderer);
-                        SDL_RenderCopy(renderer, texture, nullptr, nullptr);
-                        SDL_RenderPresent(renderer);
-                    };
-                    const int count = ui::LiveMatchdayScreen::ball_frame_count(event.displacement);
-                    const auto source_delay = [&](int pause) {
-                        const uint32_t address = ::bmh::layout::Main_FormatError_ExecutableFieldUnsigned + uint32_t(pause * 9);
-                        const int saved = state.memory.has(address) ? state.memory.u8(address) : 0;
-                        return (saved < 6 ? saved / 2 : saved) * 20;
-                    };
-                    for (int index = 0; index < count && running; ++index) {
-                        const std::string title = "OpenBMH - live_ball_" + std::to_string(event.minute) + "_" +
-                            std::to_string(event.group) + "_" + std::to_string(event.match) + "_" +
-                            std::to_string(event.displacement) + "_" + std::to_string(index);
-                        SDL_SetWindowTitle(window, window_title.c_str());
-                        const auto* chance = live_chance_context &&
-                            live_chance_context->minute == event.minute &&
-                            live_chance_context->group == event.group &&
-                            live_chance_context->match == event.match ? &*live_chance_context : nullptr;
-                        present(live_screen->render_ball(frame, event.displacement, index, chance));
-                        SDL_PumpEvents();
-                        SDL_Event quit_event;
-                        if (quit_confirmation.peep(&quit_event, 1, SDL_GETEVENT, SDL_QUIT, SDL_QUIT) > 0) {
-                            running = false;
-                            break;
-                        }
-                        // AdvanceStep(5) reads a252c; DecodeTaxAnimationScript2 uses 20ms ticks.
-                        // Retain key/mouse events for the live-minute input boundary.
-                        const int delay = live_frame_ms_explicit ? live_frame_ms :
-                            app::scene_frame_delay(source_delay(5));
-                        if (delay > 0) SDL_Delay(Uint32(delay));
-                    }
-                    if (running) {
-                        const int final_delay = live_frame_ms_explicit ? live_frame_ms : app::scene_frame_delay(source_delay(6));
-                        if (final_delay > 0) SDL_Delay(Uint32(final_delay));
-                        SDL_SetWindowTitle(window, window_title.c_str());
-                        present(live_screen->render(frame));
-                    }
-                }, [&](const LiveChanceEvent& event, const std::vector<MatchGroup>& groups,
-                       const GameState& state) {
-                    if (!running || live_skipped) return;
-                    const auto frame = ui::live_matchday_frame(event.minute, groups, state);
-                    live_score_reveal.observe(event.stage, frame);
-                    if (frame.matches.empty()) return;
-                    const auto chance = ui::live_chance_projection(event, groups, state, season_exe);
-                    if (event.stage == LiveChanceStage::preview) live_chance_context = chance;
-                    const std::string title = std::string("OpenBMH - live_chance_") +
-                        (event.stage == LiveChanceStage::preview ? "preview_" : "result_") +
-                        std::to_string(event.minute) + "_" + std::to_string(event.group) + "_" +
-                        std::to_string(event.match) + "_" + std::to_string(event.side) + "_" +
-                        std::to_string(event.kind) + "_" + std::to_string(int(event.goal));
-                    SDL_SetWindowTitle(window, window_title.c_str());
-                    const Image image = live_screen->render_chance(frame, chance);
-                    for (size_t i = 0; i < pixels.size(); ++i) pixels[i] = palette.argb[image.pixels[i]];
-                    SDL_UpdateTexture(texture, nullptr, pixels.data(), 320 * 4);
-                    SDL_RenderClear(renderer);
-                    SDL_RenderCopy(renderer, texture, nullptr, nullptr);
-                    SDL_RenderPresent(renderer);
-                    SDL_PumpEvents();
-                    SDL_Event quit_event;
-                    if (quit_confirmation.peep(&quit_event, 1, SDL_GETEVENT, SDL_QUIT, SDL_QUIT) > 0) {
-                        running = false;
-                        live_chance_context.reset();
-                        return;
-                    }
-                    const int pause = event.stage == LiveChanceStage::preview ? 12 : (event.goal ? 1 : 2);
-                    const uint32_t address = ::bmh::layout::Main_FormatError_ExecutableFieldUnsigned + uint32_t(pause * 9);
-                    const int saved = state.memory.has(address) ? state.memory.u8(address) : 0;
-                    const int delay = live_frame_ms_explicit ? live_frame_ms :
-                        app::scene_frame_delay((saved < 6 ? saved / 2 : saved) * 20);
-                    if (delay > 0) SDL_Delay(Uint32(delay));
-                    if (event.stage == LiveChanceStage::result) live_chance_context.reset();
-                }, [&](const LiveShotEvent& event, const std::vector<MatchGroup>& groups,
-                       const GameState& state) {
-                    if (!running || live_skipped) return;
-                    const auto frame = live_score_reveal.project(ui::live_matchday_frame(event.minute, groups, state));
-                    if (frame.matches.empty()) return;
-                    const auto frames = live_screen->render_shot(frame, event);
-                    const auto shot_colors = live_screen->shot_palette(palette, event, groups, state);
-                    const std::string identity = std::to_string(event.minute) + "_" +
-                        std::to_string(event.group) + "_" + std::to_string(event.match) + "_" +
-                        std::to_string(event.acting_side) + "_" + std::to_string(int(event.miss));
-                    for (size_t index = 0; index < frames.size() && running; ++index) {
-                        const std::string title = "OpenBMH - live_shot_" + identity + "_" + std::to_string(index);
-                        SDL_SetWindowTitle(window, window_title.c_str());
-                        for (size_t i = 0; i < pixels.size(); ++i) pixels[i] = shot_colors.argb[frames[index].pixels[i]];
-                        SDL_UpdateTexture(texture, nullptr, pixels.data(), 320 * 4);
-                        SDL_RenderClear(renderer);
-                        SDL_RenderCopy(renderer, texture, nullptr, nullptr);
-                        SDL_RenderPresent(renderer);
-                        SDL_PumpEvents();
-                        SDL_Event input;
-                        if (quit_confirmation.peep(&input, 1, SDL_GETEVENT, SDL_QUIT, SDL_QUIT) > 0) {
-                            running = false;
-                            return;
-                        }
-                        // Source waits Main_FormatError_RuntimeField vertical retraces after each frame (70 Hz).
-                        const int retraces = state.memory.has(::bmh::layout::Main_FormatError_RuntimeField) ?
-                            std::max(0, int(int8_t(state.memory.u8(::bmh::layout::Main_FormatError_RuntimeField)))) : 0;
-                        const int delay = live_frame_ms_explicit ? live_frame_ms : app::scene_frame_delay(retraces * 1000 / 70);
-                        if (delay > 0) SDL_Delay(Uint32(delay));
-                    }
-                    if (!running) return;
-                    if (!live_frame_ms_explicit) SDL_Delay(200); // LiveMatchdayFrame -> DecodeTaxAnimationScript2(10)
-                    if (app::match_sound_enabled(state))
-                        app::original_audio_command(playback, event.miss ? 20 : 19); // SetPieceAnimation, before its ACK.
-                    if (state.memory.has(::bmh::layout::Main_FormatError_RuntimeField5) && state.memory.u8(::bmh::layout::Main_FormatError_RuntimeField5) == 0) {
-                        // SDLFlushEvents2 accepts a fresh left/right press, not a keyboard skip.
-                        const std::string title = "OpenBMH - live_shot_wait_" + identity;
-                        SDL_SetWindowTitle(window, window_title.c_str());
-                        SDL_FlushEvents(SDL_MOUSEBUTTONDOWN, SDL_MOUSEBUTTONUP);
-                        SDL_Event input;
-                        bool acknowledged = false;
-                        while (running && !acknowledged) {
-                            while (quit_confirmation.poll(&input)) {
-                                if (input.type == SDL_QUIT) { running = false; break; }
-                                if (input.type == SDL_MOUSEBUTTONDOWN &&
-                                    (input.button.button == SDL_BUTTON_LEFT || input.button.button == SDL_BUTTON_RIGHT)) {
-                                    acknowledged = true;
-                                    break;
-                                }
-                            }
-                            if (!acknowledged && running) SDL_Delay(10);
-                        }
-                    } else {
-                        // AdvanceStep(15): the ordinary saved pause instead of a click.
-                        const int saved = state.memory.has(::bmh::layout::Main_FormatError_RuntimeField7) ? state.memory.u8(::bmh::layout::Main_FormatError_RuntimeField7) : 0;
-                        const int delay = live_frame_ms_explicit ? live_frame_ms : app::scene_frame_delay((saved < 6 ? saved / 2 : saved) * 20);
-                        if (delay > 0) SDL_Delay(Uint32(delay));
-                    }
-                }, [&](const LiveSetPieceEvent& event, const std::vector<MatchGroup>& groups,
-                       const GameState& state) {
-                    if (!running || live_skipped) return;
-                    const auto frame=live_score_reveal.project(ui::live_matchday_frame(event.minute,groups,state));
-                    if (frame.matches.empty()) return;
-                    const auto images=live_screen->render_set_piece(frame,event);
-                    LiveShotEvent palette_event;
-                    palette_event.group=event.group;palette_event.match=event.match;
-                    const auto colors=live_screen->shot_palette(palette,palette_event,groups,state);
-                    for (size_t index=0;index<images.size() && running;++index) {
-                        const std::string title="OpenBMH - live_set_piece_"+std::to_string(event.minute)+"_"+
-                            std::to_string(event.group)+"_"+std::to_string(event.match)+"_"+
-                            std::to_string(event.source_side)+"_"+std::to_string(event.kind)+"_"+
-                            std::to_string(index)+"_"+std::to_string(images.size());
-                        SDL_SetWindowTitle(window, window_title.c_str());
-                        for (size_t i=0;i<pixels.size();++i) pixels[i]=colors.argb[images[index].pixels[i]];
-                        SDL_UpdateTexture(texture,nullptr,pixels.data(),320*4);
-                        SDL_RenderClear(renderer);SDL_RenderCopy(renderer,texture,nullptr,nullptr);SDL_RenderPresent(renderer);
-                        SDL_PumpEvents();SDL_Event input;
-                        if (quit_confirmation.peep(&input,1,SDL_GETEVENT,SDL_QUIT,SDL_QUIT)>0) { running=false;return; }
-                        // FirstThen holds the first frame for 40 retraces; later frames
-                        // use saved Main_FormatError_RuntimeField2. Keyboard/mouse input remains for the minute hook.
-                        const int retraces=index==0?40:(state.memory.has(::bmh::layout::Main_FormatError_RuntimeField2)?state.memory.u8(::bmh::layout::Main_FormatError_RuntimeField2):0);
-                        const int delay=live_frame_ms_explicit?live_frame_ms:app::scene_frame_delay(retraces*1000/70);
-                        if (delay>0) SDL_Delay(Uint32(delay));
-                    }
-                    if (running && !live_frame_ms_explicit) SDL_Delay(200); // LiveMatchdayFrame
-                }, [&](const LiveBookingEvent& event, const std::vector<MatchGroup>& groups,
-                       const GameState& state) {
-                    if (!running || live_skipped) return;
-                    const auto frame=ui::live_matchday_frame(event.minute,groups,state);
-                    if (frame.matches.empty()) return;
-                    const auto booking=ui::live_booking_projection(event,groups,state,season_exe);
-                    const std::string title="OpenBMH - live_booking_"+std::to_string(event.minute)+"_"+
-                        std::to_string(event.group)+"_"+std::to_string(event.match)+"_"+
-                        std::to_string(event.side)+"_"+std::to_string(event.kind)+"_"+std::to_string(event.player);
-                    const auto present=[&](const Image& image) {
-                        for (size_t i=0;i<pixels.size();++i) pixels[i]=palette.argb[image.pixels[i]];
-                        SDL_UpdateTexture(texture,nullptr,pixels.data(),320*4);
-                        SDL_RenderClear(renderer);SDL_RenderCopy(renderer,texture,nullptr,nullptr);SDL_RenderPresent(renderer);
-                    };
-                    SDL_SetWindowTitle(window, window_title.c_str());present(live_screen->render_booking(frame,booking));
-                    if (event.kind != 2 && app::match_sound_enabled(state))
-                        app::original_audio_command(playback, 17); // EventImpl/SDLPumpEvents, no injury whistle.
-                    SDL_PumpEvents();SDL_Event input;
-                    if (quit_confirmation.peep(&input,1,SDL_GETEVENT,SDL_QUIT,SDL_QUIT)>0) { running=false;return; }
-                    const int pause=event.kind==0?3:4;
-                    const uint32_t address=::bmh::layout::Main_FormatError_ExecutableFieldUnsigned+uint32_t(pause*9);
-                    const int saved=state.memory.has(address)?state.memory.u8(address):0;
-                    const int delay=live_frame_ms_explicit?live_frame_ms:app::scene_frame_delay((saved<6?saved/2:saved)*20);
-                    if (delay>0) SDL_Delay(Uint32(delay));
-                    // EventImpl clears the box after its pause; no Source click wait here.
-                    SDL_SetWindowTitle(window, window_title.c_str());present(live_screen->render(frame));
-                }, [&](const LiveShootoutEvent& event, const std::vector<MatchGroup>& groups,
-                       const GameState& state) {
-                    if (!running || live_skipped) return;
-                    const auto frame=ui::live_matchday_frame(event.minute,groups,state);
-                    if (frame.matches.empty()) return;
-                    const auto projection=ui::live_shootout_projection(event,groups,state,season_exe);
-                    const std::string title="OpenBMH - live_shootout_"+std::to_string(int(event.stage))+"_"+
-                        std::to_string(event.group)+"_"+std::to_string(event.match)+"_"+
-                        std::to_string(event.side)+"_"+std::to_string(event.round)+"_"+
-                        std::to_string(event.of)+"_"+std::to_string(event.player);
-                    SDL_SetWindowTitle(window, window_title.c_str());
-                    const auto image=live_screen->render_shootout(frame,projection);
-                    for (size_t i=0;i<pixels.size();++i) pixels[i]=palette.argb[image.pixels[i]];
-                    SDL_UpdateTexture(texture,nullptr,pixels.data(),320*4);
-                    SDL_RenderClear(renderer);SDL_RenderCopy(renderer,texture,nullptr,nullptr);SDL_RenderPresent(renderer);
-                    SDL_PumpEvents();SDL_Event input;
-                    if (quit_confirmation.peep(&input,1,SDL_GETEVENT,SDL_QUIT,SDL_QUIT)>0) { running=false;return; }
-                    const int repeats=event.stage==LiveShootoutStage::preview?4:2;
-                    const int saved=state.memory.has(::bmh::layout::Main_FormatError_RuntimeField6)?state.memory.u8(::bmh::layout::Main_FormatError_RuntimeField6):0;
-                    const int delay=live_frame_ms_explicit?live_frame_ms:app::scene_frame_delay((saved<6?saved/2:saved)*20);
-                    for (int i=0;i<repeats && running;++i) if (delay>0) SDL_Delay(Uint32(delay));
-                }, [&](const LiveRealityEvent& event, const std::vector<MatchGroup>& groups,
-                       const GameState& state) -> bool {
-                    if (!running || live_skipped) return false;
-                    const auto frame = ui::live_matchday_frame(event.minute,groups,state);
-                    const auto present = [&](const Image& image,const Palette& colors,const std::string& title) {
-                        SDL_SetWindowTitle(window, window_title.c_str());
-                        for (size_t i=0;i<pixels.size();++i) pixels[i]=colors.argb[image.pixels[i]];
-                        SDL_UpdateTexture(texture,nullptr,pixels.data(),320*4);
-                        SDL_RenderClear(renderer);SDL_RenderCopy(renderer,texture,nullptr,nullptr);SDL_RenderPresent(renderer);
-                    };
-                    const auto delay = [&](uint32_t address) {
-                        const int saved=state.memory.has(address)?state.memory.u8(address):0;
-                        const int ms=live_frame_ms_explicit?live_frame_ms:app::scene_frame_delay((saved<6?saved/2:saved)*20);
-                        if (ms>0) SDL_Delay(Uint32(ms));
-                    };
-                    const std::string identity=std::to_string(event.minute)+"_"+std::to_string(event.group)+"_"+
-                        std::to_string(event.match)+"_"+std::to_string(event.side);
-                    if (event.stage==LiveRealityStage::begin) {
-                        LiveChanceEvent header_event;header_event.minute=event.minute;
-                        header_event.group=event.group;header_event.match=event.match;header_event.side=event.side;
-                        const auto header=ui::live_chance_projection(header_event,groups,state,season_exe);
-                        reality_pristine=live_screen->render_reality(frame,header);
-                        reality_surface=reality_pristine;reality_layout={};
-                        reality_field=std::make_unique<ui::RealityFieldScreen>(data,
-                            state.memory.has(::bmh::layout::Main_FormatError_RuntimeField3)?state.memory.u8(::bmh::layout::Main_FormatError_RuntimeField3):0);
-                        LiveShotEvent colors_event;colors_event.group=event.group;colors_event.match=event.match;
-                        reality_colors=live_screen->shot_palette(palette,colors_event,groups,state);
-                        present(reality_surface,reality_colors,"OpenBMH - live_reality_begin_"+identity);
-                        return false;
-                    }
-                    if (event.stage==LiveRealityStage::settling) {
-                        reality_field.reset();
-                        const int ms=live_frame_ms_explicit?live_frame_ms:app::scene_frame_delay(200); // DecodeTaxAnimationScript2(10)
-                        if (ms>0) SDL_Delay(Uint32(ms));
-                        return false;
-                    }
-                    if (event.stage==LiveRealityStage::end) {
-                        present(live_screen->render(frame),palette,"OpenBMH - live_matchday");
-                        return false;
-                    }
-                    if (!reality_field) throw FormatError("Reality presentation: round without Source header");
-                    for (const auto& report:event.tick.reports)
-                        reality_reporter->append(reality_surface,reality_layout,report.text,frame.gradient_text);
-                    const std::string round_identity=identity+"_"+std::to_string(event.tick.round);
-                    if (event.tick.motion) {
-                        size_t index=0;
-                        for (const auto& motion:event.tick.motion->frames) {
-                            auto backdrop=reality_pristine;
-                            std::copy_n(reality_surface.pixels.begin(),320*129,backdrop.pixels.begin());
-                            reality_surface=reality_field->render(motion,backdrop);
-                            present(reality_surface,reality_colors,"OpenBMH - live_reality_round_"+
-                                round_identity+"_"+std::to_string(index++));
-                            delay(::bmh::layout::Main_FormatError_ExecutableField2); // RealityFieldScreen: the saved Reality speed
-                        }
-                        delay(::bmh::layout::Main_FormatError_ExecutableField+10*9); // AdvanceStep(10), after all eleven frames
-                    } else {
-                        present(reality_surface,reality_colors,"OpenBMH - live_reality_report_"+round_identity);
-                    }
-                    SDL_PumpEvents();SDL_Event input;
-                    if (quit_confirmation.peep(&input,1,SDL_GETEVENT,SDL_QUIT,SDL_QUIT)>0) {running=false;return true;}
-                    // Consume only the Source exit for this scene. Other input remains
-                    // queued for the existing live-minute/manager intervention boundary.
-                    if (quit_confirmation.peep(&input,1,SDL_PEEKEVENT,SDL_KEYDOWN,SDL_KEYDOWN)>0 &&
-                        input.key.keysym.sym==SDLK_ESCAPE) {
-                        quit_confirmation.peep(&input,1,SDL_GETEVENT,SDL_KEYDOWN,SDL_KEYDOWN);return true;
-                    }
-                    if (quit_confirmation.peep(&input,1,SDL_PEEKEVENT,SDL_MOUSEBUTTONDOWN,SDL_MOUSEBUTTONDOWN)>0 &&
-                        input.button.button==SDL_BUTTON_RIGHT) {
-                        quit_confirmation.peep(&input,1,SDL_GETEVENT,SDL_MOUSEBUTTONDOWN,SDL_MOUSEBUTTONDOWN);return true;
-                    }
-                    return false;
-                }, [&](const PhaseResultRequest& request, const std::vector<MatchGroup>& groups,
+                }, live_observers.ball,
+                live_observers.chance,
+                live_observers.shot,
+                live_observers.set_piece,
+                live_observers.booking,
+                live_observers.shootout,
+                live_observers.reality, [&](const PhaseResultRequest& request, const std::vector<MatchGroup>& groups,
                        const GameState& state) {
                     if (!running) throw FormatError("phase results: presentation stopped");
                     const auto frame = ui::live_matchday_frame(request.phase_end_minute, groups, state);
