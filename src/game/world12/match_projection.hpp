@@ -32,6 +32,7 @@ public:
     uint8_t global_manager(uint8_t local)const{return manager_seats_.at(local);}
     size_t human_managers()const{return manager_seats_.size();}
     void commit_player_attributes(World&)const;
+    void commit_desktop_preferences(CareerSnapshot&)const;
     void commit_match_state(World&,bool capture_season_services=false)const;
     void commit_transfer_state(World&,PlayerId,ClubId seller,ClubId buyer,bool moved)const;
     void commit_released_players(World&,const std::vector<std::pair<PlayerId,ClubId>>&)const;

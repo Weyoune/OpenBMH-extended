@@ -23,6 +23,7 @@ struct RealityReporterLine {
 class RealityReporterPanel {
 public:
     explicit RealityReporterPanel(const std::filesystem::path& data);
+    RealityReporterPanel(const std::filesystem::path& data,const LeImage& reference);
     std::vector<RealityReporterLine> append(Image&,RealityReporterLayoutState&,
         const std::vector<std::string>& text,bool gradient = true) const;
 private:

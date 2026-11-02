@@ -123,6 +123,10 @@ int attendance(GameState& g, int home, int away, int bits, int temperature, int 
 // returns it (manager indices). One game draw per manager: entry i swaps with entry G(0, n - 1).
 std::vector<int> shuffle_manager_order(GameState& g, GameRandom& game);
 
+// AutoLineup's presentation choice, shared by bounded typed match workspaces.
+// Retains the human flag, no-live option, duplicate-home and four-board limit.
+bool select_live_match_source(GameState&,int home,int away);
+
 // The start of FinishEvent up to the first minute: flags, void masks, attendance and side
 // records for every match of every group, including the live match choice (AutoLineup) and
 // the man marking of human managers (KickOff). Human teams draw from `game` in their

@@ -20,7 +20,7 @@ static_assert(std::is_nothrow_move_assignable_v<World>);
 namespace {
 AiLeagueRoundOutcome run_ai_league_matches(World& world,const GameState& base,const std::vector<Fixture>& fixtures,
     const std::vector<AiLeagueConditions>& conditions,GameRandom& game,WatcomRandom& random,bool settle,
-    const CareerSnapshot* human_snapshot=nullptr,HumanProjectionPolicy policy={},const HumanRoundHooks* hooks=nullptr,
+    CareerSnapshot* human_snapshot=nullptr,HumanProjectionPolicy policy={},const HumanRoundHooks* hooks=nullptr,
     const KnockoutStage* cup=nullptr,const LeImage* cup_source=nullptr,CupRoundOutcome* cup_out=nullptr,const EuropeanGroup* european=nullptr,const std::vector<EuropeanGroup>* european_batch=nullptr) {
     if(fixtures.empty() || fixtures.size()>(european?64u:cup?32u:10u) || conditions.size()!=fixtures.size())throw std::invalid_argument("world12: incomplete AI league match batch");
     std::vector<ClubId> participants;LeagueId league;
@@ -147,7 +147,7 @@ AiLeagueRoundOutcome run_ai_league_matches(World& world,const GameState& base,co
     if(cup||european)cup_out->pools=outcome.pools;
     if(cup||european){for(const auto& finished:groups){cup_out->scores.insert(cup_out->scores.end(),finished.cup_results.begin(),finished.cup_results.end());cup_out->end_minutes.insert(cup_out->end_minutes.end(),finished.end_minute.begin(),finished.end_minute.end());}cup_out->game_draws=outcome.game_draws;cup_out->watcom_draws=outcome.watcom_draws;}
     else for(size_t m=0;m<fixtures.size();++m)outcome.matches.push_back({fixtures[m],{true,uint8_t(groups[0].results[m]>>4),uint8_t(groups[0].results[m]&15)},groups[0].end_minute[m],0,0,settle});
-    projection.commit_match_state(world);game=staged_game;random=staged_random;return outcome;
+    projection.commit_match_state(world);if(human_snapshot)projection.commit_desktop_preferences(*human_snapshot);game=staged_game;random=staged_random;return outcome;
 }
 }
 AiLeagueOutcome simulate_ai_league_match(World& world,const GameState& base,Fixture fixture,const AiLeagueConditions& conditions,GameRandom& game,WatcomRandom& random) {

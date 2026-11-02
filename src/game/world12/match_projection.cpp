@@ -147,6 +147,11 @@ AiMatchProjection AiMatchProjection::create_for_humans(const CareerSnapshot& sna
         install_manager_finance(local,int(m),*manager.finance);install_manager_tactics(local,int(m),*manager.tactics,result.players_);
         install_manager_match_state(local,int(m),*manager.match_state,result.manager_reference_clubs_,result.players_);
         if(manager.career)install_manager_career_state(local,uint8_t(m),*manager.career,result.players_);
+        if(snapshot.desktop){
+            const auto desk=std::find_if(snapshot.desktop->managers.begin(),snapshot.desktop->managers.end(),[&](const auto& d){return d.seat==manager.seat;});
+            if(desk==snapshot.desktop->managers.end())throw FormatError("world12: human projection missing canonical desktop preferences");
+            const auto word=layout::CareerSession_AnyOf_ExecutableField+uint32_t(m*2);local.memory.add_block(word,2);local.memory.set16(word,desk->display_word);
+        }
     }
     result.install_player_statistics(world,true);
     local.counts.players=uint32_t(local.players.size());return result;
@@ -218,6 +223,17 @@ ClubId AiMatchProjection::global_club(uint32_t local)const{if(local>=uint32_t(ru
 PlayerId AiMatchProjection::global_player(uint32_t local)const{return players_.at(local);}
 uint32_t AiMatchProjection::local_club(ClubId id)const{const auto abstract=std::find_if(abstract_clubs_.begin(),abstract_clubs_.end(),[&](const auto& club){return club.id==id;});if(abstract!=abstract_clubs_.end())return uint32_t(runtime_dimensions.record_teams)+uint32_t(abstract-abstract_clubs_.begin());auto it=std::find(clubs_.begin(),clubs_.end(),id);if(it==clubs_.end())throw std::out_of_range("world12: club is not projected");return uint32_t(it-clubs_.begin());}
 uint32_t AiMatchProjection::local_player(PlayerId id)const{auto it=std::find(players_.begin(),players_.end(),id);if(it==players_.end())throw std::out_of_range("world12: player is not projected");return uint32_t(it-players_.begin());}
+void AiMatchProjection::commit_desktop_preferences(CareerSnapshot& snapshot)const {
+    if(!snapshot.desktop)return;
+    auto candidate=*snapshot.desktop;
+    for(size_t local=0;local<manager_seats_.size();++local){
+        const auto seat=manager_seats_[local];const auto desk=std::find_if(candidate.managers.begin(),candidate.managers.end(),[&](const auto& d){return d.seat==seat;});
+        const auto at=layout::CareerSession_AnyOf_ExecutableField+uint32_t(local*2);
+        if(desk==candidate.managers.end()||!state.memory.has(at+1))throw FormatError("world12: missing matched desktop preference owner");
+        desk->display_word=state.memory.u16(at);
+    }
+    snapshot.desktop=std::move(candidate);
+}
 void AiMatchProjection::commit_player_attributes(World& world)const {
     if(!manager_seats_.empty())throw std::invalid_argument("world12: human projection requires complete match-state commit");
     PlayerStatisticsArchive expected;

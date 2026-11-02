@@ -985,6 +985,9 @@ MatchWeatherOutcome draw_match_weather(int region,int month,bool choose,
     }
     return result;
 }
+bool select_live_match_source(GameState& state,int home,int away) {
+    return select_live_match(state,home,away);
+}
 void kick_off(GameState& g, std::vector<MatchGroup>& groups, const MatchdayContext& ctx, WatcomRandom& rand,
               GameRandom& game, MinuteReport& report, bool select_sportschau, uint16_t club_threshold) {
     // LiveSceneVisible = 1 - CareerSession_DispatchLiveTactic_RuntimeField3, set by the caller of DayCompetitions2 right after the

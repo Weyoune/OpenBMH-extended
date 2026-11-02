@@ -284,7 +284,10 @@ LiveShootoutProjection live_shootout_projection(const LiveShootoutEvent& event,
 }
 
 LiveMatchdayScreen::LiveMatchdayScreen(const std::filesystem::path& data)
-    : exe_(load_le(asset_path(data, "BMH.exe"))),
+    : LiveMatchdayScreen(data,load_le(asset_path(data,"BMH.exe"))) {}
+
+LiveMatchdayScreen::LiveMatchdayScreen(const std::filesystem::path& data,const LeImage& reference)
+    : exe_(reference),
       background_(load_vga(asset_path(data / "KB", "133.VGA"))),
       board_(load_vga(asset_path(data / "KB", "21.VGA"))),
       score_digits_(load_vga(asset_path(data / "KB", "13.VGA"))),

@@ -27,3 +27,19 @@ This service remains league-only. Cup/national/indoor appointments, daily/weekly
 ## Verification
 
 The current Linux milestone passes 25 targeted checks, 56 actual synthetic human/AI fixtures (115 goals, six human event presentations), the isolated nine-fixture real-data round (17 goals), mixed-day replay/snapshot/rollback and two/four-manager state checks. The 15,120 unchanged-Core forecast comparisons remain equal. Fairplay points, mapped and unmapped histories, designated global player references, identity tampering and failed reference publication are covered. These are calculation/transaction checks, not a human GUI playthrough.
+
+## Live editor integration boundary
+
+The numeric `LiveScope` authenticates one watched human fixture and its Source
+minute, with separate manual and actual red-card/injury entry. It shares the
+Classic row/substitution and pitch/tactic actions; stale rows, retired numeric
+capabilities and formation automation are rejected. An unfinished scope restores
+its projected state, retained group storage and both random streams. A completed
+manual editor rerates once; the actual event retains its existing EventImpl tail.
+
+Human projections now install and capture each canonical manager's desktop
+display word. Local numeric manager order never becomes the saved manager seat.
+The native UI adapters share the existing Original scene and lineup presenters
+and accept explicit reference rules, rather than rediscovering a legacy profile.
+These pieces do not by themselves complete calendar/live overview ownership or
+qualify a GUI season for the Beta gate.

@@ -7,8 +7,10 @@
 #include "game/world12/codec.hpp"
 #include "game/world12/ai_match.hpp"
 #include "app/world12_ai_day.hpp"
+#include "app/world12_live_scope.hpp"
 #include "game/match.hpp"
 #include "game/matchday.hpp"
+#include "game/matchday_setup.hpp"
 #include "ui/lineup.hpp"
 #include "ui/statistics_rankings.hpp"
 #include "cli/json.hpp"
@@ -41,6 +43,80 @@ CareerSnapshot snapshot(const bmh::GameState& base) {
     snapshot.results=SeasonResults::empty(w.catalogue);snapshot.date=40;
     for(auto league:{LeagueId{4},LeagueId{9}}){snapshot.league_rounds[league.value]=2;for(int r=1;r<=2;++r)for(int m=0;m<w.catalogue.league(league).clubs/2;++m)snapshot.results.result(w.catalogue,league,r,m)={true,0,0};}
     snapshot.validate();return snapshot;
+}
+void live_preferences_and_scopes(const bmh::GameState& base) {
+    auto saved=snapshot(base);saved.world.markets.emplace();saved.world.free_players.emplace();saved.world.settings=CareerSettings{3,6,5,2,false};
+    saved.desktop.emplace();ManagerDesktop de_desk;de_desk.seat=0;de_desk.display_word=0x1234;
+    ManagerDesktop en_desk;en_desk.seat=3;en_desk.display_word=0x5678;
+    // Storage order deliberately differs from local manager order.
+    saved.desktop->managers={en_desk,de_desk};saved.validate();
+    const auto de=saved.world.managers[0].club,en=saved.world.managers[1].club;
+    auto mapped=AiMatchProjection::create_for_humans(saved,{en,de},base,{3,6,false,true});
+    check(mapped.state.memory.u16(bmh::layout::CareerSession_AnyOf_ExecutableField)==0x1234&&
+          mapped.state.memory.u16(bmh::layout::CareerSession_AnyOf_ExecutableField+2)==0x5678,
+          "human projection lost canonical sparse desktop display words");
+    mapped.state.memory.set16(bmh::layout::CareerSession_AnyOf_ExecutableField+2,0x9abc);
+    mapped.commit_desktop_preferences(saved);
+    check(saved.desktop->managers[0].seat==3&&saved.desktop->managers[0].display_word==0x9abc&&
+          saved.desktop->managers[1].display_word==0x1234,
+          "match preference capture used local seats as canonical desktop owners");
+    check(read_save(make_save(saved))==saved,"live display preferences did not survive save/reopen");
+
+    auto rules=bmh::LeImage::from_bytes(bmh::layout::GermanDataSegmentBegin,bmh::Bytes(0x20000));
+    const uint8_t maximum=3;rules.patch(bmh::layout::CareerSession_DispatchLiveSubstitution_ExecutableField,&maximum,1);
+    auto played=saved;const auto fixtures=league_fixtures(played.world,{4},3);
+    AiLeagueConditions conditions;conditions.month=8;conditions.temperature=19;conditions.date=40;
+    conditions.spectators=15000;conditions.referee_properties={24};conditions.presentation_buttons.assign(0xb4,1);
+    std::vector<AiLeagueConditions> inputs(fixtures.size(),conditions);
+    bmh::GameRandom game(17);bmh::WatcomRandom random(91);uint64_t nonce=0;bool checked=false;
+    HumanRoundHooks hooks;hooks.live_event=[](auto&,auto&,const auto&){};
+    hooks.before_matchday=[](auto& projection,auto& engine){
+        for(const auto& group:engine.groups)for(int match=0;match<group.matches();++match)
+            bmh::select_live_match_source(projection.state,group.fixtures.at(size_t(match)*2),group.fixtures.at(size_t(match)*2+1));
+    };
+    hooks.after_minute=[&](auto& projection,auto& engine,int minute){
+        if(checked||minute!=15)return;checked=true;
+        const auto team=int(projection.local_club(de));const auto before=projection.state;
+        const auto game_seed=engine.game.seed();const auto watcom_seed=engine.rand.seed();
+        const auto range=bmh::squad_range(team);
+        bmh::ui::LineupRequest action;action.kind=bmh::ui::LineupRequestKind::swap_players;
+        action.manager_slot=projection.state.manager_of(team);action.runtime_club=team;
+        action.first_row=3;action.second_row=12;
+        action.first_slot=before.squad_slots.at(range.first+3);action.second_slot=before.squad_slots.at(range.first+12);
+        action.first_player=action.first_slot&0xfff;action.second_player=action.second_slot&0xfff;
+        {
+            bmh::app::world12::LiveScope scope(projection,engine,rules,minute,team,2,nonce);
+            action.revision=scope.revision();
+            auto stale=action;++stale.revision;
+            check(!scope.apply(stale).applied,"live scope accepted a stale action");
+            const auto result=scope.apply(action);
+            check(result.applied,"actual human live substitution rejected");
+            check(!scope.apply(action).applied,"live scope accepted a replayed row action");
+            auto forbidden=bmh::ui::PitchRequest{};forbidden.kind=bmh::ui::PitchRequestKind::apply_formation;
+            forbidden.manager_slot=action.manager_slot;forbidden.runtime_club=team;forbidden.revision=scope.revision();
+            check(!scope.apply(forbidden).applied,"live scope exposed formation automation");
+            // Destruction aborts the unfinished editor. No calendar or random
+            // work may escape this nested synchronous capability.
+        }
+        check(projection.state.squad_slots==before.squad_slots&&projection.state.team_flags==before.team_flags&&
+              projection.state.tactics==before.tactics&&projection.state.manager_records==before.manager_records&&
+              projection.state.memory.u8(bmh::layout::ActiveManager)==before.memory.u8(bmh::layout::ActiveManager)&&
+              engine.game.seed()==game_seed&&engine.rand.seed()==watcom_seed,
+              "aborted live editor leaked a substitution, selected actor or random draw");
+        rejects([&]{bmh::app::world12::LiveScope early(projection,engine,rules,2,team,2,nonce);},
+                "manual intervention admitted the Source opening lock");
+        {
+            bmh::app::world12::LiveScope scope(projection,engine,rules,minute,team,2,nonce);
+            const auto old_revision=scope.revision();scope.finish();
+            check(nonce>old_revision,"finished live scope did not retire its numeric capability");
+            rejects([&]{scope.finish();},"finished live scope could rerate twice");
+            check(!scope.apply(action).applied,"retired live scope could accept actions");
+        }
+    };
+    const auto result=simulate_and_settle_human_league_round(played,base,{4},3,inputs,{3,6,false,true},game,random,hooks);
+    check(checked&&!result.matches.empty()&&played.desktop->managers==saved.desktop->managers,
+          "live scope probe missed a real minute or lost another manager's display word");
+    std::cout<<"Real human minute scope: stale/replayed actions, substitution abort, actor/RNG rollback, Source opening lock, retirement and sparse desktop preferences passed\n";
 }
 void statistics_bridge(const bmh::GameState& base) {
     auto source=snapshot(base);
@@ -115,7 +191,7 @@ void statistics_bridge(const bmh::GameState& base) {
 }
 }
 int main()try {
-    bmh::set_fixture_tables(bmh::test::authored_fixture_tables());const auto base=rules();statistics_bridge(base);const auto source=snapshot(base);auto world=source.world;
+    bmh::set_fixture_tables(bmh::test::authored_fixture_tables());const auto base=rules();statistics_bridge(base);live_preferences_and_scopes(base);const auto source=snapshot(base);auto world=source.world;
     const auto de=world.membership[4].clubs[0],en=world.membership[9].clubs[0],de_other=world.membership[4].clubs[1],en_other=world.membership[9].clubs[1];
     const std::vector<ClubId> requested{de,de_other,en,en_other};
     rejects([&]{AiMatchProjection::create(world,requested,base);},"AI-only guard allowed a human participant");

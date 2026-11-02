@@ -104,6 +104,7 @@ LiveShootoutProjection live_shootout_projection(const LiveShootoutEvent&,
 class LiveMatchdayScreen {
 public:
     explicit LiveMatchdayScreen(const std::filesystem::path& data);
+    LiveMatchdayScreen(const std::filesystem::path& data,const LeImage& reference);
     Image render(const LiveMatchdayFrame& frame) const;
     // BallFrameCount draws positions 0, +/-2, ... up to two pixels before
     // the even target. Its last target step exits without another present.

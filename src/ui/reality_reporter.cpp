@@ -16,7 +16,9 @@ bool starts_folded(std::string_view word,std::string_view pattern) {
 }
 }
 RealityReporterPanel::RealityReporterPanel(const std::filesystem::path& data)
-    : font_(load_font(asset_path(data/"F","BMH3.FNT"))),exe_(load_le(asset_path(data,"BMH.exe"))),
+    : RealityReporterPanel(data,load_le(asset_path(data,"BMH.exe"))) {}
+RealityReporterPanel::RealityReporterPanel(const std::filesystem::path& data,const LeImage& reference)
+    : font_(load_font(asset_path(data/"F","BMH3.FNT"))),exe_(reference),
       vowels_(exe_.cstring(::bmh::layout::GameEnd_SourceHyphenator_ExecutableField)) {
     if(font_.height!=6||font_.baseline!=5||exe_.cstring(::bmh::layout::RealityReporter_Font_ExecutableField)!=" "||exe_.cstring(::bmh::layout::Fltd_Layout_ExecutableField6)!="-")
         throw FormatError("Reality reporter: unsupported Original font/separators");
