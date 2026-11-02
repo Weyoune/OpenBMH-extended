@@ -6,6 +6,8 @@
 #include "app/world12_save_load.hpp"
 #include "game/world12/match_projection.hpp"
 #include "game/world12/desktop_projection.hpp"
+#include "game/world12/manager_finance.hpp"
+#include "game/world12/manager_tactics.hpp"
 #include "game/desk.hpp"
 #include "game/world12/codec.hpp"
 #include "game/save.hpp"
@@ -441,6 +443,47 @@ void actual_bank(ui::StartupFlow& flow,std::unique_ptr<session_app::Session>& se
     check(flow.screen_name()=="desktop"&&!session->preparation_open()&&session->snapshot().date==date&&
           read_save(make_save(session->snapshot()))==session->snapshot(),"bank close/save lost its persistent financial state");
     std::cout<<"Actual bank GUI: cashier, share purchase, charged stock tip, fund/property buy/sell, paid totals/depreciation, stale rejection, crest and saved actors passed\n";
+}
+void actual_camp(ui::StartupFlow& flow,std::unique_ptr<session_app::Session>& session,const std::filesystem::path& data,const std::filesystem::path& output) {
+    const auto original=session->snapshot();const auto actor=*original.desktop->active_seat;
+    const auto send=[&](const ui::FlowResult& action){const auto result=session_app::serve_startup(flow,action,session,data,91,session->scope());if(!result.error.empty())throw std::runtime_error("camp GUI: "+result.error);};
+    const auto capture=[&](const char* name){if(output.empty())return;std::filesystem::create_directories(output);
+        const auto frame=flow.render();const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));std::ofstream image(output/(std::string(name)+".ppm"),std::ios::binary);image<<"P6\n320 240\n255\n";
+        for(auto pixel:frame.pixels){const auto color=palette.argb[pixel];image.put(char(color>>16));image.put(char(color>>8));image.put(char(color));}
+        write_savegame(output/(std::string(name)+".FBM"),make_save(session->snapshot()));};
+    const auto open=[&]{const auto& items=flow.desktop()->state().items;const auto icon=std::find_if(items.begin(),items.end(),[](const auto& item){return item.kind==15&&!item.disabled;});check(icon!=items.end(),"Original camp icon unavailable");send(flow.click(icon->x+icon->width/2,icon->y+icon->height/2));};
+    open();check(flow.screen_name()=="training_camp","typed Original camp did not open");
+    auto view=*session->preparation_view(data).training_camp;check(!view.focus_normalization_required&&session->snapshot().game_seed==original.game_seed&&session->snapshot().watcom_seed==original.watcom_seed,"camp entry did not own its RNG-neutral fourth-slider normalization");
+    capture("camp-before");const auto value=uint8_t((view.focus[0]+1)%16);
+    const auto focus=flow.click(255+int(value)*3,session->rules().u8(layout::TrainingCamp_FocusControls_RuntimeField)+2);send(focus);
+    const auto focused=session->snapshot();const auto person=std::find_if(focused.world.managers.begin(),focused.world.managers.end(),[&](const auto& m){return m.seat==actor;});
+    check(person->career->camp_focus&&(*person->career->camp_focus)[0]==value&&read_save(make_save(focused))==focused,"camp slider was not retained through save/load");capture("camp-focus");
+    const auto revision=session->revision();rejects([&]{session->apply_preparation(focus.submenu_action);},"camp focus replay accepted");
+    check(session->snapshot()==focused&&session->revision()==revision,"stale focus changed camp state");
+    const auto x=session->rules().u8(layout::TrainingCamp_Click_RuntimeField)+1,y=session->rules().u8(layout::TrainingCamp_Click_RuntimeField2)+1;
+    send(flow.click(x,y));capture("camp-selected");const auto before=session->snapshot();
+    auto oracle=project_manager_desktop(before,session->reference());const auto local=oracle.state.memory.u8(layout::ActiveManager);WatcomRandom random(before.watcom_seed);
+    check(book_training_camp(oracle.state,local,0,random),"actual Core camp booking unavailable");
+    const auto booking=flow.click(240,218);check(booking.request==ui::FlowRequest::submenu_action&&std::holds_alternative<ui::TrainingCampRequest>(booking.submenu_action),"camp OK did not emit a booking request");send(booking);
+    const auto booked=session->snapshot();const auto booked_revision=session->revision();
+    check(booked.watcom_seed==random.seed()&&booked.game_seed==before.game_seed&&booked.date==before.date&&
+          booked.world.economy->managers[actor].camp_flags==oracle.state.manager_records[size_t(local)*0xb0c+0x21f],"camp booking lost visits, time or Source random streams");
+    std::vector<PlayerId> players;for(size_t n=0;n<oracle.state.players.size();++n)players.push_back(oracle.global_player(uint32_t(n)));
+    for(size_t n=0;n<players.size();++n){const auto& player=booked.world.players.at(players[n]).attributes;const auto& expected=oracle.state.players[n];
+        check(player.w35c==expected.w35c&&player.w364==expected.w364&&player.w368==expected.w368,"camp booking lost actual global player effects");}
+    const auto& manager=*std::find_if(booked.world.managers.begin(),booked.world.managers.end(),[&](const auto& m){return m.seat==actor;});
+    check(manager.finance->balance==manager_finance_from_legacy(oracle.state,local).balance,"camp lost Core cash booking");
+    check(booked.world.clubs.at(manager.club).morale==(oracle.state.team_morale[oracle.local_club(manager.club)]&63),"camp lost the Core morale value");
+    check(manager.tactics==manager_full_tactics_from_legacy(oracle.state,local,players),"camp lost Core tactical familiarity/freshness");
+    check(read_save(make_save(booked))==booked,"booked camp failed current snapshot roundtrip");capture("camp-booked");
+    auto duplicate=std::get<ui::TrainingCampRequest>(booking.submenu_action);duplicate.revision=booked_revision;
+    rejects([&]{session->apply_preparation(duplicate);},"current-week camp was charged twice");
+    check(session->snapshot()==booked&&session->revision()==booked_revision,"duplicate camp changed players, cash or RNG");
+    send(flow.send_key("ENTER"));check(flow.screen_name()=="desktop"&&!session->preparation_open(),"Source camp success acknowledgement did not return to desktop");
+    open();const auto reopened=session->snapshot();check(session->preparation_view(data).training_camp->booked_this_week(),"reopened camp lost booking guard");
+    send(flow.click(x,y));capture("camp-repeat-blocked");check(session->snapshot()==reopened,"blocked local camp preview booked another visit");
+    send(flow.send_key("ESC"));check(flow.screen_name()=="desktop"&&!session->preparation_open(),"camp abort did not release menu owner");
+    std::cout<<"Actual camp GUI: derived focus/edit, Original map and booking, global player/morale/board effects, Core fees/RNG, save/replay/duplicate limits and reentry passed\n";
 }
 void actual_save_load(ui::StartupFlow& flow,std::unique_ptr<session_app::Session>& session,const std::filesystem::path& data,const std::filesystem::path& output) {
     const auto directory=flow.save_directory();const auto path=directory/"Resume.FBM";
@@ -926,6 +969,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     check(!declined.error.empty()&&session->snapshot()==untouched&&session->revision()==live_revision&&!flow.desktop()->pending(),"unsupported next day fell through to legacy or left a stuck command");
     actual_management(flow,session,data,output);
     actual_bank(flow,session,data,output.empty()?output:output/"bank-single");
+    actual_camp(flow,session,data,output.empty()?output:output/"camp-single");
     actual_save_load(flow,session,data,output);
     ui::StartupFlow mixed(data,{},ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> multi;
     mixed.click(resources.german.u16(layout::Setup_FormatError_RuntimeField3+6*2)+10,resources.german.u8(layout::Setup_FormatError_RuntimeField4+6)+10);
@@ -941,6 +985,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     if(!output.empty())write_savegame(output/"first-event.FBM",make_save(multi->snapshot()));
     actual_management(mixed,multi,data,output.empty()?output:output/"mixed-management");
     actual_bank(mixed,multi,data,output.empty()?output:output/"bank-mixed");
+    actual_camp(mixed,multi,data,output.empty()?output:output/"camp-mixed");
     actual_mailbox(data,multi->snapshot(),output.empty()?output:output/"mailbox");
     actual_four_managers(data,output);
     actual_pending(data,output.empty()?output:output/"pending");

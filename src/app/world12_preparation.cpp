@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "app/world12_session.hpp"
 #include "app/preparation_actions.hpp"
+#include "app/training_camp_request_source.hpp"
+#include "game/world12/economy.hpp"
 #include "game/world12/desktop_projection.hpp"
 #include "game/desk_actions.hpp"
 #include "game/lineup.hpp"
@@ -81,10 +83,17 @@ void capture_display(CareerSnapshot& candidate,const AiMatchProjection& projecti
 }
 }
 void Session::open_preparation(const ui::DeskRequest& request) {
-    if(preparation_menu_||request.kind!=ui::DeskRequestKind::open_menu||(request.menu_kind!=3&&request.menu_kind!=18&&request.menu_kind!=16&&request.menu_kind!=14)||owner_.revision==std::numeric_limits<uint64_t>::max())throw FormatError("world12: unsupported or occupied preparation menu");
+    if(preparation_menu_||request.kind!=ui::DeskRequestKind::open_menu||(request.menu_kind!=3&&request.menu_kind!=18&&request.menu_kind!=16&&request.menu_kind!=14&&request.menu_kind!=15)||owner_.revision==std::numeric_limits<uint64_t>::max())throw FormatError("world12: unsupported or occupied preparation menu");
     const auto before=state_;auto candidate=state_;auto projection=project_manager_desktop(candidate,resources_.reference);auto& local=projection.state;
     actor(local,request.manager_slot,request.manager_slot>=0&&size_t(request.manager_slot)<local.manager_teams.size()?local.manager_teams[size_t(request.manager_slot)]:-1,request.revision,owner_.revision);
     const auto team=local.manager_teams.at(size_t(request.manager_slot));
+    if(request.menu_kind==15) {
+        const auto seat=projection.global_manager(uint8_t(request.manager_slot));
+        const auto& manager=*std::find_if(candidate.world.managers.begin(),candidate.world.managers.end(),[&](const auto& m){return m.seat==seat;});
+        if(!manager.career||!manager.career->camp_focus)throw FormatError("world12: old career lacks saved camp focus; start a current fresh career");
+        const auto camp=ui::training_camp_from_game(local,resources_.german,request.manager_slot,owner_.revision);
+        if(camp.focus_normalization_required&&!set_training_camp_focus(local,request.manager_slot,camp.focus))throw FormatError("world12: camp entry normalization failed");
+    }
     if(request.menu_kind==3)prepare_lineup(local,request.manager_slot,team);
     if(request.menu_kind==16){if(options_.mode<2)throw FormatError("world12: training unavailable in mode I");const auto training=ui::training_from_game(local,resources_.german,owner_.revision);
         if(training.needs_initialization()){ui::TrainingRequest r;r.kind=ui::TrainingRequestKind::initialize;r.manager_slot=request.manager_slot;r.runtime_club=team;r.revision=owner_.revision;r.desired_types=training.types;r.desired_areas=training.areas;r.desired_automation=0x9f;
@@ -96,6 +105,7 @@ void Session::open_preparation(const ui::DeskRequest& request) {
 void Session::apply_preparation(const ui::PreparationRequest& request) {
     if(!preparation_menu_||owner_.revision==std::numeric_limits<uint64_t>::max())throw FormatError("world12: no preparation command owner");
     const auto before=state_;const auto revision=owner_.revision;auto candidate=state_;auto projection=project_manager_desktop(candidate,resources_.reference);auto& local=projection.state;
+    WatcomRandom random(candidate.watcom_seed);bool camp_changed=false;
     std::visit([&](const auto& r){using R=std::decay_t<decltype(r)>;
         if constexpr(std::is_same_v<R,ui::LineupRequest>||std::is_same_v<R,ui::PitchRequest>||std::is_same_v<R,ui::TacticsRequest>||std::is_same_v<R,ui::TrainingRequest>){
             actor(local,r.manager_slot,r.runtime_club,r.revision,revision);
@@ -107,9 +117,16 @@ void Session::apply_preparation(const ui::PreparationRequest& request) {
                 if constexpr(std::is_same_v<R,ui::TacticsRequest>){if(*preparation_menu_!=18||!apply_tactics_request_source(local,resources_.german,r,scratch,error))throw FormatError(error.empty()?"world12: tactic menu mismatch":error);}
                 else {if(*preparation_menu_!=16||!apply_training_request_source(local,resources_.german,r,scratch,error))throw FormatError(error.empty()?"world12: training menu mismatch":error);}
             }
+        } else if constexpr(std::is_same_v<R,ui::TrainingCampRequest>) {
+            if(*preparation_menu_!=15)throw FormatError("world12: camp command has no current menu owner");
+            actor(local,r.manager_slot,r.runtime_club,r.revision,revision);auto scratch=revision;std::string error;
+            if(!apply_training_camp_request_source(local,random,r,scratch,error))throw FormatError(error.empty()?"world12: camp command rejected":error);
+            camp_changed=true;
         } else throw FormatError("world12: unsupported preparation command");
     },request);
-    projection.commit_match_state(candidate.world);capture_display(candidate,projection);candidate.validate();
+    projection.commit_match_state(candidate.world);capture_display(candidate,projection);
+    if(camp_changed)capture_career_economy(candidate.world,projection);
+    candidate.watcom_seed=random.seed();candidate.validate();
     if(state_!=before||owner_.revision!=revision)throw FormatError("world12: preparation owner changed during command");state_=std::move(candidate);++owner_.revision;
 }
 void Session::close_preparation(){if(preparation_menu_&&*preparation_menu_==63)throw FormatError("world12: mailbox requires its owned close request");if(!preparation_menu_)throw FormatError("world12: no preparation menu to close");preparation_menu_.reset();}

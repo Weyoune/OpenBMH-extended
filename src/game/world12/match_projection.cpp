@@ -309,7 +309,7 @@ void AiMatchProjection::commit_state(World& world,bool capture_season_services,c
         found->tactics=manager_full_tactics_from_legacy(state,int(local),players_);
         const auto previous=found->match_state;
         found->match_state=manager_match_state_from_legacy(state,int(local),manager_reference_clubs_,players_,previous?&*previous:nullptr);
-        if(found->career)found->career=manager_career_state_from_legacy(state,uint8_t(local),players_,capture_season_services||found->career->season_services.has_value());
+        if(found->career)found->career=manager_career_state_from_legacy(state,uint8_t(local),players_,capture_season_services||found->career->season_services.has_value(),&*found->career);
         const auto team=local_club(found->club);candidate.clubs.at(found->club).lineup_indoor=(state.club_heap_78.at(team*2+1)&2)!=0;
     }
     capture_player_statistics(candidate,movements);

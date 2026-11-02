@@ -82,6 +82,7 @@ void depreciation(CareerSnapshot state,const GameState& rules) {
     capture_career_economy(state.world,p);
     const auto encoded=encode_world(state.world);check(decode_world(encoded)==state.world,"depreciation failed current schema roundtrip");
     auto old=cli::parse_json(std::string(encoded.begin(),encoded.end()));old.object()->at("version")=25;
+    for(auto& manager:std::get<cli::Json::Array>(old.object()->at("managers").value))if(manager.object()->at("career").object())manager.object()->at("career").object()->erase("camp_focus");
     auto text=cli::dump_json(old);rejects([&]{decode_world(Bytes(text.begin(),text.end()));},"schema25 silently discarded known depreciation");
     auto& managers=std::get<cli::Json::Array>(old.object()->at("economy").object()->at("managers").value);
     for(auto& manager:managers)manager.object()->erase("depreciation");

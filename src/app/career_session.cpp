@@ -6,6 +6,7 @@
 #include "formats/data_profile.hpp"
 #include "app/career_session.hpp"
 #include "app/preparation_actions.hpp"
+#include "app/training_camp_request_source.hpp"
 #include "app/bank_request_source.hpp"
 
 #include <stdexcept>
@@ -7521,55 +7522,7 @@ bool CareerSession::dispatch_training_camp(const ui::TrainingCampRequest& reques
                                           std::string& error) {
     if (balance_draft_ || balance_dispatch_active_ || strengths_owner_ || strengths_dispatch_active_ ||
         top_scorers_owner_ || top_scorers_dispatch_active_ || stadium_.block_expansion || other_games_owner_ || other_games_dispatch_active_) { error = "strengths_active"; return false; }
-    if (request.manager_slot < 0 || size_t(request.manager_slot) >= g_.manager_teams.size() ||
-        request.manager_slot != int(g_.memory.u8(::bmh::layout::ActiveManager)) ||
-        request.runtime_club != g_.manager_teams[size_t(request.manager_slot)] || request.revision != revision) {
-        error = "stale_manager_or_revision";
-        return false;
-    }
-    const size_t rec = size_t(request.manager_slot) * 0xb0c;
-    if (request.kind == ui::TrainingCampRequestKind::set_focus) {
-        const std::array<uint8_t, 4> current{
-            g_.manager_records.at(rec + 0xc1), g_.manager_records.at(rec + 0xc2),
-            g_.manager_records.at(rec + 0xc3), g_.manager_records.at(rec + 0xc4)};
-        if (request.focus == current) {
-            error = "focus_unchanged";
-            return false;
-        }
-        if (!set_training_camp_focus(g_, request.manager_slot, request.focus)) {
-            error = "invalid_focus_request";
-            return false;
-        }
-        ++revision;
-        return true;
-    }
-    if (request.kind == ui::TrainingCampRequestKind::book) {
-        if (request.resort < 0 || request.resort >= kTrainingCampResorts) {
-            error = "invalid_resort";
-            return false;
-        }
-        const std::array<uint8_t, 4> current{
-            g_.manager_records.at(rec + 0xc1), g_.manager_records.at(rec + 0xc2),
-            g_.manager_records.at(rec + 0xc3), g_.manager_records.at(rec + 0xc4)};
-        if (request.focus != current) {
-            error = "stale_focus";
-            return false;
-        }
-        switch (training_camp_booking_block(g_, request.manager_slot)) {
-        case TrainingCampBookingBlock::booked_this_week: error = "booked_this_week"; return false;
-        case TrainingCampBookingBlock::visit_limit: error = "visit_limit"; return false;
-        case TrainingCampBookingBlock::invalid_request: error = "invalid_request"; return false;
-        case TrainingCampBookingBlock::none: break;
-        }
-        if (!book_training_camp(g_, request.manager_slot, request.resort, rand_)) {
-            error = "insufficient_funds";
-            return false;
-        }
-        ++revision;
-        return true;
-    }
-    error = "unsupported_training_camp_request";
-    return false;
+    return apply_training_camp_request_source(g_,rand_,request,revision,error);
 }
 
 bool CareerSession::dispatch_bank(const ui::BankRequest& request, uint64_t& revision, std::string& error) {

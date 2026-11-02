@@ -28,6 +28,7 @@ void World::validate(bool complete)const {
     if(markets && (!players_initialized || markets->first_default_name>1))throw std::invalid_argument("world12: invalid career market state");
     if(settings && (!free_players || settings->mode<1 || settings->mode>3 || settings->difficulty>9 || settings->duration>5 || settings->planned_managers<1 || settings->planned_managers>4 || managers.size()>settings->planned_managers))throw std::invalid_argument("world12: invalid career settings");
     for(const auto& manager:managers)if(manager.career) {
+        if(manager.career->camp_focus&&std::any_of(manager.career->camp_focus->begin(),manager.career->camp_focus->end(),[](auto value){return value>15;}))throw std::invalid_argument("world12: camp focus outside 0..15");
         if(!settings)throw std::invalid_argument("world12: initial manager state requires career settings");
         if(manager.career->season_services){const auto& season=*manager.career->season_services;if(season.strength_history_count>38)throw std::invalid_argument("world12: invalid seasonal history cursor");if(manager.match_state&&manager.match_state->designated_takers)for(size_t b=8;b<12;++b)if(season.advertising_contracts[16][b])throw std::invalid_argument("world12: packed taker reference in sponsor backing");
             for(size_t i:{0u,14u,15u})for(size_t b:{0u,1u,2u,3u,5u})if(season.advertising_contracts[i][b])throw std::invalid_argument("world12: duplicate initial sponsor scalar encoding");}

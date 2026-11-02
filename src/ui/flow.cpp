@@ -711,13 +711,14 @@ void StartupFlow::show_world12_preparation(PreparationState state,int menu_kind)
     validate_preparation_context(state);
     if(state.desktop.managers!=desktop_->state().managers||state.desktop.options!=desktop_->state().options||state.desktop.manager_slot!=desktop_->state().manager_slot)throw FormatError("world12: preparation changed manager identity");
     auto desktop=std::make_unique<DesktopScreen>(data_,state.desktop,*world12_reference_);
-    std::unique_ptr<LineupScreen> lineup;std::unique_ptr<TacticsScreen> tactics;std::unique_ptr<TrainingScreen> training;std::unique_ptr<PitchScreen> pitch;std::unique_ptr<BankScreen> bank;
+    std::unique_ptr<LineupScreen> lineup;std::unique_ptr<TacticsScreen> tactics;std::unique_ptr<TrainingScreen> training;std::unique_ptr<PitchScreen> pitch;std::unique_ptr<BankScreen> bank;std::unique_ptr<TrainingCampScreen> camp;
     if(menu_kind==3){lineup=std::make_unique<LineupScreen>(data_,state.lineup,*world12_reference_);if(state.lineup.saved_display_flags&8){pitch=std::make_unique<PitchScreen>(data_,state.lineup,*state.pitch,*world12_reference_);lineup.reset();}}
     else if(menu_kind==18)tactics=std::make_unique<TacticsScreen>(data_,state.tactics,*world12_reference_);
     else if(menu_kind==16&&state.training)training=std::make_unique<TrainingScreen>(data_,*state.training,*world12_reference_);
     else if(menu_kind==14&&state.bank)bank=std::make_unique<BankScreen>(data_,*state.bank,*world12_reference_);
+    else if(menu_kind==15&&state.training_camp)camp=std::make_unique<TrainingCampScreen>(data_,*state.training_camp,*world12_reference_);
     else throw FormatError("world12: unsupported preparation menu");
-    preparation_=std::make_unique<PreparationState>(std::move(state));desktop_=std::move(desktop);lineup_=std::move(lineup);pitch_=std::move(pitch);tactics_=std::move(tactics);training_=std::move(training);bank_=std::move(bank);
+    preparation_=std::make_unique<PreparationState>(std::move(state));desktop_=std::move(desktop);lineup_=std::move(lineup);pitch_=std::move(pitch);tactics_=std::move(tactics);training_=std::move(training);bank_=std::move(bank);training_camp_=std::move(camp);
 }
 
 void StartupFlow::open_world12_file_dialog(SaveLoadMode mode,const LeImage& reference,SaveLoadInfoReader reader) {

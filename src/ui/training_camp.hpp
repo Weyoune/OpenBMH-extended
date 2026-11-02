@@ -24,6 +24,7 @@ struct TrainingCampState {
     std::string club_name;
     std::string manager_name;
     uint16_t badge = 0;
+    std::string badge_atlas;
     uint8_t portrait = 0;
     std::array<uint8_t, 4> focus{};
     bool focus_normalization_required = false;
@@ -60,6 +61,7 @@ std::string training_camp_request_json(const TrainingCampRequest&);
 class TrainingCampScreen {
 public:
     TrainingCampScreen(const std::filesystem::path& data, TrainingCampState state);
+    TrainingCampScreen(const std::filesystem::path& data, TrainingCampState state,const LeImage& reference);
     Image render() const;
     TrainingCampRequest click(int x, int y, bool right = false);
     TrainingCampRequest key(std::string_view key);

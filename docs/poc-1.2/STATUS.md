@@ -54,6 +54,14 @@ claim that the GUI now completes the whole career. The human national preparatio
 desk, general scheduled match/competition ownership and seasonal progression
 remain release work.
 
+## Training camps
+
+The Original eight-resort map and focus sliders now have a typed action owner.
+Core immediate player/morale/board effects, charges, visit limits and W seed are
+retained together; schema27 stores the actual four focus bytes and preserves old
+unknown state. Real single/mixed GUI-input tests cover booking and guarded
+reentry. See [training camps](TRAINING_CAMP.md).
+
 
 Completed foundation:
 

@@ -81,6 +81,22 @@ int main()try {
     const auto poached=mixed.clubs.at(mixed.membership[10].clubs[0]).roster[0].player;history.world.managers[0].career->poach_attempts[0]=poached;
     auto projected=AiMatchProjection::create_for_humans(history,{mixed.managers[0].club},ref,{1,6,false,true});
     auto updated=history.world;projected.commit_match_state(updated);check(updated==history.world,"human projection lost initial facilities/environment or poaching reference");
+    {
+        auto focused=history;focused.world.managers[0].career->camp_focus=std::array<uint8_t,4>{3,6,9,9};
+        auto workspace=AiMatchProjection::create_for_humans(focused,{focused.world.managers[0].club},ref,{1,6,false,true});
+        for(size_t i=0;i<4;++i)check(workspace.state.manager_records[0xc1+i]==(*focused.world.managers[0].career->camp_focus)[i],"camp focus did not install in its actual manager record");
+        workspace.commit_match_state(focused.world);
+        check(decode_world(encode_world(focused.world))==focused.world,"nonzero camp focus failed current codec/projection roundtrip");
+        auto invalid=focused.world;(*invalid.managers[0].career->camp_focus)[0]=16;
+        rejects([&]{encode_world(invalid);},"invalid camp focus byte accepted");
+        const auto bytes=encode_world(focused.world);auto old=cli::parse_json(std::string(bytes.begin(),bytes.end()));old.object()->at("version")=26;
+        auto text=cli::dump_json(old);rejects([&]{decode_world(Bytes(text.begin(),text.end()));},"schema26 silently discarded saved camp focus");
+        for(auto& manager:std::get<cli::Json::Array>(old.object()->at("managers").value))manager.object()->at("career").object()->erase("camp_focus");
+        text=cli::dump_json(old);focused.world=decode_world(Bytes(text.begin(),text.end()));
+        check(!focused.world.managers[0].career->camp_focus,"schema26 invented known camp preferences");
+        auto unknown=AiMatchProjection::create_for_humans(focused,{focused.world.managers[0].club},ref,{1,6,false,true});unknown.commit_match_state(focused.world);
+        check(!focused.world.managers[0].career->camp_focus,"ordinary projection initialized unknown old camp preferences");
+    }
     auto changed_settings=history.world;++changed_settings.settings->difficulty;const auto changed_before=changed_settings;
     rejects([&]{projected.commit_match_state(changed_settings);},"projection ignored external career policy change");check(changed_settings==changed_before,"projection overwrote changed career policy");
     rejects([&]{AiMatchProjection::create_for_humans(history,{mixed.managers[0].club},ref,{3,6,false,true});},"human projection ignored persisted career policy");

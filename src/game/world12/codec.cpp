@@ -242,13 +242,15 @@ J encode_manager_career(const std::optional<ManagerCareerState>& input) {
     for(auto value:m.environment.monthly)budgets.emplace_back(J(int64_t(value)));
     for(const auto& c:m.sponsors)sponsors.emplace_back(O{{"amount",id(c.amount)},{"months",int(c.months)}});
     for(auto player:m.poach_attempts)attempts.push_back(player.valid()?id(player.value):J(nullptr));
-    return O{{"stadium",O{{"facility_values",bytes(m.stadium.facility_values)},{"stand_condition",bytes(m.stadium.stand_condition)},{"facility_levels",bytes(m.stadium.facility_levels)},{"stand_capacity",bytes(m.stadium.stand_capacity)},{"capacity_sum",int(m.stadium.capacity_sum)}}},
+    return O{{"camp_focus",m.camp_focus?J(bytes(*m.camp_focus)):J(nullptr)},{"stadium",O{{"facility_values",bytes(m.stadium.facility_values)},{"stand_condition",bytes(m.stadium.stand_condition)},{"facility_levels",bytes(m.stadium.facility_levels)},{"stand_capacity",bytes(m.stadium.stand_capacity)},{"capacity_sum",int(m.stadium.capacity_sum)}}},
         {"environment",O{{"youth",std::move(youth)},{"monthly",std::move(budgets)}}},{"sponsors",std::move(sponsors)},{"board_patience",int(m.board_patience)},{"training_plan",int(m.training_plan)},{"transfer_filters",bytes(m.transfer_filters)},{"poach_attempts",std::move(attempts)},{"season_services",encode_season_services(m.season_services)},{"season_records",m.season_records?J(bytes(*m.season_records)):J(nullptr)}};
 }
 std::optional<ManagerCareerState> decode_manager_career(const J& input,uint32_t version) {
     if(std::holds_alternative<std::nullptr_t>(input.value))return {};
     ManagerCareerState m;const auto& stadium=field(input,"stadium");
     const auto bytes=[](const J& object,const char* name,auto& output){const auto& values=array(field(object,name));if(values.size()!=output.size())throw FormatError("world12: invalid manager career dimensions");for(size_t i=0;i<values.size();++i)output[i]=uint8_t(number(values[i],255));};
+    if(version>=27){const auto& value=field(input,"camp_focus");if(value.array()){if(value.array()->size()!=4)throw FormatError("world12: invalid camp focus count");m.camp_focus.emplace();for(size_t i=0;i<4;++i)(*m.camp_focus)[i]=uint8_t(number(value.array()->at(i),15));}else if(!std::holds_alternative<std::nullptr_t>(value.value))throw FormatError("world12: invalid camp focus");}
+    else if(const auto found=input.object()->find("camp_focus");found!=input.object()->end()&&!std::holds_alternative<std::nullptr_t>(found->second.value))throw FormatError("world12: older schema cannot restore camp focus");
     bytes(stadium,"facility_values",m.stadium.facility_values);bytes(stadium,"stand_condition",m.stadium.stand_condition);bytes(stadium,"facility_levels",m.stadium.facility_levels);bytes(stadium,"stand_capacity",m.stadium.stand_capacity);
     m.stadium.capacity_sum=uint8_t(number(field(stadium,"capacity_sum"),255));
     const auto& environment=field(input,"environment");const auto& youth=array(field(environment,"youth"));const auto& budgets=array(field(environment,"monthly"));const auto& sponsors=array(field(input,"sponsors"));const auto& attempts=array(field(input,"poach_attempts"));

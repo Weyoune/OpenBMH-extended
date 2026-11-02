@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "formats/executable_layout.hpp"
+#include "formats/badge_policy.hpp"
 #include "ui/training_camp.hpp"
 
 #include <algorithm>
@@ -149,13 +150,16 @@ std::string training_camp_request_json(const TrainingCampRequest& r) {
 }
 
 TrainingCampScreen::TrainingCampScreen(const std::filesystem::path& data, TrainingCampState state)
-    : state_(std::move(state)), exe_(load_le(asset_path(data, "BMH.exe"))), texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
+    : TrainingCampScreen(data,std::move(state),load_le(asset_path(data,"BMH.exe"))) {}
+TrainingCampScreen::TrainingCampScreen(const std::filesystem::path& data, TrainingCampState state,const LeImage& reference)
+    : state_(std::move(state)), exe_(reference), texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
       background_(load_vga(asset_path(data / "KB", "129.VGA"))), map_(load_vga(asset_path(data / "KB", "12.VGA"))),
       resorts_one_(load_vga(asset_path(data / "KB", "8.VGA"))), resorts_two_(load_vga(asset_path(data / "KB", "9.VGA"))),
       widgets_(load_vga(asset_path(data / "KB", "52.VGA"))), buttons_(load_vga(asset_path(data / "KB", "0.VGA"))),
       letters_(load_vga(asset_path(data / "KB", "54.VGA"))), portraits_(load_vga(asset_path(data / "KB", "26.VGA"))),
-      badge_(load_vga(asset_path(data / "W", std::to_string(state_.badge >> 3) + ".VGA"))),
-      small_(load_font(asset_path(data / "F", "BMH3.FNT"))), large_(load_font(asset_path(data / "F", "BMH2.FNT"))), sprite_font_(data) {
+      badge_(load_vga(state_.badge_atlas.empty()?asset_path(data / "W", std::to_string(state_.badge >> 3) + ".VGA"):asset_path(data,state_.badge_atlas))),
+      small_(load_font(asset_path(data / "F", "BMH3.FNT"))), large_(load_font(asset_path(data / "F", "BMH2.FNT"))), sprite_font_(data,reference) {
+    install_original_badge_policy(exe_);
     if (state_.manager_slot < 0 || state_.manager_slot > 3 || state_.runtime_club < 0 ||
         state_.manager_name.empty() || state_.portrait > 11 || state_.badge > 0x1ff ||
         state_.source.empty() || background_.width != 320 || background_.height != 240 ||
@@ -373,7 +377,7 @@ bool TrainingCampScreen::move(int x, int y) {
 
 void TrainingCampScreen::acknowledge(TrainingCampState state) {
     if (!pending_ || state.revision <= state_.revision || state.manager_slot != state_.manager_slot ||
-        state.runtime_club != state_.runtime_club || state.source != "engine_projection")
+        state.runtime_club != state_.runtime_club || state.source != state_.source)
         throw FormatError("training camp acknowledgement: stale or mismatched projection");
     for (uint8_t focus : state.focus) if (focus > 15) throw FormatError("training camp acknowledgement: focus outside 0..15");
     const auto answered = pending_->kind;
