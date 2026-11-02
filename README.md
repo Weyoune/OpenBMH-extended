@@ -110,3 +110,5 @@ Game-data tests are optional: add `-DBMH_DATA="path/to/game"` when configuring t
 
 Report Extended issues in this repository. Never attach original game files or
 unredacted saved games to a public issue.
+
+The supplied project start artwork is embedded at native resolution; see [start-screen artwork](docs/START_SCREEN.md). It replaces the original title image while the game continues to use your own original data and assets.

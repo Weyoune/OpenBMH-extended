@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import json
+import hashlib
 from pathlib import Path, PurePosixPath
 import re
 import shutil
@@ -28,6 +29,10 @@ ASSET_SUFFIXES = {
     ".avi", ".mov", ".mp4", ".png", ".jpg", ".jpeg", ".bmp", ".gif",
     ".bin", ".zip", ".7z", ".dmg", ".tar", ".gz", ".pdf",
 }
+# Newly supplied project artwork and an unchanged MIT/public-domain decoder.
+# Exact hashes keep this exception from admitting original-game asset dumps.
+REVIEWED_BINARY_FILES = {"assets/start-screen.jpg": "8552d54d2381686f879129fffbfbae5e8d07fd50a740fb497ffd42ce9fdc93b8"}
+REVIEWED_UPSTREAM_FILES = {"src/app/third_party/stb_image.h": "594c2fe35d49488b4382dbfaec8f98366defca819d916ac95becf3e75f4200b3"}
 PRIVATE_PREFIXES = (
     ("data", "original"), ("docs", "manuals"), ("docs", "analyses"),
     ("docs", "agents"), ("src", "ui", "validation"),
@@ -166,6 +171,11 @@ def path_findings(name: str) -> list[Finding]:
 
 
 def scan_blob(name: str, blob: bytes) -> list[Finding]:
+    reviewed = REVIEWED_BINARY_FILES | REVIEWED_UPSTREAM_FILES
+    if name in reviewed:
+        if hashlib.sha256(blob).hexdigest() == reviewed[name]:
+            return []
+        return [Finding(name, 0, "modified-reviewed-project-file")]
     result = path_findings(name)
     if len(blob) > 2_000_000:
         result.append(Finding(name, 0, "oversized-source-file"))
