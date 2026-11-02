@@ -6,7 +6,7 @@
 #include <limits>
 namespace bmh::app::world12 {
 StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,std::unique_ptr<Session>& session,
-    const std::filesystem::path& data,uint32_t seed,uint64_t scope,const PendingOfferHooks& hooks,const StartupTurnHooks* turn,const AdvertisingRenewalPresenter& advertising)try {
+    const std::filesystem::path& data,uint32_t seed,uint64_t scope,const PendingOfferHooks& hooks,const StartupTurnHooks* turn,const AdvertisingRenewalPresenter& advertising,const ConstructionNoticeHook& construction,const SeasonTicketCompensationNoticeHook& compensation)try {
     if(action.request==ui::FlowRequest::load_game){
         if(session)throw FormatError("world12: setup load cannot replace an active startup session");
         const auto resources=load_runtime_resources(data);flow.open_world12_file_dialog(ui::SaveLoadMode::load,resources.german,save_info_reader(resources.german));return {};
@@ -76,6 +76,10 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
             auto staged=std::make_unique<Session>(*session);auto view=staged->open_environment(action.desk_action,data);
             auto parent=staged->preparation_view(data);flow.show_environment(std::move(view),action.desk_action,std::move(parent));session.swap(staged);return {};
         }
+        if(action.desk_action.kind==ui::DeskRequestKind::open_menu&&action.desk_action.menu_kind==22){
+            auto staged=std::make_unique<Session>(*session);staged->open_stadium(action.desk_action,data);
+            flow.show_world12_preparation(staged->preparation_view(data),22);session.swap(staged);return {};
+        }
         if(action.desk_action.kind==ui::DeskRequestKind::open_menu&&action.desk_action.menu_kind==21){
             auto staged=std::make_unique<Session>(*session);auto view=staged->open_advertising(action.desk_action,data);auto parent=staged->preparation_view(data);
             flow.show_advertising(std::move(view),std::move(parent));session.swap(staged);return {};
@@ -93,10 +97,19 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
     }
     if(action.request==ui::FlowRequest::submenu_action){
         if(!session||!flow.matches_pending_preparation(action.submenu_action))throw FormatError("world12: preparation command has no matching view owner");
+        const auto* original=session.get();const auto revision=session->revision();std::optional<bmh::world12::CareerSnapshot> before;
+        std::optional<ui::StadiumState> stadium_owner;if(std::holds_alternative<ui::StadiumRequest>(action.submenu_action)){before=session->snapshot();stadium_owner=session->stadium_view(data);}
         auto staged=std::make_unique<Session>(*session);
         if(const auto* bank=std::get_if<ui::BankRequest>(&action.submenu_action))staged->apply_bank(data,*bank);
+        else if(const auto* stadium=std::get_if<ui::StadiumRequest>(&action.submenu_action))staged->apply_stadium(data,*stadium,construction,compensation);
         else staged->apply_preparation(action.submenu_action);
-        auto view=staged->preparation_view(data);flow.acknowledge_preparation(std::move(view));session.swap(staged);return {};
+        if(stadium_owner) {
+            if(session.get()!=original||session->revision()!=revision||session->snapshot()!=*before||!flow.matches_pending_preparation(action.submenu_action))
+                throw FormatError("world12: construction presenter changed its live owner");
+            const auto current=session->stadium_view(data);if(current.scope!=stadium_owner->scope||current.sequence!=stadium_owner->sequence)
+                throw FormatError("world12: construction presenter changed its stadium window");
+        }
+        auto view=staged->preparation_view(data);flow.acknowledge_preparation(std::move(view));if(!flow.in_preparation_menu())staged->close_preparation();session.swap(staged);return {};
     }
     if(action.request==ui::FlowRequest::environment_action){
         if(!session||!flow.pending_environment()||*flow.pending_environment()!=action.environment_action)

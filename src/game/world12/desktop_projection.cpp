@@ -10,6 +10,7 @@ AiMatchProjection project_manager_desktop(const CareerSnapshot& state,const Game
     for(auto id:extra_clubs)if(std::find(clubs.begin(),clubs.end(),id)==clubs.end())clubs.push_back(id);
     const auto settings=*state.world.settings;auto projection=AiMatchProjection::create_for_desktop(state,clubs,reference,{settings.mode,settings.difficulty,settings.foreign_rule,true});
     auto& local=projection.state;local.season=int(state.season);
+    if(state.world.transfer_market){local.memory.add_block(layout::CareerSession_Invalid_RuntimeField2,4);local.memory.set32(layout::CareerSession_Invalid_RuntimeField2,uint32_t(state.world.transfer_market->checkpoint_game_seed));}
     local.memory.add_block(layout::CompetitionSelection,4);local.memory.set32(layout::CompetitionSelection,1|(state.world.catalogue.scope.international?2:0));
     for(size_t i=0;i<projection.human_managers();++i){const auto seat=projection.global_manager(uint8_t(i));
         const auto& desk=*std::find_if(state.desktop->managers.begin(),state.desktop->managers.end(),[&](const auto& d){return d.seat==seat;});

@@ -596,7 +596,9 @@ std::string stadium_request_json(const StadiumRequest& r) {
 }
 
 StadiumScreen::StadiumScreen(const std::filesystem::path& data, StadiumState state)
-    : state_(std::move(state)), data_(data), exe_(load_le(asset_path(data, "BMH.exe"))),
+    : StadiumScreen(data,std::move(state),load_le(asset_path(data,"BMH.exe"))) {}
+StadiumScreen::StadiumScreen(const std::filesystem::path& data,StadiumState state,const LeImage& reference)
+    : state_(std::move(state)), data_(data), exe_(reference),
       texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
       background_(load_vga(asset_path(data / "KB", "35.VGA"))),
       header_background_(load_vga(asset_path(data / "KB", "129.VGA"))),
@@ -607,7 +609,7 @@ StadiumScreen::StadiumScreen(const std::filesystem::path& data, StadiumState sta
       widgets_(load_vga(asset_path(data / "KB", "0.VGA"))),
       calculator_art_(load_vga(asset_path(data / "KB", "6.VGA"))),
       font_(load_font(asset_path(data / "F", "BMH3.FNT"))),
-      heading_font_(load_font(asset_path(data / "F", "BMH2.FNT"))), sprite_font_(data) {
+      heading_font_(load_font(asset_path(data / "F", "BMH2.FNT"))), sprite_font_(data,reference) {
     if (background_.width <= 0 || header_background_.width <= 0 || interior_.width <= 0 || facilities_.width <= 0 ||
         panel_.width <= 0 || calculator_art_.width < 113 || calculator_art_.height < 150 || state_.manager_slot < 0)
         throw FormatError("stadium: unsupported scene or invalid manager");
@@ -694,7 +696,7 @@ void StadiumScreen::rebuild_tip_dialog() {
     periphery_dialog_.reset();
     if (state_.periphery_quote_dialog) {
         GameEndRenderOptions options{state_.plain_background, state_.gradient_text, true};
-        periphery_dialog_.emplace(data_, *state_.periphery_quote_dialog, options, render_scene());
+        periphery_dialog_.emplace(data_, *state_.periphery_quote_dialog, options, render_scene(),exe_);
     }
     if (state_.construction_tip_dialog) {
         GameEndRenderOptions options;
@@ -703,7 +705,7 @@ void StadiumScreen::rebuild_tip_dialog() {
         if (state_.block_expansion) options.plain_background = state_.plain_background;
         tip_dialog_.emplace(data_, *state_.construction_tip_dialog,
             options, state_.block_expansion
-                ? render_block_expansion(render_scene()) : render_investment_dialog(render_scene()));
+                ? render_block_expansion(render_scene()) : render_investment_dialog(render_scene()),exe_);
     }
 }
 
@@ -871,7 +873,7 @@ void StadiumScreen::render_panorama(Image& out) const {
         text_at(out, 155 - font_.text_width(remaining), 45, remaining, 0x5f);
     } else {
         int baseline = 37;
-        for (const auto& line : wrap_source_text(data_, title, 129)) {
+        for (const auto& line : wrap_source_text(font_, exe_, title, 129)) {
             text_at(out, 26, baseline, line, 0x27); baseline += font_.height;
         }
         for (unsigned line = 0; line < 3; ++line) {
@@ -2027,10 +2029,10 @@ void StadiumScreen::acknowledge(StadiumState updated) {
     std::optional<GameEndTaxDialog> staged_tip, staged_periphery;
     if (updated.periphery_quote_dialog) {
         const GameEndRenderOptions options{updated.plain_background, updated.gradient_text, true};
-        staged_periphery.emplace(data_, *updated.periphery_quote_dialog, options, render_scene());
+        staged_periphery.emplace(data_, *updated.periphery_quote_dialog, options, render_scene(),exe_);
     }
     if (updated.construction_tip_dialog) {
-        StadiumScreen staged_screen(data_, updated);
+        StadiumScreen staged_screen(data_, updated,exe_);
         staged_tip = std::move(staged_screen.tip_dialog_);
     }
     pressed_ = Pressed::none; pressed_index_ = -1; pressed_x_ = pressed_y_ = -1;

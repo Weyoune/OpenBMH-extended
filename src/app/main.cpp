@@ -1753,7 +1753,23 @@ int main(int argc, char** argv) {
                         return Answer::acknowledged;
                     return Answer::abort;
                 };
-                const auto result=app::world12::serve_startup(flow,r,world_session,data,seed,1,r.request==ui::FlowRequest::kickoff?make_pending_offer_hooks(flow.render()):PendingOfferHooks{},nullptr,advertising);
+                const ConstructionNoticeHook construction=[&](const GameState& staged,const ConstructionNotice& notice) {
+                    if(!flow.stadium())throw FormatError("construction notice has no stadium owner");
+                    const auto& owner=flow.stadium()->state();auto view=ui::construction_notice_dialog(staged,season_exe,notice);
+                    view.compact_dialog_frame=owner.compact_dialog_frame;
+                    if(present_pending_dialog(staged,std::move(view),flow.stadium()->construction_notice_backdrop(),"OpenBMH - construction_notice",
+                        ui::GameEndRenderOptions{owner.plain_background,owner.gradient_text,true})==PendingOfferAnswer::unsupported)
+                        throw FormatError("construction notice presenter stopped");
+                };
+                const SeasonTicketCompensationNoticeHook compensation=[&](const GameState& staged,const SeasonTicketCompensationNotice& notice) {
+                    if(!flow.stadium())throw FormatError("compensation notice has no stadium owner");
+                    const auto& owner=flow.stadium()->state();auto view=ui::season_ticket_compensation_notice_dialog(staged,season_exe,notice);
+                    view.compact_dialog_frame=owner.compact_dialog_frame;
+                    if(present_pending_dialog(staged,std::move(view),flow.stadium()->construction_notice_backdrop(),"OpenBMH - stadium_ticket_compensation_notice",
+                        ui::GameEndRenderOptions{owner.plain_background,owner.gradient_text,true})==PendingOfferAnswer::unsupported)
+                        throw FormatError("compensation notice presenter stopped");
+                };
+                const auto result=app::world12::serve_startup(flow,r,world_session,data,seed,1,r.request==ui::FlowRequest::kickoff?make_pending_offer_hooks(flow.render()):PendingOfferHooks{},nullptr,advertising,construction,compensation);
                 if(!result.error.empty())std::fprintf(stderr,"world12: %s\n",result.error.c_str());
                 dirty=true;return;
             }

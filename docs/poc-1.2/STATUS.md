@@ -584,3 +584,13 @@ now have typed Original GUI/action ownership. Visible renewal/decline/refusal
 dialogs stage Core sponsor and mailbox effects and retain cancellation/reentry
 guards. Schema28 saves the actual global advertising-bundle counter rather than
 restarting it in each projection. See [advertising scope](ADVERTISING.md).
+
+## Stadium
+
+The Original A–H, investment, periphery and stadium-data screens now have a typed
+owner and share the complete Native request/projection path. Construction,
+acceleration, sponsor notices and season-ticket compensation stage Core effects
+and both random streams before GUI acknowledgement. Schema29 retains curve
+preferences; the existing global random checkpoint feeds the Source workspace.
+See [stadium ownership and validation](STADIUM.md). General live/calendar,
+remaining management views and annual release gates are still open.

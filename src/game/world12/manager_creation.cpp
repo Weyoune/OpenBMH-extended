@@ -19,6 +19,8 @@ void put32(Bytes& data,size_t at,uint32_t n){for(size_t i=0;i<4;++i)data.at(at+i
 ManagerCareerState manager_career_state_from_legacy(const GameState& state,uint8_t seat,const std::vector<PlayerId>& players,bool season_services,const ManagerCareerState* previous) {
     const auto at=record(state,seat);ManagerCareerState result;
     const auto copy=[&](size_t offset,auto& output){std::copy_n(state.manager_records.begin()+at+offset,output.size(),output.begin());};
+    const auto flags=layout::Flags+uint32_t(seat)*3+1;
+    if((!previous||previous->stadium_curve_flags)&&state.memory.has(flags))result.stadium_curve_flags=state.memory.u8(flags);
     if(!previous||previous->camp_focus){result.camp_focus.emplace();copy(0xc1,*result.camp_focus);}
     copy(0,result.stadium.facility_values);copy(0x16,result.stadium.stand_condition);copy(0x3c,result.stadium.facility_levels);copy(0x4c,result.stadium.stand_capacity);
     result.stadium.capacity_sum=state.manager_records.at(at+0x5c);
@@ -44,8 +46,11 @@ ManagerCareerState manager_career_state_from_legacy(const GameState& state,uint8
     return result;
 }
 void install_manager_career_state(GameState& state,uint8_t seat,const ManagerCareerState& input,const std::vector<PlayerId>& players) {
-    const auto at=record(state,seat);std::array<uint16_t,5> attempts;attempts.fill(0xffff);
+    const auto at=record(state,seat);
+    std::array<uint16_t,5> attempts;attempts.fill(0xffff);
     for(size_t i=0;i<5;++i)if(input.poach_attempts[i].valid()){const auto found=std::find(players.begin(),players.end(),input.poach_attempts[i]);if(found==players.end()||found-players.begin()>=4095)throw std::invalid_argument("world12: unmapped poaching attempt");attempts[i]=uint16_t(found-players.begin());}
+    const auto flags=layout::Flags+uint32_t(seat)*3+1;
+    if(input.stadium_curve_flags){state.memory.add_block(flags,1);state.memory.set8(flags,*input.stadium_curve_flags);}
     const auto copy=[&](size_t offset,const auto& values){std::copy(values.begin(),values.end(),state.manager_records.begin()+at+offset);};
     if(input.camp_focus)copy(0xc1,*input.camp_focus);
     copy(0,input.stadium.facility_values);copy(0x16,input.stadium.stand_condition);copy(0x3c,input.stadium.facility_levels);copy(0x4c,input.stadium.stand_capacity);

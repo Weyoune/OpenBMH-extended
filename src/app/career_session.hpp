@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "formats/executable_layout.hpp"
 #pragma once
+#include "app/stadium_source_types.hpp"
 // The engine side of the UI's career handoff (src/ui/flow.hpp, ENGINE_BINDING.md).
 //
 // The original starts a career at program start (game/career.hpp): the data files are
@@ -562,29 +563,7 @@ public:
     bool dispatch_stadium(const ui::StadiumRequest&, uint64_t& revision, std::string& error,
                           const ConstructionNoticeHook& notice_presenter = {},
                           const SeasonTicketCompensationNoticeHook& compensation_presenter = {});
-    struct StadiumRuntime {
-        struct BlockExpansion {
-            StadiumBlockExpansionQuote quote;
-            uint32_t total_target_places = 0;
-            uint8_t desired_features = 0;
-            int header_text_variant = -1;
-            std::optional<StandBlockOffer> tip;
-        };
-        bool opened = false;
-        bool data_open = false;
-        uint8_t data_flags = 0x40;
-        int manager = -1, club = -1, stable_club = -1, mode = -1;
-        uint64_t scope = 0, sequence = 0, revision = 0;
-        int price_percent = 100;
-        std::optional<std::pair<int, int32_t>> periphery_quote;
-        std::optional<StadiumInvestment> investment;
-        std::optional<uint8_t> selection_status;
-        int option_index = -1, text_variant = -1;
-        std::optional<StadiumInvestmentOption> option;
-        std::optional<StandBlockOffer> tip;
-        std::optional<BlockExpansion> block_expansion;
-        std::string feedback;
-    };
+    using StadiumRuntime=StadiumSourceRuntime;
     struct StadiumCheckpoint {
         GameState state;
         WatcomRandom rand;

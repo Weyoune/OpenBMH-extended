@@ -171,6 +171,7 @@ std::string stadium_request_json(const StadiumRequest&);
 class StadiumScreen {
 public:
     StadiumScreen(const std::filesystem::path&, StadiumState);
+    StadiumScreen(const std::filesystem::path&, StadiumState,const LeImage& reference);
     StadiumRequest initialize();
     Image render() const;
     // Pure underlay for the nested Source construction notices. This includes

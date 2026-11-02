@@ -1,7 +1,8 @@
 # Economic state, daily interest and weekly settlement
 
 World schema **16** added an optional career economy. The current writer uses
-schema28, including the [advertising bundle counter](ADVERTISING.md). Schema17
+schema29, including [stadium curve preferences](STADIUM.md) and the earlier
+[advertising bundle counter](ADVERTISING.md). Schema17
 added planned stand targets/flags and the submitted plan; schema1–16 source packs and
 older development snapshots remain readable; no missing account fields are
 silently inferred when running an economic phase. S9 remains the outer typed save

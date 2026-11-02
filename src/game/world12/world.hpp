@@ -126,6 +126,7 @@ struct ManagerSeasonServices {
     bool operator==(const ManagerSeasonServices&)const=default;
 };
 struct ManagerCareerState {
+    std::optional<uint8_t> stadium_curve_flags; // Source Flags byte 1, unknown in older worlds.
     std::optional<std::array<uint8_t,4>> camp_focus;
     ManagerStadium stadium;
     ManagerEnvironment environment;

@@ -90,12 +90,26 @@ int main()try {
         auto invalid=focused.world;(*invalid.managers[0].career->camp_focus)[0]=16;
         rejects([&]{encode_world(invalid);},"invalid camp focus byte accepted");
         const auto bytes=encode_world(focused.world);auto old=cli::parse_json(std::string(bytes.begin(),bytes.end()));old.object()->at("version")=26;
+        for(auto& manager:std::get<cli::Json::Array>(old.object()->at("managers").value)){auto* career=manager.object()->at("career").object();career->erase("stadium_curve_flags");}
         auto text=cli::dump_json(old);rejects([&]{decode_world(Bytes(text.begin(),text.end()));},"schema26 silently discarded saved camp focus");
         for(auto& manager:std::get<cli::Json::Array>(old.object()->at("managers").value))manager.object()->at("career").object()->erase("camp_focus");
         text=cli::dump_json(old);focused.world=decode_world(Bytes(text.begin(),text.end()));
         check(!focused.world.managers[0].career->camp_focus,"schema26 invented known camp preferences");
         auto unknown=AiMatchProjection::create_for_humans(focused,{focused.world.managers[0].club},ref,{1,6,false,true});unknown.commit_match_state(focused.world);
         check(!focused.world.managers[0].career->camp_focus,"ordinary projection initialized unknown old camp preferences");
+    }
+    {
+        auto extended=history;auto& career=*extended.world.managers[0].career;career.stadium_curve_flags=0x9f;extended.world.managers[0].match_state->staff_ratings[5]=uint16_t(int16_t(-120));
+        auto p=AiMatchProjection::create_for_humans(extended,{extended.world.managers[0].club},ref,{1,6,false,true});
+        check(p.state.memory.u8(layout::Flags+1)==0x9f&&uint16_t(p.state.manager_records[0x8b4]|uint16_t(p.state.manager_records[0x8b5])<<8)==uint16_t(int16_t(-120)),"stadium curve flags/discount input lost canonical seat or signed word");
+        p.state.memory.set8(layout::Flags+1,0x25);p.state.manager_records[0x8b4]=0x40;p.state.manager_records[0x8b5]=6;p.commit_match_state(extended.world);
+        check(extended.world.managers[0].career->stadium_curve_flags==0x25&&extended.world.managers[0].match_state->staff_ratings[5]==1600&&decode_world(encode_world(extended.world))==extended.world,"stadium preferences/discount failed capture and codec roundtrip");
+        const auto bytes=encode_world(extended.world);auto old=cli::parse_json(std::string(bytes.begin(),bytes.end()));old.object()->at("version")=28;auto text=cli::dump_json(old);
+        rejects([&]{decode_world(Bytes(text.begin(),text.end()));},"schema28 silently discarded known stadium preferences");
+        for(auto& manager:std::get<cli::Json::Array>(old.object()->at("managers").value)){auto* c=manager.object()->at("career").object();c->erase("stadium_curve_flags");}
+        text=cli::dump_json(old);extended.world=decode_world(Bytes(text.begin(),text.end()));
+        auto unknown=AiMatchProjection::create_for_humans(extended,{extended.world.managers[0].club},ref,{1,6,false,true});unknown.commit_match_state(extended.world);
+        check(!extended.world.managers[0].career->stadium_curve_flags,"ordinary projection invented older stadium preferences/discount input");
     }
     auto changed_settings=history.world;++changed_settings.settings->difficulty;const auto changed_before=changed_settings;
     rejects([&]{projected.commit_match_state(changed_settings);},"projection ignored external career policy change");check(changed_settings==changed_before,"projection overwrote changed career policy");

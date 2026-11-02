@@ -9,6 +9,8 @@
 #include "app/world12_attendance.hpp"
 #include "app/world12_event.hpp"
 #include "app/contract_source_types.hpp"
+#include "app/stadium_source_types.hpp"
+#include "ui/stadium.hpp"
 #include "app/world12_advertising.hpp"
 #include "ui/advertising.hpp"
 #include "formats/le.hpp"
@@ -75,6 +77,9 @@ public:
     ui::ContractsState contracts_view(const std::filesystem::path& data)const;
     ui::ContractActionResult apply_contract(const std::filesystem::path& data,const ui::ContractRequest&);
     void close_contracts();
+    void open_stadium(const ui::DeskRequest&,const std::filesystem::path& data);
+    ui::StadiumState stadium_view(const std::filesystem::path& data)const;
+    void apply_stadium(const std::filesystem::path& data,const ui::StadiumRequest&,const ConstructionNoticeHook& notice={},const SeasonTicketCompensationNoticeHook& compensation={});
     ui::AdvertisingState open_advertising(const ui::DeskRequest&,const std::filesystem::path& data);
     ui::AdvertisingState advertising_view(const std::filesystem::path& data)const;
     AdvertisingSpendingResult apply_advertising(const std::filesystem::path& data,const ui::AdvertisingRequest&,const AdvertisingRenewalPresenter& presenter={});
@@ -110,5 +115,7 @@ private:
     std::optional<uint8_t> contract_seat_;
     uint64_t contract_generation_=0,contract_request_=0,next_contract_quote_=1;
     uint64_t advertising_generation_=0,advertising_request_=0;
+    StadiumSourceRuntime stadium_;
+    uint64_t next_stadium_scope_=1;
 };
 }

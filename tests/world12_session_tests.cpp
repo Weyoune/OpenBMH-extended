@@ -672,6 +672,124 @@ void actual_advertising_renewals(const std::filesystem::path& data,const CareerS
     }
     std::cout<<"Actual advertising renewal GUI: renew, manager decline, sponsor refusal/mail, cancelled/missing/reentrant presenter rollback, canonical crest and saved Core effects passed\n";
 }
+void actual_stadium(ui::StartupFlow& flow,std::unique_ptr<session_app::Session>& session,const std::filesystem::path& data,const std::filesystem::path& output) {
+    const auto initial=session->snapshot();const auto actor=*initial.desktop->active_seat;
+    ConstructionNoticeHook construction;SeasonTicketCompensationNoticeHook compensation;int notices=0;
+    const auto send=[&](const ui::FlowResult& action){const auto result=session_app::serve_startup(flow,action,session,data,91,session->scope(),{},nullptr,{},construction,compensation);if(!result.error.empty())throw std::runtime_error("stadium GUI: "+result.error);};
+    const auto click=[&](int x,int y){send(flow.pointer_down(x,y));const auto action=flow.click(x,y);send(action);return action;};
+    const auto capture=[&](const char* name){if(output.empty())return;std::filesystem::create_directories(output);const auto frame=flow.render();const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));std::ofstream image(output/(std::string(name)+".ppm"),std::ios::binary);image<<"P6\n320 240\n255\n";for(auto pixel:frame.pixels){const auto color=palette.argb[pixel];image.put(char(color>>16));image.put(char(color>>8));image.put(char(color));}write_savegame(output/(std::string(name)+".FBM"),make_save(session->snapshot()));};
+    const auto verify=[&](const CareerSnapshot& before,auto& expected,const WatcomRandom& random){auto world=before.world;expected.commit_match_state(world);capture_career_economy(world,expected);
+        check(session->snapshot().world==world&&session->snapshot().watcom_seed==random.seed()&&session->snapshot().game_seed==before.game_seed&&session->snapshot().date==before.date,"stadium construction lost Core capacity/flags, accounts, bills, visits or RNG");
+        check(read_save(make_save(session->snapshot()))==session->snapshot(),"constructed stadium failed save roundtrip");};
+    construction=[&](const GameState& staged,const ConstructionNotice& notice){++notices;auto view=ui::construction_notice_dialog(staged,session->rules(),notice);const auto owner=session->stadium_view(data);view.compact_dialog_frame=owner.compact_dialog_frame;view.badge_sprite=flow.desktop()->state().badge;view.badge_atlas=flow.desktop()->state().badge_atlas;view.badge_fallback=false;ui::GameEndTaxDialog dialog(data,view,{owner.plain_background,owner.gradient_text,true},flow.stadium()->construction_notice_backdrop(),session->rules());(void)dialog.render();};
+    const auto open=[&]{const auto& items=flow.desktop()->state().items;const auto icon=std::find_if(items.begin(),items.end(),[](const auto& item){return item.kind==22&&!item.disabled;});check(icon!=items.end(),"Original stadium icon unavailable");send(flow.click(icon->x+icon->width/2,icon->y+icon->height/2));};
+    auto expected=project_manager_desktop(initial,session->reference());check(initial.world.transfer_market&&expected.state.memory.u32(layout::CareerSession_Invalid_RuntimeField2)==uint32_t(initial.world.transfer_market->checkpoint_game_seed),"stadium workspace did not use the saved Source checkpoint");GameRandom game(initial.game_seed);const auto price=construction_price_percent(expected.state,flow.desktop()->state().manager_slot,game);
+    open();check(flow.stadium()&&session->preparation_open()&&session->stadium_view(data).construction_percent==price&&session->snapshot().world==initial.world&&session->snapshot().game_seed==game.seed()&&session->snapshot().watcom_seed==initial.watcom_seed,"stadium opening lost Source discount, world or RNG");capture("stadium-before");
+    for(int slot=0;slot<8;++slot){const auto view=session->stadium_view(data);if(view.blocks[size_t(slot)].construction_weeks)continue;const auto before=session->snapshot();GameRandom rng(before.game_seed);auto p=project_manager_desktop(before,session->reference());rng.set_seed(int32_t(p.state.memory.u32(layout::CareerSession_Invalid_RuntimeField2)));const int title=rng.range(3,10);
+        const auto action=click(250,25+slot*24);check(action.request==ui::FlowRequest::submenu_action&&session->stadium_view(data).block_expansion&&session->stadium_view(data).block_expansion->header_text_variant==title&&session->snapshot().game_seed==rng.seed()&&session->snapshot().watcom_seed==before.watcom_seed&&session->snapshot().world==before.world,"stadium A-H selection lost its Source header draw or mutated world");
+        const auto accepted=session->snapshot();const auto revision=session->revision();rejects([&]{session->apply_stadium(data,std::get<ui::StadiumRequest>(action.submenu_action));},"stadium row replay accepted");check(session->snapshot()==accepted&&session->revision()==revision,"stadium row replay changed state");capture("stadium-block");click(140,140);check(!session->stadium_view(data).block_expansion,"block cancel did not return to overview");}
+    {
+        const auto view=session->stadium_view(data);int slot=-1;const auto constants=stadium_block_expansion_constants(session->rules());
+        for(int i=0;i<8;++i)if(!view.blocks[size_t(i)].construction_weeks&&uint32_t(view.blocks[size_t(i)].capacity_level)*1000+1000<=constants.max_places[size_t(i)]){slot=i;break;}
+        check(slot>=0,"actual stadium has no expandable stand");click(250,25+slot*24);auto quote=session->stadium_view(data).block_expansion->quote;
+        const auto total=uint32_t(quote.current_capacity_thousands)*1000+1000;
+        click(50,80);check(flow.stadium()->calculator_open()&&flow.text(std::to_string(total)),"stadium total calculator did not accept its actual target");send(flow.send_key("ENTER"));flow.mark_stadium_calculator_presented();send(flow.tick_stadium_calculator_source_ticks(4));
+        quote=session->stadium_view(data).block_expansion->quote;check(quote.total_target_places==total,"stadium calculator did not publish the confirmed total");capture("stadium-expansion-draft");
+        auto before=session->snapshot();WatcomRandom random(before.watcom_seed);auto tip=prepare_stand_block_offer(quote.base_price,quote.base_weeks,random);click(50,140);
+        check(session->snapshot().world==before.world&&session->snapshot().watcom_seed==random.seed()&&session->stadium_view(data).block_expansion->offer->offered_price==tip.offered_price,"stadium acceleration question lost Core quote or W draw");capture("stadium-expansion-question");
+        before=session->snapshot();auto p=project_manager_desktop(before,session->reference());random=WatcomRandom(before.watcom_seed);resolve_stand_block_offer(tip,true,random);
+        check(build_stadium_block_expansion(p.state,view.manager_slot,quote.slot,constants,quote,tip,random),"actual Core stand expansion unavailable");
+        click(100,171);verify(before,p,random);check(!session->stadium_view(data).block_expansion&&session->stadium_view(data).blocks[size_t(slot)].construction_weeks==tip.construction_days,"stand expansion lost its staged future capacity/duration");capture("stadium-expansion-built");
+    }
+    {
+        const auto view=session->stadium_view(data);int choice=-1;
+        for(int i=0;i<8;++i)if(view.investments[size_t(i)].available&&!view.investments[size_t(i)].options.empty()){choice=i;break;}
+        check(choice>=0,"actual stadium has no facility investment");click(3+(choice%4)*54+27,153+(choice/4)*30+15);click(20,86);
+        const auto selected=session->stadium_view(data);check(selected.selected_option==0,"stadium facility tier was not selected");capture("stadium-facility-draft");
+        const auto option=selected.investments[size_t(choice)].options[0];auto before=session->snapshot();WatcomRandom random(before.watcom_seed);auto tip=prepare_stand_block_offer(option.base_price,option.base_weeks,random);click(50,140);
+        check(session->snapshot().watcom_seed==random.seed()&&session->snapshot().world==before.world,"facility acceleration quote lost Core W/state");capture("stadium-facility-question");
+        before=session->snapshot();auto p=project_manager_desktop(before,session->reference());random=WatcomRandom(before.watcom_seed);resolve_stand_block_offer(tip,false,random);
+        StadiumInvestmentConstants constants;for(unsigned i=0;i<8;++i){constants.price[i]=session->rules().u32(layout::CareerSession_DispatchStadium_RuntimeField+i*4);constants.weeks[i]=session->rules().u8(layout::CareerSession_DispatchStadium_RuntimeField2+(14+i)*5);}
+        check(build_stadium_investment_source(p.state,view.manager_slot,static_cast<StadiumInvestment>(choice),view.construction_percent,constants,option,tip,random),"actual Core facility build unavailable");
+        click(205,171);verify(before,p,random);check(session->stadium_view(data).investments[size_t(choice)].construction_weeks==tip.base_days,"facility construction period lost");capture("stadium-facility-built");
+    }
+    {
+        click(30,220);click(160,220);capture("stadium-periphery-before");
+        constexpr std::array<std::array<int,2>,14> centers{{{239,172},{266,125},{80,165},{224,128},{61,131},{172,169},{148,136},{138,136},{166,135},{176,135},{284,188},{279,176},{270,163},{261,152}}};
+        bool selected=false;
+        for(int object:{6,7,8,9,10,11,12,13,0,1,2,3,4,5}) {
+            const auto view=session->stadium_view(data);if(view.days[size_t(object)]||(object?view.level[size_t(object)]!=0:view.level[0]>=0xab))continue;
+            const auto before=session->snapshot();auto p=project_manager_desktop(before,session->reference());GameRandom rng(before.game_seed);const auto price=periphery_offer(p.state,object,rng);
+            const auto point=centers[size_t(object)];const auto action=click(point[0],point[1]);
+            if(action.request!=ui::FlowRequest::submenu_action)continue;
+            check(std::get<ui::StadiumRequest>(action.submenu_action).object==object&&session->stadium_view(data).quoted_object==object&&session->stadium_view(data).quoted_price==price&&session->snapshot().game_seed==rng.seed()&&session->snapshot().world==before.world&&session->snapshot().watcom_seed==before.watcom_seed,"periphery quote lost the Original object, price or G-only draw");capture("stadium-periphery-question");
+            const auto prior=session->snapshot();p=project_manager_desktop(prior,session->reference());WatcomRandom random(prior.watcom_seed);
+            check(build_periphery(p.state,view.manager_slot,object,uint32_t(price),random),"actual Core periphery build unavailable");
+            click(100,171);verify(prior,p,random);check(session->stadium_view(data).days[size_t(object)]!=0&&!session->stadium_view(data).quoted_object,"periphery build lost duration or retained quote");capture("stadium-periphery-built");selected=true;break;
+        }
+        check(selected,"actual stadium had no visible unbuilt periphery object");click(30,220);
+    }
+    click(265,220);check(session->stadium_view(data).data.has_value(),"stadium data button did not open curves");capture("stadium-curves-before");
+    const auto flags=session->stadium_view(data).data->flags;
+    const auto curve=click(30,110),scale=click(268,114),ticket=click(94,228);
+    check(std::get<ui::StadiumRequest>(curve.submenu_action).kind==ui::StadiumRequestKind::toggle_data_curve&&
+          std::get<ui::StadiumRequest>(scale.submenu_action).kind==ui::StadiumRequestKind::toggle_data_scale&&
+          std::get<ui::StadiumRequest>(ticket.submenu_action).kind==ui::StadiumRequestKind::set_data_ticket_price&&
+          session->stadium_view(data).data->flags==uint8_t(flags^1^0xc0)&&session->stadium_view(data).data->ticket_price==12,
+          "stadium curve/scale/ticket-scenario controls lost their real selection");capture("stadium-curves-after");
+    send(flow.send_key("ESC"));check(flow.stadium()&&!session->stadium_view(data).data,"stadium data ESC did not return to its scene");
+    const auto& manager=*std::find_if(session->snapshot().world.managers.begin(),session->snapshot().world.managers.end(),[&](const auto& m){return m.seat==actor;});
+    check(manager.career->stadium_curve_flags==uint8_t(flags^1^0xc0)&&manager.career->training_plan==12&&read_save(make_save(session->snapshot()))==session->snapshot(),"stadium curves/scenario were not saved by canonical manager");
+    const auto owner=session->stadium_view(data);send(flow.send_key("ESC"));check(flow.screen_name()=="desktop"&&!session->preparation_open(),"stadium close did not release its owner");
+    open();const auto reopened=session->snapshot();ui::StadiumRequest retired;retired.kind=ui::StadiumRequestKind::close;retired.manager_slot=owner.manager_slot;retired.runtime_club=owner.runtime_club;retired.revision=session->revision();retired.stable_club_identity=owner.stable_club_identity;retired.scope=owner.scope;retired.sequence=owner.sequence;
+    rejects([&]{session->apply_stadium(data,retired);},"old stadium window token replayed after reopening");check(session->snapshot()==reopened,"retired stadium close changed world");capture("stadium-reopened");send(flow.send_key("ESC"));
+    std::cout<<"Actual stadium GUI: discount, A-H row/header/cancel ownership, saved curves and canonical actor, Original reference, replay/reopen and close passed\n";
+}
+void actual_stadium_financial_notices(const std::filesystem::path& data,const CareerSnapshot& base,const std::filesystem::path& output) {
+    const auto directory=std::filesystem::temp_directory_path()/("openbmh-stadium-notices-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);
+    struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code ignored;std::filesystem::remove_all(path,ignored);}} cleanup{directory};
+    for(int mode=0;mode<4;++mode) {
+        auto fixture=base;fixture.world.settings->difficulty=2;const auto seat=*fixture.desktop->active_seat;auto& manager=*std::find_if(fixture.world.managers.begin(),fixture.world.managers.end(),[&](const auto& m){return m.seat==seat;});
+        const bool poor=mode==0||mode==3;manager.finance->balance=poor?0:20000000;manager.finance->credit=0;
+        manager.career->stadium.stand_capacity.fill(2);manager.career->stadium.capacity_sum=16;manager.career->season_services->tickets_sold=poor?0:25000;
+        auto& economy=fixture.world.economy->managers[seat];economy.planned_stand_capacity.fill(2);economy.stand_flags.fill(0);std::fill(economy.construction_weeks.begin()+22,economy.construction_weeks.end(),uint8_t(0));economy.offers[1]=0;
+        write_savegame(directory/"Notice.FBM",make_save(fixture));ui::StartupFlow flow(data,directory,ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> session;
+        ConstructionNoticeHook construction;SeasonTicketCompensationNoticeHook compensation;
+        const auto serve=[&](const ui::FlowResult& action){return session_app::serve_startup(flow,action,session,data,91,98,{},nullptr,{},construction,compensation);};
+        const auto send=[&](const ui::FlowResult& action){const auto result=serve(action);if(!result.error.empty())throw std::runtime_error("stadium notice GUI: "+result.error);};
+        const auto click=[&](int x,int y){send(flow.pointer_down(x,y));const auto action=flow.click(x,y);send(action);return action;};
+        flow.click(60,215);send(flow.click(240,215));send(flow.send_key("ENTER"));const auto& items=flow.desktop()->state().items;const auto icon=std::find_if(items.begin(),items.end(),[](const auto& item){return item.kind==22;});send(flow.click(icon->x+icon->width/2,icon->y+icon->height/2));
+        click(250,25);click(165,95);check(session->stadium_view(data).block_expansion->quote.base_price>0,"notice fixture did not select an actual roof quote");click(50,140);
+        const auto before=session->snapshot();const auto revision=session->revision();const auto owner=session->stadium_view(data);auto expected=project_manager_desktop(before,session->reference());WatcomRandom random(before.watcom_seed);
+        const auto texts=load_textd(ui::asset_path(data,"TEXTD.BLK"));expected.state.texts=&texts;auto offer=*owner.block_expansion->offer;resolve_stand_block_offer(offer,false,random);
+        const auto& quote=owner.block_expansion->quote;int expected_notices=0;
+        const auto count_money=[&](const GameState&,const ConstructionNotice& n){++expected_notices;check(poor&&n.kind==ConstructionNoticeKind::InsufficientFunds,"Core emitted unexpected construction notice");};
+        const auto count_compensation=[&](const GameState&,const SeasonTicketCompensationNotice& n){++expected_notices;check(!poor&&n.missing_tickets>0&&n.signed_amount>0,"Core compensation was not positive");};
+        const bool built=build_stadium_block_expansion(expected.state,owner.manager_slot,quote.slot,stadium_block_expansion_constants(session->rules()),quote,offer,random,count_money,count_compensation);
+        check(built==!poor&&expected_notices==1,"controlled financial fixture did not reach its single real Core notice");
+        bool cancel=mode>=2;int shown=0;const auto name="stadium-notice-"+std::to_string(mode);
+        const auto capture=[&](const std::string& suffix,const Image& frame){if(output.empty())return;std::filesystem::create_directories(output);const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));std::ofstream image(output/(name+suffix+".ppm"),std::ios::binary);image<<"P6\n320 240\n255\n";for(auto pixel:frame.pixels){const auto color=palette.argb[pixel];image.put(char(color>>16));image.put(char(color>>8));image.put(char(color));}write_savegame(output/(name+suffix+".FBM"),make_save(session->snapshot()));};
+        const auto present=[&](ui::TaxDialogProjection view){++shown;view.badge_sprite=flow.desktop()->state().badge;view.badge_atlas=flow.desktop()->state().badge_atlas;view.badge_fallback=false;view.compact_dialog_frame=owner.compact_dialog_frame;ui::GameEndTaxDialog dialog(data,view,{owner.plain_background,owner.gradient_text,true},flow.stadium()->construction_notice_backdrop(),session->rules());capture("-dialog",dialog.render());if(cancel)throw FormatError("QA construction presenter stopped");};
+        construction=[&](const GameState& staged,const ConstructionNotice& notice){present(ui::construction_notice_dialog(staged,session->rules(),notice));};
+        compensation=[&](const GameState& staged,const SeasonTicketCompensationNotice& notice){present(ui::season_ticket_compensation_notice_dialog(staged,session->rules(),notice));};
+        capture("-before",flow.render());send(flow.pointer_down(205,171));auto action=flow.click(205,171);auto result=serve(action);
+        if(cancel){check(!result.error.empty()&&session->snapshot()==before&&session->revision()==revision&&session->stadium_view(data).scope==owner.scope&&session->stadium_view(data).sequence==owner.sequence&&session->stadium_view(data).block_expansion->offer.has_value(),"cancelled financial notice published costs, capacity, refund, RNG or lost its quote");cancel=false;click(205,171);}
+        else check(result.error.empty(),"financial notice was not acknowledged");
+        auto world=before.world;expected.commit_match_state(world);capture_career_economy(world,expected);
+        check(session->snapshot().world==world&&session->snapshot().game_seed==before.game_seed&&session->snapshot().watcom_seed==random.seed()&&session->revision()==revision+1&&shown==(mode>=2?2:1),"financial notice/retry diverged from Core or booked twice");
+        check(read_save(make_save(session->snapshot()))==session->snapshot(),"financial notice failed save roundtrip");capture("-after",flow.render());send(flow.send_key("ESC"));check(flow.screen_name()=="desktop"&&!session->preparation_open(),"financial notice did not return to its desktop");
+    }
+    std::cout<<"Actual stadium financial GUI: funds refusal, positive season-ticket compensation, stopped presenters and exactly-once retries match complete Core world/RNG\n";
+}
+void actual_stadium_saved(const std::filesystem::path& data,const std::filesystem::path& file,const std::filesystem::path& output) {
+    const auto directory=std::filesystem::temp_directory_path()/("openbmh-stadium-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);
+    struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code ignored;std::filesystem::remove_all(path,ignored);}} cleanup{directory};
+    std::filesystem::copy_file(file,directory/"Stadium.FBM");ui::StartupFlow flow(data,directory,ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> session;
+    const auto send=[&](const ui::FlowResult& action){const auto result=session_app::serve_startup(flow,action,session,data,91,97);if(!result.error.empty())throw std::runtime_error("stadium GUI load: "+result.error);};
+    flow.click(60,215);send(flow.click(240,215));send(flow.send_key("ENTER"));check(session&&flow.screen_name()=="desktop","stadium fixture did not load through Original setup");
+    actual_stadium(flow,session,data,output);
+    actual_stadium_financial_notices(data,session->snapshot(),output.empty()?output:output/"notices");
+}
 void actual_save_load(ui::StartupFlow& flow,std::unique_ptr<session_app::Session>& session,const std::filesystem::path& data,const std::filesystem::path& output) {
     const auto directory=flow.save_directory();const auto path=directory/"Resume.FBM";
     const auto send=[&](ui::StartupFlow& ui,const ui::FlowResult& action,std::unique_ptr<session_app::Session>& owner){const auto result=session_app::serve_startup(ui,action,owner,data,91,owner?owner->scope():71);if(!result.error.empty())throw std::runtime_error("file input: "+result.error);};
@@ -1161,6 +1279,8 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     actual_contracts(flow,session,data,output.empty()?output:output/"contracts-single");
     actual_advertising(flow,session,data,output.empty()?output:output/"advertising-single");
     actual_advertising_renewals(data,session->snapshot(),output.empty()?output:output/"advertising-renewals");
+    actual_stadium(flow,session,data,output.empty()?output:output/"stadium-single");
+    actual_stadium_financial_notices(data,session->snapshot(),output.empty()?output:output/"stadium-notices");
     actual_save_load(flow,session,data,output);
     ui::StartupFlow mixed(data,{},ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> multi;
     mixed.click(resources.german.u16(layout::Setup_FormatError_RuntimeField3+6*2)+10,resources.german.u8(layout::Setup_FormatError_RuntimeField4+6)+10);
@@ -1180,6 +1300,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
     actual_environment(mixed,multi,data,output.empty()?output:output/"environment-mixed");
     actual_contracts(mixed,multi,data,output.empty()?output:output/"contracts-mixed");
     actual_advertising(mixed,multi,data,output.empty()?output:output/"advertising-mixed");
+    actual_stadium(mixed,multi,data,output.empty()?output:output/"stadium-mixed");
     actual_mailbox(data,multi->snapshot(),output.empty()?output:output/"mailbox");
     {
         PendingOfferHooks decline;decline.answer=[](const GameState&,const PendingOfferQuestion&){return PendingOfferAnswer::yes;};
@@ -1189,6 +1310,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
         check(result.error.empty()&&multi->snapshot().world.manager_country(*multi->snapshot().desktop->active_seat)==Country::germany,"mixed contract handoff did not reach German manager");
         actual_contracts(mixed,multi,data,output.empty()?output:output/"contracts-german");
         actual_advertising(mixed,multi,data,output.empty()?output:output/"advertising-german");
+        actual_stadium(mixed,multi,data,output.empty()?output:output/"stadium-german");
     }
     actual_four_managers(data,output);
     actual_pending(data,output.empty()?output:output/"pending");
@@ -1197,6 +1319,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
 }
 }
 int main(int argc,char** argv)try {
+    if(argc==5&&std::string(argv[3])=="--stadium-only"){actual_stadium_saved(argv[1],argv[4],argv[2]);return 0;}
     const auto resources=synthetic();
     for(int mask=1;mask<8;++mask){const GameScope scope{bool(mask&1),bool(mask&2),bool(mask&4)};if(!scope.club_play())continue;
         ui::SetupOptions options;options.country_selection=true;options.germany=scope.germany;options.england=scope.england;options.world=scope.international;options.league=true;options.managers=int(scope.germany)+int(scope.england);
