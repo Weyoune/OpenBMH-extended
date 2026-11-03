@@ -52,6 +52,16 @@ void World::validate(bool complete)const {
         if(actual!=expected)throw std::invalid_argument("world12: canonical amateur slots omit or misidentify clubs");
     }
     for(const auto&[id,crest]:crests){const auto& path=crest.path;if(!id.valid()||crest.cell>=8||path.empty()||path.find("..")!=std::string::npos||path.find(':')!=std::string::npos||path[0]=='/'||path.find('\\')!=std::string::npos)throw std::invalid_argument("world12: invalid crest resource");}
+    if(national_origins){
+        if(!catalogue.scope.international||national_origins->size()>234)throw std::invalid_argument("world12: unavailable national provenance");
+        std::set<ClubId> origin_clubs;std::map<LeagueId,std::set<uint8_t>> ranks;
+        for(const auto& origin:*national_origins){const auto& c=origin.club;
+            if(!c.id.valid()||clubs.contains(c.id)||!origin_clubs.insert(c.id).second||c.kind!=ClubKind::club||!c.league.valid()||c.league.value>=kLeagueSlots||catalogue.league(c.league).active||catalogue.league(c.league).country!=c.country||origin.rank>=catalogue.league(c.league).clubs||!ranks[c.league].insert(origin.rank).second||c.name.empty()||c.name.size()>255||!c.crest.valid()||!crests.contains(c.crest)||c.morale>63||c.season_stats!=ClubSeasonStats{}||(origin.source_initialized&&!players_initialized))throw std::invalid_argument("world12: invalid retained national club provenance");
+            bool empty=false;size_t occupied=0;for(const auto& row:c.roster){if(row.empty()){if(row.flags)throw std::invalid_argument("world12: origin empty slot flags");empty=true;continue;}if(empty||row.flags>15||!players.contains(row.player)||!rostered.insert(row.player).second)throw std::invalid_argument("world12: missing or repeated origin player");++occupied;}
+            if(occupied<11)throw std::invalid_argument("world12: national origin lacks its real compact roster");
+        }
+        for(const auto& [league,known]:ranks)if(known.size()!=catalogue.league(league).clubs)throw std::invalid_argument("world12: national source league provenance is incomplete");
+    }
     if(free_players) {
         if(!markets)throw std::invalid_argument("world12: free-player phase requires career markets");
         const auto validate_pool=[&](const auto& pool){for(auto player:pool){if(!player.valid())continue;if(!players.contains(player)||!rostered.insert(player).second)throw std::invalid_argument("world12: missing or repeated free player");}};

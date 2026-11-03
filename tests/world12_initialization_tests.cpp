@@ -58,7 +58,9 @@ int main()try {
         initialize_career_players(repeat,plan,repeat_game,repeat_random);
         check(world.amateur_slots.has_value(),"fresh initialization did not capture canonical amateur slots");
         check(world.players_initialized && world==repeat && game.seed()==repeat_game.seed() && random.seed()==repeat_random.seed(),"initial player generation changed across repeat");
-        check(outcome.players==world.players.size() && outcome.game_draws==game.calls() && outcome.watcom_draws==random.calls(),"initial generation omitted players or lost draw counts");
+        size_t imported=0;if(world.national_origins)for(const auto& origin:*world.national_origins)if(!origin.source_initialized)for(const auto& row:origin.club.roster)if(!row.empty()){
+            ++imported;check(world.players.at(row.player)==master.players.at(row.player),"inactive imported national player was synthesized");}
+        check(outcome.players+imported==world.players.size() && outcome.game_draws==game.calls() && outcome.watcom_draws==random.calls(),"initial generation omitted players or lost draw counts");
         for(const auto& [id,p]:world.players) {
             const auto& before=master.players.at(id);
             check(p.id==before.id && p.attributes.name==before.attributes.name && p.bonus==before.bonus && p.cards==0,"generation changed stable metadata/cards");
@@ -90,7 +92,7 @@ int main()try {
         malformed.object()->at("markets").object()->at("stocks")=std::move(short_stocks);
         const auto invalid=bmh::cli::dump_json(malformed);
         rejects([&]{decode_world(bmh::Bytes(invalid.begin(),invalid.end()));},"truncated saved stock history accepted");
-        json.object()->at("version")=9;json.object()->erase("amateur_slots");json.object()->erase("markets");const auto old=bmh::cli::dump_json(json);
+        json.object()->at("version")=9;json.object()->erase("national_origins");json.object()->erase("amateur_slots");json.object()->erase("markets");const auto old=bmh::cli::dump_json(json);
         check(!decode_world(bmh::Bytes(old.begin(),old.end())).markets,"older world invented market history");
         rejects([&]{initialize_career_markets_and_moods(initialized,reference,mg,mw);},"market initialization ran twice");
         check(initialized==again&&mg.calls()==rg.calls()&&mw.calls()==rw.calls(),"duplicate market initialization changed state");
@@ -99,11 +101,13 @@ int main()try {
             const auto pool_draws=initialize_career_player_pools(initialized,plan,reference,bool(mask&1),mg,mw);
             initialize_career_player_pools(again,plan,reference,bool(mask&1),rg,rw);
             check(initialized==again&&mg.seed()==rg.seed()&&mw.seed()==rw.seed(),"free-player assignment changed across repeat");
-            check(initialized.free_players&&pool_draws.players==initialized.players.size(),"free-player phase omitted initial players");
+            check(initialized.free_players&&pool_draws.players+imported==initialized.players.size(),"free-player phase omitted initial players");
             size_t free=0,rostered=0;
             for(auto id:initialized.free_players->domestic)free+=id.valid();for(auto id:initialized.free_players->foreign)free+=id.valid();
             for(const auto& [id,club]:initialized.clubs)for(const auto& row:club.roster)rostered+=!row.empty();
-            check(free+rostered==initialized.players.size()&&free<54,"overflow was lost or hidden in an unlimited pool");
+            check(free+rostered+imported==initialized.players.size()&&free<54,"overflow was lost or hidden in an unlimited pool");
+            if(initialized.national_origins)for(const auto& origin:*initialized.national_origins)for(const auto& row:origin.club.roster)if(!row.empty()){
+                check(std::find(initialized.free_players->domestic.begin(),initialized.free_players->domestic.end(),row.player)==initialized.free_players->domestic.end()&&std::find(initialized.free_players->foreign.begin(),initialized.free_players->foreign.end(),row.player)==initialized.free_players->foreign.end(),"inactive origin entered free-player market");}
             check(decode_world(encode_world(initialized))==initialized,"free-player identities lost on world roundtrip");
             snapshot.world=initialized;snapshot.game_seed=mg.seed();snapshot.watcom_seed=mw.seed();
             check(read_save(make_save(snapshot))==snapshot,"free-player state lost on snapshot roundtrip");

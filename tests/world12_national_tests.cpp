@@ -61,6 +61,15 @@ World fixture() {
     }
     w.validate();return w;
 }
+void retained_origin_nomination() {
+    auto master=fixture();master.players_initialized=false;master.markets.reset();master.free_players.reset();master.settings.reset();master.managers.clear();master.validate();
+    for(const auto scope:{GameScope{false,false,true},GameScope{true,false,true},GameScope{false,true,true}}){
+        const auto scoped=select_world_scope(master,scope);check(scoped.national_origins.has_value(),"disabled real roster provenance missing");
+        for(auto country:{Country::germany,Country::england})check(national_nomination(scoped,country)==national_nomination(master,country),"scope changed actual national nominees or Source tie order");
+        auto duplicate=scoped;duplicate.national_origins->push_back(duplicate.national_origins->front());rejects([&]{duplicate.validate();},"duplicate national provenance accepted");
+        check(decode_world(encode_world(scoped))==scoped,"retained origin codec changed source identities");
+    }
+}
 void nomination_rules() {
     NationalSquadSelection selection;
     selection.consider(0,10,10);selection.consider(0,20,20);selection.consider(0,30,30);
@@ -225,6 +234,6 @@ void scheduled_owner() {
 }
 }
 int main()try {
-    set_fixture_tables(bmh::test::authored_fixture_tables());nomination_rules();persistence_and_ownership();original_nomination_equivalence();scheduled_owner();
+    set_fixture_tables(bmh::test::authored_fixture_tables());nomination_rules();retained_origin_nomination();persistence_and_ownership();original_nomination_equivalence();scheduled_owner();
     std::cout<<"Global national selection, quotas, availability, country/coach ownership, native boards, atomic RNG and saved squads passed\n";
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}

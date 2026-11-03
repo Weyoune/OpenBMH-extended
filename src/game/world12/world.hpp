@@ -29,6 +29,11 @@ struct ClubRecord {
     std::array<RosterSlot,24> roster;
     bool operator==(const ClubRecord&)const=default;
 };
+// Immutable imported club provenance retained solely for national nomination.
+struct NationalRosterOrigin {
+    ClubRecord club;uint8_t rank=0;bool source_initialized=false;
+    bool operator==(const NationalRosterOrigin&)const=default;
+};
 struct LeagueMembers {LeagueId league;std::vector<ClubId> clubs;bool operator==(const LeagueMembers&)const=default;};
 struct Loan {
     PlayerId player;ClubId owner,borrower;uint8_t months=0;
@@ -287,6 +292,7 @@ struct World {
     std::optional<EuropeanCampaigns> european_campaigns={};
     std::optional<IndoorSeason> indoor;
     std::optional<NationalCampaignHistory> national_campaigns;
+    std::optional<std::vector<NationalRosterOrigin>> national_origins;
     std::optional<TransferMarket> transfer_market={};
     int32_t development_balance=0;
     uint8_t trend_rotation=0;

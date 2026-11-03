@@ -39,23 +39,20 @@ std::array<NationalCandidate,20> national_nomination(const World& world,Country 
     (void)national_team(world,country);
     std::vector<NationalCandidate> candidates;
     NationalSquadSelection selection;
-    for(bool abroad:{false,true})
-      for(auto group:{TableGroup::germany,TableGroup::england,TableGroup::europe})
-        for(auto league:world.catalogue.simulation_leagues(group))
-            for(auto id:world.membership[league.value].clubs) {
-                const auto& club=world.clubs.at(id);
-                if((club.country!=country)!=abroad)continue;
-                for(size_t row=0;row<club.roster.size();++row) {
-                    const auto& slot=club.roster[row];if(slot.empty())continue;
-                    const auto& person=world.players.at(slot.player);
-                    if(person.attributes.nationality()+((person.bonus&128)?32:0)!=int(country)||
-                        !national_nomination_available(person.attributes))continue;
-                    const auto token=uint32_t(candidates.size());
-                    candidates.push_back({slot.player,id,uint8_t(row),slot.flags});
-                    selection.consider(person.attributes.position(),
-                        national_nomination_strength(person.attributes,club.country!=country),token);
-                }
-            }
+    const auto scan=[&](const ClubRecord& club,bool abroad){
+        if((club.country!=country)!=abroad)return;
+        for(size_t row=0;row<club.roster.size();++row){const auto& slot=club.roster[row];if(slot.empty())continue;const auto& person=world.players.at(slot.player);
+            if(person.attributes.nationality()+((person.bonus&128)?32:0)!=int(country)||!national_nomination_available(person.attributes))continue;
+            const auto token=uint32_t(candidates.size());candidates.push_back({slot.player,club.id,uint8_t(row),slot.flags});selection.consider(person.attributes.position(),national_nomination_strength(person.attributes,abroad),token);}
+    };
+    // Original league/row order remains authoritative even when that league
+    // has no club simulation. Retained provenance is not an active club entity.
+    const auto catalogue=Catalogue::dual_classic();
+    for(bool abroad:{false,true})for(auto group:{TableGroup::germany,TableGroup::england,TableGroup::europe})for(auto league:catalogue.simulation_leagues(group)){
+        const auto& current=world.membership[league.value];
+        if(!current.clubs.empty())for(auto id:current.clubs)scan(world.clubs.at(id),abroad);
+        else if(world.national_origins){std::vector<const NationalRosterOrigin*> origins;for(const auto& origin:*world.national_origins)if(origin.club.league==league)origins.push_back(&origin);std::sort(origins.begin(),origins.end(),[](auto a,auto b){return a->rank<b->rank;});for(auto origin:origins)scan(origin->club,abroad);}
+    }
     if(!selection.complete())throw FormatError("world12: insufficient available players for national positional quotas");
     std::array<NationalCandidate,20> result;size_t out=0;
     for(size_t position=0;position<4;++position)

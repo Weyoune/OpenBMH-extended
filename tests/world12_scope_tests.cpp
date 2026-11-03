@@ -62,7 +62,11 @@ int main()try {
             check(master.clubs.at(id)==club,"surviving club ID or data changed");
         }
         for(const auto& [id,player]:world.players)check(master.players.at(id)==player,"scope filtering renumbered players");
-        check(world.players.size()==(scope.club_play()?league_clubs*11+1:master.players.size()),"removed squads became free agents or national-only pool was discarded");
+        check(world.players.size()==(scope.club_play()&&!scope.international?league_clubs*11+1:master.players.size()),"removed squads became free agents or national-only pool was discarded");
+        size_t origins=0;if(world.national_origins)for(const auto& origin:*world.national_origins){
+            check(!world.clubs.contains(origin.club.id)&&!world.catalogue.league(origin.club.league).active,"retained origins became active clubs");
+            check(origin.club==master.clubs.at(origin.club.id)&&!origin.source_initialized,"origin changed imported roster/data");++origins;}
+        check(origins==(scope.international?234-league_clubs:0),"disabled real national origins omitted");
         check(world.clubs.contains({800000})==scope.germany && world.clubs.contains({800001})==scope.england,"excluded domestic amateur fallback survived");
         check(world.clubs.contains({900000})==scope.international,"International toggle removed/retained wrong national entities");
         check(decode_world(encode_world(world))==world,"scoped world codec roundtrip lost selection");

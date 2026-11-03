@@ -10,6 +10,9 @@ namespace bmh::test::world12 {
 // Older-schema fixtures must actually omit fields their writer did not know.
 inline void omit_recent_manager_records(bmh::cli::Json& root) {
     root.object()->erase("annual_title_archive");
+    root.object()->erase("national_origins");
+    root.object()->erase("national_campaigns");
+    root.object()->erase("national_coaches");
     root.object()->erase("annual_awards_completed");
     root.object()->erase("amateur_slots");
     root.object()->erase("european_campaigns");root.object()->erase("indoor");

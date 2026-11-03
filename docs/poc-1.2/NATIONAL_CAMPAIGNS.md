@@ -58,3 +58,12 @@ checks stored winner/runner labels against Core group tables or the actual last
 knockout score, and checks both World-Cup finals. It consumes no RNG and requires
 the currently installed Source4/6 fixture tables for group rankings. Structural
 World/codec validation deliberately remains fixture-asset independent.
+
+Disabled domestic leagues retain their imported club/roster provenance in the
+optional schema39 `national_origins` receipt. These records are not active clubs:
+they have no fixtures, financial accounts, table membership or market releases.
+Nomination scans their real players in the same league/rank/row order. A national
+only initialization uses the existing complete Source player-generation plan;
+a scoped club initialization does not generate the inactive provenance players
+or consume additional random draws. The per-origin `source_initialized` receipt
+distinguishes these cases. Older worlds keep missing provenance unknown.

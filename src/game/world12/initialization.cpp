@@ -74,7 +74,10 @@ PlayerInitializationOutcome initialize_career_players(World& world,const PlayerI
         }
         for(auto id:group.players)check(id);
     }
-    if(seen.size()!=world.players.size())throw std::invalid_argument("world12: initial plan omits world players");
+    if(seen.size()!=world.players.size()){
+        std::set<PlayerId> imported_origins;if(world.national_origins)for(const auto& origin:*world.national_origins)for(const auto& row:origin.club.roster)if(!row.empty())imported_origins.insert(row.player);
+        for(const auto& [id,player]:world.players)if(!seen.contains(id)&&!imported_origins.contains(id))throw std::invalid_argument("world12: initial plan omits a player without retained imported provenance");
+    }
     const auto before=world;auto candidate=world;auto staged_game=game;auto staged_random=random;
     if(!candidate.amateur_slots) {
         candidate.amateur_slots.emplace();
@@ -91,6 +94,7 @@ PlayerInitializationOutcome initialize_career_players(World& world,const PlayerI
         const int level=int((unsigned(count)-group.rank)*unsigned(range[1]-range[0])*100u/unsigned(count)/100u)+range[0];
         for(auto id:group.players)generate(id,level|0x1000);
     }
+    if(candidate.national_origins)for(auto& origin:*candidate.national_origins)origin.source_initialized=std::all_of(origin.club.roster.begin(),origin.club.roster.end(),[&](const auto& row){return row.empty()||seen.contains(row.player);});
     candidate.players_initialized=true;candidate.validate();
     if(world!=before || game.seed()!=g_seed || game.calls()!=g_calls || random.seed()!=w_seed || random.calls()!=w_calls)
         throw std::invalid_argument("world12: player-generation owner or RNG changed during initialization");
@@ -186,7 +190,10 @@ PlayerInitializationOutcome initialize_career_player_pools(World& world,const Pl
         }
     if(group_index!=plan.groups.size())throw std::invalid_argument("world12: unexpected initial player group");
     for(auto id:plan.extra_players)if(!world.players.contains(id)||!seen.insert(id).second)throw std::invalid_argument("world12: invalid initial release identity");
-    if(seen.size()!=world.players.size())throw std::invalid_argument("world12: initial release plan omits players");
+    std::set<PlayerId> retained;
+    if(world.national_origins)for(const auto& origin:*world.national_origins)for(const auto& row:origin.club.roster)if(!row.empty())retained.insert(row.player);
+    for(const auto& [id,player]:world.players)if(!seen.contains(id)&&!retained.contains(id))
+        throw std::invalid_argument("world12: initial release plan omits a player without retained provenance");
     const auto before=world;auto candidate=world;auto staged_game=game;auto staged_random=random;
     const auto g_seed=game.seed();const auto w_seed=random.seed();const auto g_calls=game.calls(),w_calls=random.calls();
     for(const auto& group:plan.groups)for(auto id:group.players)bmh::initialize_career_squad_player(candidate.players.at(id).attributes,staged_random);
