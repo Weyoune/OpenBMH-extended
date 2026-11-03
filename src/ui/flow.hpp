@@ -129,6 +129,11 @@ public:
     bool resume_manager_selection(SelectionContext context);
     void begin_world_manager_selection(SelectionContext context);
     void show_manager_join(std::vector<ManagerChoice> existing, SelectionContext context);
+    void show_world12_manager_join(std::vector<ManagerChoice>,SelectionContext);
+    bool matches_world12_join(const FlowResult&)const;
+    struct World12JoinView {std::unique_ptr<DesktopScreen> desktop;std::unique_ptr<PreparationState> preparation;};
+    World12JoinView prepare_world12_join_result(PreparationState,const DeskRequest&)const;
+    void finish_world12_join(World12JoinView)noexcept;
     void resume_manager_join(SelectionContext context);
     void acknowledge_manager_join(CareerInitializationResult result);
     void reject_manager_join(std::string reason);
@@ -468,7 +473,7 @@ public:
     bool matches_pending_preparation(const PreparationRequest&) const;
     bool matches_pending_pitch(const PitchRequest&) const;
     bool matches_pending_stadium(const StadiumRequest&) const;
-    bool in_preparation_menu() const { return bool(world12_friendly_ || other_games_ || balance_ || player_card_ || pitch_ || lineup_ || training_ || training_camp_ || bank_ || stadium_ || environment_ || toto_ || transfer_market_ || tactics_ || save_load_ || friendly_match_ || contracts_); }
+    bool in_preparation_menu() const { return bool(joining_ || world12_friendly_ || other_games_ || balance_ || player_card_ || pitch_ || lineup_ || training_ || training_camp_ || bank_ || stadium_ || environment_ || toto_ || transfer_market_ || tactics_ || save_load_ || friendly_match_ || contracts_); }
     bool file_info_press(int x, int y) { return save_load_ && save_load_->info_press(x, y); }
     const DesktopScreen* desktop() const { return desktop_.get(); }
     std::string screen_name() const;

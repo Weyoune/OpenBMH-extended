@@ -7,6 +7,7 @@ namespace bmh::world12 {
 // Initial BSS/default records only, before any day or desk action. Missing source
 // fields are an error; older development snapshots are not silently upgraded.
 void initialize_career_economy(CareerSnapshot&,const GameState& initial_reference);
+ManagerEconomy manager_economy_from_legacy(const GameState&,uint8_t manager);
 void install_career_economy(AiMatchProjection&,const World&);
 void capture_career_economy(World&,const AiMatchProjection&);
 // Shared notices without substituting parked club financial/portfolio state.

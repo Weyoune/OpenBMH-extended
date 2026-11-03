@@ -35,6 +35,7 @@ struct ManagerClubView {
     bmh::world12::ClubId id;
     std::string name,crest_path;
     uint8_t crest_cell=0;
+    uint8_t actual_league=0,actual_strength=1;
 };
 struct ManagerCountryGroup {std::string label;std::vector<ManagerClubView> clubs;};
 struct ManagerNationalView {
@@ -50,6 +51,7 @@ struct ManagerWorldSelection {
     // Explicit NoTeam career choices. Domestic scope/league groups stay empty;
     // a national-only choice never impersonates an available club league.
     bool national_only=false;
+    bool joining=false;
     std::vector<ManagerNationalView> national_teams;
 };
 

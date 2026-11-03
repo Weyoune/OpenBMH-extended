@@ -3,5 +3,5 @@
 #include "ui/manager.hpp"
 #include "game/world12/world.hpp"
 namespace bmh::ui {
-SelectionContext world12_manager_selection_context(const bmh::world12::World&,uint64_t revision);
+SelectionContext world12_manager_selection_context(const bmh::world12::World&,uint64_t revision,bool joining=false);
 }

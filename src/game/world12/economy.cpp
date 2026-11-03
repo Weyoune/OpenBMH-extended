@@ -87,6 +87,10 @@ void write_coupon(GameState& g,size_t local,const PoolsCoupon& c) {
     const auto at=layout::Coupon+uint32_t(local*20);g.memory.set32(at,c.stake|(c.voided?0x80000000u:0));g.memory.set32(at+4,c.winnings);g.memory.set8(at+19,c.correct);for(uint32_t n=0;n<11;++n)g.memory.set8(at+8+n,c.tips[n]);
 }
 }
+ManagerEconomy manager_economy_from_legacy(const GameState& game,uint8_t manager) {
+    if(manager>=4)throw FormatError("world12: new manager economy slot is invalid");
+    return read_manager(game,manager,{0,1,2,3});
+}
 void initialize_career_economy(CareerSnapshot& state,const GameState& reference){
     state.validate();if(state.world.economy||!state.world.settings||state.date||state.season||state.world.managers.size()!=state.world.settings->planned_managers||state.desktop)throw std::invalid_argument("world12: economy requires fresh pre-desktop initialization");
     CareerEconomy e;e.week=reference.memory.u8(layout::Savestate_Layout_ExecutableField);

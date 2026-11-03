@@ -34,4 +34,9 @@ TacticalOutcome calculate_manager_tactical_action(const World&,uint8_t manager,
 // selection. Uses supplied initial formation data, never an existing career.
 uint64_t initialize_manager_contracts(World&,uint8_t manager,const GameState& initial_rules,
     TacticalPolicy,WatcomRandom&);
+// Running takeover preserves the actual club, ages, ratings and played world.
+// Only the new human's facilities/account/contract board is initialized.
+uint64_t initialize_joining_manager_contracts(World&,uint8_t,const GameState&,TacticalPolicy,WatcomRandom&);
+std::array<uint8_t,0x58> initialize_joined_owner_loan_board(const World&,uint8_t,PlayerId,TacticalPolicy,WatcomRandom&,uint32_t season);
+
 }

@@ -1235,6 +1235,36 @@ void actual_club_inspection(const std::filesystem::path& data,const CareerSnapsh
     own_send(own_flow.pointer_down(310,230,true));capture("club-controlled-own-after",own_flow.render(),own_session->snapshot());
     std::cout<<"Actual owned club inspection: both finals/countries, A/B Original Core frames, canonical players, roster-only writes, saves, interrupted/reentrant/retired guards and no fabricated cup-only squad passed\n";
 }
+void actual_running_join_gui(const std::filesystem::path& data,const CareerSnapshot& input,const std::filesystem::path& output,int target){
+    const auto resources=session_app::load_runtime_resources(data);const auto directory=std::filesystem::temp_directory_path()/("openbmh-running-join-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);
+    struct Cleanup{std::filesystem::path p;~Cleanup(){std::error_code ignored;std::filesystem::remove_all(p,ignored);}} cleanup{directory};write_savegame(directory/"Fixture.FBM",make_save(input));
+    ui::StartupFlow flow(data,directory,ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> session;
+    const auto serve=[&](const ui::FlowResult& action){return session_app::serve_startup(flow,action,session,data,91,177);};
+    const auto require=[&](const ui::FlowResult& action){const auto result=serve(action);if(!result.error.empty())throw std::runtime_error("running join GUI: "+result.error);};
+    flow.click(60,215);require(flow.click(240,215));require(flow.send_key("ENTER"));const auto before=session->snapshot();const auto revision=session->revision();
+    const auto capture=[&](const std::string& name){if(output.empty())return;std::filesystem::create_directories(output);const auto frame=flow.render();const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));std::ofstream file(output/(name+".ppm"),std::ios::binary);file<<"P6\n320 240\n255\n";for(auto pixel:frame.pixels){const auto c=palette.argb[pixel];file.put(char(c>>16));file.put(char(c>>8));file.put(char(c));}write_savegame(output/(name+".FBM"),make_save(session->snapshot()));};
+    const auto open=[&]{const auto& items=flow.desktop()->state().items;const auto i=std::find_if(items.begin(),items.end(),[](const auto& item){return item.kind==29&&!item.disabled;});check(i!=items.end(),"running join desktop icon missing");require(flow.click(i->x+i->width/2,i->y+i->height/2));};
+    capture("join-before");open();capture("join-options-cancel");require(flow.send_key("ESC"));check(session->snapshot()==before&&session->revision()==revision&&flow.screen_name()=="desktop","cancelled manager entry changed source or stuck UI");
+    open();const int x=resources.german.u16(layout::Setup_FormatError_RuntimeField3+6*2)+5,y=resources.german.u8(layout::Setup_FormatError_RuntimeField4+6)+5;
+    for(int n=int(before.world.managers.size());n<target;++n)require(flow.click(x,y));capture("join-options");require(flow.click(10,10,true));
+    for(int ordinal=int(before.world.managers.size());ordinal<target;++ordinal){
+        if(ordinal%2)require(flow.click(200,95));
+        require(flow.click(60,66));check(flow.text("Join "+std::to_string(ordinal)),"joining name text lost");require(flow.send_key("ENTER"));
+        require(flow.click(60,136));require(flow.click(200,136));capture("join-picker-"+std::to_string(ordinal));
+        require(flow.click(10,10,true));const auto accepted=flow.click(100,171);check(accepted.request==ui::FlowRequest::join_manager,"Original confirmation did not emit join request");
+        const auto& club=before.world.clubs.at(accepted.join_manager.world_club);check(accepted.join_manager.start_league==before.world.catalogue.league(club.league).local_index&&accepted.join_manager.strength==1,"running picker allowed new-career league/strength reshuffle");
+        require(accepted);
+        if(ordinal+1<target)check(session->snapshot()==before&&session->revision()==revision,"partial manager sequence published state or RNG");
+    }
+    check(flow.screen_name()=="desktop"&&session->snapshot().world.managers.size()==size_t(target)&&session->revision()==revision+1,"complete join did not publish one owned revision");
+    const auto after=session->snapshot();check(after.world.membership==before.world.membership&&after.results==before.results&&after.calendar==before.calendar&&after.cups==before.cups&&after.world.european_campaigns==before.world.european_campaigns&&after.world.national_campaigns==before.world.national_campaigns&&after.date==before.date&&after.game_seed==before.game_seed,"takeover rewrote standings, fixtures, competitions, date or game RNG");
+    auto unchanged_players=after.world.players;for(auto& [id,p]:unchanged_players){check((p.cards&0xffe0)==(before.world.players.at(id).cards&0xffe0),"takeover reset disciplinary cards");p.cards=before.world.players.at(id).cards;}check(unchanged_players==before.world.players,"takeover reset existing player ages/ratings");for(const auto& old:before.world.managers)check(*std::find_if(after.world.managers.begin(),after.world.managers.end(),[&](const auto& m){return m.seat==old.seat;})==old,"takeover overwrote another human's owned state");
+    check(after.desktop->active_seat==before.desktop->active_seat&&after.desktop->initial_event->manager_position==before.desktop->initial_event->manager_position&&after.desktop->manager_order.size()==size_t(target),"takeover lost host/cursor/order");
+    check(read_save(make_save(after))==after&&session_app::Session::resume(resources,after,178,1).snapshot()==after,"running join lost official save/resume");capture("join-committed");
+    const auto& items=flow.desktop()->state().items;const auto line=std::find_if(items.begin(),items.end(),[](const auto& item){return item.kind==3;});require(flow.click(line->x+line->width/2,line->y+line->height/2));capture("join-host-lineup");require(flow.click(310,230,true));
+    std::cout<<"Actual running join "<<before.world.managers.size()<<"->"<<target<<": Original options/DE-EN picker/confirmation/cancel, live standings+ages+identities, atomic publication, host/order and official save/resume passed\n";
+}
+
 void actual_balance_gui(const std::filesystem::path& data,const CareerSnapshot& fixture,const std::filesystem::path& output){
     const auto resources=session_app::load_runtime_resources(data);
     const auto directory=std::filesystem::temp_directory_path()/("openbmh-plan-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);
@@ -2213,12 +2243,13 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
 }
 }
 int main(int argc,char** argv)try {
+    if(argc==6&&std::string(argv[3])=="--running-join-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_running_join_gui(argv[1],read_save(load_savegame(argv[4])),argv[2],std::stoi(argv[5]));return 0;}
     if(argc==4&&std::string(argv[3])=="--native-clock-fixture"){native_clock_fixture(argv[1],argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--live-family-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_live_family_gui(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--market-loan"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_transfer_market_gui(argv[1],read_save(load_savegame(argv[4])),argv[2],true);return 0;}
     if(argc==5&&std::string(argv[3])=="--market-received"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_market_received_gui(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--market-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_transfer_market_gui(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
-    if(argc==5&&std::string(argv[3])=="--balance-only"){actual_balance_gui(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
+    if(argc==5&&std::string(argv[3])=="--balance-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_balance_gui(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--family-results"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_family_result_views(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--indoor-settings-only"){const auto resources=session_app::load_runtime_resources(argv[1]);const auto fixture=read_save(load_savegame(argv[4]));actual_indoor_settings(argv[1],fixture,std::filesystem::path(argv[2])/"initial");for(int day:{109,110,230,231})actual_indoor_settings(argv[1],fixture,std::filesystem::path(argv[2])/("boundary-"+std::to_string(day)),day);return 0;}
     if(argc==5&&std::string(argv[3])=="--timer-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_process_timer(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}

@@ -163,12 +163,13 @@ TacticalOutcome calculate_manager_tactical_action(const World& world,uint8_t sea
             for(size_t row=0;row<24;++row)if(!result.lineup->roster[row].empty())result.changed|=world.players.at(result.lineup->roster[row].player).cards!=result.lineup->cards_by_row[row];}}
     return result;
 }
-uint64_t initialize_manager_contracts(World& world,uint8_t seat,const GameState& rules,TacticalPolicy policy,WatcomRandom& random) {
-    world.validate();
-    if(!world.players_initialized || policy.mode<1 || policy.mode>3 || policy.difficulty<0 || policy.difficulty>9 || policy.indoor || policy.frozen ||
-        world.development_balance || world.trend_rotation || !world.loans.empty())
+static uint64_t initialize_contracts_owned(World& world,uint8_t seat,const GameState& rules,TacticalPolicy policy,WatcomRandom& random,bool joining) {
+    if(joining){auto existing=world;std::erase_if(existing.managers,[&](const auto& m){return m.seat==seat;});existing.validate();}
+    else world.validate();
+    if(!world.players_initialized || policy.mode<1 || policy.mode>3 || policy.difficulty<0 || policy.difficulty>9 || (!joining&&policy.indoor) || policy.frozen ||
+        (!joining&&(world.development_balance || world.trend_rotation || !world.loans.empty())))
         throw std::invalid_argument("world12: initial manager contracts require the fresh outdoor career phase");
-    for(const auto& [id,club]:world.clubs)if(club.season_stats!=ClubSeasonStats{})throw std::invalid_argument("world12: played career cannot initialize manager contracts");
+    if(!joining)for(const auto& [id,club]:world.clubs)if(club.season_stats!=ClubSeasonStats{})throw std::invalid_argument("world12: played career cannot initialize manager contracts");
     const auto found=std::find_if(world.managers.begin(),world.managers.end(),[&](const auto& manager){return manager.seat==seat;});
     if(found==world.managers.end() || found->finance || found->tactics)throw std::invalid_argument("world12: manager contract/account state already exists or seat is missing");
     if(rules.manager_options.size()<size_t(seat+1)*5 || rules.manager_options[size_t(seat)*5]!=1 || rules.formations.size()<0x580 ||
@@ -184,10 +185,10 @@ uint64_t initialize_manager_contracts(World& world,uint8_t seat,const GameState&
     for(size_t row=0;row<24;++row)for(size_t offset:{0x44u,0x46u}){
         const auto at=size_t(seat)*board_size+row*row_size+offset;initial.tactics[at]=0xff;initial.tactics[at+1]=0x0f;}
     manager.tactics=manager_full_tactics_from_legacy(initial,seat,{});
-    auto local=workspace(candidate,manager,policy);const auto mapping=mapped_players(candidate,manager);
+    auto local=workspace(candidate,manager,policy);local.date=rules.date;local.season=rules.season;local.season_start=rules.season_start;const auto mapping=mapped_players(candidate,manager);
     for(size_t row=0;row<24;++row) {
         const auto raw=local.squad_slots[row];if((raw&0xfff)==0xfff)break;
-        auto& p=local.players.at(raw&0xfff);p.w364=(p.w364&~(0x1fu<<21))|(uint32_t(staged_random.range(4,9))<<21);
+        auto& p=local.players.at(raw&0xfff);if(!joining)p.w364=(p.w364&~(0x1fu<<21))|(uint32_t(staged_random.range(4,9))<<21);
         bmh::new_board_entry(local,0,int(row),int(row),staged_random);local.tactics[row*row_size+0xd]=100;
     }
     int tier=candidate.catalogue.league(candidate.clubs.at(manager.club).league).local_index;
@@ -197,6 +198,10 @@ uint64_t initialize_manager_contracts(World& world,uint8_t seat,const GameState&
     manager.tactics=manager_full_tactics_from_legacy(local,0,mapping);
     manager.finance=manager_initial_finance_from_legacy(local,0);
     manager.match_state=manager_match_state_from_legacy(initial,seat,{},{});
+    if(joining){
+        const auto year=uint16_t(rules.season);local.manager_records[0x2aa]=uint8_t(year);local.manager_records[0x2ab]=uint8_t(year>>8);
+        manager.career=manager_career_state_from_legacy(local,0,mapping,true);
+    }
     auto& club=candidate.clubs.at(manager.club);club.match_flags=local.team_flags[0];club.lineup_indoor=(local.club_heap_78[1]&2)!=0;
     for(size_t row=0;row<24;++row) {
         const auto raw=local.squad_slots[row];if((raw&0xfff)==0xfff){club.roster[row]={};continue;}
@@ -207,6 +212,26 @@ uint64_t initialize_manager_contracts(World& world,uint8_t seat,const GameState&
     candidate.validate();
     if(world!=before || random.seed()!=old_seed || random.calls()!=old_calls)throw std::invalid_argument("world12: manager initialization owner/RNG changed");
     const auto draws=staged_random.calls()-old_calls;world=std::move(candidate);random=staged_random;return draws;
+}
+
+uint64_t initialize_manager_contracts(World& world,uint8_t seat,const GameState& rules,TacticalPolicy policy,WatcomRandom& random) {
+    return initialize_contracts_owned(world,seat,rules,policy,random,false);
+}
+uint64_t initialize_joining_manager_contracts(World& world,uint8_t seat,const GameState& rules,TacticalPolicy policy,WatcomRandom& random) {
+    return initialize_contracts_owned(world,seat,rules,policy,random,true);
+}
+std::array<uint8_t,0x58> initialize_joined_owner_loan_board(const World& world,uint8_t seat,PlayerId player,
+    TacticalPolicy policy,WatcomRandom& random,uint32_t season) {
+    const auto actor=std::find_if(world.managers.begin(),world.managers.end(),[&](const auto& m){return m.seat==seat;});
+    if(actor==world.managers.end()||!actor->tactics||!world.players.contains(player))throw FormatError("world12: joining loan owner has no actual player/board context");
+    auto local=workspace(world,*actor,policy);local.season=int(season);const auto id=local.players.size();const auto& record=world.players.at(player);
+    if(id>=4095)throw FormatError("world12: joining loan board exceeds bounded player workspace");
+    local.players.push_back(record.attributes);local.player_cards.push_back(record.cards);local.player_bonus.push_back(record.bonus);
+    local.player_name_offsets.push_back(uint16_t(local.player_names.size()));local.player_names.insert(local.player_names.end(),record.attributes.name.begin(),record.attributes.name.end());local.player_names.push_back(0);
+    local.squad_slots[0]=uint16_t(id);local.counts.players=uint32_t(local.players.size());
+    bmh::new_board_entry(local,0,0,0,random);std::array<uint8_t,0x58> board;std::copy_n(local.tactics.begin(),board.size(),board.begin());
+    for(size_t offset=0x44;offset<0x48;++offset)board[offset]=0;
+    return board;
 }
 
 }

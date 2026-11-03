@@ -214,7 +214,9 @@ bool ManagerScreen::selection_locked(int selection)const {
 }
 void ManagerScreen::select_club(int selection) {
     choice_.selection_club=selection;
-    if(context_.world){choice_.master_club=-1;choice_.world_club=world_club_of(selection);if(national_only())choice_.country=context_.world->national_teams.at(size_t(selection)).country;}
+    if(context_.world){choice_.master_club=-1;choice_.world_club=world_club_of(selection);if(national_only())choice_.country=context_.world->national_teams.at(size_t(selection)).country;
+        if(context_.world->joining){const auto& groups=choice_.country==bmh::world12::Country::germany?context_.world->germany:context_.world->england;for(const auto& group:groups)for(const auto& club:group.clubs)if(club.id==choice_.world_club){choice_.start_league=club.actual_league;choice_.strength=1;}}
+    }
     else choice_.master_club=master_id(selection);
 }
 void ManagerScreen::select_country(bmh::world12::Country country) {
@@ -328,7 +330,7 @@ bool ManagerScreen::click(int x, int y, bool right) {
     for (int i = 0; i < 4; ++i) {
         if (x < field_x_[i] || x > field_x_[i] + field_width_[i] || y < baseline_[i] - 26 || y > baseline_[i] + 3) continue;
         if (i == 0) { choice_.name.clear(); view_ = ManagerView::name_edit; return true; }
-        if(national_only()&&(i==1||i==3))return false;
+        if((national_only()||(context_.world&&context_.world->joining))&&(i==1||i==3))return false;
         if (i == 1) { choice_.start_league = (choice_.start_league + 1) % visible_league_count(); return true; }
         if (i == 2) open_clubs = true;
         if (i == 3) { choice_.strength = (choice_.strength + 1) % 3; return true; }
@@ -457,7 +459,7 @@ Image ManagerScreen::render() const {
     if(context_.world)country_flag(out,186,77);
     badge(out, context_.world?235:186, 77, context_.world?choice_.selection_club:choice_.master_club);
     const std::array<std::string, 4> values = {choice_.name, national_only()?"Nationalmannschaft":leagues_[choice_.start_league],
-        selection_name(choice_.selection_club), national_only()?"-":texts_[(::bmh::layout::Manager_Render_TextPointer - ::bmh::layout::TextPointerTable) / 4 + choice_.strength]};
+        selection_name(choice_.selection_club), national_only()?"-":context_.world&&context_.world->joining?"Bestehend":texts_[(::bmh::layout::Manager_Render_TextPointer - ::bmh::layout::TextPointerTable) / 4 + choice_.strength]};
     for (int i = 0; i < 4; ++i) {
         copy(out, background_, field_x_[i], field_y_[i], field_x_[i], field_y_[i], field_width_[i], 11);
         // TextWidth3 refuses strings extending outside the framebuffer.

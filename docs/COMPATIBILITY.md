@@ -249,3 +249,10 @@ read-only league overview remains in its display overlay. It cannot silently
 change the running lineup; match changes use the owned lineup/substitution
 screen. Explicitly accepted table/pairings/strengths preferences still persist
 for the canonical viewer, including a manager outside the current match batch.
+
+## Extended running manager entry
+
+OpenBMH deviates from the original: an AI-club takeover preserves league membership,
+played matches and player ages instead of the original fresh-manager reshuffle.
+Actual Source personal contracts, funds and formations are initialized. Existing
+loans stay binding. See [running managers](poc-1.2/RUNNING_MANAGERS.md).

@@ -64,6 +64,14 @@ public:
     std::vector<bmh::world12::NationalDesktopActor> national_desktop_actors()const;
     bmh::world12::AiMatchProjection make_national_desktop_projection()const;
     void confirm_manager(const ui::ManagerChoice&,uint64_t expected_revision);
+    ui::SelectionContext begin_manager_join(const ui::DeskRequest&,const std::filesystem::path& data);
+    ui::SelectionContext manager_join_context()const;
+    std::vector<ui::ManagerChoice> joining_choices()const;
+    void choose_join_options(const ui::SetupOptions&);
+    void confirm_join_manager(const ui::ManagerChoice&);
+    bool manager_join_complete()const;
+    void commit_manager_join();
+    void cancel_manager_join();
     void prepare_start(uint64_t expected_revision);
     DesktopEntryOutcome begin_first_event(uint64_t expected_revision);
     DesktopEntryOutcome advance_manager(const ui::DeskRequest&);
@@ -167,6 +175,14 @@ private:
     struct ResumeTag {};
     Session(RuntimeResources,bmh::world12::CareerSnapshot,uint64_t scope,uint64_t revision,ResumeTag);
     RuntimeResources resources_;ui::SetupOptions options_;
+    struct ManagerJoinDraft {
+        bmh::world12::CareerSnapshot source,candidate;
+        ui::SetupOptions options;
+        ui::DeskRequest origin;
+        uint64_t context_revision=0;
+        bool options_chosen=false;
+    };
+    std::shared_ptr<const ManagerJoinDraft> join_;
     bmh::world12::CareerSnapshot state_;ManagerActionOwner owner_;
     InitialCompetitionOutcome draws_;InitialManagerServicesOutcome services_;
     std::optional<int> preparation_menu_;
