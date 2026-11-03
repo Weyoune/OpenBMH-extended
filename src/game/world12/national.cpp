@@ -122,7 +122,8 @@ NationalNominationOutcome nominate_national_squad(World& world,Country country,u
     const auto previous_calls=staged.calls();
     NationalSquad squad;if(prior!=world.national_squads.end())squad=*prior;
     squad.team=team;squad.nominated_on=date;
-    squad.coach=world.managers.size()==1?std::optional<uint8_t>{anchor->seat}:std::nullopt;
+    if(world.national_coaches){const auto record=std::find_if(world.national_coaches->begin(),world.national_coaches->end(),[&](const auto& value){return value.team==team;});if(record==world.national_coaches->end())throw FormatError("world12: national nomination account is unavailable");squad.coach=record->coach;}
+    else squad.coach=world.managers.size()==1?std::optional<uint8_t>{anchor->seat}:std::nullopt;
     auto local=reference;initialize_national_manager_record(local);
     std::copy_n(local.manager_records.begin()+4*record_size,record_size,local.manager_records.begin());
     std::copy_n(local.tactics.begin()+4*board_size,board_size,local.tactics.begin());
@@ -149,10 +150,12 @@ NationalNominationOutcome nominate_national_squad(World& world,Country country,u
     }else for(size_t row=0;row<24;++row)for(size_t offset:{0x44u,0x46u}) {
         local.tactics[row*0x58+offset]=255;local.tactics[row*0x58+offset+1]=15;
     }
-    const auto& backing=*anchor->tactics->backing;
+    const auto coach=squad.coach?std::find_if(world.managers.begin(),world.managers.end(),[&](const auto& manager){return manager.seat==*squad.coach;}):anchor;
+    if(coach==world.managers.end()||!coach->tactics||!coach->tactics->backing)throw FormatError("world12: nominated coach lacks actual tactical context");
+    const auto& backing=*coach->tactics->backing;
     std::copy(backing.formations.begin(),backing.formations.end(),local.formations.begin());
     local.projected_formation_tails={backing.formation_tail};
-    local.manager_options[0]=anchor->tactics->automatic_formation;
+    local.manager_options[0]=coach->tactics->automatic_formation;
     std::copy(backing.automation.begin(),backing.automation.end(),local.manager_options.begin()+1);
     if(squad.coach)local.manager_records[0x218]=backing.enabled_formations[0];
     local.team_flags.at(size_t(kNoTeam))=world.clubs.at(team).match_flags;

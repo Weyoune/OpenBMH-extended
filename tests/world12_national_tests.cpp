@@ -2,6 +2,8 @@
 #include "world12_fixture.hpp"
 #include "fixture_tables.hpp"
 #include "game/world12/national.hpp"
+#include "game/world12/national_coach.hpp"
+#include "game/week.hpp"
 #include "game/world12/codec.hpp"
 #include "game/world12/save.hpp"
 #include "app/world12_national.hpp"
@@ -64,6 +66,34 @@ World fixture() {
     }
     w.validate();return w;
 }
+void coach_account_ownership() {
+    auto world=fixture();auto reference=rules();
+    constexpr size_t monthly[]={0x338,0x33c,0x85c,0x860,0x864,0x86c,0x878,0x87c,0x880,0x884,0x888,0x88c,0x890,0x894,0x898};
+    const auto put=[&](size_t at,uint32_t value){for(size_t b=0;b<4;++b)reference.manager_records.at(at+b)=uint8_t(value>>(8*b));};
+    for(size_t n=0;n<15;++n)put(4*0xb0c+monthly[n],uint32_t(100+n));
+    put(4*0xb0c+0x854,731);put(4*0xb0c+0x858,815);put(4*0xb0c+0x318,42000);reference.manager_records[4*0xb0c+0x8ac]=9;
+    world.managers[0].finance=ManagerFinance{73100000};world.managers[1].finance=ManagerFinance{42700000};
+    const auto parked=world.managers;initialize_national_coaches(world,reference);
+    check(world.managers==parked&&world.national_coaches&&world.national_coaches->size()==2,"national account initialization overwrote parked club state");
+    const auto account=world.national_coaches->front().account;check(account.finance.balance==1000000&&account.finance.baseline->starting_balance==1000000&&account.deposit==42000&&account.training_quality==9&&std::all_of(account.training_preferences.begin(),account.training_preferences.end(),[](auto n){return n==2;}),"Source spare account/training initialization differs");
+    for(size_t n=0;n<15;++n)check(account.monthly.counters[n]==100+n,"national monthly categories borrowed club fields");
+    auto native=reference;initialize_national_manager_record(native);std::copy_n(native.manager_records.begin()+4*0xb0c,0xb0c,native.manager_records.begin());native.date=31;native.level=6;
+    auto projected=rules();projected.date=31;projected.level=6;install_national_coach_account(projected,0,account);
+    WatcomRandom nr(81),pr(81);manager_daily_interest(native,0,nr);manager_daily_interest(projected,0,pr);
+    check(national_coach_account_from_legacy(native,0)==national_coach_account_from_legacy(projected,0)&&nr.seed()==pr.seed()&&nr.calls()==pr.calls(),"national interest/monthly capture differs from Source spare account");
+    for(auto& manager:world.managers){manager.career.emplace();manager.career->annual_records.emplace();manager.career->annual_records->national_eligibility=4;}
+    auto de=world.managers[0];de.seat=2;de.portrait=2;de.name="Second German coach";de.club=world.membership[0].clubs[1];world.managers.push_back(de);
+    auto en=world.managers[1];en.seat=1;en.portrait=1;en.name="Second English coach";en.club=world.membership[5].clubs[1];world.managers.push_back(en);world.settings->planned_managers=4;world.validate();
+    const std::vector<uint8_t> order{2,1,0,3};const auto selected=select_national_coaches(world,order);check(selected==std::vector<std::pair<ClubId,uint8_t>>{{{3000000},2},{{3000002},1}},"coach choice ignored saved order/nonzero21c or appointed duplicates");
+    for(size_t count=1;count<=4;++count){auto seats=world;seats.managers.resize(count);seats.settings->planned_managers=uint8_t(count);std::vector<uint8_t> saved;for(auto seat:order)if(std::any_of(seats.managers.begin(),seats.managers.end(),[&](const auto& m){return m.seat==seat;}))saved.push_back(seat);const auto chosen=select_national_coaches(seats,saved);check(chosen.size()==(count==1?1u:2u),"one-to-four manager coach capability changed");for(const auto& [team,seat]:chosen){const auto country=seats.clubs.at(team).country;const auto first=std::find_if(saved.begin(),saved.end(),[&](auto id){return seats.manager_country(id)==country;});check(first!=saved.end()&&*first==seat,"coach choice sorted seats instead of saved order");}}
+    activate_national_coaches(world,order);check(world.managers[0].career->annual_records->national_eligibility==4,"coach selection cleared Source eligibility");
+    WatcomRandom nomination(81);nominate_national_squad(world,Country::germany,4,reference,nomination);nominate_national_squad(world,Country::england,4,reference,nomination);check(world.national_squads[0].coach==2&&world.national_squads[1].coach==1,"nomination replaced selected country coach");
+    check(read_save(make_save(CareerSnapshot{.world=world,.results=SeasonResults::empty(world.catalogue),.date=4})).world==world,"separate national accounts lost on regular save roundtrip");
+    auto duplicate=world;duplicate.national_coaches->at(1).coach=2;rejects([&]{duplicate.validate();},"one human silently coached two countries");
+    rejects([&]{select_national_coaches(world,{2,2,0,3});},"duplicate saved coach order accepted");
+    auto missing=world;missing.national_coaches.reset();check(decode_world(encode_world(missing))==missing,"unknown national finances were reconstructed on load");
+    rejects([&]{initialize_national_coaches(world,reference);},"national account initialization reset played cash");
+}
 void runtime_national_identity() {
     auto native=rules();const auto native_first=squad_range(kNoTeam).first;check(is_national_team(native,kNoTeam)&&has_national_squad(native,kNoTeam)&&!is_national_team(native,kNoTeam+2),"empty national map changed legacy sentinel semantics");
     auto world=fixture();world.managers.erase(world.managers.begin()+1);world.settings->planned_managers=1;WatcomRandom nomination(93);nominate_national_squad(world,Country::germany,4,native,nomination);
@@ -82,6 +112,7 @@ void retained_origin_nomination() {
     auto master=fixture();master.players_initialized=false;master.markets.reset();master.free_players.reset();master.settings.reset();master.managers.clear();master.validate();
     for(const auto scope:{GameScope{false,false,true},GameScope{true,false,true},GameScope{false,true,true}}){
         const auto scoped=select_world_scope(master,scope);check(scoped.national_origins.has_value(),"disabled real roster provenance missing");
+        check(national_capabilities(scoped).national_only_manager_limit==1&&national_capabilities(scoped).national_only_choices.size()==2,"real national-only choices/count were invented or omitted");
         for(auto country:{Country::germany,Country::england})check(national_nomination(scoped,country)==national_nomination(master,country),"scope changed actual national nominees or Source tie order");
         auto duplicate=scoped;duplicate.national_origins->push_back(duplicate.national_origins->front());rejects([&]{duplicate.validate();},"duplicate national provenance accepted");
         check(decode_world(encode_world(scoped))==scoped,"retained origin codec changed source identities");
@@ -251,6 +282,6 @@ void scheduled_owner() {
 }
 }
 int main()try {
-    set_fixture_tables(bmh::test::authored_fixture_tables());nomination_rules();runtime_national_identity();retained_origin_nomination();persistence_and_ownership();original_nomination_equivalence();scheduled_owner();
+    set_fixture_tables(bmh::test::authored_fixture_tables());nomination_rules();coach_account_ownership();runtime_national_identity();retained_origin_nomination();persistence_and_ownership();original_nomination_equivalence();scheduled_owner();
     std::cout<<"Global national selection, quotas, availability, country/coach ownership, native boards, atomic RNG and saved squads passed\n";
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}

@@ -75,3 +75,14 @@ rating-only nations (including the primary nation) without assigning them a
 player squad. Real DE/EN nominated squads use independent offsets; Core ratings,
 lineups, match events, settlement, Reality slots and familiarity/training use
 these offsets. These runtime fields are never serialized to legacy saves.
+
+The optional `national_coaches` context owns a separate Source spare-record
+account for each real DE/EN team. Only fresh initialization captures it; missing
+older national financial history remains unknown. Cash/baseline, the verified
+monthly categories, deposit/interest counters, robbery guard and thirteen
+training preferences/quality are independent of parked club managers. Club loans,
+property and facility state do not enter this account. Coach selection validates
+the saved manager order and appoints its first eligible nonzero Source21c manager
+per country, with the Original automatic single-manager case retained. The
+backend national-only capability is limited to one manager and reports actual
+DE/EN choices only with complete real roster provenance and positional quotas.

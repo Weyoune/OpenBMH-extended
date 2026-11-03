@@ -1233,6 +1233,7 @@ endif()
 add_library(bmhworld12 STATIC
     src/game/world12/prepared_event.cpp
     src/game/world12/national.cpp
+    src/game/world12/national_coach.cpp
     src/game/world12/catalogue.cpp
     src/game/world12/world.cpp
     src/game/world12/world_scope.cpp

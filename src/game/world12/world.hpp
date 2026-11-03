@@ -214,6 +214,24 @@ struct ManagerEconomy {
     std::array<std::array<uint32_t,52>,4> financial_history{};
     bool operator==(const ManagerEconomy&)const=default;
 };
+// The Source spare national record has its own cash, monthly counters and
+// training settings. It owns no club loans, property portfolio or facilities.
+struct NationalCoachAccount {
+    ManagerFinance finance;
+    ManagerMonthlyEconomy monthly;
+    uint32_t deposit=0,interest_income=0,overdraft_interest=0;
+    std::optional<uint32_t> bank_robbery_month;
+    std::array<uint8_t,13> training_preferences{};
+    uint16_t training_quality=0;
+    bool operator==(const NationalCoachAccount&)const=default;
+};
+struct NationalCoachRecord {
+    ClubId team;
+    std::optional<uint8_t> coach;
+    bool active=false;
+    NationalCoachAccount account;
+    bool operator==(const NationalCoachRecord&)const=default;
+};
 struct PoolsCoupon {
     uint32_t stake=0,winnings=0;
     std::array<uint8_t,11> tips{};
@@ -282,6 +300,7 @@ struct World {
     std::optional<uint32_t> annual_awards_completed; // Exactly-once season count; fresh0, unknown before schema38.
     std::optional<std::array<std::vector<ClubId>,2>> amateur_slots; // Source physical DE/EN newcomer order; unknown before schema36.
     std::vector<NationalSquad> national_squads;
+    std::optional<std::vector<NationalCoachRecord>> national_coaches;
     GlobalPlayerStatistics player_statistics;
     std::optional<CareerEconomy> economy;
     bool players_initialized=false;
