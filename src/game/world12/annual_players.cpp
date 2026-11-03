@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "game/world12/annual_players.hpp"
 #include "game/world12/economy.hpp"
+#include "game/world12/manager_creation.hpp"
 #include "game/world12/market_auctions.hpp"
 #include "game/world12/market_bids.hpp"
 #include "game/month.hpp"
@@ -105,6 +106,7 @@ AnnualPlayerRenewalStage stage_annual_player_renewal(const CareerSnapshot& state
         for(uint8_t manager=0;manager<projection.human_managers();++manager){const auto seat=projection.global_manager(manager);auto& career=*std::find_if(candidate.world.managers.begin(),candidate.world.managers.end(),[&](const auto& actor){return actor.seat==seat;})->career;
             career.other_games_view=local.memory.u8(layout::CareerSession_DispatchOtherGames_RuntimeField+manager);career.pairings_display_byte=local.memory.u8(layout::CareerSession_CloseLeagueFamily_ExecutableField+manager);
             career.table_display_word=local.memory.u16(layout::LeagueTableDisplayModes+uint32_t(manager*2));career.strengths_display_word=local.memory.u16(layout::ManagerSettings+uint32_t(manager*2));career.stadium_curve_flags=local.memory.u8(layout::Flags+uint32_t(manager*3+1));
+            capture_manager_statistics_flags(local,manager,career,5);
         }
     }
     std::vector<ClubId> order;for(auto group:{TableGroup::germany,TableGroup::england,TableGroup::europe})for(auto league:candidate.world.catalogue.simulation_leagues(group))for(auto id:candidate.world.membership[league.value].clubs)order.push_back(id);

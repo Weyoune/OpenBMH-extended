@@ -21,12 +21,19 @@ int main()try {
     rejects([&]{application::publish_annual_transition(state,owner,owner,reference,de,en,texts,{},cancelled);},"annual cancellation accepted");check(state==source&&owner.revision==0,"annual cancellation leaked accounts, archive, rosters or RNG");
     const auto outcome=application::publish_annual_transition(state,owner,owner,reference,de,en,texts,{},hooks);
     check(outcome.career_complete&&state.season==1&&state.world.settings->duration==0&&state.date==source.date&&!state.calendar&&!state.progress&&owner.revision==1&&score_updates==1&&final_displays==1,"actual fixed-length annual publication skipped final hook or ran next-year day services");
+    check(state.world.managers[0].career->statistics_flags==0x40&&state.world.managers[0].career->player_statistics_flags==0x40,"authoritative annual Flags0/2 reset stayed unknown or lost in publication");
     check(outcome.academy==1,"annual coordinator skipped the actual academy roster movement");
     for(const auto& [id,player]:source.world.players)check(state.world.players.at(id).attributes.age()==player.attributes.age()+1,"published annual player lineage aged twice or remained frozen");
     check(state.world.annual_title_archive&&state.world.annual_title_archive->seasons.size()==1&&state.world.annual_title_archive->seasons[0].season==0&&state.world.annual_awards_completed==1&&state.world.inactive_national_draw->season==1,"annual closing facts/paid marker/scratch draw did not publish exactly once");
     auto hidden_before=source.world.membership[9].clubs,hidden_after=state.world.membership[9].clubs;std::sort(hidden_before.begin(),hidden_before.end());std::sort(hidden_after.begin(),hidden_after.end());check(hidden_before==hidden_after,"hidden English simulation division was exchanged as a fifth player division");
     for(auto round:state.league_rounds)check(round==0,"published year retained a completed league round");
     check(read_save(make_save(state))==state,"published completed annual career did not roundtrip");const auto published=state;rejects([&]{application::publish_annual_transition(state,owner,owner,reference,de,en,texts,{},hooks);},"annual transaction replay accepted");check(state==published&&owner.revision==1,"annual replay changed committed state");
+    {
+        auto lowest=source;const auto facts=completed_annual_titles(lowest);const auto club=facts.final_rankings[8].back();lowest.world.managers[0].club=club;lowest.world.managers[0].start_league={8};lowest.validate();application::ManagerActionOwner protected_owner{1993,0};
+        auto protected_hooks=hooks;protected_hooks.highscore=[](const auto&,bool){return true;};
+        const auto protected_year=application::publish_annual_transition(lowest,protected_owner,protected_owner,reference,de,en,texts,{},protected_hooks);
+        check(protected_year.career_complete&&lowest.world.managers[0].club==club&&lowest.world.clubs.at(club).league==LeagueId{8},"routine lowest-visible English relegation lost the actual protected human club");
+    }
     state=bmh::test::world12::annual_transition_closing(reference,de,5);owner={1992,0};const auto continuing=application::publish_annual_transition(state,owner,owner,reference,de,en,texts,{},hooks);
     check(!continuing.career_complete&&state.world.settings->duration==5&&state.season==1&&annual_opening_ready(state)&&score_updates==2&&final_displays==1,"unlimited annual career decremented or did not reach its real first-Wednesday opening owner");
     check(state.calendar->revision==source.calendar->revision+1&&state.calendar->next_day==0&&weekday_code(state.date)==2,"annual calendar/cursor did not reset to the real opening date");

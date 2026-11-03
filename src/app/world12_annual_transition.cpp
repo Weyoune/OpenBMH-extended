@@ -48,6 +48,7 @@ AnnualTransitionOutcome publish_annual_transition(CareerSnapshot& state,ManagerA
     if(!owned())throw FormatError("world12: stale annual publication owner");state.validate();
     if(!state.progress||state.progress->phase!=ProgressPhase::annual_transition||!state.desktop||state.desktop->active_seat||state.desktop->initial_event||state.desktop->autosave_pending||!state.world.settings||!state.world.settings->duration||!state.world.highscore_signature||state.season==UINT32_MAX||state.calendar->revision==UINT64_MAX)
         throw FormatError("world12: actual closing/length/signature owner is not ready for annual publication");
+    if(state.world.catalogue.scope.international&&(!state.world.national_coaches||std::any_of(state.world.national_coaches->begin(),state.world.national_coaches->end(),[](const auto& role){return role.active||role.coach.has_value();})))throw FormatError("world12: annual national club role was not handed back before closing");
     const auto before=state;auto candidate=state;const uint32_t target=state.season+1;AnnualTransitionOutcome out;
     const auto unchanged=[&]{if(state!=before||!owned())throw FormatError("world12: annual owner changed during Source presentation");};
     const auto archive=stage_annual_title_archive(state);
@@ -86,7 +87,6 @@ AnnualTransitionOutcome publish_annual_transition(CareerSnapshot& state,ManagerA
     if(candidate.world.settings->duration<5)--candidate.world.settings->duration;out.career_complete=candidate.world.settings->duration==0;
     if(out.career_complete){if(!hooks.highscore(out.highscore,true))throw FormatError("world12: completed career needs its actual final score presenter");unchanged();}
     else {
-        if(candidate.world.catalogue.scope.international){if(!candidate.world.national_coaches)throw FormatError("world12: annual coach account context is unknown");activate_national_coaches(candidate.world,candidate.desktop->manager_order);}
         MonthlyMarketPolicy listing;for(const auto& squad:candidate.world.national_squads)for(const auto& row:squad.roster)if(!row.empty())listing.national_squad.insert(row.player);
         const auto opening=stage_annual_opening_services(candidate,reference,texts,listing);candidate=opening.snapshot;out.game_draws+=opening.game_draws;out.watcom_draws+=opening.watcom_draws;
         const auto calendar=make_annual_calendar(candidate.world.catalogue,german,english,candidate.date);candidate.calendar=CalendarCursor{calendar,0,before.calendar->revision+1};

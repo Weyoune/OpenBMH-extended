@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "game/world12/season_awards.hpp"
+#include "game/world12/annual_coach.hpp"
 #include "game/season_awards.hpp"
 #include "game/world12/manager_finance.hpp"
 #include "game/world12/economy.hpp"
@@ -56,7 +57,8 @@ AnnualAwardsStage stage_annual_awards(const CareerSnapshot& state,const GameStat
            std::any_of(state.results.leagues[league.id.value].begin(),state.results.leagues[league.id.value].end(),[](const auto& score){return !score.played;}))
             invalid("world12: annual awards require complete actual league results");
     }
-    const auto before=state;AnnualAwardsStage stage{state.world,calculate_annual_awards(state.world),state.season+1};
+    const auto before=state;AnnualAwardsStage stage{state.world,{},state.season+1};
+    (void)close_annual_national_roles(stage.world);stage.awards=calculate_annual_awards(stage.world);
     auto local=reference;local.texts=&texts;
     const auto source=[&](uint32_t pointer)->const std::string&{
         const auto index=text_id(pointer);

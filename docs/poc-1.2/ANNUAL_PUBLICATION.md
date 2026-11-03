@@ -5,6 +5,12 @@ an exhausted, paid closing season whose real closing desks have committed the
 saved `annual_transition` phase. Closing sponsor goals and offers belong to those
 desks; this transaction cannot replay them.
 
+Known club national-coach roles are handed back before awards, retaining their
+actual separate accounts and nominees. The next national date selects its coach
+from the then-current saved manager order; annual opening makes no selection.
+Unknown old role history remains explicit. The authoritative presentation reset
+captures Source statistics flag bytes 0 and 2 as well as the existing curve byte.
+
 It stages actual title facts, Source moods, the next national draw (or the saved
 inactive raw-token carry), European qualification, accounts/tax/academy,
 remaining auctions, country exchanges, sanctions, cup fields, fixture shuffle,
