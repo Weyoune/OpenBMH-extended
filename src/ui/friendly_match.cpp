@@ -171,7 +171,8 @@ void FriendlyMatchScreen::prepare_calendar() {
         day.friendly_target = option != quote_->dates.end() &&
             (option->mark == FriendlyDateMark::available || option->mark == FriendlyDateMark::available_flagged);
     }
-    calendar_.emplace(data_, std::move(calendar), state_.manager_name, true, state_.runtime_team, DeskRequest{},exe_);
+    if(state_.owned_world12)calendar_.emplace(data_, std::move(calendar), state_.manager_name, true, state_.runtime_team, DeskRequest{},exe_);
+    else calendar_.emplace(data_, std::move(calendar), state_.manager_name, true, state_.runtime_team);
 }
 
 bool FriendlyMatchScreen::move(int x, int y) {
@@ -195,7 +196,7 @@ const TaxDialogProjection* FriendlyMatchScreen::question_projection() const {
 GameEndTaxDialog::Button FriendlyMatchScreen::question_button(int x,int y) const {
     const auto* p=question_projection();
     if(!p)return GameEndTaxDialog::Button::none;
-    return GameEndTaxDialog(data_,*p,{},accepted_background(),exe_).hit_test(x,y);
+    return (state_.owned_world12?GameEndTaxDialog(data_,*p,{},accepted_background(),exe_):GameEndTaxDialog(data_,*p,{},accepted_background())).hit_test(x,y);
 }
 
 bool FriendlyMatchScreen::pointer_down(int x,int y,bool right) {
@@ -238,7 +239,7 @@ Image FriendlyMatchScreen::render() const {
         const auto* p=question_projection();
         if(!p||p->kind!=TaxDialogKind::question)
             throw FormatError("friendly question: missing Source question projection");
-        return GameEndTaxDialog(data_,*p,{},accepted_background(),exe_).render(pressed_question_);
+        return (state_.owned_world12?GameEndTaxDialog(data_,*p,{},accepted_background(),exe_):GameEndTaxDialog(data_,*p,{},accepted_background())).render(pressed_question_);
     }
     if (stage_ == FriendlyStage::quote_pending)
         return render_modal(accepted_background(), "Freundschaftsspiel", "Kosten und Termine werden geprueft.", "", "");
