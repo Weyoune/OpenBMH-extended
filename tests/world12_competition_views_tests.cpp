@@ -36,7 +36,7 @@ void captured_draw(){
     const auto before=state;const auto view=world12_cup_draw_notice(state,notice,reference,rules,texts);check(view.projection.count==notice.fixtures.size()*2&&view.clubs.size()==view.projection.count,"captured cup draw lost actual participants");for(size_t n=0;n<notice.fixtures.size();++n)for(size_t side=0;side<2;++side){const auto club=side?notice.fixtures[n].away:notice.fixtures[n].home;const auto token=uint16_t(n*2+side);check(view.clubs.at(token)==club&&view.projection.clubs[token].badge_atlas==state.world.crests.at(state.world.clubs.at(club).crest).path,"captured cup draw invented identity or crest path");}check(state==before,"captured cup draw projection changed state");auto stale=notice;std::swap(stale.fixtures[0].home,stale.fixtures[0].away);rejects([&]{world12_cup_draw_notice(state,stale,reference,rules,texts);},"forged captured draw order accepted");
 }
 void english_draw_rounds(){
-    CareerSnapshot state;state.world=bmh::test::world12::complete_world();state.results=SeasonResults::empty(state.world.catalogue);state.world.managers={{3,"Authored English draw",state.world.membership[5].clubs[0],{5},3}};
+    CareerSnapshot state;state.world=bmh::test::world12::complete_world();state.results=SeasonResults::empty(state.world.catalogue);state.world.managers={{3,"English draw",state.world.membership[5].clubs[0],{5},3}};
     auto rules=bmh::test::world12::country_rules(true);
     // Reproduce the English TEXT-table offset that collides with German
     // Champions-League qualification, independently of the actual cup stages.
