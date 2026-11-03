@@ -1232,6 +1232,7 @@ endif()
 # its application/progression adapters are completely verified.
 add_library(bmhworld12 STATIC
     src/game/world12/prepared_event.cpp
+    src/game/world12/friendlies.cpp
     src/game/world12/national.cpp
     src/game/world12/national_coach.cpp
     src/game/world12/national_setup.cpp
@@ -1647,3 +1648,6 @@ add_test(NAME world12_national_annual_players_tests COMMAND world12_national_ann
 add_executable(world12_national_annual_tests tests/world12_national_annual_tests.cpp)
 target_link_libraries(world12_national_annual_tests PRIVATE bmhworld12_app)
 add_test(NAME world12_national_annual_tests COMMAND world12_national_annual_tests)
+add_executable(world12_friendly_plan_tests tests/world12_friendly_plan_tests.cpp)
+target_link_libraries(world12_friendly_plan_tests PRIVATE bmhworld12)
+add_test(NAME world12_friendly_plan_tests COMMAND world12_friendly_plan_tests)

@@ -3,6 +3,7 @@
 #include "game/world12/fixtures.hpp"
 #include "game/world12/calendar.hpp"
 #include "game/world12/cups.hpp"
+#include "game/world12/friendlies.hpp"
 #include <optional>
 #include "formats/fbm.hpp"
 namespace bmh::world12 {
@@ -82,7 +83,7 @@ struct PreparedGroup {
     std::optional<DomesticCup> cup;
     std::optional<EuropeanCompetition> european;
     std::optional<uint8_t> national;
-    bool indoor=false,regional_playoff=false;uint8_t indoor_tournament=0;
+    bool indoor=false,regional_playoff=false,friendly=false,friendly_national=false;uint8_t indoor_tournament=0;
     uint8_t source_entry=0,round=0,leg=0,flags=2;
     uint64_t revision=0;
     std::vector<PreparedFixture> matches;
@@ -114,6 +115,7 @@ struct CareerSnapshot {
     std::optional<PreparedEvent> prepared_event;
     // Typed active career snapshots will extend this record as their owning
     // progression transactions are integrated. No legacy FBM stream is guessed.
+    std::optional<FriendlyPlan> friendly_plan;
     void validate()const;
     bool operator==(const CareerSnapshot&)const=default;
 };
