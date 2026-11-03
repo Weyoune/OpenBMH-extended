@@ -21,6 +21,7 @@
 #include <stdexcept>
 #include <algorithm>
 #include "game/world12/national_setup.hpp"
+#include "game/world12/inactive_club_state.hpp"
 namespace bmh::app::world12 {
 using namespace bmh::world12;
 RuntimeResources load_runtime_resources(const std::filesystem::path& data) {
@@ -83,7 +84,7 @@ void Session::prepare_start(uint64_t revision) {
     if(candidate.world.catalogue.scope.club_play())calendar=SeasonCalendar::from_sources(candidate.world.catalogue,de,aligned.entries);
     if(!candidate.world.catalogue.scope.club_play()){
         const auto primary=candidate.world.manager_country(candidate.world.managers.front().seat);calendar=make_national_only_calendar(candidate.world.catalogue,primary==Country::england?aligned.entries:de);
-        GameRandom game(candidate.game_seed);WatcomRandom random(candidate.watcom_seed);prepare_national_campaign(candidate.world,primary==Country::germany?resources_.german:resources_.english,0,game,random,primary);activate_national_coaches(candidate.world,{candidate.world.managers.front().seat});for(auto country:{Country::germany,Country::england})nominate_national_squad(candidate.world,country,candidate.date,resources_.reference,random);candidate.calendar=CalendarCursor{calendar,0,0};candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();initialize_career_economy(candidate,resources_.reference);initialize_desktops(candidate,resources_.reference);
+        GameRandom game(candidate.game_seed);WatcomRandom random(candidate.watcom_seed);const auto inactive=initialize_inactive_club_state(candidate.world,resources_.master,resources_.german,resources_.english,resources_.reference,game,random);prepare_national_campaign_from_initial_field(candidate.world,primary==Country::germany?resources_.german:resources_.english,primary,inactive.initial_national_field,game,random);activate_national_coaches(candidate.world,{candidate.world.managers.front().seat});for(auto country:{Country::germany,Country::england})nominate_national_squad(candidate.world,country,candidate.date,resources_.reference,random);candidate.calendar=CalendarCursor{calendar,0,0};candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();initialize_career_economy(candidate,resources_.reference);initialize_desktops(candidate,resources_.reference);
         for(auto& desk:candidate.desktop->managers){const auto record=std::find_if(candidate.world.national_coaches->begin(),candidate.world.national_coaches->end(),[&](const auto& c){return c.coach==desk.seat;});if(record==candidate.world.national_coaches->end()||!record->desktop_layout)throw FormatError("world12: Source national desktop template is missing");desk.layout=*record->desktop_layout;}
         candidate.validate();if(state_!=before||owner_.scope!=before_owner.scope||owner_.revision!=before_owner.revision)throw FormatError("world12: national preparation owner changed");state_=std::move(candidate);++owner_.revision;return;
     }
