@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "game/world12/annual_opening.hpp"
 #include "app/world12_save_load.hpp"
 #include "app/menu_layout_source.hpp"
 #include "game/save.hpp"
@@ -34,7 +35,8 @@ Session::Session(RuntimeResources resources,bmh::world12::CareerSnapshot state,u
     state_.validate();
     const bool desk_owned=state_.desktop&&state_.desktop->initial_event&&state_.desktop->active_seat;
     const bool clock_owned=state_.progress&&state_.desktop&&!state_.desktop->initial_event&&!state_.desktop->active_seat;
-    if(!scope||!revision||revision==std::numeric_limits<uint64_t>::max()||(!desk_owned&&!clock_owned)||!state_.calendar||!state_.world.transfer_market||!state_.world.initial_competitions||!state_.world.initial_competitions->manager_services_complete||state_.world.managers.size()!=size_t(options_.managers))
+    const bool annual_opening=bmh::world12::annual_opening_ready(state_);
+    if(!scope||!revision||revision==std::numeric_limits<uint64_t>::max()||(!desk_owned&&!clock_owned&&!annual_opening)||!state_.calendar||!state_.world.transfer_market||!state_.world.initial_competitions||!state_.world.initial_competitions->manager_services_complete||state_.world.managers.size()!=size_t(options_.managers))
         throw FormatError("world12: snapshot has no resumable event/progression owner");
     if(clock_owned){const auto epoch=calendar_epoch_from_executable(resources_.german);if(state_.progress->epoch_year!=epoch.year||state_.progress->epoch_weekday!=epoch.weekday)throw FormatError("world12: saved clock requires another calendar epoch");}
     for(const auto& m:state_.world.managers)if(!m.finance||!m.tactics||!m.tactics->backing||!m.match_state||!m.career||!m.career->season_services)throw FormatError("world12: saved manager state is incomplete");

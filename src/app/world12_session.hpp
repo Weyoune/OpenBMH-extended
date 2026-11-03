@@ -5,6 +5,7 @@
 #include "app/world12_initial_season.hpp"
 #include "app/world12_first_event.hpp"
 #include "app/world12_clock.hpp"
+#include "app/world12_annual_transition.hpp"
 #include "app/world12_national.hpp"
 #include "app/world12_ai_day.hpp"
 #include "app/world12_weather.hpp"
@@ -61,6 +62,12 @@ public:
     DesktopEntryOutcome begin_first_event(uint64_t expected_revision);
     DesktopEntryOutcome advance_manager(const ui::DeskRequest&);
     void finish_initial_day(const ui::DeskRequest&);
+    DesktopEntryOutcome begin_annual_closing(uint64_t expected_revision);
+    void finish_annual_closing(const ui::DeskRequest&);
+    AnnualTransitionOutcome publish_annual_year(uint64_t expected_revision,
+        const std::filesystem::path& highscore_file,const AnnualTransitionHooks&);
+    DesktopEntryOutcome begin_annual_opening(uint64_t expected_revision);
+    void finish_annual_opening(const ui::DeskRequest&);
     ClockStepOutcome advance_saved_clock(uint64_t expected_revision,const std::filesystem::path&,const ClockHooks&);
     ClockStepOutcome seek_saved_event(uint64_t expected_revision,const std::filesystem::path&,const ClockHooks&);
     NationalAppointmentOutcome prepare_national_day(uint64_t expected_revision);
