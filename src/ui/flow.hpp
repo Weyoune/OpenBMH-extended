@@ -245,6 +245,7 @@ public:
     World12MarketView prepare_world12_market_result(World12MarketState,PreparationState,const World12MarketRequest&,bool closed)const;
     void finish_world12_market(World12MarketView)noexcept;
     void reject_world12_market(std::string);
+    void reject_world12_readonly(std::string);
     const TransferMarketScreen* world12_market_screen()const{return world12_market_identity_?transfer_market_.get():nullptr;}
     const OutgoingTransferScreen* world12_offer_screen()const{return world12_market_identity_?outgoing_transfer_.get():nullptr;}
     const World12MarketRequest* pending_world12_market()const{return world12_market_pending_?&*world12_market_pending_:nullptr;}

@@ -3,6 +3,7 @@
 #include "ui/world12_readonly.hpp"
 #include "ui/top_scorers.hpp"
 #include "ui/calendar.hpp"
+#include "ui/world12_statistics_screen.hpp"
 namespace bmh::ui {
 // Owns the existing Original screens; render/input rules stay in those screens.
 class World12ReadonlyScreen {
@@ -21,8 +22,10 @@ public:
     bool owns_pending_release()const{return pending_on_down_;}
     const World12ReadonlyState& state()const{return state_;}
     std::string state_json()const;
+    void reject(std::string reason){if(statistics_)statistics_->reject(std::move(reason));}
 private:
     World12ReadonlyState state_;
+    std::unique_ptr<World12StatisticsScreen> statistics_;
     std::unique_ptr<AchievementsScreen> achievements_;
     std::unique_ptr<IndoorStandingsScreen> indoor_;
     std::unique_ptr<CalendarScreen> calendar_;
