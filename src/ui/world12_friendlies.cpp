@@ -1,0 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-only
+#include "ui/world12_friendlies.hpp"
+#include "ui/manager.hpp"
+#include <algorithm>
+namespace bmh::ui {
+using namespace bmh::world12;
+WorldCupStatisticsProjection world12_friendly_nations(const CareerSnapshot& snapshot,ClubId own,const GameState& reference,const LeImage& source,std::array<ClubId,62>& countries){
+    snapshot.validate();const auto actor=snapshot.world.clubs.find(own);if(actor==snapshot.world.clubs.end()||actor->second.kind!=ClubKind::national_team||!snapshot.world.national_campaigns)throw FormatError("world12: actual national friendly picker owner is unavailable");for(const auto& [id,club]:snapshot.world.clubs)if(club.kind==ClubKind::national_team){const auto country=size_t(club.country);if(country>=62||countries[country].valid())throw FormatError("world12: national friendly picker has duplicate actual country");countries[country]=id;}for(auto id:countries)if(!id.valid())throw FormatError("world12: national friendly picker requires its actual62 identities");
+    auto view=reference;view.club_names={0};view.club_ids.resize(size_t(kNoTeam)+62);view.memory.add_block(layout::Placements,72);for(uint32_t n=0;n<72;++n)view.memory.set8(layout::Placements+n,0);for(size_t row=0;row<std::min<size_t>(18,snapshot.world.national_campaigns->honours.size());++row)for(size_t place=0;place<4;++place){const auto id=snapshot.world.national_campaigns->honours[row][place];const auto at=std::find(countries.begin(),countries.end(),id);if(at==countries.end())throw FormatError("world12: national friendly history lost its actual podium identity");view.memory.set8(layout::Placements+uint32_t(row*4+place),uint8_t(at-countries.begin())|128);}
+    for(size_t country=0;country<62;++country){const auto name=utf8_to_original(snapshot.world.clubs.at(countries[country]).name);if(view.club_names.size()+name.size()+1>65535)throw FormatError("world12: national picker source names exceed bounded width");view.club_ids[size_t(kNoTeam)+country]=uint16_t(view.club_names.size());view.club_names.insert(view.club_names.end(),name.begin(),name.end());view.club_names.push_back(0);}auto result=world_cup_statistics_from_game(view,source,WorldCupStatisticsOwner::friendly_match_nation_picker);result.owned_world12_picker=true;result.excluded_opponent=uint8_t(actor->second.country);for(size_t country=0;country<62;++country){const auto& crest=snapshot.world.crests.at(snapshot.world.clubs.at(countries[country]).crest);result.badge_atlases[country]=crest.path;result.badge_cells[country]=crest.cell;}return result;
+}
+}

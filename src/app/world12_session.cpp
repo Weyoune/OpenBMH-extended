@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "app/world12_session.hpp"
 #include "app/world12_european.hpp"
+#include "app/world12_empty_friendly.hpp"
 #include <algorithm>
 #include "game/world12/pools.hpp"
 #include "app/world12_desktop.hpp"
@@ -86,7 +87,7 @@ void Session::prepare_start(uint64_t revision) {
         const auto primary=candidate.world.manager_country(candidate.world.managers.front().seat);calendar=make_national_only_calendar(candidate.world.catalogue,primary==Country::england?aligned.entries:de);
         GameRandom game(candidate.game_seed);WatcomRandom random(candidate.watcom_seed);const auto inactive=initialize_inactive_club_state(candidate.world,resources_.master,resources_.german,resources_.english,resources_.reference,game,random);prepare_national_campaign_from_initial_field(candidate.world,primary==Country::germany?resources_.german:resources_.english,primary,inactive.initial_national_field,game,random);activate_national_coaches(candidate.world,{candidate.world.managers.front().seat});for(auto country:{Country::germany,Country::england})nominate_national_squad(candidate.world,country,candidate.date,resources_.reference,random);candidate.calendar=CalendarCursor{calendar,0,0};candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();initialize_career_economy(candidate,resources_.reference);initialize_desktops(candidate,resources_.reference);
         for(auto& desk:candidate.desktop->managers){const auto record=std::find_if(candidate.world.national_coaches->begin(),candidate.world.national_coaches->end(),[&](const auto& c){return c.coach==desk.seat;});if(record==candidate.world.national_coaches->end()||!record->desktop_layout)throw FormatError("world12: Source national desktop template is missing");desk.layout=*record->desktop_layout;}
-        candidate.validate();if(state_!=before||owner_.scope!=before_owner.scope||owner_.revision!=before_owner.revision)throw FormatError("world12: national preparation owner changed");state_=std::move(candidate);++owner_.revision;return;
+        initialize_friendly_plan(candidate,resources_.reference);candidate.validate();if(state_!=before||owner_.scope!=before_owner.scope||owner_.revision!=before_owner.revision)throw FormatError("world12: national preparation owner changed");state_=std::move(candidate);++owner_.revision;return;
     }
     auto draws=prepare_initial_competitions(candidate,staged_owner,staged_owner,calendar,{resources_.german,resources_.english},resources_.reference);
     auto services=initialize_first_season_manager_services(candidate,staged_owner,staged_owner,resources_.reference);
@@ -94,6 +95,7 @@ void Session::prepare_start(uint64_t revision) {
     initialize_career_economy(candidate,resources_.reference);
     initialize_desktops(candidate,resources_.reference);
     if(candidate.world.catalogue.scope.international){initialize_national_coaches(candidate.world,resources_.reference);GameRandom game(candidate.game_seed);WatcomRandom random(candidate.watcom_seed);prepare_national_campaign(candidate.world,resources_.german,0,game,random);candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();}
+    initialize_friendly_plan(candidate,resources_.reference);
     if(state_!=before||owner_.scope!=before_owner.scope||owner_.revision!=before_owner.revision)throw FormatError("world12: session changed during preparation");
     state_=std::move(candidate);owner_=staged_owner;draws_=std::move(draws);services_=std::move(services);
 }
@@ -126,6 +128,7 @@ PendingOfferResult Session::resolve_pending(const std::filesystem::path& data,co
     return resolve_initial_offer(state_,owner_,{owner_.scope,request.revision},resources_.reference,texts,hooks);
 }
 
+ClockStepOutcome Session::consume_empty_friendly_day(uint64_t revision){if(preparation_menu_)throw FormatError("world12: open menu owns empty friendly date");return bmh::app::world12::consume_empty_friendly_day(state_,owner_,{owner_.scope,revision},resources_.reference);}
 NationalAppointmentOutcome Session::prepare_national_day(uint64_t revision) {
     if(preparation_menu_)throw FormatError("world12: an open menu owns the current career");
     return prepare_national_appointment(state_,owner_,{owner_.scope,revision},resources_.reference);
@@ -183,7 +186,7 @@ void Session::play_prepared_matches(uint64_t revision,const HumanRoundHooks& hoo
         throw FormatError("world12: prepared match receipt is not ready");
     const auto before=state_;auto candidate=state_;const auto event=*candidate.prepared_event;
     const auto ticket=*prepare_day(candidate);const auto settings=*candidate.world.settings;
-    std::vector<CupDayConditions> cups;std::vector<AiDayLeagueConditions> leagues;std::vector<EuropeanDayConditions> european;std::vector<IndoorDayConditions> indoor;std::optional<RegionalDayConditions> regional;std::vector<NationalDayConditions> national;
+    std::vector<CupDayConditions> cups;std::vector<AiDayLeagueConditions> leagues;std::vector<EuropeanDayConditions> european;std::vector<IndoorDayConditions> indoor;std::optional<RegionalDayConditions> regional;std::vector<NationalDayConditions> national;std::vector<FriendlyDayConditions> friendlies;
     for(const auto& group:event.groups) {
         std::vector<AiLeagueConditions> conditions;
         for(const auto& match:group.matches){
@@ -200,13 +203,14 @@ void Session::play_prepared_matches(uint64_t revision,const HumanRoundHooks& hoo
         else if(group.european){const auto planned=std::find_if(ticket.european.begin(),ticket.european.end(),[&](const auto& plan){return plan.competition==*group.european&&plan.source_entry==group.source_entry;});if(planned==ticket.european.end())throw FormatError("world12: prepared European group lost its ticket");european.push_back({*planned,std::move(conditions)});}
         else if(group.regional_playoff){if(!ticket.regional_playoff)throw FormatError("world12: prepared regional group lost its ticket");regional=RegionalDayConditions{*ticket.regional_playoff,std::move(conditions)};}
         else if(group.national){const auto planned=std::find_if(ticket.national.begin(),ticket.national.end(),[&](const auto& plan){return plan.competition==*group.national&&plan.source_entry==group.source_entry;});if(planned==ticket.national.end())throw FormatError("world12: prepared national group lost its ticket");national.push_back({*planned,std::move(conditions)});}
+        else if(group.friendly){const auto planned=std::find_if(ticket.friendlies.begin(),ticket.friendlies.end(),[&](const auto& plan){return plan.national==group.friendly_national;});if(planned==ticket.friendlies.end())throw FormatError("world12: prepared friendly lost its booked ticket");friendlies.push_back({*planned,std::move(conditions)});}
         else cups.push_back({*group.cup,group.source_entry,group.revision,std::move(conditions)});
     }
     candidate.prepared_event.reset();
     const HumanProjectionPolicy policy{settings.mode,settings.difficulty,settings.foreign_rule,true};
     auto staged_owner=owner_;
     const auto result=play_competition_day(candidate,staged_owner,{owner_.scope,revision},ticket,resources_.reference,
-        {resources_.german,resources_.english},leagues,cups,european,policy,hooks,indoor,regional,national);
+        {resources_.german,resources_.english},leagues,cups,european,policy,hooks,indoor,regional,national,friendlies);
     const auto& receipts=result.pools;
     if(candidate.world.economy&&candidate.world.economy->pools){if(!resources_.texts)throw FormatError("world12: Toto settlement needs owned Source texts");settle_scheduled_pools(candidate,event,receipts,resources_.reference,*resources_.texts);}
     if(state_!=before||owner_.revision!=revision)throw FormatError("world12: prepared match owner changed during calculation");

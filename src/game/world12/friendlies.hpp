@@ -13,7 +13,7 @@ struct PlannedFriendly {
     bool operator==(const PlannedFriendly&)const=default;
 };
 struct PlayedFriendly {
-    PlannedFriendly booking;uint16_t score=0;uint8_t end_minute=0;
+    PlannedFriendly booking;uint16_t score=0;uint8_t end_minute=0;std::optional<uint8_t> kickoff_disposition;
     bool operator==(const PlayedFriendly&)const=default;
 };
 struct FriendlyPlan {
@@ -27,7 +27,7 @@ struct FriendlyGroup {
     std::vector<uint64_t> bookings;std::vector<Fixture> matches;
     bool operator==(const FriendlyGroup&)const=default;
 };
-struct FriendlyResults {FriendlyGroup group;std::vector<uint16_t> scores;std::vector<uint8_t> end_minutes;bool operator==(const FriendlyResults&)const=default;};
+struct FriendlyResults {FriendlyGroup group;std::vector<uint16_t> scores;std::vector<uint8_t> end_minutes;std::vector<std::optional<uint8_t>> kickoff_dispositions;bool operator==(const FriendlyResults&)const=default;};
 // Only fresh Source initialization or an actual annual calendar reset creates a
 // known empty plan. Missing previous planning history never becomes known empty.
 inline FriendlyPlan empty_friendly_plan(uint32_t season,const FriendlyPlan* previous=nullptr){FriendlyPlan p;p.season=season;if(previous)p.national_progress=previous->national_progress;return p;}

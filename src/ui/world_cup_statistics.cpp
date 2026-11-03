@@ -145,7 +145,7 @@ std::optional<uint8_t> world_cup_nation_at(const WorldCupStatisticsProjection& p
 
 WorldCupStatisticsRequest world_cup_selection_request(const WorldCupStatisticsProjection& p,
                                                        std::optional<uint8_t> nation) {
-    if (!p.can_select_opponent || !nation || *nation == 0 || *nation >= kNationCount) return {};
+    if(!p.can_select_opponent||!nation||*nation>=kNationCount||(!p.owned_world12_picker&&*nation==0)||(p.excluded_opponent&&*nation==*p.excluded_opponent))return {};
     return {WorldCupStatisticsRequestKind::select_opponent, kNoTeam + *nation};
 }
 

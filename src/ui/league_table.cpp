@@ -401,7 +401,7 @@ Image LeagueTableScreen::render() const {
                 original_text(exe_, ::bmh::layout::CareerSession_FormatError_TextPointer) + textd(::bmh::layout::CareerSession_FormatError_TextPointer4);
         }
     }
-    if(world12_){title=original_to_utf8(texts_[(layout::LeagueTable_OriginalToUtf8_TextPointer-layout::TextPointerTable)/4])+league_title;subtitle=world12_->subtitle;}
+    if(world12_){title=original_to_utf8(texts_[(layout::LeagueTable_OriginalToUtf8_TextPointer-layout::TextPointerTable)/4+(world12_->opponent_picker?2:0)])+league_title;subtitle=world12_->subtitle;}
     const int title_width = sprite_font_.text_width(title);
     sprite_font_.draw(image, SpriteFont::centered_title_x(title_width), 13, title);
     if (!subtitle.empty()) sprite_font_.draw(image, 5, 235, subtitle);
@@ -481,7 +481,7 @@ Image LeagueTableScreen::render() const {
         std::string label = texts_[size_t(73 + index)];
         if(family_ && family_->source_selection_mode!=0 && index>=10)
             label=texts_[size_t((::bmh::layout::LeagueTable_Glyph_TextPointer2-::bmh::layout::TextPointerTable)/4 + (index==10 ? 0 : family_->source_selection_mode))];
-        if(opponent_mode_ && index>=10)
+        if((opponent_mode_||(world12_&&world12_->opponent_picker)) && index>=10)
             label=texts_[size_t((::bmh::layout::LeagueTable_Glyph_TextPointer2-::bmh::layout::TextPointerTable)/4 + (index==10 ? 0 : 2))];
         if (index == 9 && table.source_controls_projection) {
             if (!table.retained_range_label_source_bytes.empty())
@@ -764,10 +764,11 @@ int LeagueTableScreen::world12_hit_at(int x,int y,bool right)const {
 }
 bool LeagueTableScreen::post_world12_hit(int hit){
     World12TableRequest request;request.identity=world12_->identity;
-    if(hit==400)request.action=World12TableAction::close;
+    if(world12_->opponent_picker&&hit<10)return false;
+    if(hit==400||(world12_->opponent_picker&&(hit==10||hit==11)))request.action=World12TableAction::close;
     else if(hit==200)request.action=World12TableAction::next_group;
     else if(hit>=300){request.action=World12TableAction::select_league;request.league=world12_->leagues.at(size_t(hit-300));}
-    else if(hit>=100){request.action=World12TableAction::team_info;request.team=world12_->clubs.at(size_t(hit-100));}
+    else if(hit>=100){request.team=world12_->clubs.at(size_t(hit-100));if(world12_->opponent_picker&&request.team==world12_->excluded_opponent)return false;request.action=world12_->opponent_picker?World12TableAction::select_opponent:World12TableAction::team_info;}
     else if(hit>=10){request.action=World12TableAction::navigate;request.value=hit==10?1:2;}
     else {request.action=World12TableAction::control;request.value=hit;}
     world12_pending_=request;rejection_.clear();return true;

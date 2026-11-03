@@ -26,6 +26,8 @@ struct WorldCupStatisticsProjection {
     std::array<std::string,62> badge_atlases{};
     std::array<uint8_t,62> badge_cells{};
     bool can_select_opponent = false;
+    bool owned_world12_picker=false;
+    std::optional<uint8_t> excluded_opponent;
 };
 
 // Owner is explicit: only the verified Friendly Match caller can enable a commit.

@@ -32,12 +32,12 @@ DesktopEntryOutcome begin_scheduled_desks(CareerSnapshot& state,ManagerActionOwn
         throw FormatError("world12: scheduled desks are already prepared or lack their settings");
     const auto before=state;auto candidate=state;const auto settings=*state.world.settings;
     const HumanProjectionPolicy policy{settings.mode,settings.difficulty,settings.foreign_rule,true};
-    const bool national=!prepare_day(candidate)->national.empty();
+    const auto ticket=prepare_day(candidate);const bool national=!ticket->national.empty()||std::any_of(ticket->friendlies.begin(),ticket->friendlies.end(),[](const auto& group){return group.national;});
     if(national){
         std::vector<ClubId> teams;for(const auto& group:candidate.prepared_event->groups)for(const auto& match:group.matches)for(auto id:{match.fixture.home,match.fixture.away})if(std::find(teams.begin(),teams.end(),id)==teams.end())teams.push_back(id);
         for(const auto& record:*candidate.world.national_coaches)if(record.active&&std::find(teams.begin(),teams.end(),record.team)==teams.end())teams.push_back(record.team);
         auto p=AiMatchProjection::create_for_nationals(candidate,teams,reference,policy);auto& local=p.state;
-        for(const auto& group:candidate.prepared_event->groups){if(!group.national)throw FormatError("world12: a national coach window cannot present parked club desks");for(const auto& match:group.matches){const int home=int(p.local_club(match.fixture.home)),away=int(p.local_club(match.fixture.away));prepare_team(local,home,match_competition_class(uint8_t(*group.national+1)),0);prepare_team(local,away,match_competition_class(uint8_t(*group.national+1)),1);auto_lineup(local,home,100);auto_lineup(local,away,100);}}
+        for(const auto& group:candidate.prepared_event->groups){if(!group.national&&!group.friendly_national)throw FormatError("world12: a national coach window cannot present parked club desks");for(const auto& match:group.matches){const int home=int(p.local_club(match.fixture.home)),away=int(p.local_club(match.fixture.away));prepare_team(local,home,match_competition_class(group.friendly?11:uint8_t(*group.national+1)),0);prepare_team(local,away,match_competition_class(group.friendly?11:uint8_t(*group.national+1)),1);auto_lineup(local,home,100);auto_lineup(local,away,100);}}
         cycle_manager_options(local);local.memory.add_block(layout::CurrentMatchday,4);
         GameRandom game(candidate.game_seed);WatcomRandom random(candidate.watcom_seed);draw_matchday_number(local,random);const auto shuffled=shuffle_manager_order(local,game);p.commit_match_state(candidate.world);
         std::vector<uint8_t> actors;for(auto index:shuffled)actors.push_back(p.global_manager(uint8_t(index)));
@@ -53,7 +53,7 @@ DesktopEntryOutcome begin_scheduled_desks(CareerSnapshot& state,ManagerActionOwn
         auto p=group.european?AiMatchProjection::create_for_european(candidate,participants(candidate.world,match.fixture),reference,policy):AiMatchProjection::create_for_humans(candidate,participants(candidate.world,match.fixture),reference,policy);
         const auto home=int(p.local_club(match.fixture.home)),away=int(p.local_club(match.fixture.away));
         p.state.indoor=group.indoor;
-        const uint8_t type=group.regional_playoff?14:group.indoor?12:group.league?0:group.european?uint8_t(*group.european)+1:group.cup==DomesticCup::league_cup?12:
+        const uint8_t type=group.friendly?11:group.regional_playoff?14:group.indoor?12:group.league?0:group.european?uint8_t(*group.european)+1:group.cup==DomesticCup::league_cup?12:
             group.cup==DomesticCup::german_supercup||group.cup==DomesticCup::english_supercup?9:1;
         prepare_team(p.state,home,match_competition_class(type),0);prepare_team(p.state,away,match_competition_class(type),1);
         auto_lineup(p.state,home,100);auto_lineup(p.state,away,100);

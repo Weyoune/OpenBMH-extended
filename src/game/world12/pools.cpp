@@ -16,12 +16,12 @@ void prepare_scheduled_pools(CareerSnapshot& state,const GameState& reference,Wa
     const auto& settings=*candidate.world.settings;std::vector<Fixture> selection;
     for(const auto& group:candidate.prepared_event->groups) {
         for(const auto& match:group.matches) {
-            std::vector<ClubId> clubs;if(group.national){for(const auto& record:*candidate.world.national_coaches)if(record.active)clubs.push_back(record.team);}else for(const auto& manager:candidate.world.managers)clubs.push_back(manager.club);
+            std::vector<ClubId> clubs;if(group.national||group.friendly_national){for(const auto& record:*candidate.world.national_coaches)if(record.active)clubs.push_back(record.team);}else for(const auto& manager:candidate.world.managers)clubs.push_back(manager.club);
             for(auto club:{match.fixture.home,match.fixture.away})
                 if(std::find(clubs.begin(),clubs.end(),club)==clubs.end())clubs.push_back(club);
-            auto p=group.national?AiMatchProjection::create_for_nationals(candidate,clubs,reference,{settings.mode,settings.difficulty,settings.foreign_rule,true}):group.european?AiMatchProjection::create_for_european(candidate,clubs,reference,{settings.mode,settings.difficulty,settings.foreign_rule,true}):AiMatchProjection::create_for_humans(candidate,clubs,reference,
+            auto p=(group.national||group.friendly_national)?AiMatchProjection::create_for_nationals(candidate,clubs,reference,{settings.mode,settings.difficulty,settings.foreign_rule,true}):group.european?AiMatchProjection::create_for_european(candidate,clubs,reference,{settings.mode,settings.difficulty,settings.foreign_rule,true}):AiMatchProjection::create_for_humans(candidate,clubs,reference,
                 {settings.mode,settings.difficulty,settings.foreign_rule,true});auto& local=p.state;
-            MatchGroup native;native.desc.assign(0xd0,0);local.indoor=group.indoor;native.desc[0]=group.national?uint8_t(*group.national+1):group.regional_playoff?14:group.indoor?12:group.league?0:1;native.desc[2]=1;
+            MatchGroup native;native.desc.assign(0xd0,0);local.indoor=group.indoor;native.desc[0]=group.friendly?11:group.national?uint8_t(*group.national+1):group.regional_playoff?14:group.indoor?12:group.league?0:1;native.desc[2]=1;
             native.fixtures={int(p.local_club(match.fixture.home)),int(p.local_club(match.fixture.away))};
             // The validated prepared appointment has not been played. Materialize
             // its actual unplayed marker in this bounded, read-only Core workspace.
@@ -47,7 +47,7 @@ void settle_scheduled_pools(CareerSnapshot& state,const PreparedEvent& event,con
     if(ledger.appointment&&*ledger.appointment!=std::make_pair(state.season,uint32_t(event.day)))throw FormatError("world12: pools stakes belong to another appointment");
     const bool indoor=std::any_of(event.groups.begin(),event.groups.end(),[](const auto& group){return group.indoor;});
     const auto& matches=*event.pools_matches;if(indoor&&(matches.size()>4||ledger.appointment))throw FormatError("world12: indoor coupon cannot own a full pending stake");if(ledger.appointment&&matches.size()!=11)throw FormatError("world12: pending Toto stake has no full coupon");if(!indoor&&receipts.size()!=matches.size())throw FormatError("world12: incomplete pools regulation receipts");
-    const bool national=std::any_of(event.groups.begin(),event.groups.end(),[](const auto& group){return group.national.has_value();});
+    const bool national=std::any_of(event.groups.begin(),event.groups.end(),[](const auto& group){return group.national.has_value()||group.friendly_national;});
     const bool european=std::any_of(event.groups.begin(),event.groups.end(),[](const auto& group){return group.european.has_value();});
     const auto before=state;auto candidate=state;std::vector<ClubId> clubs;if(national){for(const auto& record:*candidate.world.national_coaches)if(record.active)clubs.push_back(record.team);}else for(const auto& m:candidate.world.managers)clubs.push_back(m.club);
     for(const auto& f:matches)for(auto id:{f.home,f.away})if(std::find(clubs.begin(),clubs.end(),id)==clubs.end())clubs.push_back(id);

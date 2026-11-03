@@ -19,7 +19,7 @@ AttendanceOutcome book_event_attendance(CareerSnapshot& state,ManagerActionOwner
        !state.world.settings||!state.world.economy||!state.progress||
        state.prepared_event->desk_phase==PreparedEvent::DeskPhase::desks)
         throw FormatError("world12: missing or stale gate-income owner");
-    const bool national_only_event=std::all_of(state.prepared_event->groups.begin(),state.prepared_event->groups.end(),[](const auto& group){return group.national.has_value();});
+    const bool national_only_event=std::all_of(state.prepared_event->groups.begin(),state.prepared_event->groups.end(),[](const auto& group){return group.national.has_value()||group.friendly_national;});
     if(!national_only_event)for(const auto& manager:state.world.managers)
         if(!manager.career||!manager.career->season_services||!manager.match_state||!manager.match_state->attendance)
             throw FormatError("world12: gate history is unknown; a current fresh career is required");
@@ -29,12 +29,12 @@ AttendanceOutcome book_event_attendance(CareerSnapshot& state,ManagerActionOwner
     GameRandom game(candidate.game_seed);WatcomRandom random(candidate.watcom_seed);AttendanceOutcome out;std::vector<std::optional<uint8_t>> dispositions;
     for(auto& group:candidate.prepared_event->groups)for(auto& match:group.matches) {
         if(group.indoor){out.spectators.push_back(10000);dispositions.push_back({});continue;}
-        std::vector<ClubId> clubs;if(group.national){for(const auto& record:*candidate.world.national_coaches)if(record.active)clubs.push_back(record.team);}else for(const auto& manager:candidate.world.managers)clubs.push_back(manager.club);
+        std::vector<ClubId> clubs;if(group.national||group.friendly_national){for(const auto& record:*candidate.world.national_coaches)if(record.active)clubs.push_back(record.team);}else for(const auto& manager:candidate.world.managers)clubs.push_back(manager.club);
         for(auto club:{match.fixture.home,match.fixture.away})if(std::find(clubs.begin(),clubs.end(),club)==clubs.end())clubs.push_back(club);
-        auto p=group.national?AiMatchProjection::create_for_nationals(candidate,clubs,reference,{settings.mode,settings.difficulty,settings.foreign_rule,true}):group.european?AiMatchProjection::create_for_european(candidate,clubs,reference,
+        auto p=(group.national||group.friendly_national)?AiMatchProjection::create_for_nationals(candidate,clubs,reference,{settings.mode,settings.difficulty,settings.foreign_rule,true}):group.european?AiMatchProjection::create_for_european(candidate,clubs,reference,
             {settings.mode,settings.difficulty,settings.foreign_rule,true}):AiMatchProjection::create_for_humans(candidate,clubs,reference,
             {settings.mode,settings.difficulty,settings.foreign_rule,true});
-        if(group.national)install_career_mailbox(p,candidate.world);else install_career_economy(p,candidate.world);auto& local=p.state;local.texts=&texts;
+        if(group.national||group.friendly_national)install_career_mailbox(p,candidate.world);else install_career_economy(p,candidate.world);auto& local=p.state;local.texts=&texts;
         local.season=int(candidate.season);local.season_start=candidate.progress->season_start;
         const auto home=int(p.local_club(match.fixture.home)),away=int(p.local_club(match.fixture.away));
         MatchGroup descriptor;descriptor.desc.assign(0xd0,0);descriptor.desc[1]=group.flags;descriptor.desc[2]=1;
@@ -43,6 +43,7 @@ AttendanceOutcome book_event_attendance(CareerSnapshot& state,ManagerActionOwner
         uint32_t competition=uint32_t(match_team_league(local,home));uint8_t type=0;
         if(group.league){context.projected_matchdays=candidate.world.catalogue.league(*group.league).rounds();
             context.projected_completed_rounds=candidate.league_rounds[group.league->value];}
+        else if(group.friendly){competition=cup_entry_address(24);type=11;const auto& source=group.friendly_national&&candidate.world.national_campaigns&&candidate.world.national_campaigns->primary_country==Country::england?sources.english:sources.german;if(group.flags!=friendly_source_flags(source))throw FormatError("world12: friendly gate Source metadata changed");local.memory.add_block(competition,0x28);for(uint32_t byte=0;byte<0x28;++byte)local.memory.set8(competition+byte,source.u8(competition+byte));}
         else if(group.national){
             const auto& campaign=candidate.world.national_campaigns->seasons.at(candidate.season);const auto& source=candidate.world.national_campaigns->primary_country==Country::england?sources.english:sources.german;
             competition=cup_entry_address(group.source_entry);type=uint8_t(*group.national+1);
@@ -74,15 +75,15 @@ AttendanceOutcome book_event_attendance(CareerSnapshot& state,ManagerActionOwner
         const auto forfeit=prepare_kickoff_fixture(local,home,away,random);
         dispositions.push_back(uint8_t(forfeit+1));
         if(forfeit>=0){
-            p.commit_match_state(candidate.world,!group.national);
-            if(group.national)capture_career_mailbox(candidate.world,p);else capture_career_economy(candidate.world,p);
+            p.commit_match_state(candidate.world,!(group.national||group.friendly_national));
+            if(group.national||group.friendly_national)capture_career_mailbox(candidate.world,p);else capture_career_economy(candidate.world,p);
             out.spectators.push_back(0);continue;
         }
         MinuteReport report;const auto bits=match_mode_bits(local,descriptor,context,report);
         if(report.unsupported)throw FormatError(report.reason);
         const auto amount=attendance(local,home,away,bits,match.temperature,match.rain,type,game,random,report);
         if(report.unsupported||amount<0)throw FormatError(report.reason.empty()?"world12: invalid calculated attendance":report.reason);
-        p.commit_match_state(candidate.world,!group.national);if(group.national)capture_career_mailbox(candidate.world,p);else capture_career_economy(candidate.world,p);
+        p.commit_match_state(candidate.world,!(group.national||group.friendly_national));if(group.national||group.friendly_national)capture_career_mailbox(candidate.world,p);else capture_career_economy(candidate.world,p);
         out.spectators.push_back(uint32_t(amount));
     }
     size_t index=0;for(auto& group:candidate.prepared_event->groups)for(auto& match:group.matches){match.spectators=out.spectators.at(index);match.kickoff_disposition=dispositions.at(index++);}

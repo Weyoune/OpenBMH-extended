@@ -7,6 +7,7 @@
 #include "app/world12_clock.hpp"
 #include "app/world12_annual_transition.hpp"
 #include "app/world12_national.hpp"
+#include "app/world12_friendlies.hpp"
 #include "game/world12/national_coach.hpp"
 #include "app/world12_ai_day.hpp"
 #include "app/world12_weather.hpp"
@@ -75,6 +76,14 @@ public:
     void finish_annual_opening(const ui::DeskRequest&);
     ClockStepOutcome advance_saved_clock(uint64_t expected_revision,const std::filesystem::path&,const ClockHooks&);
     ClockStepOutcome seek_saved_event(uint64_t expected_revision,const std::filesystem::path&,const ClockHooks&);
+    ui::World12FriendlyPicker open_friendly(const ui::DeskRequest&,const std::filesystem::path& data);
+    ui::World12FriendlyPicker friendly_picker_view(const std::filesystem::path& data)const;
+    ui::World12FriendlyPicker select_friendly_league(const ui::World12TableRequest&,const std::filesystem::path& data);
+    ui::FriendlyMatchState select_friendly_opponent(bmh::world12::ClubId,const Image& accepted_picker_frame,const std::filesystem::path& data);
+    ui::FriendlyQuoteProjection quote_friendly(const ui::FriendlyMatchRequest&,const std::filesystem::path& data);
+    ui::FriendlyBookingAck book_friendly(const ui::FriendlyMatchRequest&,const std::filesystem::path& data);
+    void close_friendly();
+    ClockStepOutcome consume_empty_friendly_day(uint64_t expected_revision);
     NationalAppointmentOutcome prepare_national_day(uint64_t expected_revision);
     NationalAppointmentOutcome finish_uncoached_national_day(uint64_t expected_revision);
     CupDayOutcome play_scheduled_domestic_cups(uint64_t expected_revision,
@@ -152,6 +161,8 @@ public:
     bool prepared()const{return state_.world.catalogue.scope.club_play()?state_.world.transfer_market.has_value():state_.world.national_campaigns.has_value()&&state_.calendar.has_value()&&state_.desktop.has_value();}
 private:
     friend class LiveFamilyScope;
+    std::optional<FriendlyMenuOwner> friendly_;
+    uint64_t friendly_sequence_=0;
     ui::World12TableState open_table_owned(uint8_t seat,uint8_t child);
     struct ResumeTag {};
     Session(RuntimeResources,bmh::world12::CareerSnapshot,uint64_t scope,uint64_t revision,ResumeTag);

@@ -14,6 +14,7 @@
 #include "game/transfer_bid.hpp"
 #include "game/weekly.hpp"
 #include "game/week.hpp"
+#include "game/national_identity.hpp"
 
 namespace bmh {
 
@@ -94,7 +95,7 @@ int national_opponent_manager(const GameState& g, const NationalFriendlyOwner& o
     if (ordinary >= 0) return ordinary;
     // FindManagerForClub's second lookup: spare manager record 4 represents the
     // Bundestrainer's own association only for the first human national coach.
-    if (owner.manager == 0 && !g.manager_teams.empty() && g.manager_teams[0] == kNoTeam &&
+    if (g.projected_national_teams.empty() && owner.manager == 0 && !g.manager_teams.empty() && g.manager_teams[0] == kNoTeam &&
         g.memory.has(::bmh::layout::DeskActions_NationalOpponentManager_RuntimeField) && int(g.memory.u16(::bmh::layout::CupDraw_FormatError_RuntimeField3)) == opponent &&
         5 * kRecordSize <= g.manager_records.size()) return 4;
     return -1;
@@ -114,25 +115,25 @@ NationalFriendlyQuote make_national_friendly_quote(const GameState& g,
         out.terms.status = FriendlyQuoteStatus::invalid_state;
         return out;
     }
-    if (!owner.request_id || owner.menu_kind != 6 || owner.runtime_team != kNoTeam || owner.manager < 0 ||
+    if (!owner.request_id || owner.menu_kind != 6 || !is_national_team(g,owner.runtime_team) || owner.manager < 0 ||
         size_t(owner.manager) >= g.manager_teams.size() ||
         (size_t(owner.manager) + 1) * kRecordSize > g.manager_records.size() ||
-        g.manager_teams[size_t(owner.manager)] != kNoTeam) {
+        g.manager_teams[size_t(owner.manager)] != owner.runtime_team) {
         out.terms.status = FriendlyQuoteStatus::invalid_manager;
         return out;
     }
     // Page 4 cannot return Germany (0); the engine boundary repeats that gate.
-    if (opponent <= kNoTeam || opponent > (kNoTeam + 61) || opponent == kNoTeam) {
+    if (g.projected_national_teams.empty()?(opponent <= kNoTeam || opponent > (kNoTeam + 61) || opponent == kNoTeam):(!is_national_team(g,opponent)||opponent==owner.runtime_team)) {
         out.terms.status = FriendlyQuoteStatus::invalid_opponent;
         return out;
     }
 
     out.terms.planner_count = g.memory.u8(kFriendlyPlanCount);
-    out.terms.home_team = manager_home ? kNoTeam : opponent;
-    out.terms.away_team = manager_home ? opponent : kNoTeam;
+    out.terms.home_team = manager_home ? owner.runtime_team : opponent;
+    out.terms.away_team = manager_home ? opponent : owner.runtime_team;
     out.terms.opponent_manager = national_opponent_manager(g, owner, opponent);
     out.terms.payer_manager = manager_home ? owner.manager : out.terms.opponent_manager;
-    const auto own = team_average(g, kNoTeam, 0xff, &rand);
+    const auto own = team_average(g, owner.runtime_team, 0xff, &rand);
     const auto opposing = team_average(g, opponent, 0xff, &rand);
     out.own_rating = own.value;
     out.opponent_rating = opposing.value;
@@ -218,7 +219,7 @@ FriendlyDateStatus friendly_date_fields_unchecked(const GameState& g,
             const int second = int16_t(g.memory.u16(teams_at + 2));
             if (first == quote.manager_team || second == quote.manager_team ||
                 first == quote.opponent || second == quote.opponent ||
-                first == kNoTeam || second == kNoTeam) return FriendlyDateStatus::unavailable;
+                (g.projected_national_teams.empty()?(first==kNoTeam||second==kNoTeam):(is_national_team(g,first)||is_national_team(g,second)))) return FriendlyDateStatus::unavailable;
         }
     }
     size_t insertion = 0;
@@ -272,9 +273,9 @@ NationalFriendlyQuote preview_national_friendly_match(const GameState& g,
 FriendlyDateStatus national_friendly_match_date_status(const GameState& g,
     const NationalFriendlyQuote& quote, const NationalFriendlyOwner& owner,
     const WatcomRandom& rand, uint16_t season_day) {
-    if (quote.owner != owner || owner.menu_kind != 6 || owner.runtime_team != kNoTeam ||
+    if (quote.owner != owner || owner.menu_kind != 6 || !is_national_team(g,owner.runtime_team) ||
         owner.manager < 0 || size_t(owner.manager) >= g.manager_teams.size() ||
-        g.manager_teams[size_t(owner.manager)] != kNoTeam ||
+        g.manager_teams[size_t(owner.manager)] != owner.runtime_team ||
         rand.seed() != quote.watcom_seed_after || rand.calls() != quote.watcom_calls_after)
         return FriendlyDateStatus::invalid_quote;
     WatcomRandom verify(quote.watcom_seed_before);

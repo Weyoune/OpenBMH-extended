@@ -100,6 +100,8 @@ struct FriendlyMatchState {
     uint32_t season_start_counter = 0;
     bool mode_three = false;
     bool national_team = false;
+    bool owned_world12 = false;
+    std::optional<Image> accepted_background;
     std::string manager_name;
     std::array<LeagueTableState, 9> leagues;
     CalendarState calendar;

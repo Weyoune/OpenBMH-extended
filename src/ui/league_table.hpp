@@ -84,7 +84,7 @@ struct World12TableIdentity {
     uint64_t revision=0,scope=0,sequence=0;
     bool operator==(const World12TableIdentity&)const=default;
 };
-enum class World12TableAction:uint8_t {close,select_league,next_group,control,team_info,navigate,pairings_control,strengths_control};
+enum class World12TableAction:uint8_t {close,select_league,next_group,control,team_info,navigate,pairings_control,strengths_control,select_opponent};
 struct World12TableRequest {
     World12TableIdentity identity;
     World12TableAction action=World12TableAction::close;
@@ -95,6 +95,8 @@ struct World12TableRequest {
 };
 struct World12TableState {
     World12TableIdentity identity;
+    bool opponent_picker=false;
+    bmh::world12::ClubId excluded_opponent;
     LeagueTableState table;
     uint8_t child=0; // table=0, pairings=1, strengths=2 (Original desk kinds)
     std::optional<LeaguePairingsState> pairings;

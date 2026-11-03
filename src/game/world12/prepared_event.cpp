@@ -36,23 +36,23 @@ void validate_prepared_event(const CareerSnapshot& state) {
         }
     }
     const auto ticket=prepare_day(state);
-    if(!ticket||ticket->leagues.size()+ticket->cups.size()+ticket->european.size()+ticket->indoor.size()+(ticket->regional_playoff?1u:0u)+ticket->national.size()!=event.groups.size()||event.groups.empty())
+    if(!ticket||ticket->leagues.size()+ticket->cups.size()+ticket->european.size()+ticket->indoor.size()+(ticket->regional_playoff?1u:0u)+ticket->national.size()+ticket->friendlies.size()!=event.groups.size()||event.groups.empty())
         throw FormatError("world12: prepared match groups do not cover the calendar ticket");
-    for(const auto& appointment:ticket->others)if(!domestic_cups_on(appointment)&&!european_cups_on(appointment)&&!german_indoor_appointment(appointment)&&!regional_playoff_appointment(appointment)&&!national_appointment(appointment,state.season))
+    for(const auto& appointment:ticket->others)if(!domestic_cups_on(appointment)&&!european_cups_on(appointment)&&!german_indoor_appointment(appointment)&&!regional_playoff_appointment(appointment)&&!national_appointment(appointment,state.season)&&!friendly_appointment(appointment))
         throw FormatError("world12: prepared weather cannot own a shared/national appointment");
     std::map<Country,std::set<uint8_t>> chosen;
     for(size_t i=0;i<event.groups.size();++i) {
         const auto& group=event.groups[i];std::vector<Fixture> fixtures;
         if(i<ticket->leagues.size()) {
             const auto& planned=ticket->leagues[i];
-            if(group.national||group.regional_playoff||group.league!=planned.appointment.league||group.cup||group.european||group.indoor||group.source_entry||group.leg||group.revision||
+            if(group.friendly||group.national||group.regional_playoff||group.league!=planned.appointment.league||group.cup||group.european||group.indoor||group.source_entry||group.leg||group.revision||
                group.flags!=2||group.round!=planned.appointment.round)
                 throw FormatError("world12: prepared league environment belongs to another round");
             fixtures=planned.matches;
         }else if(i<ticket->leagues.size()+ticket->cups.size()) {
             const auto& planned=ticket->cups[i-ticket->leagues.size()];
             const auto stage=std::find_if(state.cups.rbegin(),state.cups.rend(),[&](const auto& cup){return cup.cup==planned.cup;});
-            if(group.national||group.regional_playoff||group.league||group.european||group.indoor||group.cup!=planned.cup||group.source_entry!=planned.source_entry||group.leg!=planned.leg||
+            if(group.friendly||group.national||group.regional_playoff||group.league||group.european||group.indoor||group.cup!=planned.cup||group.source_entry!=planned.source_entry||group.leg!=planned.leg||
                group.revision!=planned.revision||stage==state.cups.rend()||group.flags!=prepared_cup_flags(*stage)||
                group.round!=stage->rounds.size())
                 throw FormatError("world12: prepared cup environment belongs to another leg");
@@ -60,24 +60,25 @@ void validate_prepared_event(const CareerSnapshot& state) {
         }
         else if(i<ticket->leagues.size()+ticket->cups.size()+ticket->european.size()) {
             const auto& planned=ticket->european[i-ticket->leagues.size()-ticket->cups.size()];
-            if(group.national||group.regional_playoff||group.league||group.cup||group.indoor||group.european!=planned.competition||group.source_entry!=planned.source_entry||group.leg!=planned.leg||group.round!=planned.round||group.flags!=planned.flags||group.revision!=planned.revision)
+            if(group.friendly||group.national||group.regional_playoff||group.league||group.cup||group.indoor||group.european!=planned.competition||group.source_entry!=planned.source_entry||group.leg!=planned.leg||group.round!=planned.round||group.flags!=planned.flags||group.revision!=planned.revision)
                 throw FormatError("world12: prepared European environment belongs to another stage/leg");
             fixtures=planned.matches;
         }
         else if(i<ticket->leagues.size()+ticket->cups.size()+ticket->european.size()+ticket->indoor.size()) {
             const auto& planned=ticket->indoor[i-ticket->leagues.size()-ticket->cups.size()-ticket->european.size()];
-            if(group.national||group.regional_playoff||group.league||group.cup||group.european||!group.indoor||group.indoor_tournament!=planned.tournament||group.source_entry!=planned.source_entry||group.round!=planned.played+1||group.leg!=1||group.flags!=planned.flags||group.revision!=planned.revision)throw FormatError("world12: prepared indoor environment belongs to another tournament/pass");fixtures=planned.matches;
+            if(group.friendly||group.national||group.regional_playoff||group.league||group.cup||group.european||!group.indoor||group.indoor_tournament!=planned.tournament||group.source_entry!=planned.source_entry||group.round!=planned.played+1||group.leg!=1||group.flags!=planned.flags||group.revision!=planned.revision)throw FormatError("world12: prepared indoor environment belongs to another tournament/pass");fixtures=planned.matches;
         }
         else if(i<ticket->leagues.size()+ticket->cups.size()+ticket->european.size()+ticket->indoor.size()+(ticket->regional_playoff?1u:0u)) {
             if(!ticket->regional_playoff)throw FormatError("world12: unexpected regional prepared group");const auto& planned=*ticket->regional_playoff;
-            if(group.national||!group.regional_playoff||group.league||group.cup||group.european||group.indoor||group.source_entry!=35||group.round!=planned.played+1||group.leg!=1||group.flags!=planned.flags||group.revision!=planned.revision)
+            if(group.friendly||group.national||!group.regional_playoff||group.league||group.cup||group.european||group.indoor||group.source_entry!=35||group.round!=planned.played+1||group.leg!=1||group.flags!=planned.flags||group.revision!=planned.revision)
                 throw FormatError("world12: prepared regional environment belongs to another round/date");fixtures=planned.matches;
         }
-        else {
+        else if(i<ticket->leagues.size()+ticket->cups.size()+ticket->european.size()+ticket->indoor.size()+(ticket->regional_playoff?1u:0u)+ticket->national.size()) {
             const auto& planned=ticket->national.at(i-ticket->leagues.size()-ticket->cups.size()-ticket->european.size()-ticket->indoor.size()-(ticket->regional_playoff?1u:0u));
-            if(group.national!=planned.competition||group.league||group.cup||group.european||group.indoor||group.regional_playoff||group.source_entry!=planned.source_entry||group.round!=planned.round||group.leg!=planned.leg||group.flags!=planned.flags||group.revision!=planned.revision)throw FormatError("world12: prepared national group belongs to another programme/stage");
+            if(group.friendly||group.national!=planned.competition||group.league||group.cup||group.european||group.indoor||group.regional_playoff||group.source_entry!=planned.source_entry||group.round!=planned.round||group.leg!=planned.leg||group.flags!=planned.flags||group.revision!=planned.revision)throw FormatError("world12: prepared national group belongs to another programme/stage");
             fixtures=planned.matches;
         }
+        else {const auto& planned=ticket->friendlies.at(i-ticket->leagues.size()-ticket->cups.size()-ticket->european.size()-ticket->indoor.size()-(ticket->regional_playoff?1u:0u)-ticket->national.size());if(!group.friendly||group.friendly_national!=planned.national||group.national||group.league||group.cup||group.european||group.indoor||group.regional_playoff||group.source_entry!=24||group.round!=1||group.leg!=1||group.flags!=planned.flags||group.revision!=planned.revision)throw FormatError("world12: prepared friendly belongs to another booked day");fixtures=planned.matches;}
         if(group.matches.size()!=fixtures.size()||group.matches.empty()||group.matches.size()>32)
             throw FormatError("world12: incomplete prepared fixture environment");
         for(size_t m=0;m<fixtures.size();++m) {
