@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "game/world12/ai_match.hpp"
+#include "game/world12/regional_playoff_match.hpp"
 #include "game/world12/cup_match.hpp"
 #include "game/world12/european_match.hpp"
 #include "game/world12/economy.hpp"
@@ -22,8 +23,8 @@ namespace {
 AiLeagueRoundOutcome run_ai_league_matches(World& world,const GameState& base,const std::vector<Fixture>& fixtures,
     const std::vector<AiLeagueConditions>& conditions,GameRandom& game,WatcomRandom& random,bool settle,
     CareerSnapshot* human_snapshot=nullptr,HumanProjectionPolicy policy={},const HumanRoundHooks* hooks=nullptr,
-    const KnockoutStage* cup=nullptr,const LeImage* cup_source=nullptr,CupRoundOutcome* cup_out=nullptr,const EuropeanGroup* european=nullptr,const std::vector<EuropeanGroup>* european_batch=nullptr,const std::vector<size_t>* league_groups=nullptr) {
-    if(fixtures.empty() || fixtures.size()>(european?64u:cup?32u:league_groups?40u:10u) || conditions.size()!=fixtures.size())throw std::invalid_argument("world12: incomplete AI league match batch");
+    const KnockoutStage* cup=nullptr,const LeImage* cup_source=nullptr,CupRoundOutcome* cup_out=nullptr,const EuropeanGroup* european=nullptr,const std::vector<EuropeanGroup>* european_batch=nullptr,const std::vector<size_t>* league_groups=nullptr,const RegionalPlayoffGroup* regional=nullptr) {
+    if(fixtures.empty() || fixtures.size()>(european?64u:cup?32u:regional?2u:league_groups?40u:10u) || conditions.size()!=fixtures.size())throw std::invalid_argument("world12: incomplete AI league match batch");
     std::vector<ClubId> participants;LeagueId league;
     const auto european_groups=european_batch?*european_batch:european?std::vector<EuropeanGroup>{*european}:std::vector<EuropeanGroup>{};
     std::vector<uint8_t> european_flags;for(const auto& group:european_groups)for(size_t i=0;i<group.matches.size()*2;++i)european_flags.push_back(group.flags);
@@ -37,13 +38,14 @@ AiLeagueRoundOutcome run_ai_league_matches(World& world,const GameState& base,co
             throw std::invalid_argument("world12: inconsistent shared league-round conditions");
         const auto& home=world.clubs.at(fixture.home);const auto& away=world.clubs.at(fixture.away);
         if((!european&&(!home.league.valid()||!away.league.valid()))||(home.league.valid()&&!world.catalogue.league(home.league).active)||(away.league.valid()&&!world.catalogue.league(away.league).active)||
-           (!cup&&!european&&(home.league!=away.league||(!league_groups&&league.valid()&&league!=home.league)))||
-           (cup&&(home.country!=cup_country(cup->cup)||away.country!=cup_country(cup->cup))))
+           (!cup&&!european&&!regional&&(home.league!=away.league||(!league_groups&&league.valid()&&league!=home.league)))||
+           (cup&&(home.country!=cup_country(cup->cup)||away.country!=cup_country(cup->cup)))||
+           (regional&&(home.country!=Country::germany||away.country!=Country::germany||(home.league.value!=2&&home.league.value!=3)||(away.league.value!=2&&away.league.value!=3))))
             throw std::invalid_argument("world12: match fixture crosses its competition ownership");
         league=home.league;participants.push_back(fixture.home);participants.push_back(fixture.away);
     }
     if(human_snapshot&&(human_snapshot->world!=world||conditions[0].date!=human_snapshot->date))throw std::invalid_argument("world12: human forecast snapshot/date does not match round owner");
-    const bool human_mode=human_snapshot&&((!cup&&!european)||std::any_of(world.managers.begin(),world.managers.end(),[&](const auto& m){return std::find(participants.begin(),participants.end(),m.club)!=participants.end();}));
+    const bool human_mode=human_snapshot&&((!cup&&!european&&!regional)||std::any_of(world.managers.begin(),world.managers.end(),[&](const auto& m){return std::find(participants.begin(),participants.end(),m.club)!=participants.end();}));
     const auto original_economy=world.economy;
     auto projection=european?AiMatchProjection::create_for_european(*human_snapshot,participants,base,policy):human_mode?(league_groups?AiMatchProjection::create_for_human_leagues(*human_snapshot,participants,base,policy):AiMatchProjection::create_for_humans(*human_snapshot,participants,base,policy)):AiMatchProjection::create(world,participants,base);auto& local=projection.state;
     if(original_economy)install_career_economy(projection,world);
@@ -80,6 +82,12 @@ AiLeagueRoundOutcome run_ai_league_matches(World& world,const GameState& base,co
             entry=int8_t(cup_source->u8(address+0x15));
         }
     }
+    if(regional){
+        if(!cup_source||!cup_out||!human_snapshot||!human_snapshot->world.regional_playoff||regional_playoff_rules(*cup_source)!=human_snapshot->world.regional_playoff->rules)
+            throw FormatError("world12: regional match lacks its actual programme/source owner");
+        group_type=14;group_flags=regional->flags;source_entry=cup_entry_address(35);
+        local.memory.add_block(source_entry,0x28);for(uint32_t b=0;b<0x28;++b)local.memory.set8(source_entry+b,cup_source->u8(source_entry+b));local.memory.set8(source_entry+0x1d,regional->played);
+    }
     if(european){
         if(!cup_source||!cup_out||!human_snapshot||!human_snapshot->world.european_campaigns)throw FormatError("world12: European match owner lacks its saved programme/source");
         std::set<EuropeanCompetition> installed;
@@ -110,13 +118,13 @@ AiLeagueRoundOutcome run_ai_league_matches(World& world,const GameState& base,co
         const auto type=european?uint8_t(european_groups[g].competition)+1:group_type;
         const auto flags=european?european_groups[g].flags:group_flags;
         const auto count=european?european_groups[g].matches.size():league_groups?league_groups->at(g):fixtures.size();
-        const auto competition=european?cup_entry_address(european_groups[g].source_entry):cup?source_entry:uint32_t(bmh::match_team_league(local,int(projection.local_club(fixtures[flat].home))));
+        const auto competition=european?cup_entry_address(european_groups[g].source_entry):(cup||regional)?source_entry:uint32_t(bmh::match_team_league(local,int(projection.local_club(fixtures[flat].home))));
         bmh::MatchGroup group;group.desc.assign(0xd0,0);group.desc[0]=uint8_t(type);group.desc[1]=flags;group.desc[2]=uint8_t(count);
         for(size_t b=0;b<4;++b)group.desc[0xcc+b]=uint8_t(competition>>(8*b));
         if(cup&&cup->two_legs()&&cup->next_leg()==2)group.cup_other_leg=cup->rounds.back().first_leg;
         if(european)group.cup_other_leg=european_groups[g].other_leg;
         for(size_t m=0;m<count;++m,++flat){const auto& c=conditions[flat];group.desc[0x10+m]=c.referee;group.desc[0x30+m]=uint8_t(c.temperature);group.desc[0x50+m]=uint8_t(c.rain);
-            group.fixtures.push_back(int(projection.local_club(fixtures[flat].home)));group.fixtures.push_back(int(projection.local_club(fixtures[flat].away)));if(cup||european)group.cup_results.push_back(0);else group.results.push_back(0);group.end_minute.push_back(0);group.spectators.push_back(c.spectators);
+            group.fixtures.push_back(int(projection.local_club(fixtures[flat].home)));group.fixtures.push_back(int(projection.local_club(fixtures[flat].away)));if(cup||european||regional)group.cup_results.push_back(0);else group.results.push_back(0);group.end_minute.push_back(0);group.spectators.push_back(c.spectators);
             bmh::MatchSetup setup;setup.home=group.fixtures[m*2];setup.away=group.fixtures[m*2+1];setup.match_index=int(m);setup.climate_effect=(flags&2)!=0;setup.month=c.month;setup.temperature=c.temperature;setup.spectators=int(c.spectators);
             const auto sides=bmh::build_side_records(local,setup,staged_random,&staged_game);for(const auto& side:sides)group.records.insert(group.records.end(),side.b.begin(),side.b.end());}
         groups.push_back(std::move(group));
@@ -148,8 +156,8 @@ AiLeagueRoundOutcome run_ai_league_matches(World& world,const GameState& base,co
         if(local.pools_open||local.memory.u8(layout::CareerSession_DispatchToto_RuntimeField)!=pool_rows.size())throw FormatError("world12: Core did not evaluate the selected pools fixtures");
         for(size_t n=0;n<pool_rows.size();++n){const auto value=local.memory.u8(layout::MatchdaySetup_EvaluatePoolsCoupon_RuntimeField+uint32_t(n));if(value>2)throw FormatError("world12: invalid Core pools outcome");outcome.pools.push_back({fixtures[pool_rows[n]],value});}
     }
-    if(cup||european)cup_out->pools=outcome.pools;
-    if(cup||european){for(const auto& finished:groups){cup_out->scores.insert(cup_out->scores.end(),finished.cup_results.begin(),finished.cup_results.end());cup_out->end_minutes.insert(cup_out->end_minutes.end(),finished.end_minute.begin(),finished.end_minute.end());}cup_out->game_draws=outcome.game_draws;cup_out->watcom_draws=outcome.watcom_draws;}
+    if(cup||european||regional)cup_out->pools=outcome.pools;
+    if(cup||european||regional){for(const auto& finished:groups){cup_out->scores.insert(cup_out->scores.end(),finished.cup_results.begin(),finished.cup_results.end());cup_out->end_minutes.insert(cup_out->end_minutes.end(),finished.end_minute.begin(),finished.end_minute.end());}cup_out->game_draws=outcome.game_draws;cup_out->watcom_draws=outcome.watcom_draws;}
     else {size_t index=0;for(const auto& finished:groups)for(size_t m=0;m<finished.results.size();++m,++index)outcome.matches.push_back({fixtures[index],{true,uint8_t(finished.results[m]>>4),uint8_t(finished.results[m]&15)},finished.end_minute[m],0,0,settle});}
     if(world.economy!=original_economy)throw FormatError("world12: career economy changed during match calculation");
     auto published=world;projection.commit_match_state(published);if(original_economy)capture_career_economy(published,projection);published.validate();
@@ -250,4 +258,20 @@ EuropeanMatchBatchOutcome simulate_and_settle_european_groups(CareerSnapshot& st
 CupRoundOutcome simulate_and_settle_european_group(CareerSnapshot& state,const GameState& base,const EuropeanGroup& group,
     const LeImage& source,const std::vector<AiLeagueConditions>& conditions,HumanProjectionPolicy policy,
     GameRandom& game,WatcomRandom& random,const HumanRoundHooks& hooks){auto result=simulate_and_settle_european_groups(state,base,{group},source,{conditions},policy,game,random,hooks);auto out=std::move(result.groups.front());out.game_draws=result.game_draws;out.watcom_draws=result.watcom_draws;return out;}
+}
+
+namespace bmh::world12 {
+CupRoundOutcome simulate_and_settle_regional_playoff_group(CareerSnapshot& state,const GameState& base,
+    const RegionalPlayoffGroup& group,const LeImage& source,const std::vector<AiLeagueConditions>& conditions,
+    HumanProjectionPolicy policy,GameRandom& game,WatcomRandom& random,const HumanRoundHooks& hooks) {
+    state.validate();const auto expected=prepare_regional_playoff_group(state);
+    if(!expected||*expected!=group)throw FormatError("world12: stale regional match/date owner");
+    const auto before=state;auto candidate=state;auto staged_game=game;auto staged_random=random;
+    const auto game_seed=game.seed();const auto game_calls=game.calls();const auto random_seed=random.seed();const auto random_calls=random.calls();
+    CupRoundOutcome outcome;run_ai_league_matches(candidate.world,base,group.matches,conditions,staged_game,staged_random,true,&candidate,policy,&hooks,nullptr,&source,&outcome,nullptr,nullptr,nullptr,&group);
+    candidate.game_seed=staged_game.seed();candidate.watcom_seed=staged_random.seed();candidate.validate();
+    if(state!=before||game.seed()!=game_seed||game.calls()!=game_calls||random.seed()!=random_seed||random.calls()!=random_calls)
+        throw FormatError("world12: regional match snapshot/RNG owner changed");
+    state=std::move(candidate);game=staged_game;random=staged_random;return outcome;
+}
 }

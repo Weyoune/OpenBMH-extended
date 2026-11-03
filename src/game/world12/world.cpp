@@ -69,6 +69,7 @@ void World::validate(bool complete)const {
     }
     validate_european_campaigns(*this);
     validate_indoor_season(*this);
+    validate_regional_playoff(*this);
     if(initial_competitions){
         if(!settings)throw std::invalid_argument("world12: initial competitions lack career settings");
         for(const auto& manager:managers)if(!manager.career||!manager.career->season_records||!manager.tactics||!manager.finance||!manager.match_state)throw std::invalid_argument("world12: prepared competitions lack complete manager state");

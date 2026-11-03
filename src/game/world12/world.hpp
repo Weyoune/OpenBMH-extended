@@ -3,6 +3,7 @@
 #include "game/world12/annual_archive_types.hpp"
 #include "game/world12/european_campaign.hpp"
 #include "game/world12/indoor.hpp"
+#include "game/world12/regional_playoff.hpp"
 #include "game/world12/national_campaign.hpp"
 #include "game/world12/catalogue.hpp"
 #include "formats/m3d.hpp"
@@ -291,6 +292,7 @@ struct World {
     std::optional<InitialCompetitionFields> initial_competitions={};
     std::optional<EuropeanCampaigns> european_campaigns={};
     std::optional<IndoorSeason> indoor;
+    std::optional<RegionalPlayoffSeason> regional_playoff; // Known inactive/actual six-date owner; unknown in older snapshots.
     std::optional<NationalCampaignHistory> national_campaigns;
     std::optional<std::vector<NationalRosterOrigin>> national_origins;
     std::optional<TransferMarket> transfer_market={};

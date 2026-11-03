@@ -14,6 +14,7 @@ inline void omit_recent_manager_records(bmh::cli::Json& root) {
     root.object()->erase("national_campaigns");
     root.object()->erase("national_coaches");
     root.object()->erase("annual_awards_completed");
+    root.object()->erase("regional_playoff");
     root.object()->erase("amateur_slots");
     root.object()->erase("european_campaigns");root.object()->erase("indoor");
     auto& managers=std::get<bmh::cli::Json::Array>(root.object()->at("managers").value);
@@ -29,7 +30,7 @@ inline void omit_recent_manager_records(bmh::cli::Json& root) {
 }
 inline void omit_recent_manager_records(bmh::world12::World& world) {
     world.annual_title_archive.reset();
-    world.annual_awards_completed.reset();
+    world.annual_awards_completed.reset();world.regional_playoff.reset();
     for(auto& manager:world.managers)if(manager.career){manager.career->first_recorded_season.reset();manager.career->annual_records.reset();}
     world.amateur_slots.reset();
     for(auto& manager:world.managers)if(manager.career&&manager.career->season_services)manager.career->season_services->promotion_tail_flags.reset();
