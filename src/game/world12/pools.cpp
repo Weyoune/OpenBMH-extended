@@ -51,6 +51,11 @@ void settle_scheduled_pools(CareerSnapshot& state,const PreparedEvent& event,con
     const bool european=std::any_of(event.groups.begin(),event.groups.end(),[](const auto& group){return group.european.has_value();});
     const auto before=state;auto candidate=state;std::vector<ClubId> clubs;if(national){for(const auto& record:*candidate.world.national_coaches)if(record.active)clubs.push_back(record.team);}else for(const auto& m:candidate.world.managers)clubs.push_back(m.club);
     for(const auto& f:matches)for(auto id:{f.home,f.away})if(std::find(clubs.begin(),clubs.end(),id)==clubs.end())clubs.push_back(id);
+    // An uncoached national day can own a genuinely empty coupon. Retain its
+    // actual fixture field as the zero-manager Core workspace, never a club or
+    // an invented coach merely to satisfy projection ownership.
+    if(national&&clubs.empty())for(const auto& source:event.groups)for(const auto& match:source.matches)
+        for(auto id:{match.fixture.home,match.fixture.away})if(std::find(clubs.begin(),clubs.end(),id)==clubs.end())clubs.push_back(id);
     const auto& settings=*candidate.world.settings;auto p=national?AiMatchProjection::create_for_nationals(candidate,clubs,reference,{settings.mode,settings.difficulty,settings.foreign_rule,true}):european?AiMatchProjection::create_for_european(candidate,clubs,reference,{settings.mode,settings.difficulty,settings.foreign_rule,true}):AiMatchProjection::create_for_humans(candidate,clubs,reference,{settings.mode,settings.difficulty,settings.foreign_rule,true});if(national){install_career_mailbox(p,candidate.world);install_career_pools(p,candidate.world);}else install_career_economy(p,candidate.world);auto& g=p.state;g.texts=&texts;g.date=event.day;
     g.memory.add_block(layout::DeskActions_SubmitPoolsCoupon_RuntimeField,44);g.memory.add_block(layout::CareerSession_DispatchToto_RuntimeField,1);g.memory.set8(layout::CareerSession_DispatchToto_RuntimeField,uint8_t(matches.size()));
     MatchGroup group;group.desc.assign(0xd0,0);group.desc[0]=1;group.desc[2]=uint8_t(matches.size());
