@@ -35,6 +35,14 @@ representation do not change. Old snapshots before attendance can proceed; an
 older snapshot with already-booked attendance and no kickoff receipt cannot
 safely resume the match through the Session owner and explicitly rejects.
 
+Initialized runtime squads may contain zero through24 actual compact rows: Source
+monthly contract expiry and retirement can release the last player. The master
+minimum remains eleven, and the data loader rejects an already initialized
+`WORLD12.JSON` as a new-game master. Player identities, compactness, empty-slot
+flags, capacity and loan ownership remain strict. A short or empty runtime team
+keeps its real lineup/market views and receives the same Source kickoff forfeit;
+no replacement player or contract renewal is invented.
+
 ## Checks
 
 - Synthetic home-, away- and both-short rounds compare the complete projected

@@ -27,6 +27,7 @@ namespace bmh::app::world12 {
 using namespace bmh::world12;
 RuntimeResources load_runtime_resources(const std::filesystem::path& data) {
     RuntimeResources r;r.texts=std::make_shared<TextDb>(load_textd(ui::asset_path(data,"TEXTD.BLK")));r.master=decode_world(read_file(ui::asset_path(data,"WORLD12.JSON")));
+    if(r.master.players_initialized)throw FormatError("world12: data master must not contain initialized career state");
     r.german=load_reference_le(ui::asset_path(data,"BMH.exe"),DataProfile{});
     r.english=load_reference_le(ui::asset_path(data,"RULES-EN.DAT"),DataProfile{});
     if(!r.english.u8(layout::LeagueStrengthRanges+1))throw FormatError("world12: English strength rules are incomplete; re-export RULES-EN.DAT");

@@ -31,6 +31,7 @@ void prepare_lineup(GameState& local,int manager,int club) {
     if((local.memory.u16(display)&0x80)&&!normalize_pitch_set_piece_source(local,manager,club))throw FormatError("world12: set-piece reentry failed");
     std::array<bool,4096> seen{};const auto first=squad_range(local,club).first;
     for(size_t row=0;row<11;++row){const auto slot=local.squad_slots.at(first+row);const auto id=slot&0xfff;const auto at=size_t(manager)*0x840+row*0x58;
+        if(id==0xfff&&slot==0xfff)continue;
         if(id==0xfff||size_t(id)>=local.players.size()||seen[id]||!(slot&0x8000)||(slot&0x4000)||int8_t(local.tactics.at(at+0x41))<0||int8_t(local.tactics.at(at+0x41))>19||int8_t(local.tactics.at(at+0x42))<0||int8_t(local.tactics.at(at+0x42))>8)
             throw FormatError("world12: incomplete prepared eleven");seen[id]=true;}
 }

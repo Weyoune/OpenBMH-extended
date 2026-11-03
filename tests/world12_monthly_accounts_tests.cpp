@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "world12_fixture.hpp"
+#include "fixture_tables.hpp"
+#include "game/world12/ai_match.hpp"
+#include "game/lineup.hpp"
+#include "ui/lineup.hpp"
+#include "ui/transfer_market.hpp"
 #include "game/world12/monthly_services.hpp"
 #include "game/month.hpp"
 #include "game/world12/market_auctions.hpp"
@@ -119,6 +124,19 @@ int main()try {
         const auto full_pool=overflow.world.free_players->domestic;const auto sent=settle_monthly_roster(overflow,3,rules,texts,no);check(sent.released==1&&overflow.world.free_players->domestic==full_pool,"full free-pool release overwrote physical entries");
         size_t owners=0;for(const auto& [id,club]:overflow.world.clubs)for(const auto& slot:club.roster)if(slot.player==player){++owners;check(id!=owner&&std::none_of(overflow.world.managers.begin(),overflow.world.managers.end(),[&](const auto& m){return m.club==id;}),"full-pool release chose a human club");}check(owners==1,"full-pool release did not choose one global AI destination");check(read_save(make_save(overflow))==overflow,"full-pool global release snapshot failed");
 
+    }
+    {
+        auto empty=initial;const auto club=empty.world.managers[1].club;const auto original_players=empty.world.players.size();
+        for(size_t row=0;row<20;++row){empty.world.managers[1].tactics->backing->scalar_rows[row][0xc]=1;empty.world.managers[1].tactics->backing->scalar_rows[row][0xb]&=~0x20u;auto& person=empty.world.players.at(empty.world.clubs.at(club).roster[row].player).attributes;person.w364=(person.w364&~(31u<<21))|(10u<<21);}
+        for(uint32_t n=0;n<80;++n){auto person=empty.world.players.begin()->second;person.id={0xf2000000u+n};person.attributes.name="Occupied release pool";empty.world.players[person.id]=person;empty.world.free_players->domestic[n]=person.id;}
+        const auto expected_players=empty.world.players.size();MonthlyContractHooks decline;decline.renew=[](auto&,auto&,auto&,auto,auto,int,const auto&)->std::optional<bool>{return false;};
+        const auto outcome=settle_monthly_roster(empty,3,rules,texts,decline);check(outcome.released==20&&std::all_of(empty.world.clubs.at(club).roster.begin(),empty.world.clubs.at(club).roster.end(),[](const auto& row){return row.empty();})&&empty.world.players.size()==expected_players,"actual Source monthly releases did not preserve an empty runtime squad/identities");
+        check(expected_players==original_players+80&&read_save(make_save(empty))==empty,"empty runtime board-month snapshot failed save roundtrip");
+        auto projection=AiMatchProjection::create_for_humans(empty,{club},rules,{3,6,false,true});auto& local=projection.state;auto_lineup(local,0,0xe4);prepare_lineup_entry(local,0);open_lineup_screen(local,0);check(initialize_pitch_set_piece_source(local,0,0)&&normalize_pitch_set_piece_source(local,0,0),"empty runtime lineup controls were unusable");
+        auto image=LeImage::from_bytes(layout::GermanDataSegmentBegin,Bytes(0x20000));for(auto pair:{std::pair{layout::TeamsWithSquads,uint16_t(runtime_dimensions.big_squad_teams)},std::pair{layout::CareerSession_DispatchLineup_RuntimeField,uint16_t(runtime_dimensions.league_teams)}}){const uint8_t word[]={uint8_t(pair.second),uint8_t(pair.second>>8)};image.patch(pair.first,word,2);}local.memory.add_block(layout::PlainBackground,1);local.memory.add_block(layout::TextGradientDisabled,1);local.memory.add_block(layout::CareerSession_AnyOf_ExecutableField,8);
+        const auto lineup=ui::lineup_from_game(local,image,7);const auto market=ui::transfer_market_from_game(local,7);check(lineup.players.size()==24&&std::all_of(lineup.players.begin(),lineup.players.end(),[](const auto& row){return row.player_id<0;})&&market.roster.has_squad,"empty runtime lineup/market views invented or rejected player rows");
+        set_fixture_tables(bmh::test::authored_fixture_tables());const auto league=empty.world.clubs.at(club).league;const auto fixtures=league_fixtures(empty.world,league,1);AiLeagueConditions condition;condition.date=empty.date;condition.month=8;condition.temperature=20;condition.spectators=15000;condition.referee_properties={24};condition.presentation_buttons.assign(180,1);GameRandom game(empty.game_seed);WatcomRandom random(empty.watcom_seed);HumanRoundHooks observer;observer.decline_unpresented_events=true;const auto played=simulate_and_settle_human_league_round(empty,rules,league,1,std::vector<AiLeagueConditions>(fixtures.size(),condition),{3,6,false,true},game,random,observer);
+        const auto awarded=std::find_if(played.matches.begin(),played.matches.end(),[&](const auto& match){return match.fixture.home==club||match.fixture.away==club;});check(awarded!=played.matches.end()&&awarded->end_minute==0&&awarded->score.home==(awarded->fixture.home==club?0:2)&&awarded->score.away==(awarded->fixture.home==club?2:0)&&read_save(make_save(empty))==empty,"empty runtime squad did not receive actual Source zero-minute forfeit/save");
     }
     std::cout<<"Complete monthly services, contracts/retirements, full-pool global release, sparse-seat accounts/dividends/credits, snapshots and rollback passed\n";
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}

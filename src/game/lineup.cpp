@@ -74,11 +74,13 @@ bool pitch_context_valid(const GameState& g, int manager, int team) {
         seen[id] = true;
         ++occupied;
     }
-    if (occupied < 11) return false;
+    const bool projected=!g.projected_match_clubs.empty();
+    if (occupied < 11 && !projected) return false;
     const size_t board = size_t(manager) * kManagerBoardSize;
     for (size_t row = 0; row < 11; ++row) {
         const uint16_t slot = g.squad_slots[range.first + row];
         const size_t id = slot & 0x0fff;
+        if(projected&&id==0x0fff){if(slot!=0x0fff)return false;continue;}
         const int depth = int8_t(g.tactics[board + row * kBoardRowSize + 0x41]);
         const int lane = int8_t(g.tactics[board + row * kBoardRowSize + 0x42]);
         if (id >= g.players.size() || (slot & 0xc000) != 0x8000 ||
@@ -156,7 +158,7 @@ void prepare_lineup_entry(GameState& g, int team) {
     size_t players = 0;
     for (size_t row = 0; row < range.count; ++row)
         players += (g.squad_slots[range.first + row] & 0x0fff) != 0x0fff;
-    if (players < 11) throw std::invalid_argument("prepare_lineup_entry: too few players");
+    if (players < 11 && g.projected_match_clubs.empty()) throw std::invalid_argument("prepare_lineup_entry: too few players");
     for (size_t row = 0; row < players; ++row) {
         const int id = g.squad_slots[range.first + row] & 0x0fff;
         if (id == 0x0fff || size_t(id) >= g.players.size())

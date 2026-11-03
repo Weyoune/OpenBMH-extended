@@ -1380,7 +1380,7 @@ target_link_libraries(world12_daily_services_tests PRIVATE bmhworld12)
 add_test(NAME world12_daily_services_tests COMMAND world12_daily_services_tests)
 
 add_executable(world12_monthly_accounts_tests tests/world12_monthly_accounts_tests.cpp)
-target_link_libraries(world12_monthly_accounts_tests PRIVATE bmhworld12)
+target_link_libraries(world12_monthly_accounts_tests PRIVATE bmhworld12 bmhui)
 add_test(NAME world12_monthly_accounts_tests COMMAND world12_monthly_accounts_tests)
 
 add_executable(world12_loan_returns_tests tests/world12_loan_returns_tests.cpp)
