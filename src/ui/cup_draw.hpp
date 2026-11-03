@@ -27,6 +27,7 @@ struct CupDrawClub {
     uint8_t reveal_name_color = 0;
     std::string original_name;
     std::string source_context;
+    std::string badge_atlas;
 };
 
 struct CupDrawGroupRow {
@@ -84,6 +85,8 @@ class CupDrawScreen {
 public:
     CupDrawScreen(const std::filesystem::path& data_directory,
                   CupDrawProjection projection);
+    CupDrawScreen(const std::filesystem::path& data_directory,
+                  CupDrawProjection projection,const LeImage& reference);
 
     // Draw-phase stepping consumes the Source bytecode scripts from BMH.exe.
     // Each call advances one timeline step. Initial setup performs ten

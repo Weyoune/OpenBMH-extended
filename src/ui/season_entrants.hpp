@@ -22,6 +22,7 @@ struct SeasonEntrant {
     std::string name; // owned UTF-8
     int x = 0;
     int y = 0;
+    std::string badge_atlas;
 };
 
 struct SeasonEntrantsState {
@@ -42,6 +43,7 @@ std::vector<SeasonEntrantsState> season_entrants_from_game(
 class SeasonEntrantsScreen {
 public:
     SeasonEntrantsScreen(const std::filesystem::path& data_directory, SeasonEntrantsState state);
+    SeasonEntrantsScreen(const std::filesystem::path& data_directory, SeasonEntrantsState state,const LeImage& reference);
     Image render() const;
 
 private:
@@ -50,6 +52,7 @@ private:
     LeImage exe_;
     Image background_;
     std::map<int, Image> logo_atlases_;
+    std::map<std::string,Image> explicit_atlases_;
     SpriteFont sprite_font_;
     Font font_;
 };

@@ -117,10 +117,13 @@ std::vector<SeasonEntrantsState> season_entrants_from_game(
 
 SeasonEntrantsScreen::SeasonEntrantsScreen(const std::filesystem::path& data_directory,
                                            SeasonEntrantsState state)
+    :SeasonEntrantsScreen(data_directory,std::move(state),load_le(asset_path(data_directory,"BMH.exe"))) {}
+SeasonEntrantsScreen::SeasonEntrantsScreen(const std::filesystem::path& data_directory,
+                                           SeasonEntrantsState state,const LeImage& reference)
     : state_(std::move(state)), data_directory_(data_directory),
-      exe_(load_le(asset_path(data_directory, "BMH.exe"))),
+      exe_(reference),
       background_(load_vga(asset_path(data_directory / "KB", "129.VGA"))),
-      sprite_font_(data_directory),
+      sprite_font_(data_directory,reference),
       font_(load_font(asset_path(data_directory / "F", "BMH3.FNT"))) {
     if (state_.competition < 0 || state_.competition >= 3 || background_.width != 320 || background_.height != 240)
         throw FormatError("season entrants: unsupported screen state or asset");
@@ -129,7 +132,9 @@ SeasonEntrantsScreen::SeasonEntrantsScreen(const std::filesystem::path& data_dir
             team.x + 38 > 320 || team.y + 38 > 240)
             throw FormatError("season entrants: invalid projected team row");
         const int group = (team.badge_selector & 0x1ff) >> 3;
-        if (!logo_atlases_.contains(group))
+        if(!team.badge_atlas.empty()){
+            if(!explicit_atlases_.contains(team.badge_atlas))explicit_atlases_.emplace(team.badge_atlas,load_vga(asset_path(data_directory_,team.badge_atlas)));
+        }else if (!logo_atlases_.contains(group))
             logo_atlases_.emplace(group, load_vga(asset_path(data_directory_ / "W", std::to_string(group) + ".VGA")));
     }
 }
@@ -177,10 +182,9 @@ Image SeasonEntrantsScreen::render() const {
     sprite_font_.draw(out, heading_x, 13, state_.heading, 5);
     sprite_font_.draw(out, 5, 235, state_.footer, 5);
     for (const auto& team : state_.teams) {
-        const auto it = logo_atlases_.find((team.badge_selector & 0x1ff) >> 3);
-        if (it == logo_atlases_.end()) throw FormatError("season entrants: missing team logo atlas");
+        const auto* atlas=team.badge_atlas.empty()?&logo_atlases_.at((team.badge_selector&0x1ff)>>3):&explicit_atlases_.at(team.badge_atlas);
         source_badge_frame(out, team.x, team.y);
-        copy_logo(out, it->second, (team.badge_selector & 7) * 38, team.x, team.y);
+        copy_logo(out, *atlas, (team.badge_selector & 7) * 38, team.x, team.y);
         const int center = team.x + 19;
         draw_source_name(center, team.y + 46, team.name);
     }

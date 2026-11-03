@@ -212,17 +212,18 @@ struct CupDrawScreen::Impl {
     bool initial_poll_done=false,script_started=false;
     int initial=0,club=0,script=0,wait=0,option_delay=0;
     std::map<int,Image> badges;
+    std::map<std::string,Image> explicit_badges;
     struct Op { bool copy; std::array<int,6> rect; int token; };
     std::vector<Op> ops;
     std::vector<size_t> revealed;
     size_t op_index=0,total_revealed=0;
-    Impl(const std::filesystem::path& d,CupDrawProjection projection)
-      :p(std::move(projection)),data(d),exe(load_le(asset_path(d,"BMH.exe"))),
+    Impl(const std::filesystem::path& d,CupDrawProjection projection,const LeImage& reference)
+      :p(std::move(projection)),data(d),exe(reference),
        panel(load_vga(asset_path(d/"KB","67.VGA"))),background(load_vga(asset_path(d/"KB","56.VGA"))),
        widgets(load_vga(asset_path(d/"KB","0.VGA"))),tier(load_vga(asset_path(d/"KB","1.VGA"))),
        regions(load_vga(asset_path(d/"KB","24.VGA"))),
        animation(load_vga(asset_path(d/"KB","74.VGA"))),texts(load_textd(asset_path(d,"TEXTD.BLK"))),
-       sprite(d),font(load_font(asset_path(d/"F","BMH3.FNT"))) {
+       sprite(d,reference),font(load_font(asset_path(d/"F","BMH3.FNT"))) {
         if(panel.width<272||panel.height<203||background.width<318||background.height<207||
            p.count>64||p.clubs.size()<p.count)throw FormatError("cup draw: invalid projection or Original assets");
         if(p.phase==SeasonCupDrawPhase::draw){screen=make_base();
@@ -231,7 +232,9 @@ struct CupDrawScreen::Impl {
             copy(screen,panel,0,0,29,22,261,203);bottom=screen;drawing=screen;present=true;flush=true;}
         else {draw_overview();drawing=screen;}
         for(size_t i=0;i<p.count;++i){const int id=p.clubs[i].runtime_id,sel=p.clubs[i].badge_selector&0x1ff;
-            if(!original_badge_fallback(id,&exe)){
+            if(!p.clubs[i].badge_atlas.empty()){
+                const auto& path=p.clubs[i].badge_atlas;if(!explicit_badges.contains(path))explicit_badges.emplace(path,load_vga(asset_path(data,path)));
+            }else if(!original_badge_fallback(id,&exe)){
                 const int atlas=sel>>3;if(!badges.contains(atlas))badges.emplace(atlas,load_vga(asset_path(data/"W",std::to_string(atlas)+".VGA")));
             }
         }
@@ -257,7 +260,8 @@ struct CupDrawScreen::Impl {
     void source_badge(Image& out,const CupDrawClub& c,int x,int y) const {
         source_frame(out,x,y);
         const int id=c.runtime_id,selector=c.badge_selector&0x1ff;
-        if(original_badge_fallback(id,&exe))
+        if(!c.badge_atlas.empty())copy(out,explicit_badges.at(c.badge_atlas),(selector&7)*38,0,x,y,38,38);
+        else if(original_badge_fallback(id,&exe))
             copy(out,widgets,8,0,x,y,38,38);
         else {
             const int atlas=selector>>3;copy(out,badges.at(atlas),(selector&7)*38,0,x,y,38,38);
@@ -429,7 +433,9 @@ struct CupDrawScreen::Impl {
 };
 
 CupDrawScreen::CupDrawScreen(const std::filesystem::path& d,CupDrawProjection p)
- :impl_(std::make_shared<Impl>(d,std::move(p))){}
+ :CupDrawScreen(d,std::move(p),load_le(asset_path(d,"BMH.exe"))){}
+CupDrawScreen::CupDrawScreen(const std::filesystem::path& d,CupDrawProjection p,const LeImage& reference)
+ :impl_(std::make_shared<Impl>(d,std::move(p),reference)){}
 bool CupDrawScreen::advance_step(){auto& s=*impl_;s.present=false;s.flush=false;s.poll=false;s.held=false;s.option_delay=0;s.wait=0;
     if(s.complete)return false;
         if(s.p.phase==SeasonCupDrawPhase::overview){s.complete=true;return false;}

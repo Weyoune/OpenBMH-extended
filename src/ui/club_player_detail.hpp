@@ -13,6 +13,7 @@ struct ClubPlayerDetailClub {
     uint16_t badge_selector = 0;
     std::string original_full_name;
     std::string original_short_name;
+    std::string badge_atlas; // Explicit typed asset; empty preserves the Original selector.
 };
 
 // Owned ClubPlayerDetailFromGame inputs. The redraw is produced by Core once per actual
@@ -45,6 +46,8 @@ class ClubPlayerDetailScreen {
 public:
     ClubPlayerDetailScreen(const std::filesystem::path&, ClubPlayerDetailProjection,
                           Image parent_frame);
+    ClubPlayerDetailScreen(const std::filesystem::path&, ClubPlayerDetailProjection,
+                          Image parent_frame,const LeImage& reference);
     Image render() const;
     bool move(int x, int y);
     bool press(int x, int y, bool right = false);

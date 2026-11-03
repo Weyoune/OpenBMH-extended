@@ -83,8 +83,11 @@ ClubPlayerDetailProjection club_player_detail_from_game(const GameState& g,
 }
 
 ClubPlayerDetailScreen::ClubPlayerDetailScreen(const std::filesystem::path& data,
-    ClubPlayerDetailProjection p,Image parent):projection_(std::move(p)),
-    exe_(load_le(asset_path(data,"BMH.exe"))),
+    ClubPlayerDetailProjection p,Image parent)
+    :ClubPlayerDetailScreen(data,std::move(p),std::move(parent),load_le(asset_path(data,"BMH.exe"))) {}
+ClubPlayerDetailScreen::ClubPlayerDetailScreen(const std::filesystem::path& data,
+    ClubPlayerDetailProjection p,Image parent,const LeImage& reference):projection_(std::move(p)),
+    exe_(reference),
     small_(load_font(asset_path(data/"F","BMH3.FNT"))),heading_(load_font(asset_path(data/"F","BMH2.FNT"))),
     texts_(load_textd(asset_path(data,"TEXTD.BLK"))),widgets_(load_vga(asset_path(data/"KB","0.VGA"))),
     atlas_(load_vga(asset_path(data/"KB","2.VGA"))),flags_(load_vga(asset_path(data/"KB","24.VGA"))),
@@ -94,7 +97,8 @@ ClubPlayerDetailScreen::ClubPlayerDetailScreen(const std::filesystem::path& data
     if(atlas_.width==314){Image padded(320,atlas_.height);padded.blit(atlas_,0,0);atlas_=std::move(padded);}
     for(size_t i=0;i<2;++i)if(projection_.clubs[i]){
         auto& club=*projection_.clubs[i];const int id=club.runtime_team;
-        if(!original_badge_fallback(id,&exe_)){
+        if(!club.badge_atlas.empty())badges_[i]=load_vga(asset_path(data,club.badge_atlas));
+        else if(!original_badge_fallback(id,&exe_)){
             badges_[i]=load_vga(asset_path(data/"W",std::to_string(club.badge_selector>>3)+".VGA"));
         }
         // TextWidth national/foreign names: longest word, then remove two
