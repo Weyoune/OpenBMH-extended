@@ -345,6 +345,24 @@ void first_event_tests(const CareerSnapshot& pending,const GameState& source) {
             cancel.select_transfer=[&](const GameState&,const TransferOfferListView&)->PendingOfferTransferChoice{aborted();return {};};
             rejects([&]{session_app::resolve_initial_offer(state,tx,tx,reference,texts,cancel);},"cancelled pending presenter committed");
             check(state==pending&&tx.revision==7,"cancelled pending decision leaked staged state/RNG");
+            {
+                std::vector<ClubId> ai;
+                for(const auto& [id,club]:pending.world.clubs)if(club.kind==ClubKind::club&&std::none_of(pending.world.managers.begin(),pending.world.managers.end(),[&](const auto& m){return m.club==id;}))ai.push_back(id);
+                check(ai.size()>2,"pending loan fixture lacks actual AI parties");
+                auto with_ai=pending;const auto player=with_ai.world.clubs.at(ai[0]).roster[0].player;
+                with_ai.world.loans.push_back({player,ai[1],ai[0],8,uint16_t(173)});
+                const auto ai_loans=with_ai.world.loans;session_app::ManagerActionOwner loan_owner{86,1};
+                const auto accepted=session_app::resolve_initial_offer(with_ai,loan_owner,loan_owner,reference,texts,decline);
+                check(accepted.completed&&with_ai.world.loans==ai_loans&&with_ai.transfers->loans.empty()&&read_save(make_save(with_ai))==with_ai,"AI loan was required to invent a human board or lost its physical ledger slot");
+                auto missing=pending;missing.world.loans.push_back({player,manager.club,ai[0],8,uint16_t(173)});const auto before_missing=missing;loan_owner={86,1};
+                rejects([&]{session_app::resolve_initial_offer(missing,loan_owner,loan_owner,reference,texts,decline);},"human-owned loan without its explicit board was accepted");
+                check(missing==before_missing&&loan_owner.revision==1,"missing human loan board rejection changed snapshot/RNG");
+                auto owned=missing;owned.transfers.emplace();LoanContract contract;contract.player=player;contract.manager=manager.seat;contract.source_slot=11;
+                contract.board.fill(17);for(size_t b=0x44;b<0x48;++b)contract.board[b]=0;
+                contract.mark=owned.world.clubs.at(ai[2]).roster[0].player;contract.marked_by=owned.world.clubs.at(ai[2]).roster[1].player;owned.transfers->loans.push_back(contract);
+                const auto owned_loans=owned.world.loans;loan_owner={86,1};session_app::resolve_initial_offer(owned,loan_owner,loan_owner,reference,texts,decline);
+                check(owned.world.loans==owned_loans&&owned.transfers->loans==std::vector<LoanContract>{contract}&&read_save(make_save(owned))==owned,"pending workspace lost sparse human board slots or external mark references");
+            }
             const auto result=session_app::resolve_initial_offer(state,tx,tx,reference,texts,decline);
             check(result.completed&&result.processed==1&&!result.transferred&&tx.revision==8&&!state.desktop->initial_event->offer&&!state.world.transfer_market->rows[40],"owned pending decline/salary decision did not finish");
             check(read_save(make_save(state))==state,"resolved pending state failed S9 roundtrip");
