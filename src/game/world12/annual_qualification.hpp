@@ -28,6 +28,12 @@ struct AnnualLeagueQualification {
     bool source_random_domestic=false;
     bool operator==(const AnnualLeagueQualification&)const=default;
 };
+struct AnnualQualificationCorrection {
+    LeagueId league;
+    ClubId club;
+    bool reserve_pool=false;
+    bool operator==(const AnnualQualificationCorrection&)const=default;
+};
 struct UnpublishedAnnualQualification {
     // Exact paid-awards source, before accounts, membership or player resets.
     CareerSnapshot source_binding;
@@ -39,6 +45,9 @@ struct UnpublishedAnnualQualification {
     // follow the existing shared-career quota redistribution.
     std::vector<AnnualLeagueQualification> league_qualification;
     AnnualEuropeanFields next_european;
+    // Only an otherwise unrepresentable Source CW deficit is repaired, after
+    // every ordinary qualification. Never changes a valid Source selection.
+    std::vector<AnnualQualificationCorrection> corrections;
     int32_t game_seed_before=0,game_seed_after=0;
     uint32_t watcom_seed_before=0,watcom_seed_after=0;
     uint64_t game_draws=0,watcom_draws=0;

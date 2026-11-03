@@ -41,3 +41,21 @@ and European transition kernels. They compare fields and both random streams
 with independent Source control loops across all six club scopes, exercise
 historical-holder/new-campaign separation, and reject unknown, stale, altered or
 externally changed owners. These fixtures are not played seasons.
+
+
+## Club-only correction for an invalid Source CW field
+
+OpenBMH deviates from the original: when the domestic winner and finalist both
+own Champions League places, fewer than five CW qualifiers can remain. The
+Original filler then reads beyond its 27 real reserve-country pools into
+national-team identities. Extended retains all ordinary allocations and repairs
+only that deficit, before field fill, with the highest remaining actual club in
+the affected country's completed top-league ranking. All three current campaigns
+are excluded. If no such club remains, the first remaining real reserve country
+in Source order supplies a club through the existing Watcom rejection pick.
+
+Each replacement has an explicit correction receipt. No club, roster, final or
+national participant is invented. Ordinary Source fields/order/G/W are identical;
+only a formerly invalid path changes its Source choices and draw sequence. The
+returned before/after seeds and counts include that correction. Normal and
+champion/cup-finalist/title-holder collision paths are tested independently.

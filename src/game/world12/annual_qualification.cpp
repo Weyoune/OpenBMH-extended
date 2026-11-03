@@ -145,6 +145,33 @@ UnpublishedAnnualQualification stage_annual_qualification(const CareerSnapshot& 
         for(auto id:out.final_rankings[5])if(!find(id)){add(2,id);assigned=true;break;}
         if(!assigned)invalid("world12: annual European field has no absent-country replacement place");
     }
+    // OpenBMH deviates from the original: a domestic winner and finalist can
+    // both occupy CL places. Fewer than five CW qualifiers makes the Source
+    // filler advance past its 27 real reserve countries into national IDs.
+    // Preserve all valid allocations, then use the affected country's next
+    // actual ranked club before any reserve pick. Ordinary paths draw nothing.
+    if(fields.qualified[2].size()<5) {
+        const auto pools=reserve_pools(world);
+        for(const auto& row:out.league_qualification) {
+            if(fields.qualified[2].size()>=5)break;
+            const auto country=world.catalogue.league(row.league).country;
+            const size_t required=1+(!world.catalogue.scope.germany&&row.league==out.league_qualification.front().league?1u:0u);
+            if(size_t(std::count_if(fields.qualified[2].begin(),fields.qualified[2].end(),[&](auto id){return club(world,id).country==country;}))>=required)continue;
+            const auto& ranked=out.final_rankings[row.league.value];
+            auto available=std::find_if(ranked.begin(),ranked.end(),[&](auto id){return !find(id);});
+            if(available!=ranked.end()) {
+                add(2,*available);out.corrections.push_back({row.league,*available,false});
+            }else {
+                bool assigned=false;
+                for(const auto& pool:pools)if(std::any_of(pool.begin(),pool.end(),[&](auto id){return !find(id);})) {
+                    ClubId selected;do selected=pool.at(size_t(random.range(0,6)));while(find(selected));
+                    add(2,selected);out.corrections.push_back({row.league,selected,true});assigned=true;break;
+                }
+                if(!assigned)invalid("world12: annual CW correction has no remaining actual club");
+            }
+        }
+        if(fields.qualified[2].size()<5)invalid("world12: annual CW deficit has no country qualification owner");
+    }
     draw_fields(world,fields,game,random);
     out.game_seed_after=game.seed();out.watcom_seed_after=random.seed();out.game_draws=game.calls();out.watcom_draws=random.calls();
     if(state!=before)invalid("world12: annual qualification source changed while staging");

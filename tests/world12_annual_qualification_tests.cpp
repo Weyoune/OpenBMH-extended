@@ -12,7 +12,7 @@ template<class F>void rejects(F f,const char* reason){bool refused=false;try{f()
 // Independent reconstructed Source loops: physical random foreign cup slots,
 // rank-based league places, exact country pool progression and scratch draws.
 AnnualEuropeanFields source_oracle(const CareerSnapshot& state,const UnpublishedAnnualQualification& facts,
-    GameRandom& game,WatcomRandom& random) {
+    GameRandom& game,WatcomRandom& random,bool qualification_only=false) {
     AnnualEuropeanFields out;for(size_t k=0;k<3;++k)out.holders[k]=(*state.world.european_campaigns)[k].winner;
     const auto find=[&](ClubId club){for(int k=0;k<3;++k)if(std::find(out.qualified[k].begin(),out.qualified[k].end(),club)!=out.qualified[k].end())return k+1;return 0;};
     std::vector<LeagueId> leagues{{state.world.catalogue.scope.germany?0u:5u}};
@@ -34,6 +34,7 @@ AnnualEuropeanFields source_oracle(const CareerSnapshot& state,const Unpublished
     }
     for(int k=0;k<3;++k)if(!find(out.holders[k]))out.qualified[k].push_back(out.holders[k]);
     if(!state.world.catalogue.scope.germany)for(auto id:facts.final_rankings[5])if(!find(id)){out.qualified[2].push_back(id);break;}
+    if(qualification_only)return out;
     using Token=uint64_t;std::array<std::vector<Token>,3> lists;
     for(size_t k=0;k<3;++k)for(auto id:out.qualified[k])lists[k].push_back(id.value);
     std::array<std::vector<ClubId>,27> pools;
@@ -71,12 +72,35 @@ int main()try {
         check(state==before&&packet.source_binding==before,"qualification changed its canonical source");
         check(packet.target_season==1&&packet.game_draws==112&&packet.game_seed_before==state.game_seed&&packet.watcom_seed_before==state.watcom_seed,"qualification lost source/target or staged RNG ownership");
         GameRandom game(state.game_seed);WatcomRandom random(state.watcom_seed);const auto expected=source_oracle(state,packet,game,random);
+        check(packet.corrections.empty(),"valid Source qualification was unnecessarily corrected");
         check(packet.next_european==expected&&packet.game_seed_after==game.seed()&&packet.watcom_seed_after==random.seed()&&packet.watcom_draws==random.calls(),"next fields/order/G/W differ from independent Source loops");
         std::set<ClubId> unique;const size_t sizes[]={64,24,32};for(size_t k=0;k<3;++k){check(packet.next_european.fields[k].size()==sizes[k],"European field size changed");for(auto id:packet.next_european.fields[k])check(unique.insert(id).second&&state.world.clubs.at(id).kind==ClubKind::club,"duplicate or non-club current campaign");}
         const auto holder=packet.european_titles[0].winner;const auto relation=annual_club_relations(packet,holder);
         check(relation.holders[1]&&relation.champion&&relation.european_cup==2&&annual_final_rank(packet,holder)==0,"completed UEFA holder/champion lost its new CL ownership or Source zero rank");
         check(read_save(make_save(state))==state,"qualification source snapshot did not roundtrip");
         ownership(state,packet);++scopes;
+    }
+    for(const GameScope scope: {GameScope{true,true,false},GameScope{true,false,false},GameScope{false,true,false}}) {
+        const auto state=bmh::test::world12::completed_qualification_closing(scope,true);const auto before=state;
+        const auto packet=stage_annual_qualification(state);validate_annual_qualification(state,packet);
+        GameRandom game(state.game_seed);WatcomRandom random(state.watcom_seed);
+        const auto source=source_oracle(state,packet,game,random,true);
+        check(source.qualified[2].size()==4&&packet.corrections.size()==1,
+              "authored duplicate-title case did not exercise the actual Source CW deficit");
+        const auto& correction=packet.corrections[0];const auto primary=LeagueId{scope.germany?0u:5u};
+        const auto allocated=[&](ClubId id){for(const auto& ids:source.qualified)if(std::find(ids.begin(),ids.end(),id)!=ids.end())return true;return false;};
+        const auto& ranked=packet.final_rankings[primary.value];const auto expected=std::find_if(ranked.begin(),ranked.end(),[&](auto id){return !allocated(id);});
+        check(correction.league==primary&&!correction.reserve_pool&&expected!=ranked.end()&&correction.club==*expected,
+              "CW deficit did not use the highest remaining actual same-country rank");
+        for(size_t k=0;k<3;++k)check(std::equal(source.qualified[k].begin(),source.qualified[k].end(),packet.next_european.qualified[k].begin()),
+              "CW correction changed an ordinary Source qualification");
+        std::set<ClubId> actual;for(const auto& field:packet.next_european.fields)for(auto id:field)
+            check(state.world.clubs.at(id).kind==ClubKind::club&&actual.insert(id).second,
+                  "corrected European fields contain a national, scratch or repeated identity");
+        const auto holder=packet.european_titles[2].winner;const auto relation=annual_club_relations(packet,holder);
+        check(relation.holders[3]&&relation.european_cup==2&&actual.size()==120&&state==before,
+              "CW title/CL participation or canonical source was lost in the correction");
+        check(stage_annual_qualification(state)==packet,"corrected field draws were not deterministic");
     }
     std::cout<<"Annual qualification: "<<scopes<<" scopes, completed authored cup/European score programmes, Source G/W/fields, zero-based ranks, stale/tampered ownership passed; not played seasons\n";
     return 0;
