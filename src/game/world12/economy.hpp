@@ -9,6 +9,9 @@ namespace bmh::world12 {
 void initialize_career_economy(CareerSnapshot&,const GameState& initial_reference);
 void install_career_economy(AiMatchProjection&,const World&);
 void capture_career_economy(World&,const AiMatchProjection&);
+// Shared notices without substituting parked club financial/portfolio state.
+void install_career_mailbox(AiMatchProjection&,const World&);
+void capture_career_mailbox(World&,const AiMatchProjection&);
 // Prices/history and every manager's paid totals/holdings use canonical seats.
 void capture_career_portfolios(World&,const AiMatchProjection&);
 void append_economy_message(CareerEconomy&,const EconomyMessage&);

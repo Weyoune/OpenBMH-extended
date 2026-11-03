@@ -98,6 +98,12 @@ void initialize_career_economy(CareerSnapshot& state,const GameState& reference)
     if(reference.memory.has(layout::CareerSession_FormatError_RuntimeField7+1))candidate.world.highscore_signature=reference.memory.u16(layout::CareerSession_FormatError_RuntimeField7);
     candidate.validate();state=std::move(candidate);
 }
+void install_career_mailbox(AiMatchProjection& projection,const World& world){
+    if(!world.economy)throw std::invalid_argument("world12: canonical mailbox is unavailable");install_mailbox(projection.state,*world.economy,seats(projection));
+}
+void capture_career_mailbox(World& world,const AiMatchProjection& projection){
+    if(!world.economy)throw std::invalid_argument("world12: canonical mailbox is unavailable");capture_mailbox(*world.economy,projection.state,seats(projection));
+}
 void install_career_economy(AiMatchProjection& projection,const World& world){
     if(!world.economy||!world.markets)throw std::invalid_argument("world12: career economy/market is missing");
     const auto map=seats(projection);auto& g=projection.state;const auto& e=*world.economy;

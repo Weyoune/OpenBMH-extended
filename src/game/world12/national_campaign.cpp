@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "game/world12/national_campaign.hpp"
 #include "game/world12/national_final_facts.hpp"
+#include "game/world12/national_coach.hpp"
 #include "game/world12/world.hpp"
 #include "game/world12/calendar.hpp"
 #include "game/national_draw.hpp"
@@ -77,10 +78,14 @@ std::pair<ClubId,ClubId> source_stage_awards(const NationalStage& s){
     require(winner.valid()&&(r.quota==1||runner.valid()),"Source ranking has no final places");return {winner,runner};
 }
 struct Workspace {
-    GameState game;std::array<ClubId,62> ids;Country primary=Country::germany;
+    GameState game;std::array<ClubId,62> ids;Country primary=Country::germany;std::vector<ClubId> coached;
     Workspace(const NationalCampaign& c,const World& world):ids(nations(world)),primary(world.national_campaigns->primary_country){
         game.season=int(std::min(c.season,49u));game.club_ids.resize(size_t(kNoTeam)+62);game.club_names={0};
         for(size_t i=0;i<ids.size();++i){const auto& name=world.clubs.at(ids[i]).name;require(game.club_names.size()+name.size()+1<65536,"name reference space exceeded");game.club_ids[size_t(kNoTeam)+i]=uint16_t(game.club_names.size());game.club_names.insert(game.club_names.end(),name.begin(),name.end());game.club_names.push_back(0);}
+        if(world.national_coaches){
+            game.level=world.settings->difficulty;for(size_t country=0;country<ids.size();++country)game.projected_national_teams.push_back({int(kNoTeam)+int(source_country(uint8_t(country))),std::nullopt});
+            for(const auto& record:*world.national_coaches)if(record.active){const auto manager=coached.size();coached.push_back(record.team);game.manager_teams.push_back(local(record.team));game.manager_records.resize((manager+1)*0xb0c);install_national_coach_account(game,int(manager),record.account);}
+        }
         auto& m=game.memory;m.add_block(kCupTable,kCupEntries*kCupEntrySize);for(int e=0;e<kCupEntries;++e)m.set16(cup_entry_address(e)+0x18,65535);
         m.add_block(layout::Cup_AdvanceCup_RuntimeField,1);m.set8(layout::Cup_AdvanceCup_RuntimeField,1);
         m.add_block(layout::Titles,900);for(uint32_t i=0;i<900;++i)m.set8(layout::Titles+i,255);
@@ -101,6 +106,7 @@ struct Workspace {
     uint16_t local(ClubId id)const{return id.valid()?uint16_t(kNoTeam+source_country(country(id))):65535;}
     ClubId global(uint16_t id)const{if(id==65535)return {};require(id>=kNoTeam&&id<kNoTeam+62,"Core returned an unknown national identity");return ids[source_country(uint8_t(id-kNoTeam))];}
     void capture(NationalCampaign& c)const{const auto& m=game.memory;for(auto& s:c.stages){const auto at=cup_entry_address(s.rules.entry);s.played=m.u8(at+0x1d);for(size_t i=0;i<s.teams.size();++i)s.teams[i]=global(m.u16(m.pointer(at)+uint32_t(i*2)));for(size_t leg=0;leg<2;++leg)if(m.pointer(at+uint32_t(12+4*leg)))for(size_t i=0;i<s.scores[leg].size();++i)s.scores[leg][i]=m.u16(m.pointer(at+uint32_t(12+4*leg))+uint32_t(i*2));s.winner=global(m.u16(at+0x22));s.runner_up=global(m.u16(at+0x24));}}
+    void capture_coaches(World& world)const {for(size_t manager=0;manager<coached.size();++manager){const auto target=std::find_if(world.national_coaches->begin(),world.national_coaches->end(),[&](const auto& record){return record.team==coached[manager];});if(target==world.national_coaches->end())throw FormatError("world12: national advance account owner disappeared");target->account=national_coach_account_from_legacy(game,int(manager));}}
     void capture_honours(NationalCampaignHistory& history)const{history.honours.clear();for(uint32_t row=0;row<20;++row){std::array<ClubId,4> places;bool complete=true;for(uint32_t p=0;p<4;++p){const auto raw=game.memory.u8(layout::Placements+row*4+p);if(!(raw&128)){complete=false;break;}require((raw&127)<62,"Core honour country is invalid");places[p]=ids[source_country(raw&127)];}if(!complete)break;history.honours.push_back(places);}}
 };
 }
@@ -166,7 +172,7 @@ void commit_national_results(World& world,const NationalResults& result,const Le
         for(size_t n=0;n<got.scores.size();++n){const auto score=got.scores[n];require((score>>10)<=2&&((s.rules.flags&8)||!(score>>10)),"score is unplayed or has an invalid phase");m.set16(m.pointer(at+12)+uint32_t((first+n)*2),score);}
         if(plan.flags&8){MatchGroup tie;tie.desc.assign(0xd0,0);tie.desc[1]=plan.flags;tie.cup_results=got.scores;tie.cup_other_leg=plan.other_leg;for(size_t n=0;n<got.scores.size();++n)require(cup_tie(tie,int(n))!=2,"knockout tie is unresolved");}
     }
-    auto staged=random;MinuteReport report;bmh::advance_cup(workspace.game,c.competition,staged,report);require(!report.unsupported,"Core programme transition is unsupported");workspace.capture(c);const auto& completed=stage(c,c.active_entry);if(completed.played==duration(completed.rules)){if(completed.rules.next)c.active_entry=completed.rules.next;else {c.complete=true;c.winner=completed.winner;c.runner_up=completed.runner_up;if(c.competition==4){const auto& third=stage(c,completed.rules.parallel);c.places={c.winner,c.runner_up,third.winner,third.runner_up};workspace.capture_honours(*candidate.national_campaigns);}}}
+    auto staged=random;MinuteReport report;bmh::advance_cup(workspace.game,c.competition,staged,report);require(!report.unsupported,"Core programme transition is unsupported");workspace.capture(c);workspace.capture_coaches(candidate);const auto& completed=stage(c,c.active_entry);if(completed.played==duration(completed.rules)){if(completed.rules.next)c.active_entry=completed.rules.next;else {c.complete=true;c.winner=completed.winner;c.runner_up=completed.runner_up;if(c.competition==4){const auto& third=stage(c,completed.rules.parallel);c.places={c.winner,c.runner_up,third.winner,third.runner_up};workspace.capture_honours(*candidate.national_campaigns);}}}
     ++c.revision;candidate.validate();require(world==before&&random.seed()==old_random.seed()&&random.calls()==old_random.calls(),"result/draw ownership changed");world=std::move(candidate);random=staged;
 }
 }

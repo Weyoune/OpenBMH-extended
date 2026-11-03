@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "game/national_identity.hpp"
+#include "game/national_settlement.hpp"
 #include "formats/executable_layout.hpp"
 #include "game/cup.hpp"
 #include "game/cup_draw_rules.hpp"
@@ -420,8 +422,6 @@ void store_cup_results(GameState& g, const MatchGroup& grp) {
         g.memory.set16(grp.cup_result_address[0] + uint32_t(i) * 2, grp.cup_results[i]);
 }
 
-namespace {
-
 // NationalTournamentEnd, at the end of the international tournament (competition type 4): the
 // honours list of the tournaments (Placements, 4 bytes per tournament, newest first)
 // moves one place on and gets the first four (final winner and loser Cup_NationalTournamentEnd_RuntimeField/2dce,
@@ -436,13 +436,18 @@ void national_tournament_end(GameState& g) {
     if (mem.has(::bmh::layout::Placements))
         for (int i = 0x4c - 1; i >= 0; i--) mem.set8(::bmh::layout::Cup_NationalTournamentEnd_RuntimeField5 + uint32_t(i), mem.u8(::bmh::layout::Placements + uint32_t(i)));
     const bool coach = !g.manager_teams.empty() && g.manager_teams[0] == kNoTeam;
-    if (coach) book_money(g, 0, -400000, true, true);
+    const bool explicit_nations=!g.projected_national_teams.empty();
+    if(explicit_nations){for(size_t manager=0;manager<g.manager_teams.size();++manager)if(is_national_team(g,g.manager_teams[manager]))book_money(g,int(manager),-400000,true,true);}
+    else if (coach) book_money(g, 0, -400000, true, true);
     for (int i = 0; i < 4; i++) {
-        if (teams[i] == kNoTeam && coach) book_money(g, 0, -kPremium[i], true, true);
+        if(explicit_nations){const auto manager=g.manager_of(teams[i]);if(manager>=0&&is_national_team(g,teams[i]))book_money(g,manager,-kPremium[i],true,true);}
+        else if (teams[i] == kNoTeam && coach) book_money(g, 0, -kPremium[i], true, true);
         // (0x8a + 0x1e + 0xbd = 0x165: CareerSession_DispatchLineup_RuntimeField + CareerSession_InstallLeagueSizes_RuntimeField6 + ClubPlayerDetail_ClubPlayerDetailFromGame_RuntimeField3)
         if (mem.has(::bmh::layout::Placements)) mem.set8(::bmh::layout::Placements + uint32_t(i), uint8_t((teams[i] - kNoTeam) | 0x80));
     }
 }
+
+namespace {
 
 // cup_tie on the result arrays of a stage (CupTie(results0, results1, index, flags))
 int stage_tie(const StaticMemory& mem, uint32_t e, int index) {

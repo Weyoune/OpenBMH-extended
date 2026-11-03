@@ -97,3 +97,26 @@ retains roster membership, publishes national player statistics and preserves
 explicit live display choices. National class3 leaves league fairplay guest
 memory untouched. The standalone projection is not calendar/turn admission or a
 completed tournament runner.
+
+The national match owner now reuses the outdoor shared Core minute clock and
+post-match processing with Source descriptors5..8. It validates the complete
+parallel saved programme, actual nominees and Source stage metadata, retains
+canonical mailbox recipients without installing parked club portfolios, and
+publishes scores/RNG/rosters/accounts atomically. Trusted `before_owned` receives
+the staged snapshot; cancellation and incomplete groups publish no match state.
+`national_desktop_actors` exposes active canonical seats/nations in saved manager
+order, independently of the number of parked club managers.
+
+AdvanceCup installs only real active national accounts for its existing
+NationalTournamentEnd call. The explicit runtime national mapping applies the
+same association allowance and podium premiums to each actual coach. The empty
+mapping retains Original single-coach settlement. A small shared settlement
+header exposes that existing kernel for compatibility validation.
+
+The authored-fixture match regression computes436 actual Core matches across all
+four programmes twice, checks12 English coached clocks, actual final-payment
+oracles, cancellation, sparse recipients, parked-account isolation and regular
+save roundtrips after every batch. These are isolated tournament-programme tests;
+whole calendar seasons, supplied-data gameplay and native GUI admission require
+separate evidence. The single-leg final-facts regression also covers narrow away
+wins, which must not read the unused0xCCCC return-leg array.

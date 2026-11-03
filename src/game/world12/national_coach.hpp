@@ -3,6 +3,9 @@
 #include "game/world12/world.hpp"
 #include "game/state.hpp"
 namespace bmh::world12 {
+struct CareerSnapshot;
+struct NationalDesktopActor {uint8_t seat=0;ClubId team;Country country=Country::germany;bool operator==(const NationalDesktopActor&)const=default;};
+std::vector<NationalDesktopActor> national_desktop_actors(const CareerSnapshot&);
 struct NationalSelectionChoice {Country country;ClubId team;bool operator==(const NationalSelectionChoice&)const=default;};
 struct NationalCapabilities {
     uint8_t national_only_manager_limit=1;

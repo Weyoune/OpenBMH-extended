@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "game/world12/national_coach.hpp"
 #include "game/world12/national.hpp"
+#include "game/world12/save.hpp"
 #include "game/world12/manager_finance.hpp"
 #include "game/career.hpp"
 #include "game/bank_robbery.hpp"
@@ -13,6 +14,12 @@ constexpr size_t monthly_offsets[]={0x338,0x33c,0x85c,0x860,0x864,0x86c,0x878,0x
 uint32_t word(const Bytes& b,size_t p){uint32_t v=0;for(size_t n=0;n<4;++n)v|=uint32_t(b.at(p+n))<<(n*8);return v;}
 void put(Bytes& b,size_t p,uint32_t v){for(size_t n=0;n<4;++n)b.at(p+n)=uint8_t(v>>(n*8));}
 ClubId nation(const World& w,Country c){ClubId found;for(const auto& [id,club]:w.clubs)if(club.kind==ClubKind::national_team&&club.country==c){if(found.valid())throw FormatError("world12: ambiguous coach nation");found=id;}if(!found.valid())throw FormatError("world12: missing coach nation");return found;}
+}
+std::vector<NationalDesktopActor> national_desktop_actors(const CareerSnapshot& snapshot){
+    snapshot.validate();const auto& w=snapshot.world;std::vector<NationalDesktopActor> result;if(!w.national_coaches)return result;
+    const bool active=std::any_of(w.national_coaches->begin(),w.national_coaches->end(),[](const auto& record){return record.active;});if(!active)return result;if(!snapshot.desktop||snapshot.desktop->manager_order.empty())throw FormatError("world12: active national desktop lacks saved manager order");
+    for(auto seat:snapshot.desktop->manager_order)for(const auto& record:*w.national_coaches)if(record.active&&record.coach==seat){const auto squad=std::find_if(w.national_squads.begin(),w.national_squads.end(),[&](const auto& value){return value.team==record.team;});if(squad==w.national_squads.end()||squad->coach!=seat)throw FormatError("world12: national desktop has no actual nominated coach squad");result.push_back({seat,record.team,w.clubs.at(record.team).country});}
+    const auto expected=std::count_if(w.national_coaches->begin(),w.national_coaches->end(),[](const auto& record){return record.active;});if(result.size()!=size_t(expected))throw FormatError("world12: saved order omits an active national coach");return result;
 }
 NationalCapabilities national_capabilities(const World& w){
     w.validate();NationalCapabilities result;
