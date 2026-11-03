@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "app/world12_first_event.hpp"
+#include "game/world12/annual_opening.hpp"
+#include "game/world12/annual_qualification.hpp"
 #include "game/world12/match_projection.hpp"
 #include "game/transfer_bid.hpp"
 #include "game/month.hpp"
@@ -94,23 +96,25 @@ std::optional<PendingDeskOffer> initial_offer(CareerSnapshot& state,uint8_t seat
 }
 std::optional<PendingDeskOffer> prepare_manager_desk_offer(CareerSnapshot& state,uint8_t seat,
     const GameState& reference,WatcomRandom& random) {
-    if(!state.prepared_event)return initial_offer(state,seat,reference,random);
+    if(!state.prepared_event&&!annual_opening_ready(state)&&!annual_closing_ready(state))return initial_offer(state,seat,reference,random);
     const auto notice=prepare_unsolicited_offer(state,seat,reference,random,{true});
     if(!notice)return {};
     return PendingDeskOffer{seat,notice->row,notice->salary_only,notice->warned};
 }
-DesktopEntryOutcome prepare_first_desk_event(CareerSnapshot& state,ManagerActionOwner& owner,
-    ManagerActionOwner expected,const GameState& reference) {
+static DesktopEntryOutcome prepare_empty_desk_event(CareerSnapshot& state,ManagerActionOwner& owner,
+    ManagerActionOwner expected,const GameState& reference,bool annual,bool closing=false) {
     state.validate();
     if(!owner.scope||owner.scope!=expected.scope||owner.revision!=expected.revision||owner.revision==std::numeric_limits<uint64_t>::max()||
-        state.date||state.season||!state.world.settings||state.world.managers.empty()||state.world.managers.size()!=state.world.settings->planned_managers||!state.calendar||state.calendar->next_day||!state.world.transfer_market||!state.desktop||state.desktop->active_seat||state.desktop->initial_event||
-        !state.world.loans.empty()||!state.calendar->schedule.leagues_on(0).empty()||!state.calendar->schedule.others_on(0).empty())
+        (closing?!annual_closing_ready(state):annual?!annual_opening_ready(state):bool(state.date||state.season))||!state.world.settings||state.world.managers.empty()||state.world.managers.size()!=state.world.settings->planned_managers||!state.calendar||(!closing&&state.calendar->next_day)||!state.world.transfer_market||!state.desktop||state.desktop->active_seat||state.desktop->initial_event||
+        (!annual&&!closing&&!state.world.loans.empty())||(!closing&&(!state.calendar->schedule.leagues_on(0).empty()||!state.calendar->schedule.others_on(0).empty())))
         throw std::invalid_argument("world12: invalid initial empty event owner/phase");
-    const auto before=state;auto candidate=state;GameRandom game(state.game_seed);WatcomRandom random(state.watcom_seed);
+    const auto before=state;if(closing)(void)completed_annual_titles(state);auto candidate=state;GameRandom game(state.game_seed);WatcomRandom random(state.watcom_seed);
     InitialDeskEvent event;event.matchday_number=uint16_t(random.range(0,10000));
-    for(const auto& manager:candidate.world.managers)event.manager_order.push_back(manager.seat);
+    if(annual||closing)event.manager_order=candidate.desktop->manager_order;
+    else for(const auto& manager:candidate.world.managers)event.manager_order.push_back(manager.seat);
     for(size_t i=0;i<event.manager_order.size();++i)std::swap(event.manager_order[i],event.manager_order[size_t(game.range(0,int(event.manager_order.size())-1))]);
-    event.offer=initial_offer(candidate,event.manager_order.front(),reference,random);
+    if(annual||closing){candidate.desktop->manager_order=event.manager_order;candidate.desktop->matchday_number=event.matchday_number;candidate.desktop->initial_event=event;}
+    event.offer=(annual||closing)?prepare_manager_desk_offer(candidate,event.manager_order.front(),reference,random):initial_offer(candidate,event.manager_order.front(),reference,random);
     candidate.desktop->manager_order=event.manager_order;
     candidate.desktop->matchday_number=event.matchday_number;
     candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();candidate.desktop->initial_event=std::move(event);
@@ -118,6 +122,15 @@ DesktopEntryOutcome prepare_first_desk_event(CareerSnapshot& state,ManagerAction
     candidate.validate();
     if(state!=before||owner.scope!=expected.scope||owner.revision!=expected.revision)throw std::invalid_argument("world12: initial event owner changed during preparation");
     DesktopEntryOutcome outcome{game.calls()+entered.game_draws,random.calls()+entered.watcom_draws,entered.autosave_due};state=std::move(candidate);++owner.revision;return outcome;
+}
+DesktopEntryOutcome prepare_first_desk_event(CareerSnapshot& state,ManagerActionOwner& owner,ManagerActionOwner expected,const GameState& reference) {
+    return prepare_empty_desk_event(state,owner,expected,reference,false);
+}
+DesktopEntryOutcome prepare_annual_closing_desk_event(CareerSnapshot& state,ManagerActionOwner& owner,ManagerActionOwner expected,const GameState& reference) {
+    return prepare_empty_desk_event(state,owner,expected,reference,false,true);
+}
+DesktopEntryOutcome prepare_annual_desk_event(CareerSnapshot& state,ManagerActionOwner& owner,ManagerActionOwner expected,const GameState& reference) {
+    return prepare_empty_desk_event(state,owner,expected,reference,true);
 }
 DesktopEntryOutcome advance_initial_manager(CareerSnapshot& state,ManagerActionOwner& owner,ManagerActionOwner expected,const GameState& reference) {
     state.validate();

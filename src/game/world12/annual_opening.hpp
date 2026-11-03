@@ -2,6 +2,9 @@
 #pragma once
 #include "game/world12/monthly_market.hpp"
 namespace bmh::world12 {
+// Pure strict saved-state predicate; does not recursively validate snapshots.
+bool annual_opening_ready(const CareerSnapshot&);
+bool annual_closing_ready(const CareerSnapshot&);
 struct AnnualOpeningStage {
     CareerSnapshot snapshot;
     uint64_t game_draws=0,watcom_draws=0;

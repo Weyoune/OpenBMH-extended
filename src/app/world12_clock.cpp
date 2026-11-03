@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "app/world12_clock.hpp"
+#include "game/world12/annual_opening.hpp"
 #include "game/week.hpp"
 #include "game/world12/match_projection.hpp"
 #include "game/matchday_setup.hpp"
@@ -18,13 +19,13 @@ void owner_matches(const ManagerActionOwner& owner,const ManagerActionOwner& exp
 void epoch_matches(const CalendarEpoch& epoch){const auto installed=calendar_epoch();if(epoch.year!=installed.year||epoch.weekday!=installed.weekday)throw FormatError("world12: progression calendar differs from installed rules");}
 void complete_empty_day(CareerSnapshot& state){const auto ticket=prepare_day(state);if(!ticket||!ticket->leagues.empty()||!ticket->others.empty()||!ticket->cups.empty())throw FormatError("world12: progression cannot skip a scheduled competition");commit_day(state,*ticket,{},{});}
 }
-void finish_initial_event(CareerSnapshot& state,ManagerActionOwner& owner,ManagerActionOwner expected,const GameState& reference,CalendarEpoch epoch){
+static void finish_empty_opening_event(CareerSnapshot& state,ManagerActionOwner& owner,ManagerActionOwner expected,const GameState& reference,CalendarEpoch epoch,bool annual){
     owner_matches(owner,expected);state.validate();epoch_matches(epoch);
-    if(state.progress||state.date||state.season||!state.desktop||!state.desktop->initial_event||!state.desktop->active_seat||state.desktop->autosave_pending||!state.calendar||state.calendar->next_day)
+    if(state.progress||(annual?!annual_opening_ready(state):bool(state.date||state.season))||!state.desktop||!state.desktop->initial_event||!state.desktop->active_seat||state.desktop->autosave_pending||!state.calendar||state.calendar->next_day)
         throw FormatError("world12: initial event is not ready to finish");
     const auto& event=*state.desktop->initial_event;
     if(event.offer||size_t(event.manager_position)+1!=event.manager_order.size()||*state.desktop->active_seat!=event.manager_order.back())throw FormatError("world12: remaining manager/offer owns the initial desk");
-    const auto before=state;auto candidate=state;CareerProgress progress;progress.last_manager=*state.desktop->active_seat;progress.epoch_year=uint16_t(epoch.year);progress.epoch_weekday=uint8_t(epoch.weekday);
+    const auto before=state;auto candidate=state;CareerProgress progress;progress.previous_date=state.date;progress.season_start=annual?state.date:0;progress.last_manager=*state.desktop->active_seat;progress.epoch_year=uint16_t(epoch.year);progress.epoch_weekday=uint8_t(epoch.weekday);
     // Free scratch quotes have no OfferSlots owner. Keep entry40's separately
     // retained bidder history; actual pending offers were rejected above.
     if(candidate.world.transfer_market)for(size_t n=40;n<44;++n){const auto& row=candidate.world.transfer_market->rows[n];if(row&&std::any_of(row->bids.begin(),row->bids.end(),[](const auto& bid){return bid.bidder.valid();}))throw FormatError("world12: unresolved special offer at event end");candidate.world.transfer_market->rows[n].reset();}
@@ -49,6 +50,21 @@ void finish_initial_event(CareerSnapshot& state,ManagerActionOwner& owner,Manage
     candidate.desktop->initial_event.reset();candidate.desktop->active_seat.reset();complete_empty_day(candidate);candidate.progress=progress;candidate.validate();
     if(state!=before)throw FormatError("world12: initial event changed while closing");owner_matches(owner,expected);state=std::move(candidate);++owner.revision;
 }
+void finish_initial_event(CareerSnapshot& state,ManagerActionOwner& owner,ManagerActionOwner expected,const GameState& reference,CalendarEpoch epoch) {
+    finish_empty_opening_event(state,owner,expected,reference,epoch,false);
+}
+void finish_annual_opening_event(CareerSnapshot& state,ManagerActionOwner& owner,ManagerActionOwner expected,const GameState& reference,CalendarEpoch epoch) {
+    finish_empty_opening_event(state,owner,expected,reference,epoch,true);
+}
+void finish_annual_closing_event(CareerSnapshot& state,ManagerActionOwner& owner,ManagerActionOwner expected) {
+    owner_matches(owner,expected);state.validate();
+    if(!annual_closing_ready(state)||!state.desktop->initial_event||!state.desktop->active_seat||state.desktop->autosave_pending||state.desktop->initial_event->offer||
+       size_t(state.desktop->initial_event->manager_position)+1!=state.desktop->initial_event->manager_order.size())throw FormatError("world12: actual closing desks/offers/autosave are not complete");
+    const auto before=state;auto candidate=state;candidate.progress->last_manager=*candidate.desktop->active_seat;
+    if(candidate.world.transfer_market)for(size_t row=40;row<44;++row){if(candidate.world.transfer_market->rows[row]&&std::any_of(candidate.world.transfer_market->rows[row]->bids.begin(),candidate.world.transfer_market->rows[row]->bids.end(),[](const auto& bid){return bid.bidder.valid();}))throw FormatError("world12: actual closing offer remains unsettled");candidate.world.transfer_market->rows[row].reset();}
+    candidate.desktop->initial_event.reset();candidate.desktop->active_seat.reset();candidate.progress->phase=ProgressPhase::annual_transition;candidate.validate();
+    if(state!=before)throw FormatError("world12: annual closing owner changed before transition");owner_matches(owner,expected);state=std::move(candidate);++owner.revision;
+}
 ClockStepOutcome advance_clock_step(CareerSnapshot& state,ManagerActionOwner& owner,ManagerActionOwner expected,const GameState& reference,const TextDb& texts,const ClockHooks& hooks){
     owner_matches(owner,expected);state.validate();if(!state.progress)throw FormatError("world12: no saved progression owner");
     epoch_matches({state.progress->epoch_year,state.progress->epoch_weekday});const auto before=state;auto candidate=state;auto& clock=*candidate.progress;ClockStepOutcome out;
@@ -70,13 +86,14 @@ ClockStepOutcome advance_clock_step(CareerSnapshot& state,ManagerActionOwner& ow
         const auto previous=candidate.date;complete_empty_day(candidate);candidate.progress->previous_date=previous;candidate.progress->entry=DayEntry::plain_day;candidate.progress->phase=ProgressPhase::daily_services;out.date_advanced=true;break;
     }
     case ProgressPhase::scheduled_event:throw FormatError("world12: scheduled event needs its competition/desk owner");
+    case ProgressPhase::annual_transition:throw FormatError("world12: actual annual transition owner is required");
     case ProgressPhase::season_end:throw FormatError("world12: annual awards and closing desk are required");
     }
     candidate.validate();if(state!=before)throw FormatError("world12: progression changed during service presentation");owner_matches(owner,expected);out.phase=candidate.progress->phase;state=std::move(candidate);++owner.revision;return out;
 }
 ClockStepOutcome seek_next_event(CareerSnapshot& state,ManagerActionOwner& owner,ManagerActionOwner expected,const GameState& reference,const TextDb& texts,const ClockHooks& hooks){
-    owner_matches(owner,expected);state.validate();if(!state.progress)throw FormatError("world12: no progression search owner");if(state.progress->phase==ProgressPhase::scheduled_event||state.progress->phase==ProgressPhase::season_end)throw FormatError("world12: progression is already waiting for its event owner");const auto before=state;auto candidate=state;ManagerActionOwner staged{owner.scope,0};ClockStepOutcome out;
-    for(size_t n=0;n<4*367;++n){if(candidate.progress->phase==ProgressPhase::scheduled_event||candidate.progress->phase==ProgressPhase::season_end){out.phase=candidate.progress->phase;candidate.validate();if(state!=before)throw FormatError("world12: progression changed during event search");owner_matches(owner,expected);state=std::move(candidate);++owner.revision;return out;}
+    owner_matches(owner,expected);state.validate();if(!state.progress)throw FormatError("world12: no progression search owner");if(state.progress->phase==ProgressPhase::scheduled_event||state.progress->phase==ProgressPhase::season_end||state.progress->phase==ProgressPhase::annual_transition)throw FormatError("world12: progression is already waiting for its event owner");const auto before=state;auto candidate=state;ManagerActionOwner staged{owner.scope,0};ClockStepOutcome out;
+    for(size_t n=0;n<4*367;++n){if(candidate.progress->phase==ProgressPhase::scheduled_event||candidate.progress->phase==ProgressPhase::season_end||candidate.progress->phase==ProgressPhase::annual_transition){out.phase=candidate.progress->phase;candidate.validate();if(state!=before)throw FormatError("world12: progression changed during event search");owner_matches(owner,expected);state=std::move(candidate);++owner.revision;return out;}
         const auto step=advance_clock_step(candidate,staged,staged,reference,texts,hooks);out.game_draws+=step.game_draws;out.watcom_draws+=step.watcom_draws;out.date_advanced|=step.date_advanced;if(state!=before)throw FormatError("world12: progression changed during event search");owner_matches(owner,expected);
     }
     throw FormatError("world12: bounded event search exhausted");

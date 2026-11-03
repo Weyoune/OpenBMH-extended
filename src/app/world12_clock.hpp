@@ -16,6 +16,9 @@ struct ClockStepOutcome {
 };
 // Finish the owned initial empty event. Finance remains explicitly pending in
 // the saved progress record; no earlier date or random stream is replayed.
+void finish_annual_closing_event(bmh::world12::CareerSnapshot&,ManagerActionOwner&,ManagerActionOwner expected);
+void finish_annual_opening_event(bmh::world12::CareerSnapshot&,ManagerActionOwner&,ManagerActionOwner expected,
+    const GameState& reference,CalendarEpoch);
 void finish_initial_event(bmh::world12::CareerSnapshot&,ManagerActionOwner&,ManagerActionOwner expected,const GameState&,CalendarEpoch);
 ClockStepOutcome advance_clock_step(bmh::world12::CareerSnapshot&,ManagerActionOwner&,ManagerActionOwner expected,
     const GameState&,const TextDb&,const ClockHooks&);

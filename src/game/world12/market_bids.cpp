@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "game/world12/market_bids.hpp"
+#include "game/world12/annual_opening.hpp"
 #include "game/world12/match_projection.hpp"
 #include "game/world12/standings.hpp"
 #include "game/transfer_bid.hpp"
@@ -119,7 +120,7 @@ MarketBidOutcome run(CareerSnapshot& state,const GameState& reference,MarketBidP
 std::optional<UnsolicitedOffer> prepare_unsolicited_offer(CareerSnapshot& state,uint8_t seat,
     const GameState& reference,WatcomRandom& random,MarketBidPolicy policy) {
     state.validate();
-    if(!state.world.settings||!state.world.transfer_market||!state.prepared_event||!state.desktop||
+    if(!state.world.settings||!state.world.transfer_market||(!state.prepared_event&&!annual_opening_ready(state)&&!annual_closing_ready(state))||!state.desktop||
        !state.desktop->initial_event||state.desktop->initial_event->offer||state.desktop->active_seat||
        state.desktop->initial_event->manager_order[state.desktop->initial_event->manager_position]!=seat)
         throw FormatError("world12: scheduled unsolicited offer lacks its free decision owner");

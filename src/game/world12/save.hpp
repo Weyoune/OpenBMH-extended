@@ -56,7 +56,7 @@ struct TransferRuntime {
     std::vector<LoanContract> loans;
     bool operator==(const TransferRuntime&)const=default;
 };
-enum class ProgressPhase:uint8_t { daily_services,post_event_market,inspect_calendar,scheduled_event,season_end };
+enum class ProgressPhase:uint8_t { daily_services,post_event_market,inspect_calendar,scheduled_event,season_end,annual_transition };
 enum class DayEntry:uint8_t { after_event,plain_day };
 struct CareerProgress {
     ProgressPhase phase=ProgressPhase::daily_services;

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "game/world12/save.hpp"
+#include "game/world12/annual_opening.hpp"
 #include "game/world12/prepared_event.hpp"
 #include "game/world12/progression.hpp"
 #include "game/world12/codec.hpp"
@@ -37,7 +38,7 @@ void CareerSnapshot::validate()const{
         if(desktop->initial_event){const auto& event=*desktop->initial_event;
             const bool scheduled=prepared_event&&prepared_event->desk_phase==PreparedEvent::DeskPhase::desks;
             if(!calendar||event.matchday_number>10000||event.manager_order.size()!=world.managers.size()||event.manager_position>=event.manager_order.size()||!event.pools_open||
-               (!scheduled&&(date||season||calendar->next_day||!calendar->schedule.leagues_on(0).empty()||!calendar->schedule.others_on(0).empty())))
+               (!scheduled&&!annual_opening_ready(*this)&&!annual_closing_ready(*this)&&(date||season||calendar->next_day||!calendar->schedule.leagues_on(0).empty()||!calendar->schedule.others_on(0).empty())))
                 throw FormatError("world12: invalid owned desktop event");
             std::array<bool,4> ordered{};for(auto seat:event.manager_order){if(seat>=4||!seen[seat]||ordered[seat])throw FormatError("world12: invalid initial desk order");ordered[seat]=true;}
             if(!desktop->manager_order.empty()&&(desktop->manager_order!=event.manager_order||desktop->matchday_number!=event.matchday_number))throw FormatError("world12: current and persistent event metadata disagree");
@@ -59,14 +60,14 @@ void CareerSnapshot::validate()const{
     }
     if(progress){const auto& p=*progress;
         const bool scheduled_desk=prepared_event&&prepared_event->desk_phase==PreparedEvent::DeskPhase::desks&&p.phase==ProgressPhase::scheduled_event;
-        if(uint8_t(p.phase)>uint8_t(ProgressPhase::season_end)||uint8_t(p.entry)>1||p.epoch_year<1600||p.epoch_year>9999||p.epoch_weekday>6||p.last_manager>3||!calendar||!desktop||(!scheduled_desk&&(desktop->active_seat||desktop->initial_event||desktop->autosave_pending))||p.previous_date==0xffffffffu||date!=p.previous_date+1||date<p.season_start||date-p.season_start!=calendar->next_day||
+        if(uint8_t(p.phase)>uint8_t(ProgressPhase::annual_transition)||uint8_t(p.entry)>1||p.epoch_year<1600||p.epoch_year>9999||p.epoch_weekday>6||p.last_manager>3||!calendar||!desktop||(!scheduled_desk&&!annual_closing_ready(*this)&&(desktop->active_seat||desktop->initial_event||desktop->autosave_pending))||p.previous_date==0xffffffffu||date!=p.previous_date+1||date<p.season_start||date-p.season_start!=calendar->next_day||
            std::none_of(world.managers.begin(),world.managers.end(),[&](const auto& m){return m.seat==p.last_manager;}))throw FormatError("world12: invalid saved progression owner/clock");
         const bool scheduled=calendar->next_day<calendar->schedule.days&&
             (!calendar->schedule.leagues_on(calendar->next_day).empty()||!admitted_other_appointments(*this,calendar->next_day).empty());
         if(p.phase==ProgressPhase::scheduled_event&&!scheduled)throw FormatError("world12: saved event has no calendar appointment");
         if(p.phase==ProgressPhase::post_event_market&&p.entry!=DayEntry::after_event)throw FormatError("world12: plain day cannot own an extra event market tick");
         const bool closing=date>0&&month_code(date)==7&&month_code(p.previous_date)!=7;
-        if((p.phase==ProgressPhase::season_end&&!closing)||(p.phase==ProgressPhase::post_event_market&&closing))throw FormatError("world12: invalid annual progression boundary");
+        if(((p.phase==ProgressPhase::season_end||p.phase==ProgressPhase::annual_transition)&&!closing)||(p.phase==ProgressPhase::post_event_market&&closing))throw FormatError("world12: invalid annual progression boundary");
     }
     for(const auto& squad:world.national_squads)if(squad.nominated_on>date)throw FormatError("world12: national nomination is in the future");
     if(world.annual_awards_completed&&uint64_t(*world.annual_awards_completed)>uint64_t(season)+1)

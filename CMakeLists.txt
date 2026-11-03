@@ -1588,3 +1588,7 @@ add_test(NAME world12_national_match_tests COMMAND world12_national_match_tests)
 add_executable(world12_league_history_tests tests/world12_league_history_tests.cpp)
 target_link_libraries(world12_league_history_tests PRIVATE bmhworld12)
 add_test(NAME world12_league_history_tests COMMAND world12_league_history_tests)
+
+add_executable(world12_annual_desk_tests tests/world12_annual_desk_tests.cpp)
+target_link_libraries(world12_annual_desk_tests PRIVATE bmhworld12_app)
+add_test(NAME world12_annual_desk_tests COMMAND world12_annual_desk_tests)

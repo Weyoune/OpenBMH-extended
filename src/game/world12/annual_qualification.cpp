@@ -92,7 +92,7 @@ void draw_fields(const World& world,AnnualEuropeanFields& fields,GameRandom& gam
 }
 CompletedAnnualTitles completed_annual_titles(const CareerSnapshot& state) {
     state.validate();
-    if(!state.world.catalogue.scope.club_play()||!state.progress||state.progress->phase!=ProgressPhase::season_end||
+    if(!state.world.catalogue.scope.club_play()||!state.progress||(state.progress->phase!=ProgressPhase::season_end&&state.progress->phase!=ProgressPhase::annual_transition)||
        !state.world.settings||!state.world.initial_competitions||!state.world.european_campaigns||
        state.season==std::numeric_limits<uint32_t>::max()||!state.world.annual_awards_completed||
        *state.world.annual_awards_completed!=state.season+1)

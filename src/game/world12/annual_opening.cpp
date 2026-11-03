@@ -5,7 +5,26 @@
 #include "game/turn.hpp"
 #include "game/week.hpp"
 #include <algorithm>
+#include <set>
 namespace bmh::world12 {
+bool annual_closing_ready(const CareerSnapshot& state) {
+    GameState date;date.date=state.date;
+    if(!state.world.settings||!state.calendar||!state.progress||state.progress->phase!=ProgressPhase::season_end||!is_season_end(date)||state.prepared_event||
+       !state.world.annual_awards_completed||uint64_t(*state.world.annual_awards_completed)!=uint64_t(state.season)+1||!state.desktop||state.world.managers.empty()||state.desktop->manager_order.size()!=state.world.managers.size())return false;
+    for(const auto& league:state.world.catalogue.leagues)if(league.active){if(state.league_rounds[league.id.value]!=league.rounds()||std::any_of(state.results.leagues[league.id.value].begin(),state.results.leagues[league.id.value].end(),[](const auto& result){return !result.played;}))return false;}
+    std::set<uint8_t> order;for(auto seat:state.desktop->manager_order)if(!order.insert(seat).second||std::none_of(state.world.managers.begin(),state.world.managers.end(),[&](const auto& manager){return manager.seat==seat;}))return false;
+    return true;
+}
+bool annual_opening_ready(const CareerSnapshot& state) {
+    if(!state.season||state.date<7||weekday_code(state.date)!=2||month_code(state.date)!=7||month_code(state.date-7)==7||!state.world.settings||!state.world.settings->duration||
+       !state.world.annual_awards_completed||*state.world.annual_awards_completed!=state.season||!state.world.annual_title_archive||state.world.annual_title_archive->seasons.empty()||
+       uint64_t(state.world.annual_title_archive->seasons.back().season)+1!=state.season||state.progress||state.prepared_event||!state.calendar||state.calendar->next_day||
+       !state.calendar->schedule.leagues_on(0).empty()||!state.calendar->schedule.others_on(0).empty()||!state.desktop||state.desktop->manager_order.size()!=state.world.managers.size()||state.world.managers.empty())return false;
+    if(std::any_of(state.league_rounds.begin(),state.league_rounds.end(),[](auto round){return round!=0;}))return false;
+    for(const auto& league:state.results.leagues)if(std::any_of(league.begin(),league.end(),[](const auto& result){return result.played;}))return false;
+    std::set<uint8_t> order;for(auto seat:state.desktop->manager_order)if(!order.insert(seat).second||std::none_of(state.world.managers.begin(),state.world.managers.end(),[&](const auto& manager){return manager.seat==seat;}))return false;
+    return order.size()==state.world.managers.size();
+}
 AnnualOpeningStage stage_annual_opening_services(const CareerSnapshot& source,const GameState& reference,
     const TextDb& texts,const MonthlyMarketPolicy& policy) {
     source.validate();const auto before=source;GameState date;date.date=source.date;

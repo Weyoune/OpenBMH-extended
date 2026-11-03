@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "app/world12_desktop.hpp"
+#include "game/world12/annual_opening.hpp"
+#include "game/world12/economy.hpp"
 #include "game/world12/match_projection.hpp"
 #include "game/desk.hpp"
 #include "game/schedule.hpp"
@@ -27,28 +29,32 @@ DesktopEntryOutcome enter_initial_manager_desktop(CareerSnapshot& state,ManagerA
     ManagerActionOwner expected,uint8_t seat,const GameState& reference) {
     state.validate();
     const bool scheduled=state.prepared_event&&state.prepared_event->desk_phase==PreparedEvent::DeskPhase::desks;
+    const bool annual=annual_opening_ready(state);
+    const bool closing=annual_closing_ready(state);
     if(!owner.scope||owner.scope!=expected.scope||owner.revision!=expected.revision||
        owner.revision==std::numeric_limits<uint64_t>::max()||!state.desktop||!state.world.settings||state.desktop->active_seat||
-       (!scheduled&&(state.date||state.season||std::any_of(state.league_rounds.begin(),state.league_rounds.end(),[](auto r){return r!=0;}))))
+       (!scheduled&&!annual&&!closing&&(state.date||state.season||std::any_of(state.league_rounds.begin(),state.league_rounds.end(),[](auto r){return r!=0;}))))
         throw std::invalid_argument("world12: invalid desktop owner/state");
     const auto manager=std::find_if(state.world.managers.begin(),state.world.managers.end(),[&](const auto& m){return m.seat==seat;});
     if(manager==state.world.managers.end())throw std::invalid_argument("world12: unknown desktop manager");
     // Initial confirmations occupy seats in order. Source uses manager index
     // zero for monthly accounting; do not misapply that to an arbitrary sparse
     // or reordered roster, or to an English process-wide reference layout.
-    for(size_t i=0;i<state.world.managers.size();++i)if(!scheduled&&state.world.managers[i].seat!=i)
+    for(size_t i=0;i<state.world.managers.size();++i)if(!scheduled&&!annual&&!closing&&state.world.managers[i].seat!=i)
         throw std::invalid_argument("world12: initial desktop requires ordered manager seats");
     if(kEnglishCompetitions)throw std::invalid_argument("world12: desktop requires the German numeric reference profile");
     // Season-end sponsorship has its own financial/message owner. Do not run
     // that extra path accidentally with a stale Core template flag.
-    if(reference.memory.has(layout::CareerSession_RuntimeError_RuntimeField4)&&reference.memory.u8(layout::CareerSession_RuntimeError_RuntimeField4))
+    if(!closing&&reference.memory.has(layout::CareerSession_RuntimeError_RuntimeField4)&&reference.memory.u8(layout::CareerSession_RuntimeError_RuntimeField4))
         throw std::invalid_argument("world12: season-end desktop needs its sponsorship owner");
     const auto before=state;auto candidate=state;std::vector<ClubId> clubs;
     for(const auto& m:state.world.managers)clubs.push_back(m.club);
     const auto settings=*state.world.settings;
     auto projected=AiMatchProjection::create_for_humans(candidate,clubs,reference,
         {settings.mode,settings.difficulty,settings.foreign_rule,true});
+    if(closing)install_career_economy(projected,candidate.world);
     auto& local=projected.state;auto& runtime=*candidate.desktop;
+    local.memory.add_block(layout::CareerSession_RuntimeError_RuntimeField4,1);local.memory.set8(layout::CareerSession_RuntimeError_RuntimeField4,uint8_t(closing));
     local.memory.add_block(layout::CareerDuration,1);local.memory.set8(layout::CareerDuration,settings.duration);
     local.autosave_month=runtime.autosave_month;local.autosave_months=runtime.autosave_months;
     size_t index=0;
@@ -71,6 +77,7 @@ DesktopEntryOutcome enter_initial_manager_desktop(CareerSnapshot& state,ManagerA
         local.memory.set8(at,uint8_t(local.memory.u8(at)|0x10));
     }
     projected.commit_match_state(candidate.world);
+    if(closing)capture_career_economy(candidate.world,projected);
     auto& desk=*std::find_if(runtime.managers.begin(),runtime.managers.end(),[&](const auto& d){return d.seat==seat;});
     desk.prestige=local.manager_records.at(index*0xb0c+0x211);
     for(size_t r=0;r<54;++r)for(size_t b=0;b<16;++b)
