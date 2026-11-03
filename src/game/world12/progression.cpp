@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "game/world12/progression.hpp"
+#include "game/world12/league_history.hpp"
 #include <stdexcept>
 #include <limits>
 #include <algorithm>
@@ -108,6 +109,7 @@ DayPresentation commit_day(CareerSnapshot& state,const DayTicket& ticket,const s
     if(indoor_results){const auto outcome=commit_indoor_results(staged,*indoor_results,*indoor_reference,*shared_rules);presentation.game_draws+=outcome.game_draws;presentation.watcom_draws+=outcome.watcom_draws;}
     if(regional_results){commit_regional_playoff_results(staged,*regional_results,*shared_rules,european_random);staged.watcom_seed=european_random.seed();presentation.watcom_draws=european_random.calls();}
     for(const auto& round:completed){for(size_t m=0;m<round.results.size();++m)staged.results.result(staged.world.catalogue,round.league,round.round,int(m))=round.results[m];staged.league_rounds[round.league.value]=round.round;}
+    record_completed_league_history(staged,state,completed);
     if(std::any_of(staged.calendar->schedule.others.begin(),staged.calendar->schedule.others.end(),regional_playoff_appointment))activate_regional_playoff(staged,state);
     bool next_date=true;
     if(ticket.indoor_date){

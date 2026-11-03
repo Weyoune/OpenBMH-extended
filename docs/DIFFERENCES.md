@@ -38,6 +38,8 @@ describe deliberate changes; they are not a list of every known compatibility li
 - [src/game/week.hpp](../src/game/week.hpp): uses the enhanced assistant-training rules, retaining the selected skill until it reaches its maximum.
 - [src/game/weekly.cpp](../src/game/weekly.cpp): uses the supported weekly-event configuration, with its rule switch disabled.
 - [src/game/weekly.hpp](../src/game/weekly.hpp): uses the supported weekly processing and transfer rule profile.
+- [src/game/world12/annual_qualification.cpp](../src/game/world12/annual_qualification.cpp): a domestic winner and finalist can both occupy CL places.
+- [src/game/world12/league_history.cpp](../src/game/world12/league_history.cpp): FLTD's inherited literal18 collapse aliases its fourth20-club tier with the third.
 - [src/game/world12/progression.cpp](../src/game/world12/progression.cpp): shared English outdoor fixtures precede Hall passes on a coincident date, with no repeated daily service.
 - [src/ui/bank.cpp](../src/ui/bank.cpp): read-only totals use wide arithmetic; individual saved account, price, holding and paid fields are unchanged.
 - [src/ui/league_table.hpp](../src/ui/league_table.hpp): uses three points for a win in the supported rule profile.

@@ -1258,6 +1258,7 @@ add_library(bmhworld12 STATIC
     src/game/world12/cups.cpp
     src/game/world12/cup_draw.cpp
     src/game/world12/progression.cpp
+    src/game/world12/league_history.cpp
     src/game/world12/save.cpp
     src/game/world12/desktop_projection.cpp
     src/game/world12/match_projection.cpp
@@ -1583,3 +1584,7 @@ add_test(NAME world12_annual_calendar_tests COMMAND world12_annual_calendar_test
 add_executable(world12_national_match_tests tests/world12_national_match_tests.cpp)
 target_link_libraries(world12_national_match_tests PRIVATE bmhworld12_app)
 add_test(NAME world12_national_match_tests COMMAND world12_national_match_tests)
+
+add_executable(world12_league_history_tests tests/world12_league_history_tests.cpp)
+target_link_libraries(world12_league_history_tests PRIVATE bmhworld12)
+add_test(NAME world12_league_history_tests COMMAND world12_league_history_tests)

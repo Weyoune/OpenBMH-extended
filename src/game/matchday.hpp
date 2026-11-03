@@ -24,6 +24,10 @@
 
 namespace bmh {
 
+// Shared post-round Source history writes. No random stream is read or changed.
+void store_season_position(GameState&,int manager,int value);
+void store_strength_history(GameState&,int manager);
+
 // Score of match m of a group (MatchScore, read mode): league result byte or the cup
 // result of the current leg. Returns false if the score is not known.
 bool match_score(const MatchGroup& g, int m, int& home, int& away);

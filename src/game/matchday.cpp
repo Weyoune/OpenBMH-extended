@@ -694,13 +694,13 @@ void manager_match_record(GameState& g, const MatchGroup& grp, int m, int home_g
 
 
 // ManagerOf(manager, 0, value): the manager's position of this season.
-static void store_season_position(GameState& g, int manager, int value) {
+void store_season_position(GameState& g, int manager, int value) {
     int season = std::min(g.season, 0x31);
     g.manager_records.at(size_t(manager) * kManagerRecord + 0xda + size_t(season) * 3) = uint8_t(value);
 }
 
 // StoreStrengthHistory: strength and position history of a human manager's club (38 entries).
-static void store_strength_history(GameState& g, int manager) {
+void store_strength_history(GameState& g, int manager) {
     const size_t rec = size_t(manager) * kManagerRecord;
     const int team = g.manager_teams.at(manager);
     int n = g.manager_records.at(rec + 0x284);
