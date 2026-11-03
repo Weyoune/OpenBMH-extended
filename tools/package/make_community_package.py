@@ -19,6 +19,13 @@ def create(program, data, destination, version):
         if z.read('RUNTIME.DAT')[:8]!=b'OBMHDAT1':
             raise ValueError('Expected a data-only runtime')
         receipt=json.loads(z.read('PACKAGE.json'))
+        if (receipt.get('format')!='openbmh-community-12'
+                or receipt.get('profile')!='dual-classic-2'
+                or receipt.get('requires')!='runtime:dual-classic-2'
+                or receipt.get('playable') is not True
+                or type(receipt.get('world_schema')) is not int
+                or receipt['world_schema']<42):
+            raise ValueError('A finalized playable shared-country data bundle is required')
         for name,digest in receipt['files'].items():
             if hashlib.sha256(z.read(name)).hexdigest()!=digest:
                 raise ValueError('Resource checksum mismatch: '+name)
@@ -45,8 +52,8 @@ def create(program, data, destination, version):
         'Alle benoetigten Spieldaten, Grafiken und Sounds liegen in COMMUNITY.OBD.\n'
         'Keine Original-DOS-Installation und kein Startskript erforderlich.\n'
         'Eigene Spielstaende und Einstellungen bleiben ausserhalb des Datenarchivs.\n\n'
-        '263 auslaendische Vereinswappen: 175 echte und 88 fiktive Ersatzwappen.\n'
-        'Quellen und gekennzeichnete Ergaenzungen: IMPORT-REPORT.json.\n\n'
+        'Der Datensatz enthaelt gekennzeichnete fiktive Ergaenzungen und Ersatzwappen.\n'
+        'Quellen und Ergaenzungen: Importberichte im mitgelieferten Datenpaket.\n\n'
         'Anwendung: GPL-3.0-only. Vollstaendiger korrespondierender Quellcode und\n'
         'Abhaengigkeiten kostenlos und separat unter:\n'+source_url+'\n'
         'Lizenzen der Abhaengigkeiten siehe THIRD_PARTY_NOTICES.md und docs/licenses.\n'
