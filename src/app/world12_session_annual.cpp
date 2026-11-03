@@ -27,8 +27,9 @@ void Session::finish_annual_closing(const ui::DeskRequest& request) {
 }
 AnnualTransitionOutcome Session::publish_annual_year(uint64_t revision,const std::filesystem::path& scores,const AnnualTransitionHooks& hooks) {
     if(preparation_menu_||!resources_.texts)throw FormatError("world12: annual publication has an open menu or missing Source text owner");
-    return publish_annual_transition(state_,owner_,{owner_.scope,revision},resources_.reference,
+    auto result=publish_annual_transition(state_,owner_,{owner_.scope,revision},resources_.reference,
         resources_.german,resources_.english,*resources_.texts,scores,hooks);
+    options_.duration=state_.world.settings->duration;return result;
 }
 DesktopEntryOutcome Session::begin_annual_opening(uint64_t revision) {
     if(preparation_menu_)throw FormatError("world12: an open menu owns the annual opening");
