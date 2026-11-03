@@ -60,6 +60,12 @@ bool Session::advance_to_next_desktop(const ui::DeskRequest& request,const std::
         const auto ticket=prepare_day(staged.state_);
         if(!ticket||staged.state_.progress->phase!=ProgressPhase::scheduled_event)
             throw FormatError("world12: closing season needs its awards and annual desktop owner");
+        if(staged.state_.friendly_plan&&ticket->leagues.empty()&&ticket->cups.empty()&&
+           ticket->european.empty()&&ticket->national.empty()&&ticket->friendlies.empty()&&
+           ticket->indoor.empty()&&!ticket->regional_playoff&&!ticket->others.empty()&&
+           std::all_of(ticket->others.begin(),ticket->others.end(),friendly_appointment)) {
+            staged.consume_empty_friendly_day(staged.revision());continue;
+        }
         if(ticket->leagues.empty()&&ticket->cups.empty()&&ticket->others.size()==1&&
            ticket->others.front().domain==CalendarDomain::shared&&ticket->others.front().source_entry==0x4006) {
             const auto nominated=staged.prepare_national_day(staged.revision());

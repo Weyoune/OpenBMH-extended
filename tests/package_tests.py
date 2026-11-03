@@ -22,10 +22,10 @@ class PackageAllowlistTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             # Empty authored placeholders test names/structure, not executable behavior.
-            for name in ['OpenBMH', 'openbmh_cli', 'README.md', 'LICENSE',
+            for name in ['OpenBMH', 'README.md', 'LICENSE',
                          'THIRD_PARTY_NOTICES.md', 'ACKNOWLEDGEMENTS.md', 'CONTRIBUTING.md']:
                 (root / name).write_text('synthetic')
-            notes = root / 'docs/release/1.0/RELEASE_NOTES.md'
+            notes = root / 'docs/release/extended-1.0/RELEASE_NOTES.md'
             notes.parent.mkdir(parents=True)
             notes.write_text('synthetic release notes')
             licenses = Path(__file__).resolve().parents[1] / 'docs' / 'licenses'
@@ -35,12 +35,12 @@ class PackageAllowlistTests(unittest.TestCase):
                     target.parent.mkdir(parents=True, exist_ok=True)
                     target.write_text('synthetic license placeholder')
             package.validate(root, False)
-            for name in ['game.fbm', 'BMH.EXE', 'unit_tests', 'secret.txt']:
+            for name in ['game.fbm', 'BMH.EXE', 'unit_tests', 'secret.txt', 'openbmh_cli']:
                 (root / name).write_text('synthetic refusal fixture')
                 with self.assertRaises(RuntimeError):
                     package.validate(root, False)
                 (root / name).unlink()
-            (root / 'openbmh_cli').unlink()
+            (root / 'OpenBMH').unlink()
             with self.assertRaises(RuntimeError):
                 package.validate(root, False)
 

@@ -9,6 +9,8 @@
 
 namespace bmh::ui {
 FlowResult StartupFlow::move_action(int x, int y) {
+    if(world12_friendly_release_barrier_)return {};
+    if(world12_friendly_)return {world12_friendly_->move(x,y)};
     if(world12_readonly_release_barrier_)return {};
     if(world12_readonly_)return {world12_readonly_->move(x,y)};
     if (indoor_standings_ || indoor_standings_release_barrier_) return {};
@@ -273,6 +275,7 @@ FlowResult StartupFlow::hold(int x,int y,int milliseconds){
 }
 
 FlowResult StartupFlow::click(int x, int y, bool right, bool double_click) {
+    if(world12_friendly_||world12_friendly_release_barrier_)return world12_friendly_up(x,y,right);
     if(world12_readonly_||world12_readonly_release_barrier_)return world12_readonly_up(x,y,right);
     if(pitch_hold_release_barrier_&&!right){pitch_hold_release_barrier_=false;return {};}
     if(friendly_question_release_barrier_&&!right) {
@@ -514,6 +517,7 @@ FlowResult StartupFlow::click(int x, int y, bool right, bool double_click) {
 }
 
 FlowResult StartupFlow::send_key(std::string_view value) {
+    if(world12_friendly_||world12_friendly_release_barrier_)return world12_friendly_key(value);
     if(world12_readonly_||world12_readonly_release_barrier_)return world12_readonly_key(value);
     if (indoor_standings_ || indoor_standings_release_barrier_) return {};
     if(achievements_)return {}; // AchievementsFromGame waits for its Source mouse event.
@@ -612,6 +616,7 @@ FlowResult StartupFlow::send_key(std::string_view value) {
 }
 
 bool StartupFlow::text(std::string_view value) {
+    if(world12_friendly_)return world12_friendly_->text(value);
     if(world12_readonly_)return world12_readonly_->text(value);
     if(desk_records_)return desk_records_->text_input(value);
     if(family_table_dispatch_pending_)return false;
@@ -1070,6 +1075,7 @@ bool StartupFlow::resume_manager_selection(SelectionContext context) {
 }
 
 std::string StartupFlow::screen_name() const {
+    if(world12_friendly_)return "world12_friendly";
     if(world12_readonly_)return world12_readonly_->state().identity.menu==4?"achievements":world12_readonly_->state().identity.menu==9?"indoor_standings":world12_readonly_->state().identity.menu==8?"calendar":world12_readonly_->state().identity.menu==20?"top_scorers":world12_readonly_->state().identity.menu==26?"highscore":"fair_play";
     if (indoor_standings_) return "indoor_standings";
     if(achievements_)return "achievements";
@@ -1098,6 +1104,7 @@ std::string StartupFlow::screen_name() const {
     return player_card_ ? (player_card_->in_statistics() ? "player_statistics" : "player_card") : contracts_ ? "contracts" : friendly_match_ ? "friendly_match" : league_table_ ? "league_table" : mailbox_ ? "mailbox" : save_load_ ? "save_load" : settings_ ? "settings" : advertising_ ? "advertising" : environment_ ? "environment" : matchday_results_ ? "matchday_results" : player_card_ ? (player_card_->in_statistics() ? "player_statistics" : "player_card") : pitch_ ? "pitch" : lineup_ ? "lineup" : training_ ? "training" : training_camp_ ? "training_camp" : bank_ ? "bank" : stadium_ ? "stadium" : toto_ ? "toto" : transfer_market_ ? "transfer_market" : tactics_ ? "tactics" : desktop_ ? "desktop" : pending_ ? "career_pending" : awaiting_context_ ? "manager_pending" : manager_ ? manager_->screen_name() : "setup";
 }
 std::string StartupFlow::state_json() const {
+    if(world12_friendly_)return world12_friendly_->state_json();
     if(world12_readonly_)return world12_readonly_->state_json();
     if (indoor_standings_) return indoor_standings_->state_json();
     if(achievements_)return "{\"screen\":\"achievements\",\"manager\":"+

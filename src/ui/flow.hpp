@@ -20,6 +20,7 @@
 #include "ui/settings.hpp"
 #include "ui/advertising.hpp"
 #include "ui/friendly_match.hpp"
+#include "ui/world12_friendlies.hpp"
 #include "ui/national_friendly_ui.hpp"
 #include "ui/calendar.hpp"
 #include "ui/strengths.hpp"
@@ -56,7 +57,7 @@ struct CareerInitializationResult {
     std::vector<InitializedManager> managers;
     PreparationState preparation;
 };
-enum class FlowRequest { none, load_game, manager_confirmed, new_career, kickoff, desk_action, end_session, submenu_opened, submenu_closed, contracts_closed, submenu_action, file_action, results_closed, mailbox_action, mailbox_closed, settings_action, settings_close, settings_file_action, friendly_action, national_friendly_selected, contract_action, advertising_action, environment_action, join_options, join_manager, join_cancel, league_pairings_action, strengths_action, top_scorers_action, balance_action, other_games_action, league_family_action, opportunities_action, statistics_menu_action, statistics_rankings_action, analytics_action, statistics_page_action, reschedule_action, world12_table_action, world12_market_action, world12_readonly_action };
+enum class FlowRequest { none, load_game, manager_confirmed, new_career, kickoff, desk_action, end_session, submenu_opened, submenu_closed, contracts_closed, submenu_action, file_action, results_closed, mailbox_action, mailbox_closed, settings_action, settings_close, settings_file_action, friendly_action, national_friendly_selected, contract_action, advertising_action, environment_action, join_options, join_manager, join_cancel, league_pairings_action, strengths_action, top_scorers_action, balance_action, other_games_action, league_family_action, opportunities_action, statistics_menu_action, statistics_rankings_action, analytics_action, statistics_page_action, reschedule_action, world12_table_action, world12_market_action, world12_readonly_action, world12_friendly_action };
 enum class StatisticsPageActionKind : uint8_t { close, alltime, world_cup };
 struct StatisticsPageAction { DeskRequest owner{}; int page=-1; StatisticsPageActionKind kind=StatisticsPageActionKind::close; int nation=-1; bool relative=false; bool operator==(const StatisticsPageAction&) const = default; };
 struct FlowResult {
@@ -91,6 +92,7 @@ struct FlowResult {
     World12TableRequest world12_table_action{};
     World12MarketRequest world12_market_action{};
     World12ReadonlyRequest world12_readonly_action{};
+    World12FriendlyRequest world12_friendly_action{};
 };
 
 class StartupFlow {
@@ -177,6 +179,16 @@ public:
     FlowResult world12_readonly_down(int,int,bool);
     FlowResult world12_readonly_up(int,int,bool);
     FlowResult world12_readonly_key(std::string_view);
+    struct World12FriendlyView {std::unique_ptr<DesktopScreen> desktop;std::unique_ptr<PreparationState> preparation;std::unique_ptr<World12FriendlyScreen> screen;bool release_barrier=false;};
+    World12FriendlyView prepare_world12_friendly_open(World12FriendlyPicker,PreparationState,const DeskRequest&)const;
+    World12FriendlyView prepare_world12_friendly_result(std::unique_ptr<World12FriendlyScreen>,PreparationState,const World12FriendlyRequest&,bool closed)const;
+    void finish_world12_friendly(World12FriendlyView)noexcept;
+    const World12FriendlyScreen* world12_friendly_screen()const{return world12_friendly_.get();}
+    const World12FriendlyRequest* pending_world12_friendly()const{return world12_friendly_&&world12_friendly_->pending()?&*world12_friendly_->pending():nullptr;}
+    FlowResult world12_friendly_down(int,int,bool);
+    FlowResult world12_friendly_up(int,int,bool);
+    FlowResult world12_friendly_key(std::string_view);
+    void reject_world12_friendly(std::string);
     void show_world12_tables(World12TableState,PreparationState,const DeskRequest&);
     struct World12TableView {std::unique_ptr<DesktopScreen> desktop;std::unique_ptr<PreparationState> preparation;std::unique_ptr<LeagueTableScreen> screen;};
     World12TableView prepare_world12_table_result(World12TableState,PreparationState,const World12TableRequest&,bool closed)const;
@@ -455,7 +467,7 @@ public:
     bool matches_pending_preparation(const PreparationRequest&) const;
     bool matches_pending_pitch(const PitchRequest&) const;
     bool matches_pending_stadium(const StadiumRequest&) const;
-    bool in_preparation_menu() const { return bool(other_games_ || balance_ || player_card_ || pitch_ || lineup_ || training_ || training_camp_ || bank_ || stadium_ || environment_ || toto_ || transfer_market_ || tactics_ || save_load_ || friendly_match_ || contracts_); }
+    bool in_preparation_menu() const { return bool(world12_friendly_ || other_games_ || balance_ || player_card_ || pitch_ || lineup_ || training_ || training_camp_ || bank_ || stadium_ || environment_ || toto_ || transfer_market_ || tactics_ || save_load_ || friendly_match_ || contracts_); }
     bool file_info_press(int x, int y) { return save_load_ && save_load_->info_press(x, y); }
     const DesktopScreen* desktop() const { return desktop_.get(); }
     std::string screen_name() const;
@@ -486,6 +498,8 @@ private:
     std::unique_ptr<MatchdayResultsScreen> matchday_results_;
     std::unique_ptr<World12ReadonlyScreen> world12_readonly_;
     bool world12_readonly_release_barrier_=false;
+    std::unique_ptr<World12FriendlyScreen> world12_friendly_;
+    bool world12_friendly_release_barrier_=false;
     std::unique_ptr<CalendarScreen> calendar_;
     std::unique_ptr<IndoorStandingsScreen> indoor_standings_;
     bool indoor_standings_release_barrier_ = false;

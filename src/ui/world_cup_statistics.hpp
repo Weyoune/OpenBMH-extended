@@ -36,6 +36,7 @@ enum class WorldCupStatisticsRequestKind : uint8_t { none, close, select_opponen
 struct WorldCupStatisticsRequest {
     WorldCupStatisticsRequestKind kind = WorldCupStatisticsRequestKind::none;
     int runtime_team = -1;
+    bool operator==(const WorldCupStatisticsRequest&)const=default;
 };
 
 WorldCupStatisticsProjection world_cup_statistics_from_game(const GameState&, const LeImage&,

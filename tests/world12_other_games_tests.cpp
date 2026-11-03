@@ -3,6 +3,7 @@
 #include "app/world12_cups.hpp"
 #include "ui/world12_other_games.hpp"
 #include "ui/other_games.hpp"
+#include "ui/setup.hpp"
 #include "game/world12/codec.hpp"
 #include <iostream>
 #include <stdexcept>
@@ -33,6 +34,7 @@ CareerSnapshot snapshot(GameScope scope={}) {
 World12OtherGamesIdentity owner(const CareerSnapshot& state){return {0,state.world.managers[0].club,42,71,1};}
 OtherGamesRequest navigation(const World12OtherGamesIdentity& id,OtherGamesAction action,int value=-1){OtherGamesRequest r;r.world12_identity=id;r.action=action;r.value=value;return r;}
 void model_tests() {
+    bmh::TextDb texts;texts.strings.resize(bmh::TEXT_COUNT,"Authored competition");
     const auto state=snapshot();const auto id=owner(state);World12OtherSelection selected;selected.page=World12OtherPage::supercups;
     const auto page=world12_other_games_state(state,id,selected);
     check(page.projection.selectors.size()==8 && page.selector_labels[5]=="SUPER-CUP" && page.selector_labels[6]=="FA CUP" && page.selector_labels[7]=="KOKA KOLA CUP","mixed BMH/FLTD selector layout incomplete");
@@ -59,9 +61,9 @@ void model_tests() {
     }
     auto selection=default_world12_other_selection(state.world);
     for(int page=0;page<8;++page) {
-        const auto next=navigate_world12_other_games(state,id,selection,navigation(id,OtherGamesAction::select_competition,page));
+        const auto next=navigate_world12_other_games(state,id,selection,navigation(id,OtherGamesAction::select_competition,page),&texts);
         check(int(next.page)==page,"selector slot interpreted as a legacy competition ID");
-        world12_other_games_state(state,id,next);
+        world12_other_games_state(state,id,next,{},&texts);
     }
     selection=navigate_world12_other_games(state,id,selection,navigation(id,OtherGamesAction::select_competition,0));
     check(selection.participant_offset==16,"same competition selector did not cycle participant pages");
@@ -98,6 +100,7 @@ void saved_view_codec() {
     check(!decode_world(bmh::Bytes(encoded.begin(),encoded.end())).managers[0].career->other_games_view,"old schema invented an other-games display byte");
 }
 void render_tests(const std::filesystem::path& data) {
+    const auto texts=bmh::load_textd(bmh::ui::asset_path(data,"TEXTD.BLK"));
     const auto state=snapshot();const auto id=owner(state);World12OtherSelection selected;selected.page=World12OtherPage::supercups;
     OtherGamesScreen screen(data,world12_other_games_state(state,id,selected));
     check(screen.render().width==320&&screen.render().height==240,"native classic surface changed");
@@ -111,7 +114,7 @@ void render_tests(const std::filesystem::path& data) {
     OtherGamesScreen selector(data,world12_other_games_state(state,id,{}));
     check(selector.pointer_down(130,204)&&selector.release(130,204)&&selector.pending()&&selector.pending()->value==6&&selector.pending()->world12_identity==id,
         "right-column FA Cup control is not wired to its typed selector");
-    for(int page=0;page<8;++page){World12OtherSelection choice;choice.page=World12OtherPage(page);OtherGamesScreen candidate(data,world12_other_games_state(state,id,choice));candidate.render();}
+    for(int page=0;page<8;++page){World12OtherSelection choice;choice.page=World12OtherPage(page);OtherGamesScreen candidate(data,world12_other_games_state(state,id,choice,{},&texts));candidate.render();}
 }
 }
 int main(int argc,char** argv)try {
