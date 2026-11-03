@@ -230,6 +230,7 @@ struct NationalCoachAccount {
     bool operator==(const NationalCoachAccount&)const=default;
 };
 struct NationalViewPreferences {
+    std::optional<uint8_t> statistics_flags,player_statistics_flags; // Independent Source Flags0/2; unknown preserved under schema42.
     std::optional<uint16_t> table_display_word,strengths_display_word;
     std::optional<uint8_t> pairings_display_byte,other_games_view;
     bool operator==(const NationalViewPreferences&)const=default;

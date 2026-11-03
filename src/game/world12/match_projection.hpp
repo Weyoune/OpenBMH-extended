@@ -48,7 +48,8 @@ public:
     void commit_player_attributes(World&)const;
     void commit_desktop_preferences(CareerSnapshot&)const;
     void retain_live_preferences(uint8_t global_seat,std::optional<uint16_t> table,
-        std::optional<uint16_t> strengths,std::optional<uint8_t> pairings);
+        std::optional<uint16_t> strengths,std::optional<uint8_t> pairings,
+        std::optional<uint8_t> player_statistics_flags=std::nullopt);
     void retain_live_settings(const std::array<uint8_t,180>&);
     void commit_match_state(World&,bool capture_season_services=false)const;
     void commit_transfer_state(World&,PlayerId,ClubId seller,ClubId buyer,bool moved)const;
@@ -78,7 +79,7 @@ private:
     std::vector<Manager> original_managers_;
     std::optional<CareerSettings> original_settings_;
     std::vector<uint8_t> manager_seats_;
-    std::map<uint8_t,std::array<std::optional<uint16_t>,3>> live_preferences_;
+    std::map<uint8_t,std::array<std::optional<uint16_t>,4>> live_preferences_;
     std::optional<std::array<uint8_t,180>> live_settings_;
     std::vector<ClubId> manager_reference_clubs_;
     std::map<uint16_t,ClubId> record_opponents_;

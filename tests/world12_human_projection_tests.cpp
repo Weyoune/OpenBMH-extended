@@ -12,6 +12,7 @@
 #include "app/world12_ai_day.hpp"
 #include "app/world12_european.hpp"
 #include "app/world12_live_scope.hpp"
+#include "app/career_session.hpp"
 #include "game/match.hpp"
 #include "game/matchday.hpp"
 #include "game/matchday_setup.hpp"
@@ -109,7 +110,7 @@ void live_preferences_and_scopes(const bmh::GameState& base) {
         projection.retain_live_preferences(3,uint16_t(0x3411),uint16_t(0x91ff),uint8_t(0x21));
         rejects([&]{projection.retain_live_preferences(2,uint16_t(0x11),{},{});},
                 "live UI accepted an absent canonical manager");
-        const auto team=int(projection.local_club(de));const auto before=projection.state;
+        const auto team=int(projection.local_club(de));const auto before=projection.state;const auto before_projection=projection;
         const auto game_seed=engine.game.seed();const auto watcom_seed=engine.rand.seed();
         const auto range=bmh::squad_range(team);
         bmh::ui::LineupRequest action;action.kind=bmh::ui::LineupRequestKind::swap_players;
@@ -128,6 +129,7 @@ void live_preferences_and_scopes(const bmh::GameState& base) {
             auto forbidden=bmh::ui::PitchRequest{};forbidden.kind=bmh::ui::PitchRequestKind::apply_formation;
             forbidden.manager_slot=action.manager_slot;forbidden.runtime_club=team;forbidden.revision=scope.revision();
             check(!scope.apply(forbidden).applied,"live scope exposed formation automation");
+            auto services=scope.player_services(played.world);check(bool(services.retain_player_statistics_flags),"actual card flags lack an owned-write capability");services.retain_player_statistics_flags(0x55);
             // Destruction aborts the unfinished editor. No calendar or random
             // work may escape this nested synchronous capability.
         }
@@ -136,17 +138,19 @@ void live_preferences_and_scopes(const bmh::GameState& base) {
               projection.state.memory.u8(bmh::layout::ActiveManager)==before.memory.u8(bmh::layout::ActiveManager)&&
               engine.game.seed()==game_seed&&engine.rand.seed()==watcom_seed,
               "aborted live editor leaked a substitution, selected actor or random draw");
+        {auto expected=saved.world,actual=saved.world;before_projection.commit_match_state(expected);projection.commit_match_state(actual);check(actual==expected,"aborted card editor leaked retained preference metadata after restoring Source state");}
         rejects([&]{bmh::app::world12::LiveScope early(projection,engine,rules,2,team,2,nonce);},
                 "manual intervention admitted the Source opening lock");
         {
             bmh::app::world12::LiveScope scope(projection,engine,rules,minute,team,2,nonce);
-            const auto old_revision=scope.revision();scope.finish();
+            const auto old_revision=scope.revision();auto services=scope.player_services(played.world);services.retain_player_statistics_flags(0x5a);scope.finish();rejects([&]{services.retain_player_statistics_flags(0x66);},"retired card preference capability wrote another value");
             check(nonce>old_revision,"finished live scope did not retire its numeric capability");
             rejects([&]{scope.finish();},"finished live scope could rerate twice");
             check(!scope.apply(action).applied,"retired live scope could accept actions");
         }
     };
     const auto result=simulate_and_settle_human_league_round(played,base,{4},3,inputs,{3,6,false,true},game,random,hooks);
+    check(played.world.managers[0].career->player_statistics_flags==0x5a,"accepted real live card preference was not retained for its canonical owner");
     check(checked&&!result.matches.empty()&&played.desktop->managers==saved.desktop->managers,
           "live scope probe missed a real minute or lost another manager's display word");
     const auto& retained=*played.world.managers[1].career;

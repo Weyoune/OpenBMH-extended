@@ -67,6 +67,7 @@ bmh::app::ClubModalServices LiveScope::player_services(const bmh::world12::World
             throw FormatError("world12: live player card requested another runtime byte");
         projection_.state.memory.add_block(at,1);projection_.state.memory.set8(at,value);
     };
+    services.retain_player_statistics_flags=[this,guard](uint8_t value){guard();player_statistics_flags_=value;};
     services.redraw_player=[this,guard](const ClubPlayerDetailSelection& selection){
         guard();if(selection.runtime_team!=team_||selection.origin!=ClubPlayerDetailOrigin::squad||selection.human_loan_index!=-1)
             throw FormatError("world12: live card has another squad owner");
@@ -112,6 +113,7 @@ void LiveScope::finish(){validate();if(nonce_==UINT64_MAX)throw FormatError("wor
     // EventImpl owns the event-origin rerate at its existing tail.
     // The Source menu leaves its selected manager active; abort alone restores
     // the previous actor. EventImpl retains its own post-menu rerate boundary.
+    if(player_statistics_flags_)projection_.retain_live_preferences(projection_.global_manager(uint8_t(manager_)),{},{},{},player_statistics_flags_);
     ++nonce_;closed_=true;*active_=false;
 }
 void LiveScope::abort(){if(closed_)return;

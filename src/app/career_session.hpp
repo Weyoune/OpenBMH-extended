@@ -93,6 +93,8 @@ struct ClubModalServices {
     std::function<uint8_t(uint32_t)> runtime_byte;
     std::function<void(uint32_t,uint8_t)> set_runtime_byte;
     std::function<void(ui::ClubPlayerDetailProjection&)> decorate_player_projection;
+    // Explicit actual checkbox write; promotes only its owning Flags2 byte.
+    std::function<void(uint8_t)> retain_player_statistics_flags;
 };
 using TransferOfferTeamInfoPresenter = std::function<bool(ClubModalServices&,int,const Image&)>;
 using TransferOfferPlayerInfoPresenter = std::function<bool(ClubModalServices&,const ClubPlayerDetailSelection&,const Image&)>;

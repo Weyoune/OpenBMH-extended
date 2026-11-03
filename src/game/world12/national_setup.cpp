@@ -30,6 +30,6 @@ NationalViewPreferences initial_national_view_preferences(const GameState& refer
     const auto word=[&](uint32_t at,std::optional<uint16_t>& value){if(reference.memory.has(at+1))value=reference.memory.u16(at);};
     word(layout::LeagueTableDisplayModes+uint32_t(seat)*2,p.table_display_word);word(layout::ManagerSettings+uint32_t(seat)*2,p.strengths_display_word);
     const auto pairings=layout::CareerSession_CloseLeagueFamily_ExecutableField+uint32_t(seat),other=layout::CareerSession_DispatchOtherGames_RuntimeField+uint32_t(seat);
-    if(reference.memory.has(pairings))p.pairings_display_byte=reference.memory.u8(pairings);if(reference.memory.has(other))p.other_games_view=reference.memory.u8(other);return p;
+    if(reference.memory.has(pairings))p.pairings_display_byte=reference.memory.u8(pairings);if(reference.memory.has(other))p.other_games_view=reference.memory.u8(other);const auto flags=layout::Flags+uint32_t(seat)*3;if(reference.memory.has(flags))p.statistics_flags=reference.memory.u8(flags);if(reference.memory.has(flags+2))p.player_statistics_flags=reference.memory.u8(flags+2);return p;
 }
 }

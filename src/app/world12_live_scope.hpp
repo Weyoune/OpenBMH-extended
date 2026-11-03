@@ -39,6 +39,7 @@ private:
     uint64_t& nonce_;uint64_t revision_=0;
     bool closed_=false;
     std::optional<LiveMatchEvent> event_;
+    std::optional<uint8_t> player_statistics_flags_;
     GameState before_;GameRandom game_before_;WatcomRandom random_before_;
     std::vector<MatchGroup> groups_before_;
     const MatchGroup* group_storage_=nullptr;
