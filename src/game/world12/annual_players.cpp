@@ -8,6 +8,31 @@
 #include <set>
 namespace bmh::world12 {
 namespace {
+CareerSnapshot expand_population(const CareerSnapshot& source) {
+    auto expanded=source;if(!source.world.national_origins||source.world.national_origins->empty())return expanded;
+    auto& world=expanded.world;world.catalogue=Catalogue::dual_classic({true,true,true});
+    for(size_t league=0;league<kLeagueSlots;++league)if(!source.world.catalogue.leagues[league].active) {
+        std::vector<const NationalRosterOrigin*> slots;
+        for(const auto& origin:*source.world.national_origins)if(origin.club.league==LeagueId{uint32_t(league)})slots.push_back(&origin);
+        std::sort(slots.begin(),slots.end(),[](const auto* a,const auto* b){return a->rank<b->rank;});
+        if(slots.size()!=world.catalogue.leagues[league].clubs)throw FormatError("world12: inactive annual population lacks actual physical origin slots");
+        auto& members=world.membership[league];members.league={uint32_t(league)};members.clubs.clear();
+        for(size_t rank=0;rank<slots.size();++rank){const auto& origin=*slots[rank];if(origin.rank!=rank||!world.clubs.emplace(origin.club.id,origin.club).second)throw FormatError("world12: inactive annual origin order/identity is repeated");members.clubs.push_back(origin.club.id);}
+        expanded.league_rounds[league]=0;expanded.results.leagues[league]=SeasonResults::empty(world.catalogue).leagues[league];
+    }
+    // This is only a numeric roster workspace. Keep every real owner in the
+    // source receipt; none of these detached campaign/archive fields is erased
+    // from the canonical result.
+    world.national_origins.reset();world.european_campaigns.reset();world.indoor.reset();world.regional_playoff.reset();world.annual_title_archive.reset();
+    expanded.calendar.reset();expanded.progress.reset();expanded.prepared_event.reset();expanded.cups.clear();expanded.validate();return expanded;
+}
+World restore_population(const World& source,const World& expanded) {
+    if(!source.national_origins||source.national_origins->empty())return expanded;
+    auto result=source;result.players=expanded.players;result.managers=expanded.managers;result.economy=expanded.economy;result.markets=expanded.markets;result.free_players=expanded.free_players;result.loans=expanded.loans;result.player_statistics=expanded.player_statistics;result.development_balance=expanded.development_balance;result.trend_rotation=expanded.trend_rotation;
+    for(auto& [id,club]:result.clubs)club=expanded.clubs.at(id);
+    for(auto& origin:*result.national_origins)origin.club=expanded.clubs.at(origin.club.id);
+    result.validate();return result;
+}
 void forget_loans(CareerSnapshot& state,const std::set<PlayerId>& released) {
     std::erase_if(state.world.loans,[&](const auto& row){return released.contains(row.player);});
     if(state.transfers)std::erase_if(state.transfers->loans,[&](const auto& row){return released.contains(row.player);});
@@ -60,7 +85,7 @@ AnnualPlayerRenewalStage stage_annual_player_renewal(const CareerSnapshot& state
     if(std::any_of(state.world.loans.begin(),state.world.loans.end(),[](const auto& loan){return !loan.source_slot;})||
        std::any_of(state.transfers->loans.begin(),state.transfers->loans.end(),[](const auto& loan){return !loan.source_slot;}))
         throw FormatError("world12: annual loan reset has unknown physical Source slots");
-    auto candidate=state;assign_transfer_loan_slots(candidate);const auto settings=*candidate.world.settings;
+    auto candidate=expand_population(state);assign_transfer_loan_slots(candidate);const auto settings=*candidate.world.settings;
     GameRandom game(state.game_seed);WatcomRandom random(state.watcom_seed);AnnualPlayerRenewalStage result;result.source_binding=before;
     std::vector<ClubId> humans;for(const auto& manager:candidate.world.managers){humans.push_back(manager.club);if(!manager.career||!manager.career->season_records||!manager.career->season_services||!manager.career->annual_records||!candidate.world.economy->managers[manager.seat].monthly)
         throw FormatError("world12: annual manager reset has unknown backing");}
@@ -90,7 +115,7 @@ AnnualPlayerRenewalStage stage_annual_player_renewal(const CareerSnapshot& state
         install_career_economy(projection,candidate.world);install_transfer_loans(projection,candidate);std::vector<PlayerId> free;
         for(auto id:candidate.world.free_players->domestic)if(id.valid())free.push_back(id);for(auto id:candidate.world.free_players->foreign)if(id.valid())free.push_back(id);projection.include_players(candidate.world,free);
         auto& local=projection.state;local.texts=&texts;local.season=int(qualification.target_season);
-        for(size_t team=0;team<clubs.size();++team)local.projected_match_clubs[team].table_rank=ranks.at(clubs[team]);
+        for(size_t team=0;team<clubs.size();++team)local.projected_match_clubs[team].table_rank=ranks.contains(clubs[team])?ranks.at(clubs[team]):-1;
         const auto install_pool=[&](const auto& pool,size_t first){for(size_t n=0;n<pool.size();++n)local.squad_slots.at(first+n)=pool[n].valid()?uint16_t(projection.local_player(pool[n])):0xfff;};
         install_pool(candidate.world.free_players->domestic,size_t(runtime_dimensions.free_first));install_pool(candidate.world.free_players->foreign,size_t(runtime_dimensions.foreign_free_first));
         auto working=candidate;std::vector<std::pair<PlayerId,ClubId>> released;std::set<PlayerId> removed;std::set<ClubId> overflow_clubs;
@@ -121,7 +146,7 @@ AnnualPlayerRenewalStage stage_annual_player_renewal(const CareerSnapshot& state
     };
     for(auto id:order)pass(id);pass({});
     for(auto& [id,club]:candidate.world.clubs)if(club.league.valid())club.fairplay_points=0;
-    result.desktop=std::move(candidate.desktop);result.transfers=std::move(candidate.transfers);result.results=SeasonResults::empty(candidate.world.catalogue);result.world=std::move(candidate.world);result.game_seed=game.seed();result.watcom_seed=random.seed();result.game_draws=game.calls();result.watcom_draws=random.calls();result.visited=visited.size();result.inactive_origin_refresh_required=result.world.national_origins&& !result.world.national_origins->empty();
+    result.desktop=std::move(candidate.desktop);result.transfers=std::move(candidate.transfers);result.results=SeasonResults::empty(state.world.catalogue);result.world=restore_population(state.world,candidate.world);result.game_seed=game.seed();result.watcom_seed=random.seed();result.game_draws=game.calls();result.watcom_draws=random.calls();result.visited=visited.size();result.inactive_origin_refresh_required=false;
     if(state!=before)throw FormatError("world12: annual player owner changed during reset/retirement");return result;
 }
 void begin_annual_manager_history(World& world,uint32_t target) {

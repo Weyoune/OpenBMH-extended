@@ -13,8 +13,8 @@ struct AnnualPlayerRenewalStage {
     int32_t game_seed=0;uint32_t watcom_seed=0;
     uint64_t game_draws=0,watcom_draws=0;
     size_t visited=0,released=0;
-    // National provenance stays outside active club finance/market ownership.
-    // Its distinct Source refresh owner must finish before final publication.
+    // True only if an actual retained population could not be visited. Origin
+    // entities retain their distinct canonical ownership after numeric refresh.
     bool inactive_origin_refresh_required=false;
 };
 // Retained Source position history follows a real club through league swaps;

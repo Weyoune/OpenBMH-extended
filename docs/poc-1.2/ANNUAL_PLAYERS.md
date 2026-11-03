@@ -27,9 +27,14 @@ substitute for this Source history.
 The output owns the changed World, desktop/transfer state, empty new results,
 zero round cursors and both random receipts. It is unpublished: date/season,
 next indoor/regional/cup/calendar owners, coach/provenance refresh and the first
-Wednesday/opening desk still belong to the outer annual transaction. Inactive
-national provenance has a separate refresh requirement and is not silently
-frozen or moved into the active market by this stage.
+Wednesday/opening desk still belong to the outer annual transaction. Retained inactive national provenance is merged into an unsaved numeric roster
+workspace using only its actual club records, player IDs and physical rank
+order. The same global visitor ages that real population once; canonical output
+restores the records to `national_origins`, outside active club fixtures and
+finances. Source release effects use the genuine shared free pools and actual
+no-list outcomes. Imported `source_initialized` provenance is not rewritten and
+no nominee roster is refilled. NAT-only initialization/annual composition has
+its distinct National owner; this club-scoped stage does not invent one.
 
 `begin_annual_manager_history` performs Source's fifty-season shift and next-row
 marker after player renewal. The saved history-origin word is required when its

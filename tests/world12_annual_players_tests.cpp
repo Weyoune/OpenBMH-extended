@@ -58,6 +58,20 @@ int main()try {
         auto altered=before;std::swap(altered.world.membership[10].clubs,altered.world.membership[11].clubs);rejects([&]{annual_player_ranks(altered.world,input.qualification,input.exchanges);},"foreign membership permutation accepted as annual shuffle");
     }
     {
+        const auto input=prepared(rules,texts,{true,false,true},false);
+        check(input.before.world.national_origins&& !input.before.world.national_origins->empty(),"authored inactive provenance fixture is absent");
+        const auto result=stage_annual_player_renewal(input.before,input.qualification,input.exchanges,rules,texts);
+        check(!result.inactive_origin_refresh_required&&result.world.catalogue==input.before.world.catalogue&&result.world.membership==input.before.world.membership&&result.world.clubs.size()==input.before.world.clubs.size(),
+            "inactive annual population became active fixtures/clubs or stayed frozen");
+        check(result.world.national_origins->size()==input.before.world.national_origins->size(),"inactive annual population lost actual origin records");
+        for(size_t n=0;n<input.before.world.national_origins->size();++n){const auto& old=(*input.before.world.national_origins)[n];const auto& current=(*result.world.national_origins)[n];
+            check(current.club.id==old.club.id&&current.rank==old.rank&&current.source_initialized==old.source_initialized,"annual origin order/provenance was invented");
+            for(const auto& slot:old.club.roster)if(!slot.empty())check(result.world.players.at(slot.player).attributes.age()==input.before.world.players.at(slot.player).attributes.age()+1,
+                "actual inactive-origin player did not age exactly once");
+        }
+        check(result.visited==input.before.world.players.size(),"merged active/inactive physical pass skipped or duplicated actual player identities");
+    }
+    {
         const auto input=prepared(rules,texts,{true,true,false},true,true,true);
         ClubId source_club;for(const auto& [id,club]:input.before.world.clubs)for(const auto& slot:club.roster)if(slot.player==input.injured)source_club=id;
         const auto result=stage_annual_player_renewal(input.before,input.qualification,input.exchanges,rules,texts);
