@@ -9,6 +9,8 @@
 #include "game/world12/manager_tactics.hpp"
 #include "game/world12/desktop_projection.hpp"
 #include "game/world12/prediction.hpp"
+#include "game/world12/balance_planning.hpp"
+#include "game/world12/codec.hpp"
 #include "ui/world12_readonly.hpp"
 #include "ui/world12_statistics.hpp"
 #include "ui/world12_readonly_capabilities.hpp"
@@ -69,8 +71,18 @@ void balance_pages(const GameState& ref,const LeImage& source){
         double total=-100;for(size_t row=0;row<18;++row)total+=expected[row]*(row<7?1:-1);
         check(actual.draft.total==total&&actual.draft.depreciation==100&&actual.draft.view==BalanceView::so_far,"balance total/depreciation differs from Source so_far");
         check(actual.draft.rows[kBalanceLeagueHomeGames]==int(state.world.membership[league].clubs.size())-1&&actual.draft.rows[kBalanceTicketPrice]==17&&actual.draft.rows[kBalanceGateSoFar]==25000&&actual.draft.rows[kBalanceAccount]==-123456,"balance lost actual20club count/ticket/attendance/account");
-        check(actual.actuals_only&&!actual.row_available[kBalanceOtherHomeGames]&&!actual.row_available[kBalanceAverageGate]&&!actual.capability_notice.empty(),"balance invented unavailable plan values");
+        check(!actual.actuals_only&&actual.row_available[kBalanceOtherHomeGames]&&actual.row_available[kBalanceAverageGate]&&actual.capability_notice.empty(),"balance planning controls are unavailable");
         check(state==before&&read_save(make_save(state))==state,"balance changed canonical career or RNG");
+        auto p=project_manager_desktop(state,ref,state.world.membership[league].clubs);auto& local=p.state;auto draft=actual.draft;
+        cycle_balance_view(local,draft);check(draft.view==BalanceView::real&&draft.rows[kBalanceLeagueHomeGames]==int(state.world.membership[league].clubs.size())-1,"country-aware real balance home count differs");
+        check(edit_balance_plan(local,draft,kBalanceOtherHomeGames,4)==BalanceEditStatus::changed&&edit_balance_plan(local,draft,kBalanceTicketPrice,20)==BalanceEditStatus::changed,"editable balance inputs refused");
+        cycle_balance_view(local,draft);check(draft.view==BalanceView::future,"future balance view missing");
+        check(edit_balance_plan(local,draft,0,123456)==BalanceEditStatus::changed,"future income adjustment refused");
+        local.memory.add_block(layout::PlanTicketPrice+uint32_t(draft.manager),1);(void)close_balance_plan(local,draft);const auto stored=balance_plan_from_game(local,draft.manager);
+        auto planned=state;planned.world.economy->managers[3].balance_plan=stored;check(read_save(make_save(planned))==planned&&decode_world(encode_world(planned.world))==planned.world,"balance plan lost its save/world roundtrip");
+        const auto reopened=ui::world12_readonly_state(planned,id,{},ref,source,Image(320,240));check(reopened.balance->draft.view==draft.view&&reopened.balance->draft.adjustments==draft.adjustments&&reopened.balance->draft.rows[kBalanceOtherHomeGames]==4&&reopened.balance->draft.rows[kBalanceTicketPrice]==20,"reopened plan lost edits or view");
+        auto reset=reopened.balance->draft;reset_balance_plan(local,reset);check(reset.adjustments==std::array<int32_t,18>{},"actual-values reset retained annual adjustments");
+        auto bytes=encode_world(planned.world);auto old=bmh::cli::parse_json(std::string(bytes.begin(),bytes.end()));old.object()->at("version")=42;const auto json=bmh::cli::dump_json(old);rejects([&]{decode_world(Bytes(json.begin(),json.end()));},"older schema silently lost an edited plan");
         auto unknown=state;unknown.world.economy->managers[3].depreciation.reset();rejects([&]{ui::world12_readonly_state(unknown,id,{},ref,source,Image(320,240));},"balance silently supplied missing depreciation");
         unknown=state;unknown.world.managers[1].match_state->attendance.reset();rejects([&]{ui::world12_readonly_state(unknown,id,{},ref,source,Image(320,240));},"balance silently supplied missing attendance");
     }

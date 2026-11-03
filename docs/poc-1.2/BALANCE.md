@@ -1,34 +1,40 @@
-# Typed current balance (menu 28)
+# Shared-career balance planning (menu 28)
 
-Extended menu 28 opens the existing Original `BalanceScreen` through the canonical
-readonly Session owner. It uses the supplied data-only LE rule reference. It never
-loads an executable from the typed data directory.
+The existing Original BalanceScreen now owns current, real and future views,
+number entry, actual-values reset and the staged close/warning workflow. It uses
+the supplied runtime rule image and canonical manager/window ownership.
 
-The Source `so_far` kernel reads the real eighteen booked income/expense counters,
-salary/bonus totals, ticket income, interest, depreciation, current account, actual
-ticket price and recorded attendance. Scheduled league home games use canonical
-membership size minus one (19 in the English 20-club leagues), rather than a German
-local league index. The complete career snapshot and both RNG streams remain
-unchanged on open, redraw, ESC, right-click, Source event 8 and close. Existing
-scope/revision/generation/sequence and canonical actor/roster guards protect the
-window; no call to `close_balance_plan` occurs.
+World schema 43 adds a nullable ManagerEconomy balance_plan: eighteen signed
+annual adjustments, accepted total, other home games, average gate, view and the
+planning ticket price. These are planning values, separate from the actual ticket
+price, cash, monthly ledger, attendance and submitted association budget.
+Generic economy projection/capture preserves known plans and keeps an older
+unknown plan unknown until its explicit first planning publication.
 
-**Beta limit:** this is the current booked balance only. Forecast/plan editing,
-reset/accept controls and submission are unavailable. The two unknown plan input
-rows show `--`, and the screen explicitly says `Beta: nur Ist-Bilanz / kein Plan`.
-World currently has no persistent owner for the eighteen plan adjustments,
-unsubmitted plan, planned other home games, planned average gate or process-local
-planned ticket price. No estimate is substituted for these fields. Missing known
-monthly bookings, depreciation or attendance in older development saves reject
-explicitly; national teams have no club financial owner for this view.
+Beta1 never exposed editable planning. An older save remains readable and begins
+with a fresh temporary planning draft when first opened; its recorded accounts
+and attendance remain authoritative. Non-null plan data cannot be disguised as
+schema 42 or silently discarded by an older reader. The existing typed FBM wraps
+the versioned World codec; the original data master need not be reimported.
 
-This focused view does not complete the management, annual planning or Beta gates.
-Rescheduling (7) and joining an ongoing career (29) still require their own canonical
-backend/save transactions.
+Every edit and view change stays in the owned draft. Closing runs the shared
+Source calculation and stages its exact result once. If the association warning
+is displayed, publication waits for its acknowledgement. Only the accepted plan
+and Source display word change; cash, other managers, dates, results and both
+random streams stay unchanged. Aborted/replayed/foreign actor requests fail at
+the window boundary. Calendar event8 uses the same close owner.
 
-Public regression: `world12_readonly_tests` checks all eighteen ledger mappings,
-DE/EN home counts, current price/gates/account, unavailable plan inputs and missing
-backing. Private data verification is available through
-`world12_session_tests DATA OUTPUT --balance-only SNAPSHOT.FBM`; it exercises the
-real visible mode-III desktop, shared Original frame, Core rows, unsupported edits,
-owner/replay/reopen guards, Source timeout and full save/resume equality.
+The shared kernel reads actual projected league size: English 20-club leagues
+have nineteen home games; the 18- and 10-team cases retain seventeen and nine.
+Legacy native workspaces keep their original league lookup. Payroll uses the
+state-aware roster range. Calculators and notices reuse the Original rendering,
+presets and source timing, including the supplied explicit LE reference. Host
+text packets retain every digit during the visual key flash, and Enter completes
+the accepted value after that flash; fast keyboard input is not discarded.
+
+Validation: synthetic ledger and 18/20/10-team planning controls, reset, reopen,
+World/FBM roundtrips and downgrade rejection; actual supplied-data GUI input for
+German and English managers and the empty-roster three-season opening. The
+private helper `world12_session_tests DATA OUTPUT --balance-only SNAPSHOT.FBM`
+retains frames and FBMs for current/future/edited/warning/closed/reopened states.
+The 32-bit monetary representation remains outside this change.

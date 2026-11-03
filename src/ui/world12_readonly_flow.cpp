@@ -11,9 +11,14 @@ StartupFlow::World12ReadonlyView StartupFlow::prepare_world12_readonly_open(Worl
     out.screen=std::make_unique<World12ReadonlyScreen>(data_,std::move(page),render_reference());out.desktop=std::make_unique<DesktopScreen>(data_,parent.desktop,render_reference());out.preparation=std::make_unique<PreparationState>(std::move(parent));return out;
 }
 StartupFlow::World12ReadonlyView StartupFlow::prepare_world12_readonly_result(World12ReadonlyState page,PreparationState parent,const World12ReadonlyRequest& request,bool closed)const{
-    if(!world12_readonly_||!pending_world12_readonly()||*pending_world12_readonly()!=request||world12_readonly_->state().identity!=request.identity||!desktop_||!world12_reference_||closed!=(request.action==World12ReadonlyAction::close))throw FormatError("world12: readonly result has no matching window");
+    if(!world12_readonly_||!pending_world12_readonly()||*pending_world12_readonly()!=request||world12_readonly_->state().identity!=request.identity||!desktop_||!world12_reference_||(closed&&(request.action!=World12ReadonlyAction::close&&!(request.action==World12ReadonlyAction::balance&&request.balance_request&&(request.balance_request->kind==BalanceAction::close||request.balance_request->kind==BalanceAction::confirm_close)))))throw FormatError("world12: readonly result has no matching window");
     auto next=request.identity;++next.revision;++next.sequence;if(page.identity!=next||parent.desktop.revision!=next.revision||desk_actor(parent.desktop)!=next.manager||page.identity.career_roster!=parent.desktop.world12_career_roster)throw FormatError("world12: readonly result changed actor/generation/revision");
-    same_readonly_desktop(desktop_->state(),parent.desktop);validate_preparation_context(parent);World12ReadonlyView out;if(!closed)out.screen=std::make_unique<World12ReadonlyScreen>(data_,std::move(page),render_reference());
+    if(page.identity.menu==28){
+        const auto& before=desktop_->state();const auto& after=parent.desktop;
+        if(after.source!=before.source||desk_actor(after)!=desk_actor(before)||after.runtime_club!=before.runtime_club||after.day_counter!=before.day_counter||after.options!=before.options||after.world12_career_roster!=before.world12_career_roster)
+            throw FormatError("world12: balance result changed its actor or career context");
+    }else same_readonly_desktop(desktop_->state(),parent.desktop);
+    validate_preparation_context(parent);World12ReadonlyView out;if(!closed)out.screen=std::make_unique<World12ReadonlyScreen>(data_,std::move(page),render_reference());
     out.desktop=std::make_unique<DesktopScreen>(data_,parent.desktop,render_reference());out.preparation=std::make_unique<PreparationState>(std::move(parent));out.release_barrier=world12_readonly_->owns_pending_release();return out;
 }
 void StartupFlow::finish_world12_readonly(World12ReadonlyView view)noexcept{desktop_=std::move(view.desktop);preparation_=std::move(view.preparation);world12_readonly_=std::move(view.screen);world12_readonly_release_barrier_=view.release_barrier;}

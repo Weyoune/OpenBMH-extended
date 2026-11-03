@@ -192,6 +192,20 @@ std::optional<CareerPools> decode_pools(const J& input) {
     for(size_t i=0;i<4;++i){const auto& j=managers[i];auto& c=pools.managers[i];c.stake=number(field(j,"stake"),400000);if(c.stake&&c.stake<10000)throw FormatError("world12: invalid pools stake");c.winnings=number(field(j,"winnings"),4294967295u);c.correct=uint8_t(number(field(j,"correct"),11));c.voided=boolean(field(j,"voided"));const auto& tips=array(field(j,"tips"));if(tips.size()!=11)throw FormatError("world12: invalid pools tips");for(size_t n=0;n<11;++n)c.tips[n]=uint8_t(number(tips[n],2));}
     for(size_t n=0;n<11;++n)pools.previous_outcomes[n]=uint8_t(number(previous[n],2));return pools;
 }
+J encode_balance_plan(const std::optional<ManagerBalancePlan>& plan) {
+    if(!plan)return nullptr;const auto& p=*plan;A adjustments;for(auto value:p.adjustments)adjustments.emplace_back(int64_t(value));
+    return O{{"adjustments",std::move(adjustments)},{"total",int64_t(p.total)},
+        {"other_home_games",int64_t(p.other_home_games)},{"average_gate",int64_t(p.average_gate)},
+        {"view",int(p.view)},{"ticket_price",int(p.ticket_price)}};
+}
+std::optional<ManagerBalancePlan> decode_balance_plan(const J& value) {
+    if(std::holds_alternative<std::nullptr_t>(value.value))return {};
+    ManagerBalancePlan p;const auto& rows=array(field(value,"adjustments"));
+    if(rows.size()!=p.adjustments.size())throw FormatError("world12: invalid plan adjustments");
+    for(size_t i=0;i<rows.size();++i)p.adjustments[i]=signed_number(rows[i]);
+    p.total=signed_number(field(value,"total"));p.other_home_games=int32_t(number(field(value,"other_home_games"),25));
+    p.average_gate=int32_t(number(field(value,"average_gate"),100000));p.view=uint8_t(number(field(value,"view"),2));p.ticket_price=uint8_t(number(field(value,"ticket_price"),25));return p;
+}
 J encode_economy(const std::optional<CareerEconomy>& input) {
     if(!input)return nullptr;
     const auto numbers=[](const auto& values){A out;for(auto v:values)out.push_back(id(v));return out;};
@@ -199,7 +213,7 @@ J encode_economy(const std::optional<CareerEconomy>& input) {
     for(const auto& m:input->managers){A loans,history;for(const auto& row:m.loans)loans.emplace_back(numbers(row));for(const auto& row:m.financial_history)history.emplace_back(numbers(row));
         J monthly=nullptr;if(m.monthly)monthly=O{{"history_count",int(m.monthly->history_count)},{"expenses",numbers(m.monthly->expenses)},{"counters",numbers(m.monthly->counters)}};
         managers.emplace_back(O{{"depreciation",m.depreciation?id(*m.depreciation):J(nullptr)},{"bank_robbery_month",m.bank_robbery_month?id(*m.bank_robbery_month):J(nullptr)},{"monthly",std::move(monthly)},{"deposit",id(m.deposit)},{"interest_income",id(m.interest_income)},{"overdraft_interest",id(m.overdraft_interest)},
-            {"loans",std::move(loans)},{"stand_flags",numbers(m.stand_flags)},{"planned_stand_capacity",numbers(m.planned_stand_capacity)},{"submitted_balance_plan",id(m.submitted_balance_plan)},{"construction_weeks",numbers(m.construction_weeks)},{"offers",numbers(m.offers)},
+            {"loans",std::move(loans)},{"stand_flags",numbers(m.stand_flags)},{"planned_stand_capacity",numbers(m.planned_stand_capacity)},{"submitted_balance_plan",id(m.submitted_balance_plan)},{"balance_plan",encode_balance_plan(m.balance_plan)},{"construction_weeks",numbers(m.construction_weeks)},{"offers",numbers(m.offers)},
             {"camp_weeks",int(m.camp_weeks)},{"camp_flags",int(m.camp_flags)},{"camp_bill",id(m.camp_bill)},{"weekly_count",int(m.weekly_count)},
             {"facility_history",numbers(m.facility_history)},{"financial_history",std::move(history)}});
     }
@@ -227,6 +241,8 @@ std::optional<CareerEconomy> decode_economy(const J& input,uint32_t version) {
         m.deposit=number(field(j,"deposit"),4294967295u);m.interest_income=number(field(j,"interest_income"),4294967295u);m.overdraft_interest=number(field(j,"overdraft_interest"),4294967295u);
         const auto& loans=array(field(j,"loans"));const auto& history=array(field(j,"financial_history"));if(loans.size()!=5||history.size()!=4)throw FormatError("world12: invalid loan/history row count");
         for(size_t row=0;row<5;++row)numbers(loans[row],m.loans[row]);for(size_t row=0;row<4;++row)numbers(history[row],m.financial_history[row]);
+        if(version>=43)m.balance_plan=decode_balance_plan(field(j,"balance_plan"));
+        else if(const auto plan=j.object()->find("balance_plan");plan!=j.object()->end()&&!std::holds_alternative<std::nullptr_t>(plan->second.value))throw FormatError("world12: older schema cannot restore balance planning");
         numbers(field(j,"construction_weeks"),m.construction_weeks);if(version>=17){numbers(field(j,"stand_flags"),m.stand_flags);numbers(field(j,"planned_stand_capacity"),m.planned_stand_capacity);m.submitted_balance_plan=number(field(j,"submitted_balance_plan"),4294967295u);}else if(std::any_of(m.construction_weeks.begin()+22,m.construction_weeks.end(),[](auto weeks){return weeks!=0;}))throw FormatError("world12: schema16 cannot restore unfinished stand targets");numbers(field(j,"offers"),m.offers);numbers(field(j,"facility_history"),m.facility_history);
         m.camp_weeks=uint8_t(number(field(j,"camp_weeks"),255));m.camp_flags=uint8_t(number(field(j,"camp_flags"),255));m.camp_bill=number(field(j,"camp_bill"),4294967295u);m.weekly_count=uint8_t(number(field(j,"weekly_count"),52));
     }

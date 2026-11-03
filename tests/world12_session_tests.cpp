@@ -1236,30 +1236,47 @@ void actual_club_inspection(const std::filesystem::path& data,const CareerSnapsh
     std::cout<<"Actual owned club inspection: both finals/countries, A/B Original Core frames, canonical players, roster-only writes, saves, interrupted/reentrant/retired guards and no fabricated cup-only squad passed\n";
 }
 void actual_balance_gui(const std::filesystem::path& data,const CareerSnapshot& fixture,const std::filesystem::path& output){
-    const auto resources=session_app::load_runtime_resources(data);const auto directory=std::filesystem::temp_directory_path()/("openbmh-balance-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);
-    struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code ignored;std::filesystem::remove_all(path,ignored);}} cleanup{directory};write_savegame(directory/"Fixture.FBM",make_save(fixture));
-    ui::StartupFlow flow(data,directory,ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> session;
-    const auto require=[&](const ui::FlowResult& action){const auto result=session_app::serve_startup(flow,action,session,data,91,167);if(!result.error.empty())throw std::runtime_error("balance GUI: "+result.error);};
+    const auto resources=session_app::load_runtime_resources(data);
+    const auto directory=std::filesystem::temp_directory_path()/("openbmh-plan-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);
+    struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code ignored;std::filesystem::remove_all(path,ignored);}} cleanup{directory};
+    write_savegame(directory/"Fixture.FBM",make_save(fixture));ui::StartupFlow flow(data,directory,ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> session;
+    const auto require=[&](const ui::FlowResult& action){const auto result=session_app::serve_startup(flow,action,session,data,91,167);if(!result.error.empty())throw std::runtime_error("planning GUI: "+result.error);};
     flow.click(60,215);require(flow.click(240,215));require(flow.send_key("ENTER"));const auto before=session->snapshot();
-    const auto open=[&]{const auto& items=flow.desktop()->state().items;const auto icon=std::find_if(items.begin(),items.end(),[](const auto& i){return i.kind==28&&!i.disabled;});check(icon!=items.end(),"Original modeIII balance desktop icon missing");require(flow.click(icon->x+icon->width/2,icon->y+icon->height/2));check(flow.screen_name()=="balance"&&session->preparation_open(),"balance did not open typed Original owner");};
     const auto capture=[&](const std::string& name){if(output.empty())return;std::filesystem::create_directories(output);const auto image=flow.render();const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));std::ofstream file(output/(name+".ppm"),std::ios::binary);file<<"P6\n320 240\n255\n";for(auto pixel:image.pixels){const auto c=palette.argb[pixel];file.put(char(c>>16));file.put(char(c>>8));file.put(char(c));}write_savegame(output/(name+".FBM"),make_save(session->snapshot()));};
-    capture("desktop-before");open();const auto page=session->readonly_view();check(bool(page.balance),"typed balance has no Original state");const auto& b=*page.balance;
-    ui::BalanceScreen original(data,b,resources.german);check(original.render().pixels==flow.render().pixels,"typed balance differs from shared explicit-reference Original renderer");
-    check(b.actuals_only&&b.draft.view==BalanceView::so_far&&!b.row_available[kBalanceOtherHomeGames]&&!b.row_available[kBalanceAverageGate],"typed balance exposed assumed plan values");
-    const auto& actor=*std::find_if(before.world.managers.begin(),before.world.managers.end(),[&](const auto& m){return m.seat==page.identity.manager;});check(b.draft.rows[kBalanceLeagueHomeGames]==int(before.world.membership[before.world.clubs.at(actor.club).league.value].clubs.size())-1&&b.draft.rows[kBalanceTicketPrice]==actor.career->training_plan&&b.draft.rows[kBalanceAccount]==actor.finance->balance,"balance changed actual homecount/ticket/account");
-    auto oracle=project_manager_desktop(before,resources.reference);const auto rec=size_t(b.draft.manager)*0xb0c;for(size_t n=0;n<4;++n)oracle.state.manager_records[rec+0x310+n]=0;const auto expected=open_balance_plan(oracle.state,b.draft.manager);for(size_t row=0;row<18;++row)check(b.draft.rows[row]==expected.rows[row],"balance booked items differ from Core so_far");check(b.draft.total==expected.total&&b.draft.depreciation==expected.depreciation,"balance total differs from Core so_far");
-    capture("balance-open");for(auto point:{std::pair{190,218},std::pair{265,218},std::pair{60,44},std::pair{150,188}}){flow.pointer_down(point.first,point.second);require(flow.click(point.first,point.second));check(!flow.pending_world12_readonly()&&session->readonly_view().identity==page.identity,"balance attempted an unsupported plan edit");}
-    check(session->snapshot()==before&&read_save(make_save(session->snapshot()))==before,"balance redraw/edit attempts changed full saved career/RNG");
-    auto stale=ui::World12ReadonlyRequest{page.identity,ui::World12ReadonlyAction::close,page.selection.metric};auto forged=stale;++forged.identity.manager;rejects([&]{session->apply_readonly(forged);},"balance accepted another manager");forged=stale;forged.action=ui::World12ReadonlyAction::set_metric;rejects([&]{session->apply_readonly(forged);},"balance accepted an unsupported mutation");
-    require(flow.send_key("ESCAPE"));check(flow.screen_name()=="desktop"&&!session->preparation_open()&&session->snapshot()==before,"balance close committed a temporary plan");rejects([&]{session->apply_readonly(stale);},"closed balance owner replayed");capture("balance-closed");
-    open();check(session->readonly_view().identity.sequence!=page.identity.sequence,"balance reopened stale generation");rejects([&]{session->apply_readonly(stale);},"old balance request closed reopened owner");require(flow.process_timer_expired());check(flow.screen_name()=="desktop"&&session->snapshot()==before,"Source balance event8 changed saved state");
-    open();require(flow.pointer_down(310,230,true));check(flow.screen_name()=="desktop"&&flow.source_mouse_wait_release_pending(),"host cannot route the real UP of a closed typed balance");
-    require(flow.click(310,230,true));check(!flow.source_mouse_wait_release_pending()&&session->snapshot()==before,"owned right UP leaked past the balance or retained its barrier");
-    const auto& saved_items=flow.desktop()->state().items;const auto save_icon=std::find_if(saved_items.begin(),saved_items.end(),[](const auto& i){return i.kind==11&&!i.disabled;});check(save_icon!=saved_items.end(),"balance return lost its save icon");
-    require(flow.pointer_down(save_icon->x+save_icon->width/2,save_icon->y+save_icon->height/2));const auto first_click=flow.click(save_icon->x+save_icon->width/2,save_icon->y+save_icon->height/2);check(first_click.request==ui::FlowRequest::desk_action&&first_click.desk_action.menu_kind==11,"first deliberate click after balance was swallowed");require(first_click);check(flow.screen_name()=="save_load","first save click after balance did not open its dialog");require(flow.send_key("ESC"));
-    const auto restored=session_app::Session::resume(resources,read_save(make_save(session->snapshot())),168,1);check(restored.snapshot()==before,"balance lost save/resume equality");
-    std::cout<<"Actual modeIII balance Original frame/Core rows, canonical home/ticket/account, unavailable plan controls, owner/stale/reopen/event8, unchanged full FBM/RNG passed\n";
+    const auto open=[&]{const auto& items=flow.desktop()->state().items;const auto i=std::find_if(items.begin(),items.end(),[](const auto& item){return item.kind==28&&!item.disabled;});check(i!=items.end(),"planning icon missing");require(flow.click(i->x+i->width/2,i->y+i->height/2));check(flow.balance()&&session->preparation_open(),"planning owner did not open");};
+    uint64_t clock=1000;
+    const auto tick=[&]{clock+=100;require(flow.tick_balance_source_milliseconds(clock));};
+    const auto button=[&](int x,int y){require(flow.pointer_down(x,y));require(flow.click(x,y));};
+    const auto edit=[&](int x,int y,std::string value){
+        flow.mark_balance_presented_source_milliseconds(clock);button(x,y);check(flow.balance()->calculator_open(),"numeric plan input did not open");
+        require(flow.send_key("SPACE"));tick();for(char digit:value)check(flow.text(std::string(1,digit)),"fragmented fast numeric input lost a digit during key flash");require(flow.send_key("ENTER"));tick();
+        check(flow.balance()&&!flow.balance()->calculator_open(),"plan calculator failed its accepted completion");
+    };
+    capture("desktop-before");open();capture("plan-open");const auto original=session->readonly_view();
+    auto forged=ui::World12ReadonlyRequest{original.identity,ui::World12ReadonlyAction::close};rejects([&]{session->apply_readonly(forged);},"generic close bypassed planning publication");
+    for(int n=0;n<3&&flow.balance()->state().draft.view!=BalanceView::future;++n)button(190,218);
+    check(flow.balance()->state().draft.view==BalanceView::future,"future view unavailable");capture("plan-future");
+    edit(110,41,"123456");check(flow.balance()->state().draft.rows[0]==123456,"plan row value differs");
+    button(265,218);check(flow.balance()->state().draft.adjustments==std::array<int32_t,18>{},"actual-values reset failed");
+    edit(110,41,"123456");edit(210,185,"20");capture("plan-edited");
+    check(session->snapshot()==before,"draft edit changed accepted world, cash or RNG");const auto draft=flow.balance()->state().draft;const auto identity=session->readonly_view().identity;
+    require(flow.pointer_down(310,230,true));require(flow.click(310,230,true));
+    if(flow.balance()&&flow.balance()->notice_open()){
+        check(session->snapshot()==before,"warning published the plan before acknowledgement");capture("plan-close-warning");
+        require(flow.pointer_down(160,120));require(flow.click(160,120));
+    }
+    check(flow.screen_name()=="desktop"&&!session->preparation_open(),"plan close did not restore desktop");
+    const auto after=session->snapshot();const auto seat=identity.manager;check(after.world.economy->managers[seat].balance_plan.has_value(),"plan was not persisted");
+    const auto& saved=*after.world.economy->managers[seat].balance_plan;
+    check(saved.view==2&&saved.ticket_price==20&&saved.adjustments==draft.adjustments,"accepted plan lost actual controls");
+    auto expected=before;expected.world.economy->managers[seat].balance_plan=saved;auto m=std::find_if(expected.world.managers.begin(),expected.world.managers.end(),[&](const auto& actor){return actor.seat==seat;});m->finance->baseline->account_flags=2;
+    check(after==expected,"plan committed fields outside its budget/view owner or consumed RNG");capture("plan-closed");
+    check(read_save(make_save(after))==after&&session_app::Session::resume(resources,after,168,1).snapshot()==after,"accepted plan failed save/resume");
+    auto stale=ui::World12ReadonlyRequest{identity,ui::World12ReadonlyAction::balance};stale.balance_request=ui::BalanceRequest{};rejects([&]{session->apply_readonly(stale);},"closed plan owner replayed");
+    open();check(flow.balance()->state().draft.view==BalanceView::future&&flow.balance()->state().draft.adjustments==saved.adjustments&&flow.balance()->state().draft.rows[kBalanceTicketPrice]==20,"reopened plan lost edits");capture("plan-reopened");
+    std::cout<<"Actual persistent planning: Source current/real/future, numeric edits/reset, close/warning, canonical owner/replay, only plan/view publication, unchanged cash/RNG and full save/resume passed\n";
 }
+
 void actual_tables_gui(const std::filesystem::path& data,const CareerSnapshot& fixture,const std::filesystem::path& output){
     competition_folder_owner(data,fixture,0);
     const auto resources=session_app::load_runtime_resources(data);const auto directory=std::filesystem::temp_directory_path()/("openbmh-tables-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);

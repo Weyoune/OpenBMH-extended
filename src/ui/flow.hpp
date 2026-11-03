@@ -382,8 +382,8 @@ public:
     void acknowledge_balance(BalanceState);
     void close_balance(BalanceState, PreparationState);
     void reject_balance(std::string reason);
-    bool in_balance() const { return bool(balance_); }
-    const BalanceScreen* balance() const { return balance_.get(); }
+    bool in_balance() const { return balance()!=nullptr; }
+    const BalanceScreen* balance() const { return world12_readonly_?world12_readonly_->balance():balance_.get(); }
     const BalanceRequest* pending_balance() const { return balance_&&balance_->pending()?&*balance_->pending():nullptr; }
     void show_other_games(OtherGamesState, PreparationState, const DeskRequest& owner);
     void show_world12_other_games(OtherGamesState,PreparationState,const DeskRequest&);

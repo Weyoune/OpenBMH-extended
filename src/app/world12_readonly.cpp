@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "app/world12_session.hpp"
 #include "app/world12_visible_menu.hpp"
+#include "game/world12/desktop_projection.hpp"
+#include "game/world12/balance_planning.hpp"
 #include "ui/world12_desktop.hpp"
 #include "ui/world12_statistics.hpp"
 #include <algorithm>
@@ -26,7 +28,7 @@ ui::World12ReadonlyState Session::open_readonly(const ui::DeskRequest& request,c
     ui::World12ReadonlySelection selection;const auto country=state_.world.clubs.at(actor.world_club).country;selection.alltime_nation=int(country);
     auto page=ui::world12_readonly_state(state_,identity,selection,resources_.reference,resources_.german,underlay,highscore_rows);
     auto source=std::make_shared<const CareerSnapshot>(state_);
-    readonly_highscore_rows_=highscore_rows;readonly_owner_=identity;readonly_selection_=selection;readonly_underlay_=underlay;readonly_source_=std::move(source);++readonly_generation_;++owner_.revision;preparation_menu_=request.menu_kind;return page;
+    readonly_highscore_rows_=highscore_rows;readonly_owner_=identity;readonly_selection_=page.selection;readonly_underlay_=underlay;readonly_source_=std::move(source);++readonly_generation_;++owner_.revision;preparation_menu_=request.menu_kind;return page;
 }
 ui::World12ReadonlyState Session::readonly_view()const{
     if(!readonly_owner_||preparation_menu_!=readonly_owner_->menu||readonly_owner_->scope!=owner_.scope||readonly_owner_->revision!=owner_.revision||(readonly_owner_->sequence>>32)!=readonly_generation_||!readonly_source_||state_!=*readonly_source_||roster(state_)!=readonly_owner_->career_roster||!state_.desktop||state_.desktop->active_seat!=readonly_owner_->manager)
@@ -35,9 +37,45 @@ ui::World12ReadonlyState Session::readonly_view()const{
 }
 bool Session::apply_readonly(const ui::World12ReadonlyRequest& request){
     const auto current=readonly_view();if(request.identity!=current.identity||owner_.revision==UINT64_MAX||uint32_t(current.identity.sequence)==UINT32_MAX)throw FormatError("world12: stale readonly action");
-    if(current.identity.menu==28&&(request.action!=ui::World12ReadonlyAction::close||request.value!=-1||request.first_season||request.expected_flags||request.target_flags))throw FormatError("world12: current balance owns only its exact close action");
+    if(current.identity.menu==28&&(request.action!=ui::World12ReadonlyAction::balance||!request.balance_request||request.value!=-1||request.first_season||request.expected_flags||request.target_flags))throw FormatError("world12: balance needs its exact Source planning command");
     auto selection=readonly_selection_;bool closed=false;std::optional<CareerSnapshot> changed;
     switch(request.action){
+    case ui::World12ReadonlyAction::balance:{
+        if(current.identity.menu!=28||!current.balance||!request.balance_request||request.balance_request->identity!=current.balance->identity||!current.selection.balance_draft)
+            throw FormatError("world12: planning action lost its exact canonical/native owner");
+        const auto& action=*request.balance_request;auto draft=*current.selection.balance_draft;
+        auto p=project_manager_desktop(state_,resources_.reference);auto& game=p.state;
+        if(action.kind!=ui::BalanceAction::edit_row&&(action.row!=-1||action.value))throw FormatError("world12: malformed balance control");
+        if(selection.balance_pending_close!=(selection.balance_closed_plan.has_value()))throw FormatError("world12: incomplete staged balance close");
+        if(selection.balance_pending_close&&action.kind!=ui::BalanceAction::confirm_close)throw FormatError("world12: balance warning still owns the close");
+        switch(action.kind){
+        case ui::BalanceAction::edit_row:
+            if(action.row<0||action.row>=kBalanceRows||edit_balance_plan(game,draft,action.row,action.value)!=BalanceEditStatus::changed)throw FormatError("world12: rejected balance edit");break;
+        case ui::BalanceAction::cycle_view:cycle_balance_view(game,draft);break;
+        case ui::BalanceAction::take_actuals:reset_balance_plan(game,draft);break;
+        case ui::BalanceAction::close:{
+            game.memory.add_block(layout::PlanTicketPrice+uint32_t(draft.manager),1);
+            const bool warning=close_balance_plan(game,draft);
+            selection.balance_closed_plan=balance_plan_from_game(game,draft.manager);
+            selection.balance_pending_close=warning&&current.balance->read_only_notice_enabled;
+            closed=!selection.balance_pending_close;break;
+        }
+        case ui::BalanceAction::confirm_close:
+            if(!selection.balance_pending_close)throw FormatError("world12: no staged balance warning to acknowledge");closed=true;break;
+        default:throw FormatError("world12: unsupported balance control");
+        }
+        selection.balance_draft=draft;
+        if(closed){
+            if(!selection.balance_closed_plan||!state_.world.economy)throw FormatError("world12: planning close has no actual budget owner");
+            changed=state_;changed->world.economy->managers[current.identity.manager].balance_plan=selection.balance_closed_plan;
+            auto manager=std::find_if(changed->world.managers.begin(),changed->world.managers.end(),[&](const auto& m){return m.seat==current.identity.manager;});
+            if(manager==changed->world.managers.end()||!manager->finance||!manager->finance->baseline)throw FormatError("world12: balance close lost its financial backing");
+            manager->finance->baseline->account_flags=selection.balance_closed_plan->view;
+            changed->validate();
+        }
+        break;
+    }
+
     case ui::World12ReadonlyAction::close:if(request.metric!=current.selection.metric)throw FormatError("world12: readonly close metric changed");closed=true;break;
     case ui::World12ReadonlyAction::set_metric:
         if(current.identity.menu!=20||uint8_t(request.metric)>uint8_t(ui::TopScorersMetric::scorer))throw FormatError("world12: unsupported readonly metric");selection.metric=request.metric;break;

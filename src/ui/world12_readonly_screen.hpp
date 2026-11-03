@@ -16,6 +16,9 @@ public:
     bool key(std::string_view);
     bool text(std::string_view);
     bool process_timer_expired();
+    bool tick_balance(uint64_t now){return !pending_&&balance_&&capture(balance_->tick_source_milliseconds(now));}
+    void mark_balance(uint64_t now){if(balance_)balance_->mark_presented_source_milliseconds(now);}
+    const BalanceScreen* balance()const{return balance_.get();}
     bool points_active()const{return records_&&records_->points_active();}
     bool advance_point(){return records_&&records_->advance_point();}
     bool finish_points(){return records_&&records_->finish_points();}

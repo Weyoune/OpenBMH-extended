@@ -24,15 +24,19 @@ struct World12ReadonlySelection {
     TopScorersScope scope=TopScorersScope::league;
     int statistics_page=-1,prediction_mode=1,title_category=0,title_first_season=0,alltime_nation=0;
     bool alltime_relative=false;
+    std::optional<BalancePlanDraft> balance_draft;
+    bool balance_pending_close=false;
+    std::optional<bmh::world12::ManagerBalancePlan> balance_closed_plan;
     bool operator==(const World12ReadonlySelection&)const=default;
 };
-enum class World12ReadonlyAction:uint8_t {close,set_metric,toggle_scope,close_child,select_statistics_page,set_prediction,set_statistics_flags,select_title_category,select_alltime_nation,toggle_alltime_relative};
+enum class World12ReadonlyAction:uint8_t {close,set_metric,toggle_scope,close_child,select_statistics_page,set_prediction,set_statistics_flags,select_title_category,select_alltime_nation,toggle_alltime_relative,balance};
 struct World12ReadonlyRequest {
     World12ReadonlyIdentity identity;
     World12ReadonlyAction action=World12ReadonlyAction::close;
     TopScorersMetric metric=TopScorersMetric::goals;
     int value=-1,first_season=0;
     uint8_t expected_flags=0,target_flags=0;
+    std::optional<BalanceRequest> balance_request;
     bool operator==(const World12ReadonlyRequest&)const=default;
 };
 struct World12ReadonlyState {

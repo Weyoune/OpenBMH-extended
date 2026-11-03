@@ -198,6 +198,12 @@ struct ManagerMonthlyEconomy {
     std::array<uint32_t,15> counters{};
     bool operator==(const ManagerMonthlyEconomy&)const=default;
 };
+struct ManagerBalancePlan {
+    std::array<int32_t,18> adjustments{};
+    int32_t total=0,other_home_games=0,average_gate=0;
+    uint8_t view=0,ticket_price=0;
+    bool operator==(const ManagerBalancePlan&)const=default;
+};
 struct ManagerEconomy {
     uint32_t deposit=0,interest_income=0,overdraft_interest=0;
     std::optional<uint32_t> depreciation; // Source property/fund annual costs; unknown in older schemas.
@@ -209,6 +215,7 @@ struct ManagerEconomy {
     std::array<uint8_t,30> construction_weeks{};
     std::array<uint8_t,8> planned_stand_capacity{},stand_flags{};
     uint32_t submitted_balance_plan=0;
+    std::optional<ManagerBalancePlan> balance_plan;
     // Source170,171,174..179; 172/173 belong to ManagerMatchState.
     std::array<uint8_t,8> offers{};
     uint8_t camp_weeks=0,camp_flags=0,weekly_count=0;

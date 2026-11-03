@@ -38,19 +38,22 @@ World12ReadonlyState world12_readonly_state(const CareerSnapshot& state,
     if(id.menu==28){
         if(!actor->finance||!actor->career||!actor->career->season_services||!actor->match_state||!actor->match_state->attendance||!state.world.economy||!state.world.economy->managers[id.manager].monthly||!state.world.economy->managers[id.manager].depreciation)
             throw FormatError("world12: current balance requires known actual finance, monthly bookings, depreciation and attendance");
-        // Only the Source so_far path is allowed. It performs no wage prediction,
-        // forecast or RNG and never consults a discarded temporary plan as truth.
-        const auto record=size_t(local_manager)*0xb0c;
-        for(size_t n=0;n<4;++n)game.manager_records.at(record+0x310+n)=0;
-        auto draft=open_balance_plan(game,local_manager);draft.adjustments.fill(0);
-        draft.rows[kBalanceLeagueHomeGames]=int(members.size())-1;
-        draft.rows[kBalanceTicketPrice]=actor->career->training_plan; // actual Source +26e
-        draft.rows[kBalanceOtherHomeGames]=0;draft.rows[kBalanceAverageGate]=0;
+        // Beta1 exposed no editable plan. Its first planning entry starts a
+        // fresh draft; already recorded income/attendance remains authoritative.
+        if(!state.world.economy->managers[id.manager].balance_plan){
+            const auto base=size_t(local_manager)*0xb0c;
+            for(size_t n=0;n<18*4;++n)game.manager_records.at(base+0x2b0+n)=0;
+            for(auto offset:{0x2f8,0x2fc,0x308,0x310})for(size_t n=0;n<4;++n)game.manager_records.at(base+size_t(offset)+n)=0;
+            game.memory.add_block(layout::PlanTicketPrice+uint32_t(local_manager),1);game.memory.set8(layout::PlanTicketPrice+uint32_t(local_manager),0);
+        }
+        auto draft=selection.balance_draft?*selection.balance_draft:open_balance_plan(game,local_manager);
+        if(draft.manager!=local_manager||uint8_t(draft.view)>2)throw FormatError("world12: balance draft changed its actual manager");
+        out.selection.balance_draft=draft;
         BalanceIdentity child{local_manager,int(p.local_club(id.club)),int(game.club_ids.at(p.local_club(id.club))),state.date,id.revision,id.scope,id.sequence};
         auto page=balance_from_game(game,draft,source,child,underlay);
-        page.actuals_only=true;page.row_available[kBalanceOtherHomeGames]=false;page.row_available[kBalanceAverageGate]=false;
-        page.capability_notice="Beta: nur Ist-Bilanz / kein Plan";
-        page.read_only_notice_enabled=false;page.club_name=utf8_to_original(state.world.clubs.at(id.club).name);
+        page.pending_close=selection.balance_pending_close;page.club_name=utf8_to_original(state.world.clubs.at(id.club).name);
+        const auto& crest=state.world.crests.at(state.world.clubs.at(id.club).crest);
+        for(auto* notice:{&page.read_only_notice,&page.close_notice}){notice->badge_atlas=crest.path;notice->badge_sprite=crest.cell;notice->badge_fallback=false;}
         page.decorated=game.memory.u8(layout::PlainBackground)==0;page.original_panel=game.memory.u8(layout::SolidPanelBackground)==0;page.gradient=game.memory.u8(layout::TextGradientDisabled)==0&&source.u8(layout::TextGradientMode)==2;
         page.cached_backdrop=game.memory.has(layout::CareerSession_ApplyBalanceSourceStyle_ExecutableField)?game.memory.u32(layout::CareerSession_ApplyBalanceSourceStyle_ExecutableField)!=0:source.u32(layout::CareerSession_ApplyBalanceSourceStyle_ExecutableField)!=0;
         out.balance=std::move(page);

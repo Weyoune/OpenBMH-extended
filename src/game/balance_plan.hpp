@@ -55,6 +55,7 @@ struct BalancePlanDraft {
     int days_left = 0;    // local_34
     int64_t depreciation = 0;  // "Abschreibungen": record +0x30c in the views so_far/real
     double total = 0;          // GEWINN (> 0) / VERLUST (< 0), the plan figure on leaving
+    bool operator==(const BalancePlanDraft&)const=default;
 };
 
 // BalanceFromGame2 up to its first redraw: the draft of `manager` with the stored view, the

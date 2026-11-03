@@ -7,6 +7,7 @@
 #include <cmath>
 
 #include "game/prediction.hpp"
+#include "game/national_identity.hpp"
 #include "game/schedule.hpp"
 #include "game/table.hpp"
 #include "game/week.hpp"
@@ -17,6 +18,16 @@ namespace {
 
 constexpr size_t kRecordSize = 0xb0c;
 constexpr uint32_t kPlanTicketPrice = ::bmh::layout::PlanTicketPrice;  // one byte per manager
+int league_home_games(const GameState& g,int team) {
+    if(!g.projected_match_clubs.empty()) {
+        if(team<0||size_t(team)>=g.projected_match_clubs.size()||g.projected_match_clubs[size_t(team)].league_size<2)
+            throw FormatError("balance: projected club has no actual league size");
+        return g.projected_match_clubs[size_t(team)].league_size-1;
+    }
+    const auto league=team>(kNoTeam-1)?0:team_league(team);
+    if(league<0||league>=kLeagueCount)throw FormatError("balance: club has no Source league");
+    return league_matchdays(league)/2;
+}
 // BalancePlanRuntimeField: months left in the business year by calendar month (July: 12, June: 1)
 constexpr int8_t kMonthsLeft[13] = {0, 6, 5, 4, 3, 2, 1, 12, 11, 10, 9, 8, 7};
 // BalancePlanRuntimeField2: which rows can be changed; BalancePlanRuntimeField3: the class of the maximum
@@ -108,7 +119,7 @@ int32_t monthly_pay(GameState& g, int m, uint8_t flags = 0xb) {
     std::array<uint8_t, 24> buf{};
     const int predicted = table_prediction(g, team, 4, buf);
     const int rank = predicted == 0 ? 0xb : predicted + 1;
-    const SquadRange range = squad_range(team);
+    const SquadRange range = squad_range(g,team);
     int32_t sum = 0;
     for (int s = 0; s < 0x18; s++) {
         const size_t slot = size_t(m) * 0x840 + size_t(s) * 0x58;
@@ -254,7 +265,7 @@ int32_t stadium_required_attendance(const GameState& source, int manager) {
     const int league = team > (kNoTeam - 1) ? 0 : team_league(team);
     if (league < 0 || league >= kLeagueCount)
         throw FormatError("stadium attendance: manager has no Source league");
-    const int home_games = league_matchdays(league) / 2;
+    const int home_games = league_home_games(g,team);
     if (home_games <= 0) throw FormatError("stadium attendance: invalid Source league home count");
     const int m = manager;
     int32_t costs = wrap(int64_t(facility_costs(g, m)) + rec32(g, m, 0x854) + rec32(g, m, 0x858));
@@ -284,9 +295,8 @@ BalancePlanDraft open_balance_plan(const GameState& g, int manager) {
     d.manager = manager;
     const int m = manager;
     d.view = BalanceView(std::clamp(int(int8_t(rec8(g, m, 0x310))), 0, 2));
-    const int league = team_league(g.manager_teams.at(size_t(m)));
     auto& r = d.rows;
-    r[kBalanceLeagueHomeGames] = league < kLeagueCount ? league_matchdays(league) / 2 : 0;
+    r[kBalanceLeagueHomeGames] = league_home_games(g,g.manager_teams.at(size_t(m)));
     r[kBalanceOtherHomeGames] = rec32(g, m, 0x2f8);
     r[kBalanceAverageGate] = rec32(g, m, 0x2fc);
     uint8_t ticket = g.memory.has(kPlanTicketPrice + uint32_t(m)) ? g.memory.u8(kPlanTicketPrice + uint32_t(m)) : 0;

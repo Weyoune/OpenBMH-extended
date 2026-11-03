@@ -112,7 +112,7 @@ void BalanceScreen::draw_calculator(Image& o)const{
 void BalanceScreen::draw_notice(Image& o)const{
  if(!notice_visible_&&!close_notice_visible_)return;
  const auto& p=close_notice_visible_?state_.close_notice:state_.read_only_notice;
- GameEndTaxDialog dialog(data_,p,GameEndRenderOptions{!state_.decorated,state_.gradient},o);o=dialog.render();
+ GameEndTaxDialog dialog(data_,p,GameEndRenderOptions{!state_.decorated,state_.gradient},o,exe_);o=dialog.render();
 }
 Image BalanceScreen::render()const{Image out=state_.cached_backdrop?state_.underlay:(state_.decorated?frame_art_:Image(320,240));draw_panels(out);draw_rows(out);draw_buttons(out);draw_calculator(out);draw_notice(out);return out;}
 void BalanceScreen::open_calculator(int row){
@@ -159,7 +159,9 @@ bool BalanceScreen::pointer_down(int x,int y,bool right){
 bool BalanceScreen::release(int x,int y){if(pointer_x_<0)return false;bool handled=dragging_calculator_||pressed_calculator_control_>=0||pressed_main_button_>=0;if(dragging_calculator_){dragging_calculator_=false;}else if(pressed_calculator_control_>=0){pressed_calculator_control_=-1;}else if(pressed_main_button_>=0){const int id=pressed_main_button_;const bool activate=main_button_armed_&&in(x,y,id==0?170:245,214,id==0?233:308,224);pressed_main_button_=-1;main_button_armed_=false;if(activate)pending_=request(id==0?BalanceAction::cycle_view:BalanceAction::take_actuals);}else if(calculator_open_){/* no release action for unpressed calculator area */}pointer_x_=pointer_y_=-1;return handled;}
 bool BalanceScreen::move(int x,int y){if(pointer_x_<0)return false;if(dragging_calculator_){state_.calculator_x=std::clamp(x-drag_offset_x_,0,207);state_.calculator_y=std::clamp(y-drag_offset_y_,0,104);}if(pressed_main_button_>=0&&main_button_armed_&&!in(x,y,pressed_main_button_==0?170:245,214,pressed_main_button_==0?233:308,224))main_button_armed_=false;pointer_x_=x;pointer_y_=y;return true;}
 bool BalanceScreen::key(std::string_view k){
- if(pending_||calculator_cancel_waiting_||(flash_calculator_control_>=0&&current_milliseconds_<calculator_flash_until_))return false;
+ // SDL may deliver fragmented text and Enter during the visual key flash.
+ // Keep those keyboard events; the accepted value still completes after its flash.
+ if(pending_||calculator_cancel_waiting_||calculator_deferred_accept_||(!calculator_open_&&flash_calculator_control_>=0&&current_milliseconds_<calculator_flash_until_))return false;
  if(close_notice_visible_){if(k!="ESC"&&k!="ESCAPE")return false;close_notice_visible_=false;if(state_.pending_close)pending_=request(BalanceAction::confirm_close);return true;}
  if(notice_visible_){if(k!="ESC"&&k!="ESCAPE")return false;notice_visible_=false;notice_consumed_=true;return true;}
  if(calculator_open_){if(k.size()==1&&k[0]>='0'&&k[0]<='9')return text(k);if(k=="BACKSPACE"){calculator_value_/=10;numeric_text_=std::to_string(calculator_value_);calculator_value_edited_=true;pressed_calculator_control_=flash_calculator_control_=10;calculator_flash_until_=current_milliseconds_+80;return true;}if(k=="SPACE"){calculator_value_=0;numeric_text_="0";calculator_value_edited_=true;pressed_calculator_control_=flash_calculator_control_=12;calculator_flash_until_=current_milliseconds_+80;return true;}if(k=="ENTER"||k=="RETURN"){pressed_calculator_control_=flash_calculator_control_=13;calculator_flash_until_=current_milliseconds_+80;calculator_deferred_accept_=true;return true;}if(k=="ESC"||k=="ESCAPE")return commit_calculator(false);return false;}
@@ -177,7 +179,7 @@ bool BalanceScreen::process_timer_expired(){
  pending_=request(BalanceAction::close);return true;
 }
 bool BalanceScreen::text(std::string_view s){
- if(!calculator_open_||pending_||calculator_cancel_waiting_||(flash_calculator_control_>=0&&current_milliseconds_<calculator_flash_until_)||s.empty())return false;for(char c:s)if(c<'0'||c>'9')return false;
+ if(!calculator_open_||pending_||calculator_cancel_waiting_||calculator_deferred_accept_||s.empty())return false;for(char c:s)if(c<'0'||c>'9')return false;
  std::string candidate=(numeric_text_=="0"?std::string{}:numeric_text_)+std::string(s);if(candidate.size()>10)return false;uint64_t v=0;auto [end,ec]=std::from_chars(candidate.data(),candidate.data()+candidate.size(),v);if(ec!=std::errc{}||end!=candidate.data()+candidate.size())return false;
  calculator_value_=uint32_t(std::min<uint64_t>(v,active_profile_.maximum));numeric_text_=std::to_string(calculator_value_);calculator_value_edited_=true;const int digit=s.back()-'0';pressed_calculator_control_=flash_calculator_control_=digit;calculator_flash_until_=current_milliseconds_+80;return true;
 }

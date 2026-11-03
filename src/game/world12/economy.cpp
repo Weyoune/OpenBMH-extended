@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "game/world12/economy.hpp"
+#include "game/world12/balance_planning.hpp"
 #include "game/messages.hpp"
 #include "game/highscore.hpp"
 #include "game/week.hpp"
@@ -28,7 +29,7 @@ ManagerEconomy read_manager(const GameState& g,size_t local,const std::array<uin
     for(size_t n=0;n<2;++n)monthly.expenses[n]=word(g.manager_records,rec+0x854+n*4);
     for(size_t n=0;n<15;++n)monthly.counters[n]=word(g.manager_records,rec+monthly_offsets[n]);
     m.deposit=word(g.manager_records,rec+0x318);m.interest_income=word(g.manager_records,rec+0x870);m.overdraft_interest=word(g.manager_records,rec+0x89c);m.depreciation=word(g.manager_records,rec+0x30c);
-    m.submitted_balance_plan=word(g.manager_records,rec+0x320);
+    m.submitted_balance_plan=word(g.manager_records,rec+0x320);m.balance_plan=balance_plan_from_game(g,int(local));
     std::copy_n(g.manager_records.begin()+ptrdiff_t(rec+0x54),8,m.planned_stand_capacity.begin());
     std::copy_n(g.manager_records.begin()+ptrdiff_t(rec+0x44),8,m.stand_flags.begin());
     m.camp_bill=word(g.manager_records,rec+0x850);m.camp_weeks=g.manager_records.at(rec+0x287);m.camp_flags=g.manager_records.at(rec+0x21f);m.weekly_count=g.manager_records.at(rec+0x285);
@@ -47,7 +48,7 @@ void write_manager(GameState& g,size_t local,const ManagerEconomy& m,const std::
         for(size_t n=0;n<2;++n)put(g.manager_records,rec+0x854+n*4,m.monthly->expenses[n]);
         for(size_t n=0;n<15;++n)put(g.manager_records,rec+monthly_offsets[n],m.monthly->counters[n]);}
     put(g.manager_records,rec+0x318,m.deposit);put(g.manager_records,rec+0x870,m.interest_income);put(g.manager_records,rec+0x89c,m.overdraft_interest);
-    put(g.manager_records,rec+0x320,m.submitted_balance_plan);
+    put(g.manager_records,rec+0x320,m.submitted_balance_plan);if(m.balance_plan)install_balance_plan(g,int(local),*m.balance_plan);
     std::copy(m.planned_stand_capacity.begin(),m.planned_stand_capacity.end(),g.manager_records.begin()+ptrdiff_t(rec+0x54));
     std::copy(m.stand_flags.begin(),m.stand_flags.end(),g.manager_records.begin()+ptrdiff_t(rec+0x44));
     put(g.manager_records,rec+0x850,m.camp_bill);g.manager_records.at(rec+0x287)=m.camp_weeks;g.manager_records.at(rec+0x21f)=m.camp_flags;g.manager_records.at(rec+0x285)=m.weekly_count;
@@ -149,7 +150,7 @@ void capture_career_economy(World& world,const AiMatchProjection& projection){
     if(e.presentation_options)for(uint32_t i=0;i<180;++i)(*e.presentation_options)[i]=g.memory.u8(layout::LeaguePresentationOptions+i);
     e.week=g.memory.u8(layout::Savestate_Layout_ExecutableField);
     if(e.advertising_group)e.advertising_group=g.memory.u8(layout::AdGroupId);
-    for(uint8_t n=0;n<projection.human_managers();++n){const auto had_monthly=e.managers[map[n]].monthly.has_value();const auto had_depreciation=e.managers[map[n]].depreciation.has_value();e.managers[map[n]]=read_manager(g,n,map);if(!had_monthly)e.managers[map[n]].monthly.reset();if(!had_depreciation)e.managers[map[n]].depreciation.reset();}
+    for(uint8_t n=0;n<projection.human_managers();++n){const auto had_monthly=e.managers[map[n]].monthly.has_value();const auto had_depreciation=e.managers[map[n]].depreciation.has_value();const auto had_plan=e.managers[map[n]].balance_plan.has_value();e.managers[map[n]]=read_manager(g,n,map);if(!had_monthly)e.managers[map[n]].monthly.reset();if(!had_depreciation)e.managers[map[n]].depreciation.reset();if(!had_plan)e.managers[map[n]].balance_plan.reset();}
     capture_mailbox(e,g,map);
 }
 void capture_career_portfolios(World& world,const AiMatchProjection& projection) {

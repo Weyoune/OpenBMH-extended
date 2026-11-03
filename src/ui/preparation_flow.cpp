@@ -1303,11 +1303,14 @@ void StartupFlow::reject_balance(std::string reason) {
     balance_->reject_action(std::move(reason));
 }
 FlowResult StartupFlow::tick_balance_source_milliseconds(uint64_t now) {
+    if(world12_readonly_&&world12_readonly_->balance()){
+        const bool changed=world12_readonly_->tick_balance(now);FlowResult out{changed};if(const auto* request=pending_world12_readonly()){out.request=FlowRequest::world12_readonly_action;out.world12_readonly_action=*request;}return out;
+    }
     if(!balance_||!balance_->tick_source_milliseconds(now))return {};
     return finish_balance_input(true);
 }
 void StartupFlow::mark_balance_presented_source_milliseconds(uint64_t now) {
-    if(balance_)balance_->mark_presented_source_milliseconds(now);
+    if(world12_readonly_&&world12_readonly_->balance())world12_readonly_->mark_balance(now);else if(balance_)balance_->mark_presented_source_milliseconds(now);
 }
 FlowResult StartupFlow::tick_stadium_calculator_source_ticks(unsigned ticks) {
     if (!stadium_ || !stadium_->calculator_advance_source_ticks(ticks)) return {};
