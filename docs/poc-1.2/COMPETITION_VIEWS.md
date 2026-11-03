@@ -27,3 +27,13 @@ Synthetic tests exercise52 saved European group/leg boundaries across all three
 Source programmes, exact current fixtures, actual-score display overlays,
 stale/altered fixture rejection, immutable state/seeds and actual captured draw
 order/crest paths. Their authored test scores are not a played-season claim.
+
+Domestic live overlays authenticate the saved stage revision, Source entry,
+complete ordered `next_fixtures()` and the pending leg cursor
+`(rounds.size()-1) * legs + next_leg()-1`. They replace only local display
+values. A half-time 0:0 is valid presentation data and never completes a
+knockout round, chooses a qualifier or draws its successor. Return-leg words
+retain their actual match orientation while the display aligns them with the
+stored first-leg fixture. German and English Super-Cup finals remain separate
+owners even when both use Source entry23 and revision0. Unknown, repeated,
+stale, incomplete or wrongly oriented overlay receipts reject atomically.

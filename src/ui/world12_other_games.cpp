@@ -78,7 +78,7 @@ OtherGamesState world12_european_games_state(const bmh::world12::CareerSnapshot&
     if(page<1||page>3||!enabled(world,page))throw FormatError("other games: European page lacks its actual country scope");
     OtherGamesState state;state.world12_identity=owner;auto& p=state.projection;p.competition=page;p.descriptor_competition=page;p.title=labels[page];p.rounds=1;p.knockout=true;
     for(int slot=0;slot<8;++slot){const bool active=enabled(world,slot);p.selectors.push_back({slot,active?slot:-1,active?labels[slot]:"",active});state.selector_labels[size_t(slot)]=active?labels[slot]:"";}
-    if(!world.european_campaigns){p.fixtures_available=false;state.unavailable_message="Europapokal-Verlauf unbekannt";return state;}
+    if(!world.european_campaigns){if(!overlays.empty())throw FormatError("other games: live European score has no actual campaign owner");p.fixtures_available=false;state.unavailable_message="Europapokal-Verlauf unbekannt";return state;}
     const auto& campaign=(*world.european_campaigns)[size_t(page-1)];
     const auto active=std::find_if(campaign.stages.begin(),campaign.stages.end(),[&](const auto& stage){return stage.rules.entry==campaign.active_entry;});if(active==campaign.stages.end())throw FormatError("other games: European active stage is missing");
     const int selected=selection.stage<0?int(active-campaign.stages.begin()):selection.stage;if(selected<0||size_t(selected)>=campaign.stages.size())throw FormatError("other games: European stage selector is stale");
@@ -117,7 +117,7 @@ OtherGamesState world12_national_games_state(const bmh::world12::CareerSnapshot&
     if(!world.catalogue.scope.international)throw FormatError("other games: national page lacks its actual country scope");
     OtherGamesState state;state.world12_identity=owner;auto& p=state.projection;p.competition=page;p.descriptor_competition=page;p.title=labels[page];p.rounds=1;p.knockout=true;
     for(int slot=0;slot<8;++slot){const bool active=enabled(world,slot);p.selectors.push_back({slot,active?slot:-1,active?labels[slot]:"",active});state.selector_labels[size_t(slot)]=active?labels[slot]:"";}
-    if(!world.national_campaigns){p.fixtures_available=false;state.unavailable_message="Nationaler Verlauf unbekannt";return state;}
+    if(!world.national_campaigns){if(!overlays.empty())throw FormatError("other games: live national score has no actual campaign owner");p.fixtures_available=false;state.unavailable_message="Nationaler Verlauf unbekannt";return state;}
     if(!world.national_campaigns->seasons.contains(snapshot.season))throw FormatError("other games: current national campaign is unknown");
     const auto& campaign=world.national_campaigns->seasons.at(snapshot.season);p.competition=p.descriptor_competition=campaign.competition;p.title=texts[(layout::CupDraw_FormatError_ExecutableField6-layout::TextPointerTable)/4+campaign.competition];
     if(source_entry!=255){const auto found=std::find_if(campaign.stages.begin(),campaign.stages.end(),[&](const auto& stage){return stage.rules.entry==source_entry;});if(found==campaign.stages.end())throw FormatError("other games: national source stage is not owned");selection.stage=int(found-campaign.stages.begin());}
@@ -189,9 +189,20 @@ OtherGamesState world12_indoor_games_state(const bmh::world12::CareerSnapshot& s
     return state;
 }
 OtherGamesState world12_other_games_state(const bmh::world12::CareerSnapshot& snapshot,
-    const World12OtherGamesIdentity& owner,World12OtherSelection selection) {
-    if(int(selection.page)>=1&&int(selection.page)<=3)return world12_european_games_state(snapshot,owner,selection);
+    const World12OtherGamesIdentity& owner,World12OtherSelection selection,const std::vector<World12CompetitionOverlay>& overlays) {
+    if(int(selection.page)>=1&&int(selection.page)<=3)return world12_european_games_state(snapshot,owner,selection,overlays);
     const auto& world=snapshot.world;world.validate();validate_cup_programmes(world,snapshot.cups);validate_owner(world,owner);
+    std::map<const KnockoutStage*,const World12CompetitionOverlay*> current_scores;
+    for(const auto& overlay:overlays){const KnockoutStage* matched=nullptr;
+        for(const auto& stage:snapshot.cups){if(stage.complete()||stage.source_entry!=overlay.source_entry||stage.revision!=overlay.revision)continue;const auto legs=stage.two_legs()?2u:1u;const auto played=(stage.rounds.size()-1)*legs+stage.next_leg()-1;
+            if(played!=overlay.played||stage.next_fixtures()!=overlay.matches)continue;if(matched)throw FormatError("other games: ambiguous actual domestic score owner");matched=&stage;}
+        if(!matched||overlay.scores.size()!=overlay.matches.size()||!current_scores.emplace(matched,&overlay).second)throw FormatError("other games: stale, repeated or mismatched actual domestic score owner");
+        for(auto score:overlay.scores)if(score==0xcccc||(score>>10)>2||(matched->two_legs()&&matched->next_leg()==1&&(score>>10)))throw FormatError("other games: invalid actual domestic live score");
+    }
+    const auto displayed_score=[&](const KnockoutStage& stage,size_t round,size_t match,bool second)->std::optional<uint16_t>{
+        if(const auto found=current_scores.find(&stage);found!=current_scores.end()&&round+1==stage.rounds.size()&&second==(stage.next_leg()==2))return found->second->scores.at(match);
+        const auto& saved=second?stage.rounds.at(round).second_leg:stage.rounds.at(round).first_leg;if(saved.empty())return {};return saved.at(match);
+    };
     const int page=int(selection.page);
     if(page<0||page>=8||!enabled(world,page))throw FormatError("other games: disabled typed competition page");
     OtherGamesState state;state.world12_identity=owner;auto& p=state.projection;
@@ -217,7 +228,7 @@ OtherGamesState world12_other_games_state(const bmh::world12::CareerSnapshot& sn
             else {
                 const auto& round=available.back()->rounds.front();
                 if(round.fixtures.size()!=1)throw FormatError("other games: a supercup must contain one independent final");
-                add_fixture(state,world,round.fixtures[0],round.first_leg.empty()?std::nullopt:std::optional(round.first_leg[0]),{},0,baseline);section.row_count=1;
+                add_fixture(state,world,round.fixtures[0],displayed_score(*available.back(),available.back()->rounds.size()-1,0,false),{},0,baseline);section.row_count=1;
             }
             state.sections.push_back(std::move(section));
         }
@@ -248,8 +259,8 @@ OtherGamesState world12_other_games_state(const bmh::world12::CareerSnapshot& sn
     const auto& round=stage.rounds[size_t(p.round)];
     const size_t first=p.display_mode==OtherGamesDisplayMode::detail?size_t(selection.participant_offset/2):0;
     const size_t last=std::min(round.fixtures.size(),p.display_mode==OtherGamesDisplayMode::detail?first+8:round.fixtures.size());
-    for(size_t m=first;m<last;++m)add_fixture(state,world,round.fixtures[m],round.first_leg.empty()?std::nullopt:std::optional(round.first_leg[m]),
-        round.second_leg.empty()?std::nullopt:std::optional(round.second_leg[m]),int(m));
+    for(size_t m=first;m<last;++m)add_fixture(state,world,round.fixtures[m],displayed_score(stage,size_t(p.round),m,false),
+        displayed_score(stage,size_t(p.round),m,true),int(m));
     return state;
 }
 World12OtherSelection navigate_world12_other_games(const bmh::world12::CareerSnapshot& snapshot,const World12OtherGamesIdentity& owner,
