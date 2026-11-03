@@ -111,6 +111,9 @@ InitialManagerServicesOutcome initialize_first_season_manager_services(bmh::worl
         capture_transfer_history(candidate,projected);
     }
     for(auto& [id,club]:candidate.world.clubs)if(club.league.valid())club.fairplay_points=0;
+    if(candidate.world.annual_title_archive&&(*candidate.world.annual_title_archive!=AnnualTitleArchive{}))
+        throw std::invalid_argument("world12: fresh manager services cannot overwrite title history");
+    candidate.world.annual_title_archive.emplace();
     candidate.world.annual_awards_completed=0;
     candidate.results=SeasonResults::empty(candidate.world.catalogue);candidate.world.initial_competitions->manager_services_complete=true;candidate.watcom_seed=random.seed();candidate.validate();
     if(state!=before||owner.scope!=expected.scope||owner.revision!=expected.revision)throw std::invalid_argument("world12: manager service owner changed during initialization");

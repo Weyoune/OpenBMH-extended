@@ -20,7 +20,7 @@ void omit_later_records(cli::Json& root) {
     root.object()->erase("annual_awards_completed");root.object()->erase("amateur_slots");root.object()->erase("european_campaigns");
     for(auto& manager:std::get<cli::Json::Array>(root.object()->at("managers").value)) {
         auto* career=manager.object()->at("career").object();
-        for(const char* name:{"annual_records","cup_titles","strengths_display_word","pairings_display_byte","table_display_word","other_games_view"})career->erase(name);
+        for(const char* name:{"first_recorded_season","annual_records","cup_titles","strengths_display_word","pairings_display_byte","table_display_word","other_games_view"})career->erase(name);
         const auto services=career->find("season_services");if(services!=career->end()&&services->second.object())services->second.object()->erase("promotion_tail_flags");
     }
 }

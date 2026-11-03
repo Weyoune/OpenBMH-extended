@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
+#include "game/world12/annual_archive_types.hpp"
 #include "game/world12/european_campaign.hpp"
 #include "game/world12/indoor.hpp"
 #include "game/world12/national_campaign.hpp"
@@ -136,6 +137,7 @@ struct ManagerAnnualRecords {
     bool operator==(const ManagerAnnualRecords&)const=default;
 };
 struct ManagerCareerState {
+    std::optional<uint16_t> first_recorded_season; // Source history-window origin2aa; unknown before schema40.
     std::optional<ManagerAnnualRecords> annual_records; // Source annual accounts/title words; unknown before schema38.
     std::optional<std::array<uint16_t,2>> cup_titles; // Native national/European title words; unknown before schema35.
     std::optional<uint16_t> strengths_display_word; // Original per-seat UI word, unknown before schema34.
@@ -270,6 +272,7 @@ struct TransferMarket {
 };
 using GlobalPlayerStatistics = std::map<std::pair<ClubId,PlayerId>,PlayerClubStatistics>;
 struct World {
+    std::optional<AnnualTitleArchive> annual_title_archive; // Known retained IDs and explicit unknown prior history; schema40.
     std::optional<uint32_t> annual_awards_completed; // Exactly-once season count; fresh0, unknown before schema38.
     std::optional<std::array<std::vector<ClubId>,2>> amateur_slots; // Source physical DE/EN newcomer order; unknown before schema36.
     std::vector<NationalSquad> national_squads;

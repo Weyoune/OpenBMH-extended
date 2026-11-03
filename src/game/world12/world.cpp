@@ -18,6 +18,7 @@ void validate_manager_tactics(const ManagerTactics& tactics) {
     }
 }
 void World::validate(bool complete)const {
+    validate_annual_title_archive(*this);
     for (const auto& [identity, counters] : player_statistics)
         if (!clubs.contains(identity.first) || !players.contains(identity.second))
             throw std::invalid_argument("world12: unknown global statistics identity");

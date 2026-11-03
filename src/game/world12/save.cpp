@@ -9,6 +9,13 @@
 #include <set>
 namespace bmh::world12 {
 void CareerSnapshot::validate()const{
+    if(world.annual_title_archive) {
+        const auto& archive=*world.annual_title_archive;
+        if(uint64_t(archive.first_retained_season)+archive.seasons.size()!=season)
+            throw FormatError("world12: annual title archive is not bound to published seasons");
+        if(!archive.unresolved_source_labels.empty()&&archive.unresolved_source_labels.rbegin()->first>season)
+            throw FormatError("world12: unresolved Source title labels are in the future");
+    }
     if(desktop){
         if(!world.settings||desktop->managers.size()!=world.managers.size()||desktop->managers.empty()||desktop->managers.size()>4||desktop->autosave_month>12||desktop->autosave_months>255)
             throw FormatError("world12: invalid saved desktop runtime");

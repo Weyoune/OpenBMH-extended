@@ -92,7 +92,7 @@ void annual_backing() {
     install_manager_career_state(source,3,captured,{});check(manager_career_state_from_legacy(source,3,{}).annual_records==captured.annual_records&&source.manager_records[at+0x327]==0x71&&source.manager_records[at+0x334]==0x72,"annual backing install changed neighbours or lost values");
     auto current=closing();current.world.managers[0].career=captured;const auto bytes=encode_world(current.world);check(decode_world(bytes)==current.world,"schema38 lost annual account/award completion facts");
     auto input=cli::parse_json(std::string(bytes.begin(),bytes.end()));input.object()->at("version")=cli::Json(37);auto old=cli::dump_json(input);rejects([&]{decode_world(Bytes(old.begin(),old.end()));},"schema37 admitted known38 annual facts");
-    input.object()->erase("annual_awards_completed");auto& managers=std::get<cli::Json::Array>(input.object()->at("managers").value);managers[0].object()->at("career").object()->erase("annual_records");old=cli::dump_json(input);const auto decoded=decode_world(Bytes(old.begin(),old.end()));check(!decoded.annual_awards_completed&&!decoded.managers[0].career->annual_records,"schema37 invented annual records/completion");
+    input.object()->erase("annual_awards_completed");auto& managers=std::get<cli::Json::Array>(input.object()->at("managers").value);managers[0].object()->at("career").object()->erase("annual_records");managers[0].object()->at("career").object()->erase("first_recorded_season");old=cli::dump_json(input);const auto decoded=decode_world(Bytes(old.begin(),old.end()));check(!decoded.annual_awards_completed&&!decoded.managers[0].career->annual_records,"schema37 invented annual records/completion");
 }
 uint64_t draws=0;void observed(int){++draws;}
 }
