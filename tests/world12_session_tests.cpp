@@ -3,6 +3,10 @@
 #include "app/world12_startup.hpp"
 #include "app/world12_tables.hpp"
 #include "app/world12_live_family.hpp"
+#include "app/world12_live_settings.hpp"
+#include "app/world12_live_scope.hpp"
+#include "app/career_session.hpp"
+#include "ui/club_player_detail.hpp"
 #include "app/world12_market.hpp"
 #include "game/world12/market_bids.hpp"
 #include "ui/pending_offer.hpp"
@@ -29,6 +33,7 @@
 #include "game/week.hpp"
 #include "game/month.hpp"
 #include "game/matchday_setup.hpp"
+#include "game/national_identity.hpp"
 #include "fixture_tables.hpp"
 #include <algorithm>
 #include <chrono>
@@ -1407,6 +1412,55 @@ void actual_live_family_gui(const std::filesystem::path& data,const CareerSnapsh
         auto& permitted=*std::find_if(allowed.managers.begin(),allowed.managers.end(),[&](const auto& m){return m.seat==seat;});
         permitted.career->table_display_word=target->career->table_display_word;permitted.career->strengths_display_word=target->career->strengths_display_word;permitted.career->pairings_display_byte=target->career->pairings_display_byte;
         check(after==allowed,"live family retained more than its canonical UI preferences");
+        const auto saved_buttons=engine.buttons;const auto saved_options=[&]{std::array<uint8_t,180> value{};for(uint32_t i=0;i<180;++i)value[i]=p.state.memory.u8(layout::LeaguePresentationOptions+i);return value;}();
+        const auto write_speed=[](const ui::SettingsState& page){return ui::SettingsWriteRequest{page.manager_slot,page.revision,page.cells,0,8,ui::SettingsEdit::increment};};
+        {
+            session_app::LiveSettingsScope aborted(p,engine,resources.german,minute,nonce,ui::SettingsSoundCapabilities{true,true});
+            const auto page=aborted.view();auto stale=write_speed(page);++stale.revision;
+            rejects([&]{aborted.apply(stale);},"live S accepted another window revision");
+            aborted.apply(write_speed(page));aborted.abort();
+            rejects([&]{aborted.view();},"aborted S retained a capability");
+        }
+        for(uint32_t i=0;i<180;++i)check(p.state.memory.u8(layout::LeaguePresentationOptions+i)==saved_options[i],"aborted S retained a cell");
+        check(engine.buttons==saved_buttons,"aborted S changed match display buttons");
+        {
+            session_app::LiveSettingsScope settings_scope(p,engine,resources.german,minute,nonce,ui::SettingsSoundCapabilities{true,true});
+            const auto before=settings_scope.view();auto blocked=write_speed(before);blocked.row=17;blocked.column=4;blocked.operation=ui::SettingsEdit::toggle_binary;
+            rejects([&]{settings_scope.apply(blocked);},"live S enabled unowned secondary-league admission");
+            settings_scope.apply(write_speed(before));rejects([&]{settings_scope.apply(write_speed(before));},"live S replayed a successful edit");
+            const auto page=settings_scope.view();check(page.cells[8]==uint8_t(before.cells[8]+2),"live S did not use Source ninth-column step");
+            ui::SaveLoadRequest file{ui::SaveLoadAction::save,page.manager_slot,page.revision,{},false,ui::SaveLoadFileKind::settings,-1};
+            const auto bytes=settings_scope.file(file);check(bytes.size()==180&&bytes[8]==page.cells[8],"live S exported another settings block");
+            file.action=ui::SaveLoadAction::load;auto invalid=bytes;invalid[17*9+4]^=1;
+            rejects([&]{settings_scope.file(file,invalid);},"live EIN bypassed the calendar admission owner");
+            settings_scope.file(file,bytes);settings_scope.finish();rejects([&]{settings_scope.finish();},"closed S could publish twice");
+            auto published=staged->world;p.commit_match_state(published);if(published.economy)capture_career_economy(published,p);
+            auto expected_settings=allowed;expected_settings.economy->presentation_options=std::array<uint8_t,180>{};
+            std::copy_n(bytes.begin(),180,expected_settings.economy->presentation_options->begin());
+            check(published==expected_settings,"live S changed finance, players or another canonical preference");
+            if(!output.empty()){
+                const auto frame=ui::SettingsScreen(data,page,-1,resources.german).render();const auto colors=load_palette(ui::asset_path(data,"M3PC.COL"));
+                std::ofstream image(output/"live-settings-minute15.ppm",std::ios::binary);image<<"P6\n320 240\n255\n";for(auto pixel:frame.pixels){const auto c=colors.argb[pixel];image.put(char(c>>16));image.put(char(c>>8));image.put(char(c));}++pictures;
+            }
+        }
+        check(p.state.squad_slots==slots&&p.state.tactics==tactics&&engine.game.seed()==gs&&engine.rand.seed()==ws&&engine.game.calls()==gc&&engine.rand.calls()==wc,
+              "live S consumed match randomness or altered a lineup");
+        std::optional<app::ClubModalServices> retired_card;
+        {
+            const auto local=p.state.memory.u8(layout::ActiveManager);const auto team=p.state.manager_teams.at(local);
+            session_app::LiveScope scope(p,engine,resources.german,minute,team,2,nonce);auto services=scope.player_services(staged->world);
+            const auto range=squad_range(p.state,team);const auto raw=p.state.squad_slots.at(range.first);
+            ClubPlayerDetailSelection selection{team,int(raw&0xfff),0,0,-1};
+            const auto redraw=services.redraw_player(selection);auto page=ui::club_player_detail_from_game(services.state(),redraw,resources.german);services.decorate_player_projection(page);
+            check(!page.clubs[0]->badge_atlas.empty()&&!page.redraw.context.national_action_available&&page.redraw.context.active_offer==-1,"live card lost actual crest or exposed a transaction");
+            auto extras=scope.pitch();const auto& crest=staged->world.crests.at(staged->world.clubs.at(p.global_club(uint32_t(team))).crest);extras.badge_atlas=crest.path;extras.badge=crest.cell;
+            const auto g=engine.game;const auto w=engine.rand;ui::ClubPlayerDetailScreen card(data,page,ui::PitchScreen(data,scope.lineup(),extras,resources.german).render(),resources.german);
+            const auto frame=card.render();check(card.render().pixels==frame.pixels&&engine.game.seed()==g.seed()&&engine.rand.seed()==w.seed()&&engine.game.calls()==g.calls()&&engine.rand.calls()==w.calls(),"player-card rendering consumed Source randomness");
+            if(!output.empty()){const auto colors=load_palette(ui::asset_path(data,"M3PC.COL"));std::ofstream image(output/"live-player-card-minute15.ppm",std::ios::binary);image<<"P6\n320 240\n255\n";for(auto pixel:frame.pixels){const auto c=colors.argb[pixel];image.put(char(c>>16));image.put(char(c>>8));image.put(char(c));}++pictures;}
+            retired_card=services;scope.abort();
+        }
+        rejects([&]{retired_card->state();},"retired live player card retained mutable match access");
+        check(p.state.squad_slots==slots&&p.state.tactics==tactics&&engine.game.seed()==gs&&engine.rand.seed()==ws&&engine.game.calls()==gc&&engine.rand.calls()==wc,"aborted card scope retained random/lineup changes");
     };
     const auto settings=*fixture.world.settings;
     const auto receipt=simulate_and_settle_human_league_round(played,resources.reference,league,round,inputs,

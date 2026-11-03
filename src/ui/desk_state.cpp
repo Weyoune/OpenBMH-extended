@@ -5,6 +5,7 @@
 #include "formats/executable_layout.hpp"
 #include "ui/desk_state.hpp"
 #include "game/calendar.hpp"
+#include "game/national_identity.hpp"
 
 #include <algorithm>
 #include <set>
@@ -82,11 +83,11 @@ void project_drawer_rows(DeskState& d, const LeImage& exe, const Bytes& managers
     auto rank_curve = [&](int team, DeskRankCurve& curve) {
         curve.runtime_team = team;
         curve.team_name = pool_name(club_names, club_ids, team);
-        if (team == kNoTeam) {
+        if (game?is_national_team(*game,team):team==kNoTeam) {
             // TablePosition returns rank 2 for this special national row;
             // QuoteNationalFriendlyMatch uses its native no-team squad (no random rating).
             curve.current_position = 2;
-            if (game) curve.strength = team_average(*game, kNoTeam, 0x1ff).value;
+            if (game && has_national_squad(*game,team)) curve.strength = team_average(*game, team, 0x1ff).value;
             return;
         }
         const int league = executable_league(exe, team);
@@ -141,14 +142,17 @@ struct Tables {
 };
 
 DeskState project(const StaticMemory& memory, const Tables& t, const LeImage& exe,
-                  int level, uint32_t date, int season_day, int season, uint64_t revision,const SetupOptions* typed_options=nullptr) {
+                  int level, uint32_t date, int season_day, int season, uint64_t revision,const SetupOptions* typed_options=nullptr,const GameState* game=nullptr) {
     DeskState d;
     d.revision = revision;
     d.options.duration = memory.u8(::bmh::layout::CareerDuration); d.options.mode = memory.u8(::bmh::layout::GameMode);
     d.options.managers = memory.u8(::bmh::layout::ManagerCount); d.options.difficulty = level;
     const auto competitions = memory.u32(::bmh::layout::CompetitionSelection);
     d.options.league = (competitions & 1) != 0; d.options.world = (competitions & 2) != 0;
-    if(typed_options){if(!typed_options->country_selection||typed_options->mode!=d.options.mode||typed_options->duration!=d.options.duration||typed_options->difficulty!=level||typed_options->managers!=d.options.managers||typed_options->league!=d.options.league||typed_options->world!=d.options.world)throw FormatError("desk: typed setup/reference mismatch");d.options=*typed_options;}
+    d.projected_national_team=game&&!game->projected_national_teams.empty();
+    if(d.projected_national_team)for(const int team:t.teams)
+        if(!is_national_team(*game,team)||!has_national_squad(*game,team))throw FormatError("desk: projected coach has no actual national squad");
+    if(typed_options){if(!typed_options->country_selection||typed_options->mode!=d.options.mode||typed_options->duration!=d.options.duration||typed_options->difficulty!=level||(!d.projected_national_team&&typed_options->managers!=d.options.managers)||typed_options->league!=d.options.league||typed_options->world!=d.options.world)throw FormatError("desk: typed setup/reference mismatch");const auto active=d.options.managers;d.options=*typed_options;if(d.projected_national_team)d.options.managers=active;}
     if (d.options.managers < 1 || d.options.managers > 4 || level < 0 || level > 9 ||
         (d.options.duration < 1&&!d.options.country_selection) || d.options.duration > 5 || d.options.mode < 1 || d.options.mode > 3 ||
         (!d.options.league && !d.options.world)) throw FormatError("desk: invalid saved setup");
@@ -199,9 +203,9 @@ DeskState project(const StaticMemory& memory, const Tables& t, const LeImage& ex
     if (t.managers.size() < base + 0xb0c || t.options.size() < size_t(d.manager_slot + 1) * 5)
         throw FormatError("desk: truncated manager records/options");
     d.runtime_club = t.teams.at(d.manager_slot);
-    d.national_team = d.runtime_club == kNoTeam;
+    d.national_team = d.projected_national_team || d.runtime_club == kNoTeam;
     d.national_coach_takeover = memory.has(::bmh::layout::CoachActive) && memory.u8(::bmh::layout::CoachActive) != 0;
-    if (d.national_team && d.national_coach_takeover) {
+    if (d.national_team && d.national_coach_takeover && !d.projected_national_team) {
         const int saved_manager_count = memory.has(::bmh::layout::OriginalManagerCount) ? memory.u8(::bmh::layout::OriginalManagerCount) : 0;
         if (saved_manager_count < 1 || saved_manager_count > 4)
             throw FormatError("desk: invalid saved manager count during national takeover");
@@ -236,7 +240,7 @@ DeskState project(const StaticMemory& memory, const Tables& t, const LeImage& ex
         d.managers.at(0).club_identity_key = coach->club_identity_key;
     }
     if (d.runtime_club < 0 || d.runtime_club >= int(t.name_offsets.size())) throw FormatError("desk: invalid runtime club");
-    if (d.national_team && ((!d.options.world && !d.national_coach_takeover) ||
+    if (d.national_team && !d.projected_national_team && ((!d.options.world && !d.national_coach_takeover) ||
                             d.manager_slot != 0 || d.options.managers != 1))
         throw FormatError("desk: national team requires one manager and world-mode or source takeover evidence");
     d.manager_name = d.managers[size_t(d.manager_slot)].name;
@@ -310,8 +314,9 @@ DeskState project(const StaticMemory& memory, const Tables& t, const LeImage& ex
     d.warnings[3] = remaining < 4;
     const int max24 = exe.u16(::bmh::layout::TeamsWithSquads), league_teams = exe.u16(::bmh::layout::CareerSession_DispatchLineup_RuntimeField);
     if (!d.national_team && d.runtime_club >= league_teams) throw FormatError("desk: cup-only squad projection not supported");
-    const size_t first = d.national_team ? runtime_dimensions.national_slots_first : size_t(d.runtime_club < max24 ? d.runtime_club * 24 : d.runtime_club * 16 + max24 * 8);
-    const size_t count = d.national_team ? 24 : (d.runtime_club < max24 ? 24 : 16);
+    const auto actual=d.projected_national_team?squad_range(*game,d.runtime_club):SquadRange{};
+    const size_t first = d.projected_national_team?actual.first:d.national_team ? runtime_dimensions.national_slots_first : size_t(d.runtime_club < max24 ? d.runtime_club * 24 : d.runtime_club * 16 + max24 * 8);
+    const size_t count = d.projected_national_team?actual.count:d.national_team ? 24 : (d.runtime_club < max24 ? 24 : 16);
     if (t.squads.size() < first + count || t.tactics.size() < size_t(d.manager_slot) * 0x840 + count * 0x58)
         throw FormatError("desk: truncated squad/tactics");
     int lineup = 0, reserve = 0, condition = 0, technique = 0, form = 0, morale = 0;
@@ -446,14 +451,17 @@ void validate_desk_state(const DeskState& d) {
         if(!d.canonical_manager_slot||!seats.contains(uint8_t(*d.canonical_manager_slot)))throw FormatError("desk: actor absent from canonical career roster");
     }
     if(!d.world12_event_known&&!d.world12_event_groups.empty())throw FormatError("desk: unknown event has prepared group metadata");
-    const bool national = d.runtime_club == kNoTeam;
+    const bool national = d.projected_national_team || d.runtime_club == kNoTeam;
     if (d.table_position && (*d.table_position < 0 || *d.table_position > 31))
         throw FormatError("desk: invalid Source table position");
     if (d.national_team != national ||
-        (national && (d.manager_slot != 0 || d.options.managers != 1 ||
+        (national && !d.projected_national_team && (d.manager_slot != 0 || d.options.managers != 1 ||
                       (!d.options.world && !d.national_coach_takeover))))
         throw FormatError("desk: inconsistent national-team manager context");
-    if (national && d.national_coach_takeover) {
+    if(d.projected_national_team) {
+        if(!d.national_team||!d.national_return_roster.empty()||d.options.managers>2)
+            throw FormatError("desk: invalid projected national role");
+    } else if (national && d.national_coach_takeover) {
         if (d.national_return_roster.size() < 1 || d.national_return_roster.size() > 4)
             throw FormatError("desk: missing national return roster");
         std::set<int> return_keys;
@@ -548,11 +556,11 @@ DeskState desk_from_game(const GameState& g, const LeImage& exe, uint64_t revisi
                          const DeskMatchCallargs* source_callargs,const SetupOptions* typed_options) {
     auto d = project(g.memory, {g.manager_records, g.tactics, g.manager_options, g.stocks, g.club_heap_78, g.club_names,
                      g.club_ids, g.squad_slots, g.players, g.team_morale, g.manager_teams, g.league_rounds},
-                     exe, g.level, g.date, g.season_day(), g.season, revision,typed_options);
+                     exe, g.level, g.date, g.season_day(), g.season, revision,typed_options,&g);
     project_automation_formation(d, g.formations, g.indoor);
     // DeskDate only auto-opens for an ordinary club manager; the national
     // runtime (0x165) suppresses this consumer while manual mailbox access remains valid.
-    if (d.runtime_club != kNoTeam && d.manager_slot >= 0 && d.manager_slot < 32 && g.memory.has(::bmh::layout::MailboxRecipientMask))
+    if (!d.national_team && d.manager_slot >= 0 && d.manager_slot < 32 && g.memory.has(::bmh::layout::MailboxRecipientMask))
         d.mailbox_notification_pending = (g.memory.u32(::bmh::layout::MailboxRecipientMask) & (uint32_t(1) << d.manager_slot)) != 0;
     project_table_position(d, g);
     if (!current_groups && g.date == 0 && g.season == 0 && g.season_day() == 0 && g.texts) {
@@ -727,6 +735,7 @@ std::string desk_json(const DeskState& d) {
     out<<']'
         << ",\"manager_name\":" << json_quote(original_to_utf8(d.manager_name)) << ",\"runtime_club\":" << d.runtime_club
         << ",\"national_team\":" << (d.national_team ? "true" : "false")
+        << ",\"projected_national_team\":" << (d.projected_national_team ? "true" : "false")
         << ",\"national_coach_takeover\":" << (d.national_coach_takeover ? "true" : "false")
         << ",\"manager_teams\":[";
     for (size_t i = 0; i < d.manager_teams.size(); ++i) {

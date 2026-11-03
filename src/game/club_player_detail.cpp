@@ -8,6 +8,7 @@
 #include "game/matchday.hpp"
 #include "game/month.hpp"
 #include "game/national.hpp"
+#include "game/national_identity.hpp"
 #include "game/lineup.hpp"
 #include "game/weekly.hpp"
 
@@ -25,7 +26,7 @@ int source_manager(const GameState& g, int club) {
     const size_t count = g.memory.has(::bmh::layout::ManagerCount) ? g.memory.u8(::bmh::layout::ManagerCount) : g.manager_teams.size();
     if (count > 4 || count > g.manager_teams.size()) throw std::invalid_argument("player detail: invalid manager count");
     for (size_t m = 0; m < count; ++m) if (g.manager_teams[m] == club) return int(m);
-    if (count && g.manager_teams[0] == kNoTeam && record_word(g, 4, 0x290) == club) return 4;
+    if (g.projected_national_teams.empty() && count && g.manager_teams[0] == kNoTeam && record_word(g, 4, 0x290) == club) return 4;
     return -1;
 }
 
@@ -72,9 +73,9 @@ ClubPlayerDetailContext club_player_detail_context(const GameState& g, const Clu
         out.primary_club = -1;
     } else {
         if (s.rendered_row < 0 || s.rendered_row >= 24 || s.runtime_team < 0 ||
-            (s.runtime_team >= runtime_dimensions.league_teams && s.runtime_team != kNoTeam))
+            (s.runtime_team >= runtime_dimensions.league_teams && !has_national_squad(g,s.runtime_team)))
             throw std::invalid_argument("player detail: invalid runtime club");
-        const auto range = squad_range(s.runtime_team);
+        const auto range = squad_range(g,s.runtime_team);
         if (range.first + range.count > g.squad_slots.size()) throw std::invalid_argument("player detail: truncated squad");
         out.source_manager = source_manager(g, s.runtime_team);
         out.primary_club = s.runtime_team;
@@ -83,8 +84,8 @@ ClubPlayerDetailContext club_player_detail_context(const GameState& g, const Clu
         // The validated pool identity is already loaded. National resolution
         // below may select a real squad copy; offers never imply a board.
     } else if (s.human_loan_index >= 0) {
-        const auto range = squad_range(s.runtime_team);
-        if (s.human_loan_index >= 12 || s.physical_row != -1 || s.runtime_team == kNoTeam || out.source_manager < 0)
+        const auto range = squad_range(g,s.runtime_team);
+        if (s.human_loan_index >= 12 || s.physical_row != -1 || is_national_team(g,s.runtime_team) || out.source_manager < 0)
             throw std::invalid_argument("player detail: invalid human loan row");
         const uint32_t loan = uint32_t(s.human_loan_index);
         const uint32_t player_at = ::bmh::layout::Career_CareerManagersEnd_RuntimeField + loan * 2, owner_at = ::bmh::layout::ClubInfo_FormatError_RuntimeField2 + loan, board_at = ::bmh::layout::ClubInfo_FormatError_RuntimeField + loan * kBoardRow;
@@ -97,7 +98,7 @@ ClubPlayerDetailContext club_player_detail_context(const GameState& g, const Clu
         out.board.emplace();
         for (size_t i = 0; i < kBoardRow; ++i) (*out.board)[i] = g.memory.u8(board_at + uint32_t(i));
     } else {
-        const auto range = squad_range(s.runtime_team);
+        const auto range = squad_range(g,s.runtime_team);
         if (s.human_loan_index != -1 || s.physical_row < 0 || size_t(s.physical_row) >= range.count)
             throw std::invalid_argument("player detail: invalid physical row");
         out.source_slot = int(range.first) + s.physical_row;
@@ -105,7 +106,7 @@ ClubPlayerDetailContext club_player_detail_context(const GameState& g, const Clu
         if ((out.displayed_slot & 0x0fff) != s.player_id) throw std::invalid_argument("player detail: stale physical identity");
     }
     if (!out.human_loan) {
-        if (g.manager_teams[size_t(out.active_manager)] == kNoTeam) {
+        if (g.projected_national_teams.empty() && g.manager_teams[size_t(out.active_manager)] == kNoTeam) {
             const auto national = squad_range(kNoTeam);
             if (national.first + national.count > g.squad_slots.size()) throw std::invalid_argument("player detail: truncated national squad");
             bool selected = false;
@@ -128,7 +129,7 @@ ClubPlayerDetailContext club_player_detail_context(const GameState& g, const Clu
             out.source_manager = owner == 0xff ? -1 : owner;
         }
         if (out.source_manager >= 0) {
-            const auto owner_range = squad_range(out.primary_club);
+            const auto owner_range = squad_range(g,out.primary_club);
             const int row = out.source_slot - int(owner_range.first);
             if (row < 0 || size_t(row) >= owner_range.count) throw std::invalid_argument("player detail: board row outside owner squad");
             out.board = board_copy(g, out.source_manager, row);

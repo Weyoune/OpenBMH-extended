@@ -77,6 +77,9 @@ struct DeskState {
     // In a multiplayer career the visible national desk has only the coach in slot 0.
     std::vector<DeskManagerIdentity> national_return_roster;
     bool national_team = false;
+    // Explicit runtime role from a typed national projection. Unlike the
+    // Original temporary slot, this can contain two independently owned coaches.
+    bool projected_national_team = false;
     // SwapManagerSlots2 temporary coach assignment (CoachActive). This can make
     // a league-only, single-manager career temporarily project team 0x165.
     bool national_coach_takeover = false;

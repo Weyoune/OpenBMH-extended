@@ -1,3 +1,4 @@
+#include "game/national_identity.hpp"
 // SPDX-License-Identifier: GPL-3.0-only
 #include "formats/executable_layout.hpp"
 #include "ui/pitch.hpp"
@@ -56,12 +57,13 @@ const char* kind_name(PitchRequestKind k){switch(k){case PitchRequestKind::none:
     case PitchRequestKind::select_pitch_page:return "select_pitch_page";
     case PitchRequestKind::set_player_marking:return "set_player_marking";}return "none";}
 PitchExtras extras(const StaticMemory& memory,const Bytes& managers,const Bytes& formations,
-                  const Bytes& badges,const std::vector<int>& teams,const LeImage& exe,uint64_t revision) {
+                  const Bytes& badges,const std::vector<int>& teams,const LeImage& exe,uint64_t revision,const GameState* game=nullptr) {
     PitchExtras e;e.manager_slot=memory.u8(::bmh::layout::ActiveManager);e.revision=revision;
     const int count=memory.u8(::bmh::layout::ManagerCount);
     if(count<1||count>4||e.manager_slot>=count||teams.size()!=size_t(count))throw FormatError("pitch: invalid active manager");
     e.runtime_club=teams.at(e.manager_slot);
-    if(e.runtime_club<0||e.runtime_club>=exe.u16(::bmh::layout::CareerSession_DispatchLineup_RuntimeField))throw FormatError("pitch: unsupported club");
+    const bool national=game&&!game->projected_national_teams.empty()&&is_national_team(*game,e.runtime_club)&&has_national_squad(*game,e.runtime_club)&&game->manager_of(e.runtime_club)==e.manager_slot;
+    if(e.runtime_club<0||(e.runtime_club>=exe.u16(::bmh::layout::CareerSession_DispatchLineup_RuntimeField)&&!national))throw FormatError("pitch: unsupported club");
     const size_t m=size_t(e.manager_slot)*0xb0c,f=size_t(e.manager_slot)*0x160;
     if(managers.size()<m+0xb0c||formations.size()<f+0x160||badges.size()<size_t(e.runtime_club+1)*2)
         throw FormatError("pitch: truncated manager/formations/badges");
@@ -87,14 +89,17 @@ PitchExtras pitch_extras_from_save(const SaveState& save,const LeImage& exe,uint
     e.source="original_save_read_only";return e;
 }
 PitchExtras pitch_extras_from_game(const GameState& game,const LeImage& exe,uint64_t revision,int opponent_team){
-    auto e=extras(game.memory,game.manager_records,game.formations,game.club_heap_78,game.manager_teams,exe,revision);
+    auto e=extras(game.memory,game.manager_records,game.formations,game.club_heap_78,game.manager_teams,exe,revision,&game);
     e.source="engine_projection";e.indoor=game.indoor;
     // The independent indoor template set uses the same per-manager stride.
     if(game.indoor){const size_t at=size_t(e.manager_slot)*0x160+0xb0;
         std::copy_n(game.formations.begin()+at,8*22,e.formations.begin());
         e.formation_mask=game.manager_records.at(size_t(e.manager_slot)*0xb0c+0x219);}
     if(opponent_team>=0){
-        const auto range=squad_range(opponent_team);
+        const auto range=squad_range(game,opponent_team);
+        if(!game.projected_national_teams.empty()&&is_national_team(game,opponent_team)&&!has_national_squad(game,opponent_team)){
+            e.opponent_team=opponent_team;e.opponent_name=game.club_name(opponent_team);return e;
+        }
         if(!range.count||range.first+range.count>game.squad_slots.size())
             throw FormatError("pitch: unsupported live opponent squad");
         e.opponent_team=opponent_team;
@@ -122,7 +127,7 @@ PitchExtras pitch_extras_from_game(const GameState& game,const LeImage& exe,uint
                 const size_t assignment=own_base+size_t(own)*0x58+0x44;
                 if(assignment+1>=game.tactics.size())throw FormatError("pitch: truncated own marking rows");
                 const uint16_t marked=uint16_t(game.tactics[assignment]|uint16_t(game.tactics[assignment+1])<<8);
-                if(marked==id){const int own_id=game.squad_slots.at(squad_range(e.runtime_club).first+size_t(own))&0x0fff;
+                if(marked==id){const int own_id=game.squad_slots.at(squad_range(game,e.runtime_club).first+size_t(own))&0x0fff;
                     if(own_id!=0x0fff)opponent.current_marker_player_id=own_id;break;}
             }
             e.opponent_players.push_back(std::move(opponent));

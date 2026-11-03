@@ -19,6 +19,7 @@ LeagueId live_group_league(const World& world,const AiMatchProjection& projectio
 }
 CareerSnapshot live_family_snapshot(const CareerSnapshot& staged,const AiMatchProjection& projection,const MatchEngine& engine) {
     staged.validate();
+    if(!projection.state.projected_national_teams.empty())throw FormatError("world12: national matches require their independent competition view");
     if(&engine.state!=&projection.state)throw FormatError("world12: live overview has another match workspace");
     auto display=staged;
     projection.commit_match_state(display.world);

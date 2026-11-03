@@ -34,6 +34,8 @@
 #include "app/world12_startup.hpp"
 #include "app/world12_live_scope.hpp"
 #include "app/world12_live_family.hpp"
+#include "app/world12_live_settings.hpp"
+#include "app/world12_save_load.hpp"
 #include "game/matchday_setup.hpp"
 #include "app/world12_clock_presenters.hpp"
 #include "app/quit_confirmation.hpp"
@@ -68,6 +70,7 @@
 #include "ui/outgoing_transfer.hpp"
 #include "ui/pending_offer.hpp"
 #include "ui/season_entrants.hpp"
+#include "ui/world12_start.hpp"
 #include "ui/season_promotion.hpp"
 #include "ui/cup_draw.hpp"
 #include "ui/club_info.hpp"
@@ -1277,9 +1280,11 @@ int main(int argc, char** argv) {
                 std::string error;
                 auto redraw = services.redraw_player(selection);
                 ++rebuild_count;
-                return ui::club_player_detail_from_game(services.state(), std::move(redraw), season_exe);
+                auto page=ui::club_player_detail_from_game(services.state(), std::move(redraw), season_exe);
+                if(services.decorate_player_projection)services.decorate_player_projection(page);
+                return page;
             };
-            ui::ClubPlayerDetailScreen card(data, rebuild(), parent_image);
+            ui::ClubPlayerDetailScreen card(data, rebuild(), parent_image,season_exe);
             const auto show = [&] {
                 const auto title = "OpenBMH - cup_player_detail_" + std::to_string(selection.runtime_team) +
                     "_" + std::to_string(selection.player_id) + (card.in_statistics() ? "_player_statistics_" : "_card_") +
@@ -1632,20 +1637,22 @@ int main(int argc, char** argv) {
         // skipped reveal still presents every overview; a normal reveal ACK or
         // the right press leaving an overview does not skip subsequent groups.
         bool group_reveal_skipped = false;
-        SeasonCupDrawHook cup_draw_presenter = [&](const GameState& state, const SeasonCupDrawEvent& event) {
+        const auto present_cup_projection = [&](const GameState& state, ui::CupDrawProjection view,
+                const std::function<void(uint16_t,const Image&)>& information={},
+                const std::function<ui::CupDrawProjection()>& refresh={}) {
+            const auto phase=view.phase;const bool group_stage=view.group_stage;const int group_index=view.group_index;
             if (!running) return;
-            if (event.phase == SeasonCupDrawPhase::draw) {
-                if (!event.group_stage || event.group_index == 0)
+            if (phase == SeasonCupDrawPhase::draw) {
+                if (!group_stage || group_index == 0)
                     group_reveal_skipped = false;
-                if (event.group_stage && group_reveal_skipped) {
+                if (group_stage && group_reveal_skipped) {
                     // SDLFlushEvents still runs before the native overview.
                     SDL_FlushEvents(SDL_MOUSEMOTION, SDL_MOUSEBUTTONUP);
                     return;
                 }
             }
-            auto view = ui::cup_draw_from_game(state, event, season_exe, season_texts);
             if (!view.source_eligible) return;
-            ui::CupDrawScreen screen(data, std::move(view));
+            ui::CupDrawScreen screen(data, std::move(view),season_exe);
             bool first_draw_frame = true;
             const auto show_draw = [&] {
                 const auto title = "OpenBMH - cup_draw_" + std::to_string(screen.revealed_count());
@@ -1656,7 +1663,7 @@ int main(int argc, char** argv) {
                     SDL_FlushEvents(SDL_MOUSEMOTION, SDL_MOUSEBUTTONUP);
                 first_draw_frame = false;
             };
-            if (event.phase == SeasonCupDrawPhase::draw) {
+            if (phase == SeasonCupDrawPhase::draw) {
                 // Source ignores the first OriginalMouseSound poll's gameplay result, then
                 // presents the starting scene before its ten option-delay polls.
                 SDL_Event initial;
@@ -1694,7 +1701,7 @@ int main(int argc, char** argv) {
                     present_season(screen.render(), "OpenBMH - cup_draw_ack");
                     wait_season_ack();
                 }
-                if (event.group_stage && screen.reveal_aborted())
+                if (group_stage && screen.reveal_aborted())
                     group_reveal_skipped = true;
                 SDL_FlushEvents(SDL_MOUSEMOTION, SDL_MOUSEBUTTONUP); // SDLFlushEvents before native sort
                 return;
@@ -1710,14 +1717,9 @@ int main(int argc, char** argv) {
                     if (input.button.button == SDL_BUTTON_LEFT) {
                         const auto club = screen.hit_test_team(input.button.x, input.button.y);
                         if (club) {
-                            auto services=session->live_club_modal_services(revision);
-                            (void)present_club_information(services,*club);
-                            if (!running) return;
-                            // Native category/squad edits belong to the clicked
-                            // Source modal. Rebuild the overview from the current
-                            // state while retaining its owned sorted round field.
-                            auto current = ui::cup_draw_from_game(session->state(), event, season_exe, season_texts);
-                            screen = ui::CupDrawScreen(data, std::move(current));
+                            if(information)information(*club,screen.render());
+                            if(!running)return;
+                            if(refresh)screen=ui::CupDrawScreen(data,refresh(),season_exe);
                             present_season(screen.render(), "OpenBMH - cup_overview");
                             SDL_FlushEvents(SDL_MOUSEMOTION, SDL_MOUSEBUTTONUP);
                         }
@@ -1725,6 +1727,11 @@ int main(int argc, char** argv) {
                 }
                 SDL_Delay(10);
             }
+        };
+        SeasonCupDrawHook cup_draw_presenter = [&](const GameState& state,const SeasonCupDrawEvent& event){
+            present_cup_projection(state,ui::cup_draw_from_game(state,event,season_exe,season_texts),
+                [&](uint16_t club,const Image&){auto services=session->live_club_modal_services(revision);(void)present_club_information(services,club);},
+                [&]{return ui::cup_draw_from_game(session->state(),event,season_exe,season_texts);});
         };
         auto show_highscore = [&](const GameState& state, bool display) {
             if (!running) return;
@@ -2414,6 +2421,91 @@ int main(int argc, char** argv) {
             if(!running)throw FormatError("world12: live overview interrupted");
         };
 
+        const auto present_world12_live_settings = [&](bmh::world12::AiMatchProjection& projection,
+                MatchEngine& engine,int minute) {
+            app::world12::LiveSettingsScope scope(projection,engine,season_exe,minute,world_live_nonce,
+                ui::SettingsSoundCapabilities{playback.original_ready()&&playback.available(),playback.original_ready()&&playback.available()});
+            ui::SettingsScreen screen(data,scope.view(),-1,season_exe);
+            std::unique_ptr<ui::SettingsReadmeScreen> readme;
+            app::original_audio_command(playback,1);
+            const auto draw=[&]{present_season(readme?readme->render():screen.render(),readme?"OpenBMH - live_settings_readme":"OpenBMH - live_settings");};
+            const auto files=[&]{
+                const auto menu=*screen.pending_file();
+                ui::SaveLoadScreen file(data,save_directory,menu.action==ui::SaveLoadAction::load?ui::SaveLoadMode::load:ui::SaveLoadMode::save,
+                    menu.manager_slot,scope.view().revision,screen.render(),scope.view().decorated_background,ui::SaveLoadFileKind::settings,-1,season_exe);
+                bool done=false;std::optional<SDL_MouseButtonEvent> down;
+                present_season(file.render(),"OpenBMH - live_settings_file");focus_filename_input(renderer);
+                while(running&&!done){
+                    SDL_Event input;bool changed=false;
+                    while(quit_confirmation.poll(&input)){
+                        if(input.type==SDL_QUIT){running=false;break;}
+                        if(input.type==SDL_MOUSEBUTTONDOWN&&(input.button.button==SDL_BUTTON_LEFT||input.button.button==SDL_BUTTON_RIGHT)){
+                            down=input.button;if(input.button.button==SDL_BUTTON_RIGHT)changed|=file.info_press(input.button.x,input.button.y);
+                        }else if(input.type==SDL_MOUSEBUTTONUP&&down&&input.button.button==down->button){
+                            changed|=file.click(input.button.x,input.button.y,input.button.button==SDL_BUTTON_RIGHT,input.button.clicks>=2);down.reset();
+                        }else if(input.type==SDL_TEXTINPUT)changed|=file.text(input.text.text);
+                        else if(input.type==SDL_KEYDOWN){std::string key;
+                            switch(input.key.keysym.sym){case SDLK_ESCAPE:key="ESC";break;case SDLK_RETURN:case SDLK_KP_ENTER:key="ENTER";break;case SDLK_BACKSPACE:key="BACKSPACE";break;case SDLK_DELETE:key="DELETE";break;case SDLK_UP:key="UP";break;case SDLK_DOWN:key="DOWN";break;default:break;}
+                            if(!key.empty())changed|=file.key(key);
+                        }
+                        if(file.pending()){
+                            try{
+                                const auto request=*file.pending();const auto path=app::world12::checked_settings_path(save_directory,request);std::optional<Bytes> incoming;
+                                if(request.action==ui::SaveLoadAction::load){if(std::filesystem::file_size(path)!=180)throw FormatError("EIN must contain exactly 180 bytes");incoming=read_file(path);}
+                                const auto bytes=scope.file(request,incoming);
+                                if(request.action==ui::SaveLoadAction::save)app::world12::publish_settings(path,bytes,request.overwrite);
+                                screen.acknowledge_file(scope.view());file.acknowledge();done=true;
+                            }catch(const std::exception& error){file.reject(error.what());changed=true;}
+                        }else if(file.close_requested()){screen.cancel_file_request();done=true;}
+                        if(done||!running)break;if(changed)present_season(file.render(),"OpenBMH - live_settings_file");
+                    }
+                    if(!changed&&!done)SDL_Delay(8);
+                }
+                if(running)draw();
+            };
+            bool closed=false,readme_release=false;std::optional<SDL_MouseButtonEvent> down;
+            draw();
+            while(running&&!closed){SDL_Event input;bool changed=false;
+                while(quit_confirmation.poll(&input)){
+                    if(input.type==SDL_QUIT){running=false;break;}
+                    if(readme){
+                        if(input.type==SDL_MOUSEBUTTONDOWN&&(input.button.button==SDL_BUTTON_LEFT||input.button.button==SDL_BUTTON_RIGHT)){
+                            down=input.button;readme->pointer_down(true);if(readme->close_requested()){readme.reset();readme_release=true;}changed=true;
+                        }
+                    }else if(input.type==SDL_KEYDOWN&&input.key.keysym.sym==SDLK_ESCAPE)changed|=screen.key("ESC");
+                    else if(input.type==SDL_MOUSEBUTTONDOWN&&(input.button.button==SDL_BUTTON_LEFT||input.button.button==SDL_BUTTON_RIGHT)){
+                        down=input.button;const bool footer=input.button.button==SDL_BUTTON_LEFT&&input.button.x>=1&&input.button.x<55&&input.button.y>=188&&input.button.y<224;
+                        if(!footer)changed|=screen.click(input.button.x,input.button.y,input.button.button==SDL_BUTTON_RIGHT);
+                    }else if(input.type==SDL_MOUSEBUTTONUP&&down&&input.button.button==down->button){
+                        if(readme_release)readme_release=false;
+                        else if(input.button.x==down->x&&input.button.y==down->y&&input.button.button==SDL_BUTTON_LEFT&&input.button.x>=1&&input.button.x<55&&input.button.y>=188&&input.button.y<224)changed|=screen.click(input.button.x,input.button.y);
+                        down.reset();
+                    }
+                    if(screen.readme_requested()){screen.consume_readme_request();readme=std::make_unique<ui::SettingsReadmeScreen>(data,scope.view().decorated_background,season_exe);changed=true;}
+                    if(screen.pending_file()){files();changed=true;}
+                    if(const auto* pending=screen.pending()){
+                        const auto request=*pending;
+                        try{scope.apply(request);screen.acknowledge(scope.view());playback.set_original_options(app::original_audio_options(projection.state,music_enabled));}
+                        catch(const std::exception& error){
+                            if(const auto notice=ui::settings_source_refusal(scope.state(),request,request.revision)){
+                                auto dialog=ui::environment_notice_dialog(scope.state(),request.manager_slot,message_text(scope.state(),*notice));
+                                (void)present_pending_dialog(scope.state(),std::move(dialog),screen.render(),"OpenBMH - live_settings_notice");screen.reject({});screen.consume_release();down.reset();SDL_FlushEvents(SDL_MOUSEMOTION,SDL_MOUSEBUTTONUP);
+                            }else screen.reject(error.what());
+                        }
+                        changed=true;
+                    }
+                    if(screen.close_requested()){closed=true;break;}
+                    if(changed)draw();
+                }
+                if(!changed&&!closed)SDL_Delay(8);
+            }
+            if(!running)throw FormatError("world12: live settings interrupted");
+            // A close on DOWN owns its UP, before the same match minute resumes.
+            if(down){bool released=false;while(running&&!released){SDL_Event input;while(quit_confirmation.poll(&input)){if(input.type==SDL_QUIT){running=false;break;}if(input.type==SDL_MOUSEBUTTONUP&&input.button.button==down->button)released=true;}if(!released&&running)SDL_Delay(8);}}
+            if(!running)throw FormatError("world12: live settings release interrupted");
+            scope.finish();app::original_match_audio_command(playback,projection.state,3);press.reset();SDL_FlushEvents(SDL_MOUSEMOTION,SDL_MOUSEBUTTONUP);
+        };
+
         auto make_world12_match_hooks = [&] {
             auto live=std::make_shared<LivePresentationState>();
             const auto observers=make_live_observers(live);
@@ -2449,8 +2541,12 @@ int main(int argc, char** argv) {
                     const auto& world=world_session->snapshot().world;const auto& club=world.clubs.at(projection.global_club(uint32_t(team)));
                     const auto& crest=world.crests.at(club.crest);view.badge_atlas=crest.path;view.badge=crest.cell;return view;
                 };
+                const auto player_services=[&](uint64_t&) {
+                    if(!scope||!live->staged_snapshot)throw FormatError("world12: live card lost its minute scope");
+                    return scope->player_services(live->staged_snapshot->world);
+                };
                 const bool completed=present_live_lineup(minute,engine,engine.groups,projection.state,world_live_nonce,
-                    team,opponent,rows,tactics,pitch,boundary,live->live_skipped,event.has_value(),extras);
+                    team,opponent,rows,tactics,pitch,boundary,live->live_skipped,event.has_value(),extras,player_services);
                 if(event&&!completed)throw FormatError("world12: event lineup did not finish");
                 if(!running)throw FormatError("world12: match presentation interrupted");
             };
@@ -2520,6 +2616,9 @@ int main(int argc, char** argv) {
                         if(!running)throw FormatError("world12: paused match interrupted");continue;
                     }
                     if(live->live_skipped)continue;
+                    if(!start&&input.type==SDL_KEYDOWN&&!input.key.repeat&&input.key.keysym.sym==SDLK_s&&season_exe.u8(layout::Main_FileScreen_RuntimeField3)=='s'){
+                        present_world12_live_settings(projection,engine,minute);draw();continue;
+                    }
                     if(!start&&input.type==SDL_KEYDOWN&&!input.key.repeat&&
                         ((input.key.keysym.sym==SDLK_g&&season_exe.u8(layout::Main_FileScreen_RuntimeField)=='g')||
                          (input.key.keysym.sym==SDLK_t&&season_exe.u8(layout::Main_FileScreen_RuntimeField2)=='t'))) {
@@ -2671,6 +2770,14 @@ int main(int argc, char** argv) {
                 };
                 const auto& table_range=present_table_range;
                 std::optional<app::world12::StartupTurnHooks> turn;
+                if(r.request==ui::FlowRequest::new_career&&flow.pending_career()&&!flow.pending_career()->managers.empty()){
+                    turn.emplace();turn->initial=[&](const app::world12::Session& staged){
+                        for(auto page:ui::world12_season_entrants(staged.snapshot(),staged.rules(),season_texts)){
+                            ui::SeasonEntrantsScreen screen(data,std::move(page),staged.rules());present_season(screen.render(),"OpenBMH - initial_european_entrants");wait_season_ack();
+                            if(!running)throw FormatError("world12: initial entrants interrupted");
+                        }
+                    };
+                }
                 if(r.request==ui::FlowRequest::kickoff){
                     if(!world_session||!world_session->snapshot().desktop||!world_session->snapshot().desktop->active_seat)
                         throw FormatError("world12: native turn has no active canonical desk");

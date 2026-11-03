@@ -8,6 +8,7 @@
 #include "game/matchday.hpp"
 #include "game/messages.hpp"
 #include "game/state.hpp"
+#include "game/national_identity.hpp"
 #include "ui/manager.hpp"
 #include "ui/live_set_piece.hpp"
 #include "ui/setup.hpp"
@@ -50,8 +51,8 @@ std::string original(std::string_view utf8) {
 
 int placed_players(const GameState& state, int team) {
     // SquadRange3 returns 11 for every non-league field team, except the special no-team squad.
-    const SquadRange range = squad_range(team);
-    if (range.count == 0 && team != kNoTeam) return 11;
+    const SquadRange range = squad_range(state,team);
+    if (range.count == 0 && !has_national_squad(state,team)) return 11;
     uint8_t count = 0;
     const size_t end = std::min(state.squad_slots.size(), range.first + range.count);
     for (size_t slot = range.first; slot < end; ++slot) {

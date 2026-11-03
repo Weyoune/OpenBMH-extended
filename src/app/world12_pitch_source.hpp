@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
+#include "game/national_identity.hpp"
 #include "formats/executable_layout.hpp"
 #include "game/lineup.hpp"
 #include "ui/pitch.hpp"
 namespace bmh::app::world12 {
 inline void verify_world12_pitch_row(const GameState& local,int club,int row,int player,uint16_t slot){
-    if(row<0||row>=24||local.squad_slots.at(squad_range(club).first+size_t(row))!=slot||((slot&0xfff)==0xfff?-1:int(slot&0xfff))!=player)
+    if(row<0||row>=24||local.squad_slots.at(squad_range(local,club).first+size_t(row))!=slot||((slot&0xfff)==0xfff?-1:int(slot&0xfff))!=player)
         throw FormatError("world12: stale pitch player/row");
 }
 inline void apply_world12_pitch_action(GameState& local,const ui::PitchRequest& r,bool foreign_rule) {

@@ -4,6 +4,8 @@
 #include "game/match_engine.hpp"
 #include "ui/pitch.hpp"
 #include "ui/tactics.hpp"
+#include <memory>
+namespace bmh::app {struct ClubModalServices;}
 namespace bmh::app::world12 {
 struct LiveEditOutcome {bool applied=false;uint32_t notice=0;std::string error;};
 // Numeric, synchronous capability for one actual watched human match. No world
@@ -18,6 +20,7 @@ public:
     ui::LineupState lineup()const;
     ui::PitchExtras pitch()const;
     ui::TacticsState tactics()const;
+    bmh::app::ClubModalServices player_services(const bmh::world12::World&);
     LiveEditOutcome apply(const ui::PitchRequest&);
     LiveEditOutcome apply(const ui::LineupRequest&);
     LiveEditOutcome apply(const ui::TacticsRequest&);
@@ -39,6 +42,7 @@ private:
     GameState before_;GameRandom game_before_;WatcomRandom random_before_;
     std::vector<MatchGroup> groups_before_;
     const MatchGroup* group_storage_=nullptr;
+    std::shared_ptr<bool> active_=std::make_shared<bool>(true);
     void validate()const;
     void validate_actor(int,int,uint64_t)const;
 };

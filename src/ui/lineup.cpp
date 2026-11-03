@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "game/state.hpp"
+#include "game/national_identity.hpp"
 #include "formats/executable_layout.hpp"
 #include "ui/lineup.hpp"
 
@@ -32,20 +33,23 @@ LineupState project(const StaticMemory& memory, const LeImage& exe, const std::v
                     const std::vector<uint16_t>& squad, const std::vector<Player>& players,
                     const Bytes& tactics, const Bytes& options, const std::vector<uint16_t>& cards,
                     const Bytes& bonus, const std::vector<uint16_t>& player_offsets, const Bytes& player_names,
-                    const std::vector<uint16_t>& club_offsets, const Bytes& club_names, uint64_t revision) {
+                    const std::vector<uint16_t>& club_offsets, const Bytes& club_names, uint64_t revision,const GameState* game=nullptr) {
     LineupState out;
     out.manager_slot = memory.u8(::bmh::layout::ActiveManager); out.revision = revision;
     if (out.manager_slot < 0 || out.manager_slot > 3 || size_t(out.manager_slot) >= teams.size())
         throw FormatError("lineup: unsupported active manager");
     out.runtime_club = teams.at(out.manager_slot);
     const int split = exe.u16(::bmh::layout::TeamsWithSquads), limit = exe.u16(::bmh::layout::CareerSession_DispatchLineup_RuntimeField);
-    const bool national = out.runtime_club == kNoTeam && out.manager_slot == 0 && teams.size() == 1 &&
+    const bool projected=game&&!game->projected_national_teams.empty();
+    const bool national = projected?(is_national_team(*game,out.runtime_club)&&has_national_squad(*game,out.runtime_club)&&game->manager_of(out.runtime_club)==out.manager_slot):
+                          out.runtime_club == kNoTeam && out.manager_slot == 0 && teams.size() == 1 &&
                           ((memory.u32(::bmh::layout::CompetitionSelection) & 2) != 0 ||
                            (memory.has(::bmh::layout::CoachActive) && memory.u8(::bmh::layout::CoachActive) != 0));
     if (out.runtime_club < 0 || (out.runtime_club >= limit && !national))
         throw FormatError("lineup: only domestic league squads are supported");
-    const size_t count = national || out.runtime_club < split ? 24 : 16;
-    const size_t first = national ? runtime_dimensions.national_slots_first : out.runtime_club < split ? size_t(out.runtime_club) * 24 : size_t(out.runtime_club) * 16 + split * 8;
+    const auto range=projected&&national?squad_range(*game,out.runtime_club):SquadRange{};
+    const size_t count = projected&&national?range.count:national || out.runtime_club < split ? 24 : 16;
+    const size_t first = projected&&national?range.first:national ? runtime_dimensions.national_slots_first : out.runtime_club < split ? size_t(out.runtime_club) * 24 : size_t(out.runtime_club) * 16 + split * 8;
     const size_t board_base = size_t(out.manager_slot) * 0x840;
     if (first + count > squad.size() || board_base + count * 0x58 > tactics.size() || size_t(out.manager_slot) * 5 >= options.size())
         throw FormatError("lineup: truncated squad/tactics/options");
@@ -118,7 +122,7 @@ LineupState lineup_from_save(const SaveState& s,const LeImage& exe,uint64_t revi
 }
 LineupState lineup_from_game(const GameState& g,const LeImage& exe,uint64_t revision) {
     auto out=project(g.memory,exe,g.manager_teams,g.squad_slots,g.players,g.tactics,g.manager_options,
-        g.player_cards,g.player_bonus,g.player_name_offsets,g.player_names,g.club_ids,g.club_names,revision);
+        g.player_cards,g.player_bonus,g.player_name_offsets,g.player_names,g.club_ids,g.club_names,revision,&g);
     for (auto& p : out.players) if (p.player_id >= 0)
         p.statistics = player_club_statistics(g, out.runtime_club, p.player_id, p.board);
     out.source="engine_projection"; return out;

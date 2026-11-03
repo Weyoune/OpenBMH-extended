@@ -7,6 +7,7 @@
 
 #include "formats/savestate.hpp"
 #include "game/state.hpp"
+#include "game/national_identity.hpp"
 #include "ui/manager.hpp"
 
 namespace bmh::ui {
@@ -24,7 +25,7 @@ std::string bounded_string(const Bytes& b, size_t at, size_t limit) {
 }
 TacticsState project(const StaticMemory& memory, const Bytes& managers, const Bytes& board,
         const Bytes& options, const std::vector<int>& teams, const Bytes& names,
-        const std::vector<uint16_t>& offsets, const LeImage& exe, uint64_t revision) {
+        const std::vector<uint16_t>& offsets, const LeImage& exe, uint64_t revision,const GameState* game=nullptr) {
     const int count = memory.u8(::bmh::layout::ManagerCount), slot = memory.u8(::bmh::layout::ActiveManager);
     if (count < 1 || count > 4 || slot < 0 || slot >= count || teams.size() != size_t(count))
         throw FormatError("tactics: invalid/unsupported active manager");
@@ -34,11 +35,13 @@ TacticsState project(const StaticMemory& memory, const Bytes& managers, const By
         throw FormatError("tactics: truncated manager/board/options");
     TacticsState s;
     s.manager_slot = slot; s.runtime_club = teams.at(slot); s.revision = revision;
-    const bool national = s.runtime_club == kNoTeam && slot == 0 && count == 1 &&
+    const bool projected=game&&!game->projected_national_teams.empty();
+    const bool national = projected?(is_national_team(*game,s.runtime_club)&&has_national_squad(*game,s.runtime_club)&&game->manager_of(s.runtime_club)==slot):
+                          s.runtime_club == kNoTeam && slot == 0 && count == 1 &&
                           ((memory.u32(::bmh::layout::CompetitionSelection) & 2) != 0 ||
                            (memory.has(::bmh::layout::CoachActive) && memory.u8(::bmh::layout::CoachActive) != 0));
     if (s.runtime_club < 0 || s.runtime_club >= int(offsets.size()) ||
-        (s.runtime_club == kNoTeam && !national))
+        ((projected?is_national_team(*game,s.runtime_club):s.runtime_club == kNoTeam) && !national))
         throw FormatError("tactics: unsupported runtime club");
     s.manager_name = bounded_string(managers, manager + 0xa8, 26);
     s.club_name = bounded_string(names, offsets.at(s.runtime_club), names.size());
@@ -87,7 +90,7 @@ TacticsState tactics_from_save(const SaveState& save, const LeImage& exe, uint64
 }
 TacticsState tactics_from_game(const GameState& game, const LeImage& exe, uint64_t revision) {
     auto s = project(game.memory, game.manager_records, game.tactics, game.manager_options,
-        game.manager_teams, game.club_names, game.club_ids, exe, revision);
+        game.manager_teams, game.club_names, game.club_ids, exe, revision,&game);
     s.source = "engine_projection"; return s;
 }
 

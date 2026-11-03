@@ -45,7 +45,7 @@ void validate_preparation_context(const PreparationState& s) {
             s.transfer_market->manager_name != s.desktop.manager_name ||
             s.transfer_market->club_name != s.desktop.club_name)))
         throw FormatError("preparation: inconsistent manager/club/source/revision across views");
-    if (national && (s.training || s.training_camp || s.bank || s.stadium || s.pitch))
+    if (national && (s.training || s.training_camp || s.bank || s.stadium || (s.pitch&&!s.desktop.projected_national_team)))
         throw FormatError("preparation: national coach has no supported club-only training/finance/pitch context");
     if (s.pitch && (s.pitch->manager_slot != s.desktop.manager_slot ||
         s.pitch->runtime_club != s.desktop.runtime_club || s.pitch->revision != s.desktop.revision ||

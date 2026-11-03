@@ -6,10 +6,11 @@ namespace bmh::app::world12 {
 enum class StartupProgress { idle,selecting,prepared };
 struct StartupResult {StartupProgress progress=StartupProgress::idle;std::string error;};
 using SettingsNoticePresenter=std::function<bool(const GameState&,uint32_t message_address)>;
-struct StartupTurnHooks {ClockHooks clock;bmh::world12::HumanRoundHooks matches;};
+struct StartupTurnHooks {ClockHooks clock;bmh::world12::HumanRoundHooks matches;std::function<void(const Session&)> initial;};
 // Same request boundary used by the development SDL entry and input tests.
 // Prepared includes the owned initial empty event and explicit typed desktop.
-// Initial draw/ticket presentations and later management/day actions remain separate.
+// Optional synchronous startup presentation observes the actual unpublished
+// initial receipts, before the first desktop is committed.
 StartupResult serve_startup(ui::StartupFlow&,const ui::FlowResult&,std::unique_ptr<Session>&,
     const std::filesystem::path& data,uint32_t seed,uint64_t scope,const PendingOfferHooks& hooks={},
     const StartupTurnHooks* turn=nullptr,const AdvertisingRenewalPresenter& advertising={},const ConstructionNoticeHook& construction={},

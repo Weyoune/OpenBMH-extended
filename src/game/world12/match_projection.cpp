@@ -269,6 +269,9 @@ void AiMatchProjection::retain_live_preferences(uint8_t seat,std::optional<uint1
     auto& preferences=live_preferences_[seat];
     if(table)preferences[0]=*table;if(strengths)preferences[1]=*strengths;if(pairings)preferences[2]=*pairings;
 }
+void AiMatchProjection::retain_live_settings(const std::array<uint8_t,180>& options) {
+    live_settings_=options;
+}
 void AiMatchProjection::commit_player_attributes(World& world)const {
     if(national_projection_)throw FormatError("world12: national projection requires complete match-state commit");
     if(!manager_seats_.empty())throw std::invalid_argument("world12: human projection requires complete match-state commit");
@@ -404,6 +407,10 @@ void AiMatchProjection::commit_state(World& world,bool capture_season_services,c
     candidate.validate();world=std::move(candidate);
 }
 void AiMatchProjection::apply_live_preferences(World& world)const {
+    if(live_settings_){
+        if(!world.economy||!world.economy->presentation_options)throw FormatError("world12: live settings have no saved presentation owner");
+        world.economy->presentation_options=*live_settings_;
+    }
     for(const auto& [seat,preferences]:live_preferences_){
         const auto manager=std::find_if(world.managers.begin(),world.managers.end(),[&](const auto& m){return m.seat==seat;});
         if(manager==world.managers.end()||!manager->career)throw FormatError("world12: live preference owner disappeared");

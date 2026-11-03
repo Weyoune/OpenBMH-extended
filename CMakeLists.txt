@@ -1297,9 +1297,9 @@ add_library(bmhworld12_app STATIC src/app/world12_european.cpp src/app/world12_e
     src/app/world12_annual_awards.cpp
     src/app/world12_clock.cpp src/app/world12_pending.cpp)
 target_link_libraries(bmhworld12_app PUBLIC bmhworld12)
-add_library(bmhworld12_ui STATIC src/ui/world12_table.cpp src/ui/world12_other_games.cpp src/ui/world12_manager_selection.cpp src/ui/world12_desktop.cpp src/ui/world12_preparation.cpp)
+add_library(bmhworld12_ui STATIC src/ui/world12_table.cpp src/ui/world12_other_games.cpp src/ui/world12_manager_selection.cpp src/ui/world12_start.cpp src/ui/world12_desktop.cpp src/ui/world12_preparation.cpp)
 target_link_libraries(bmhworld12_ui PUBLIC bmhui bmhworld12)
-add_library(bmhworld12_session STATIC src/app/world12_session.cpp src/app/world12_session_event.cpp src/app/world12_startup.cpp src/app/world12_preparation.cpp src/app/world12_bank.cpp src/app/world12_environment.cpp src/app/world12_contracts.cpp src/app/world12_advertising.cpp src/app/world12_stadium.cpp src/app/world12_toto.cpp src/app/world12_desktop_actions.cpp src/app/world12_menu_layout.cpp src/app/world12_settings.cpp src/app/world12_other_games.cpp src/app/world12_club_information.cpp src/app/world12_tables.cpp src/app/world12_live_scope.cpp src/app/world12_live_family.cpp src/app/world12_market.cpp src/app/world12_clock_presenters.cpp
+add_library(bmhworld12_session STATIC src/app/world12_session.cpp src/app/world12_session_event.cpp src/app/world12_startup.cpp src/app/world12_preparation.cpp src/app/world12_bank.cpp src/app/world12_environment.cpp src/app/world12_contracts.cpp src/app/world12_advertising.cpp src/app/world12_stadium.cpp src/app/world12_toto.cpp src/app/world12_desktop_actions.cpp src/app/world12_menu_layout.cpp src/app/world12_settings.cpp src/app/world12_other_games.cpp src/app/world12_club_information.cpp src/app/world12_tables.cpp src/app/world12_live_scope.cpp src/app/world12_live_family.cpp src/app/world12_live_settings.cpp src/app/world12_market.cpp src/app/world12_clock_presenters.cpp
     src/app/world12_mailbox.cpp src/app/world12_save_load.cpp)
 target_link_libraries(bmhworld12_session PUBLIC bmhworld12_app bmhworld12_ui)
 if(TARGET openbmh_play)

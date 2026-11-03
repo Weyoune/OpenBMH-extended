@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
+#include "game/national_identity.hpp"
 #include <algorithm>
 #include <functional>
 #include "game/state.hpp"
@@ -17,7 +18,7 @@ inline bool apply_live_substitution_source(GameState& state,const ui::LineupRequ
        size_t(team)>=state.team_flags.size()||state.manager_of(team)!=active||minute<0||minute>125||
        max_substitutions<0||max_substitutions>7||foreign_limit_count<0||foreign_limit_count>11||
        (foreign_rule&&!is_foreign)) {error="Der Eingriff hat keinen gültigen Kaderbesitzer.";return false;}
-    const auto range = squad_range(team);
+    const auto range = squad_range(state,team);
     const bool first_field = request.first_row >= 0 && request.first_row < 11;
     const bool second_field = request.second_row >= 0 && request.second_row < 11;
     const bool same_zone_exchange = first_field == second_field;
@@ -122,7 +123,7 @@ inline bool apply_live_substitution_source(GameState& state,const ui::LineupRequ
     } else {
         const int field_row = first_field ? request.first_row : request.second_row;
         const int bench_row = first_field ? request.second_row : request.first_row;
-        const auto staged_range = squad_range(team);
+        const auto staged_range = squad_range(staged_state,team);
         const size_t field_at = staged_range.first + size_t(field_row);
         const size_t bench_at = staged_range.first + size_t(bench_row);
         const uint16_t field_slot = staged_state.squad_slots.at(field_at);

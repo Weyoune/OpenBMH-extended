@@ -52,6 +52,7 @@
 #include "ui/opportunities.hpp"
 #include "ui/other_games_state.hpp"
 
+namespace bmh::ui {struct ClubPlayerDetailProjection;}
 namespace bmh::app {
 
 ui::OutgoingTransferEditorState loan_return_offer_editor_projection(
@@ -91,6 +92,7 @@ struct ClubModalServices {
     std::function<PendingOfferResult(const ClubPlayerDetailSelection&,const PendingOfferHooks&)> pending_offers;
     std::function<uint8_t(uint32_t)> runtime_byte;
     std::function<void(uint32_t,uint8_t)> set_runtime_byte;
+    std::function<void(ui::ClubPlayerDetailProjection&)> decorate_player_projection;
 };
 using TransferOfferTeamInfoPresenter = std::function<bool(ClubModalServices&,int,const Image&)>;
 using TransferOfferPlayerInfoPresenter = std::function<bool(ClubModalServices&,const ClubPlayerDetailSelection&,const Image&)>;

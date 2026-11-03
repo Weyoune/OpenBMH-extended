@@ -3,9 +3,12 @@
 #include "app/live_substitution_source.hpp"
 #include "app/world12_pitch_source.hpp"
 #include "app/preparation_actions.hpp"
+#include "app/career_session.hpp"
+#include "ui/club_player_detail.hpp"
 #include "game/match.hpp"
 #include "game/lineup.hpp"
 #include "game/weekly.hpp"
+#include "game/national_identity.hpp"
 #include <algorithm>
 namespace bmh::app::world12 {
 namespace {
@@ -37,14 +40,14 @@ LiveScope::LiveScope(bmh::world12::AiMatchProjection& p,MatchEngine& e,const LeI
         if(event_->group_index>=e.groups.size()||event_->match_index<0||event_->match_index>=e.groups[event_->group_index].matches()||
            event_->player<0||size_t(event_->player)>=p.state.players.size()||(event_->kind!=1&&event_->kind!=2))throw FormatError("world12: invalid live card/injury boundary");
         const auto& player=p.state.players.at(size_t(event_->player));bool found=false;
-        const auto range=squad_range(team);for(size_t row=0;row<range.count;++row){const auto slot=p.state.squad_slots.at(range.first+row);if((slot&0xfff)!=event_->player||(slot&0x8000))continue;
+        const auto range=squad_range(p.state,team);for(size_t row=0;row<range.count;++row){const auto slot=p.state.squad_slots.at(range.first+row);if((slot&0xfff)!=event_->player||(slot&0x8000))continue;
             found=event_->kind==1?(player.w368&0x07000000u)!=0:(player.w35c>>27)!=0;}
         if(!found)throw FormatError("world12: live event has no changed Source player");
     }
     auto entered=p.state;if(mode_==2)prepare_lineup_entry(entered,team_);entered.memory.set8(layout::ActiveManager,uint8_t(manager_));
     p.state=std::move(entered);revision_=++nonce_;
 }
-LiveScope::~LiveScope(){if(!closed_){try{abort();}catch(...){}}}
+LiveScope::~LiveScope(){*active_=false;if(!closed_){try{abort();}catch(...){}}}
 void LiveScope::validate()const{
     if(closed_||nonce_!=revision_||&engine_.state!=&projection_.state||engine_.groups.data()!=group_storage_||engine_.groups.size()!=groups_before_.size())throw FormatError("world12: retired or changed live menu owner");
     for(size_t i=0;i<groups_before_.size();++i)if(engine_.groups[i].desc!=groups_before_[i].desc||engine_.groups[i].fixtures!=groups_before_[i].fixtures)throw FormatError("world12: live menu changed a retained fixture");
@@ -54,6 +57,37 @@ void LiveScope::validate_actor(int manager,int team,uint64_t revision)const{vali
 ui::LineupState LiveScope::lineup()const{validate();auto out=ui::lineup_from_game(projection_.state,rules_,revision_);out.in_match=true;out.entry_prepared=true;return out;}
 ui::PitchExtras LiveScope::pitch()const{validate();return ui::pitch_extras_from_game(projection_.state,rules_,revision_,opponent_);}
 ui::TacticsState LiveScope::tactics()const{validate();return ui::tactics_from_game(projection_.state,rules_,revision_);}
+bmh::app::ClubModalServices LiveScope::player_services(const bmh::world12::World& world){
+    validate();bmh::app::ClubModalServices services;const auto active=active_;
+    const auto guard=[this,active]{if(!*active)throw FormatError("world12: retired live player-card capability");validate();};
+    services.state=[this,guard]() -> GameState& {guard();return projection_.state;};
+    services.runtime_byte=[this,guard](uint32_t at){guard();return projection_.state.memory.has(at)?projection_.state.memory.u8(at):rules_.u8(at);};
+    services.set_runtime_byte=[this,guard](uint32_t at,uint8_t value){
+        guard();if(at!=layout::CareerSession_DispatchPoachUi_ExecutableField&&at!=layout::CareerSession_InitializeClubModalRuntime_ExecutableField)
+            throw FormatError("world12: live player card requested another runtime byte");
+        projection_.state.memory.add_block(at,1);projection_.state.memory.set8(at,value);
+    };
+    services.redraw_player=[this,guard](const ClubPlayerDetailSelection& selection){
+        guard();if(selection.runtime_team!=team_||selection.origin!=ClubPlayerDetailOrigin::squad||selection.human_loan_index!=-1)
+            throw FormatError("world12: live card has another squad owner");
+        auto game=engine_.game;auto random=engine_.rand;
+        auto redraw=club_player_detail_redraw(projection_.state,selection,rules_,game,random);
+        engine_.game=game;engine_.rand=random;return redraw;
+    };
+    services.decorate_player_projection=[this,guard,&world](ui::ClubPlayerDetailProjection& page){
+        guard();for(auto& club:page.clubs)if(club){const auto id=projection_.global_club(uint32_t(club->runtime_team));
+            const auto& crest=world.crests.at(world.clubs.at(id).crest);club->badge_atlas=crest.path;club->badge_selector=crest.cell;
+        }
+        const auto& player=world.players.at(projection_.global_player(uint32_t(page.redraw.context.selection.player_id)));
+        const auto country=uint8_t(player.attributes.nationality()+((player.bonus&0x80)?32:0));
+        const auto nation=std::find_if(world.clubs.begin(),world.clubs.end(),[&](const auto& pair){return pair.second.kind==bmh::world12::ClubKind::national_team&&uint8_t(pair.second.country)==country;});
+        if(nation!=world.clubs.end())page.original_nationality_name=nation->second.name;
+        // A running game admits no transfer or nomination transaction. This
+        // card displays the actual current squad's board and Source redraw.
+        page.redraw.context.active_offer=-1;page.redraw.context.national_action_available=false;page.displayed_offer_amount.reset();
+    };
+    return services;
+}
 LiveEditOutcome LiveScope::apply(const ui::LineupRequest& request){
     try{validate_actor(request.manager_slot,request.runtime_club,request.revision);if(mode_!=2)throw FormatError("world12: lineup action outside Source lineup scope");
         const auto& g=projection_.state;const bool foreign=g.projected_foreign_rule.value_or(rules_.u8(layout::ForeignPlayerLimitEnabled)!=0);
@@ -78,10 +112,10 @@ void LiveScope::finish(){validate();if(nonce_==UINT64_MAX)throw FormatError("wor
     // EventImpl owns the event-origin rerate at its existing tail.
     // The Source menu leaves its selected manager active; abort alone restores
     // the previous actor. EventImpl retains its own post-menu rerate boundary.
-    ++nonce_;closed_=true;
+    ++nonce_;closed_=true;*active_=false;
 }
 void LiveScope::abort(){if(closed_)return;
     if(engine_.groups.data()!=group_storage_||engine_.groups.size()!=groups_before_.size())throw FormatError("world12: live group storage was invalidated");
-    projection_.state=std::move(before_);for(size_t i=0;i<groups_before_.size();++i)engine_.groups[i]=std::move(groups_before_[i]);engine_.game=game_before_;engine_.rand=random_before_;if(nonce_!=UINT64_MAX)++nonce_;closed_=true;
+    projection_.state=std::move(before_);for(size_t i=0;i<groups_before_.size();++i)engine_.groups[i]=std::move(groups_before_[i]);engine_.game=game_before_;engine_.rand=random_before_;if(nonce_!=UINT64_MAX)++nonce_;closed_=true;*active_=false;
 }
 }

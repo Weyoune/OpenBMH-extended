@@ -3,6 +3,7 @@
 #include "formats/badge_policy.hpp"
 #include "formats/executable_layout.hpp"
 #include "ui/player_card.hpp"
+#include "game/national_identity.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -38,7 +39,7 @@ void validate(const PlayerCardState& s) {
         throw FormatError("player card: inconsistent ordinary loan context");
 }
 PlayerCardState project(LineupState lineup,const LeImage& exe,int row,const Bytes& club_heap,
-                        const std::vector<uint16_t>& offsets,const Bytes& names,const Bytes& short_names) {
+                        const std::vector<uint16_t>& offsets,const Bytes& names,const Bytes& short_names,bool national=false) {
     PlayerCardState out;out.lineup=std::move(lineup);out.row=row;
     if(row<0||size_t(row)>=out.lineup.players.size()||out.lineup.players.at(size_t(row)).player_id<0)
         throw FormatError("player card: empty or invalid squad row");
@@ -47,7 +48,7 @@ PlayerCardState project(LineupState lineup,const LeImage& exe,int row,const Byte
     const int nation=p.attributes.nationality()+((p.bonus&0x80)?32:0);
     const size_t nation_club=exe.u16(::bmh::layout::ClubPlayerDetail_ClubPlayerDetailFromGame_RuntimeField3)+exe.u16(::bmh::layout::NoTeamSquadStart)+nation;
     out.nationality_name=pool_name(names,offsets.at(nation_club));
-    if (out.lineup.runtime_club == kNoTeam) {
+    if (national || out.lineup.runtime_club == kNoTeam) {
         // The national runtime slot is absent from the ordinary short-name
         // table; its projected club name is already the full country label.
         out.club_short_name=out.lineup.club_name;
@@ -127,7 +128,9 @@ PlayerCardState player_card_from_save(const SaveState& s,const LeImage& exe,int 
 PlayerCardState player_card_from_game(const GameState& g,const LeImage& exe,int row,uint64_t revision) {
     Bytes short_names;
     for(int club=0;club<exe.u16(::bmh::layout::CareerSession_DataDirectory_RuntimeField2);++club)short_names.push_back(g.club_short_offset(club));
-    auto out=project(lineup_from_game(g,exe,revision),exe,row,g.club_heap_78,g.club_ids,g.club_names,short_names);
+    const int manager=g.memory.u8(layout::ActiveManager);
+    if(manager<0||size_t(manager)>=g.manager_teams.size())throw FormatError("player card: active manager is absent");
+    auto out=project(lineup_from_game(g,exe,revision),exe,row,g.club_heap_78,g.club_ids,g.club_names,short_names,is_national_team(g,g.manager_teams[size_t(manager)]));
     context(out,g.memory,g.club_heap_78,g.club_ids,g.club_names,short_names);
     const size_t months=size_t(out.lineup.manager_slot)*0xb0c+0x286;
     const uint32_t flags=::bmh::layout::Flags+uint32_t(out.lineup.manager_slot)*3+2;
