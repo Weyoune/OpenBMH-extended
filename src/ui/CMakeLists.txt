@@ -255,3 +255,7 @@ bmh_add_data_test(NAME sportschau_ui_tests COMMAND sportschau_ui_tests "${BMH_DA
 add_executable(live_score_reveal_tests live_score_reveal_tests.cpp)
 target_link_libraries(live_score_reveal_tests PRIVATE bmhui)
 add_test(NAME live_score_reveal_tests COMMAND live_score_reveal_tests)
+
+add_executable(ui_annual_reference_tests ../../tests/ui_annual_reference_tests.cpp)
+target_link_libraries(ui_annual_reference_tests PRIVATE bmhui)
+bmh_add_data_test(NAME ui_annual_reference_tests COMMAND ui_annual_reference_tests "${BMH_DATA}")

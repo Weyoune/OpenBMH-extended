@@ -201,10 +201,12 @@ std::vector<std::string> wrap_source_text(const std::filesystem::path& data,std:
     const auto exe=load_le(asset_path(data,"BMH.exe"));
     return wrap_source_text(font,exe,text,max_width);
 }
-struct GameEndHighscoreScreen::FontData { Font small; LeImage exe; SpriteFont sprite; explicit FontData(const std::filesystem::path& p):small(load_font(asset_path(p/"F","BMH3.FNT"))),exe(load_le(asset_path(p,"BMH.exe"))),sprite(p){} };
+struct GameEndHighscoreScreen::FontData { Font small; LeImage exe; SpriteFont sprite; FontData(const std::filesystem::path& p,const LeImage& reference):small(load_font(asset_path(p/"F","BMH3.FNT"))),exe(reference),sprite(p,reference){} };
 GameEndHighscoreScreen::GameEndHighscoreScreen(const std::filesystem::path& data,HighscoreProjection p,GameEndRenderOptions options)
+ : GameEndHighscoreScreen(data,std::move(p),options,load_le(asset_path(data,"BMH.exe"))) {}
+GameEndHighscoreScreen::GameEndHighscoreScreen(const std::filesystem::path& data,HighscoreProjection p,GameEndRenderOptions options,const LeImage& reference)
  : projection_(std::move(p)),options_(options),background_(load_vga(asset_path(data/"KB","129.VGA"))),
-   logo_(load_vga(asset_path(data/"KB","51.VGA"))),texts_(load_textd(asset_path(data,"TEXTD.BLK"))),font_(std::make_shared<FontData>(data)) {}
+   logo_(load_vga(asset_path(data/"KB","51.VGA"))),texts_(load_textd(asset_path(data,"TEXTD.BLK"))),font_(std::make_shared<FontData>(data,reference)) {}
 Image GameEndHighscoreScreen::render() const {
     Image out=source_base(background_,options_.plain_background,true);
     if(logo_.width>=112&&logo_.height>=74){fill(out,102,99,112,2,0x40);fill(out,212,27,2,74,0x40);copy(out,logo_,0,0,100,25,112,74);}

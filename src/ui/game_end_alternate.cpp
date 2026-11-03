@@ -29,8 +29,11 @@ std::string grouped(unsigned n) {
 }
 
 GameEndAlternateScoreAssets load_game_end_alternate_score_assets(const std::filesystem::path& data) {
+    return load_game_end_alternate_score_assets(data,load_le(asset_path(data,"BMH.exe")));
+}
+GameEndAlternateScoreAssets load_game_end_alternate_score_assets(const std::filesystem::path& data,const LeImage& reference) {
     auto text=load_textd(asset_path(data,"TEXTD.BLK"));
-    return {load_le(asset_path(data,"BMH.exe")),load_font(asset_path(data/"F","BMH3.FNT")),
+    return {reference,load_font(asset_path(data/"F","BMH3.FNT")),
             load_vga(asset_path(data/"KB","6.VGA")),{text[890],text[891],text[892]}};
 }
 

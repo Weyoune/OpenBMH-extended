@@ -52,12 +52,15 @@ uint8_t name_color(bool relegated) { return relegated?251:122; }
 
 SeasonPromotionScreen::SeasonPromotionScreen(const std::filesystem::path& data_directory,
                                              SeasonPromotionProjection projection)
+    : SeasonPromotionScreen(data_directory,std::move(projection),load_le(asset_path(data_directory,"BMH.exe"))) {}
+SeasonPromotionScreen::SeasonPromotionScreen(const std::filesystem::path& data_directory,
+                                             SeasonPromotionProjection projection,const LeImage& reference)
     : projection_(std::move(projection)),
-      exe_(load_le(asset_path(data_directory,"BMH.exe"))),
+      exe_(reference),
       background_(load_vga(asset_path(data_directory/"KB","25.VGA"))),
       widgets_(load_vga(asset_path(data_directory/"KB","0.VGA"))),
       texts_(load_textd(asset_path(data_directory,"TEXTD.BLK"))),
-      sprite_font_(data_directory),font_(load_font(asset_path(data_directory/"F","BMH3.FNT"))) {
+      sprite_font_(data_directory,reference),font_(load_font(asset_path(data_directory/"F","BMH3.FNT"))) {
     if(projection_.group<0||projection_.group>3||projection_.count>8||
        projection_.relegated.size()<projection_.count||projection_.promoted.size()<projection_.count||
        projection_.scanline_steps<0||projection_.scanline_steps>int(kScanlineOrder.size())||
@@ -66,10 +69,12 @@ SeasonPromotionScreen::SeasonPromotionScreen(const std::filesystem::path& data_d
     for(size_t i=0;i<projection_.count;++i) {
         for(const auto* team:{&projection_.relegated[i],&projection_.promoted[i]}) {
             if(team->original_name.empty())throw FormatError("season promotion: empty Source club name");
-            if(!team->badge_fallback) {
-                const int atlas=(team->badge_selector&0x1ff)>>3;
-                if(!badge_atlases_.contains(atlas))
-                    badge_atlases_.emplace(atlas,load_vga(asset_path(data_directory/"W",std::to_string(atlas)+".VGA")));
+            if(!team->badge_atlas.empty()||!team->badge_fallback) {
+                const std::string atlas=team->badge_atlas.empty()?"W/"+std::to_string((team->badge_selector&0x1ff)>>3)+".VGA":team->badge_atlas;
+                if(!badge_atlases_.contains(atlas)){
+                    const std::filesystem::path relative(atlas);
+                    badge_atlases_.emplace(atlas,load_vga(asset_path(data_directory/relative.parent_path(),relative.filename().string())));
+                }
             }
         }
     }
@@ -109,9 +114,10 @@ Image SeasonPromotionScreen::render(int scanline_steps) const {
     auto draw_team=[&](bool relegated,size_t row,const SeasonPromotionClub& team) {
         const int x=team_x(relegated),y=team_y(relegated,int(row));
         source_badge_frame(out,x,y);
-        if(team.badge_fallback)copy(out,widgets_,8,0,x,y,38,38,false);
+        if(team.badge_atlas.empty()&&team.badge_fallback)copy(out,widgets_,8,0,x,y,38,38,false);
         else {
-            const Image& atlas=badge_atlases_.at((team.badge_selector&0x1ff)>>3);
+            const std::string path=team.badge_atlas.empty()?"W/"+std::to_string((team.badge_selector&0x1ff)>>3)+".VGA":team.badge_atlas;
+            const Image& atlas=badge_atlases_.at(path);
             copy(out,atlas,(team.badge_selector&7)*38,0,x,y,38,38,false);
         }
         draw_name(relegated,row,team.original_name);

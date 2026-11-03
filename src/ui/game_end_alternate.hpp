@@ -21,6 +21,7 @@ struct GameEndAlternateScoreAssets {
     std::array<std::string, 3> texts; // original-encoded TEXTD 890/891/892
 };
 GameEndAlternateScoreAssets load_game_end_alternate_score_assets(const std::filesystem::path& data);
+GameEndAlternateScoreAssets load_game_end_alternate_score_assets(const std::filesystem::path& data,const LeImage& reference);
 
 enum class AlternateScorePhase { Calculator, Points, AwaitAck, Closed, Cancelled };
 

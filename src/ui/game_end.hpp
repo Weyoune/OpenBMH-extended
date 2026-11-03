@@ -38,6 +38,7 @@ class GameEndHighscoreScreen {
 public:
     GameEndHighscoreScreen(const std::filesystem::path& data, HighscoreProjection projection,
                            GameEndRenderOptions options = {});
+    GameEndHighscoreScreen(const std::filesystem::path&,HighscoreProjection,GameEndRenderOptions,const LeImage& reference);
     Image render() const;
 private:
     HighscoreProjection projection_;

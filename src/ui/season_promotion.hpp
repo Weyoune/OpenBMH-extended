@@ -23,6 +23,7 @@ struct SeasonPromotionClub {
     uint16_t badge_selector = 0;
     bool badge_fallback = false; // Source SourceBadgeFallback uses club-ID ranges, not selector ranges.
     std::string original_name;   // raw Original-encoded club name from ClubName2
+    std::string badge_atlas;     // Explicit typed atlas; empty retains the Native selector.
 };
 
 struct SeasonPromotionProjection {
@@ -41,6 +42,7 @@ class SeasonPromotionScreen {
 public:
     SeasonPromotionScreen(const std::filesystem::path& data_directory,
                           SeasonPromotionProjection projection);
+    SeasonPromotionScreen(const std::filesystem::path&,SeasonPromotionProjection,const LeImage& reference);
     Image render() const;
     Image render(int scanline_steps) const;
 
@@ -51,7 +53,7 @@ private:
     TextDb texts_;
     SpriteFont sprite_font_;
     Font font_;
-    std::map<int, Image> badge_atlases_;
+    std::map<std::string, Image> badge_atlases_;
 };
 
 } // namespace bmh::ui
