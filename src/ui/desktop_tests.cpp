@@ -876,6 +876,16 @@ void folder_pointer_input_tests(const std::filesystem::path& data,const LeImage&
 }
 
 void desktop_control_input_tests(const std::filesystem::path& data,DeskState& d) {
+    {
+        auto projected=d;projected.canonical_manager_slot=3;projected.managers.at(size_t(projected.manager_slot)).canonical_slot=3;
+        DesktopScreen sparse(data,projected);const auto action=sparse.click(50,125);
+        check(action.kind==DeskRequestKind::open_menu&&action.manager_slot==3&&sparse.state().manager_slot==projected.manager_slot,
+              "sparse rendered row leaked its local index into the canonical desktop request");
+        DesktopScreen timer(data,projected);check(timer.process_timer_expired().manager_slot==3,
+              "desktop clock used the local coach row instead of its canonical seat");
+        check(desk_json(projected).find("\"canonical_manager_slot\":3")!=std::string::npos,
+              "canonical desktop actor is absent from the immutable projection");
+    }
     DesktopScreen desk(data,d);
     const auto pixels = desk.render().pixels;
     check(desk.render().pixels == pixels,"repeat render is deterministic");

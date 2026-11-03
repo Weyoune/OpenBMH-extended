@@ -427,16 +427,25 @@ void validate_desk_state(const DeskState& d) {
     if (d.manager_teams.size() != size_t(d.options.managers) || d.managers.size() != size_t(d.options.managers) || d.manager_slot < 0 ||
         d.manager_slot >= d.options.managers || d.runtime_club != d.manager_teams[size_t(d.manager_slot)])
         throw FormatError("desk: inconsistent manager slot/runtime mapping");
-    std::set<int> unique, unique_identities;
+    std::set<int> unique, unique_identities,canonical_seats;
     for (size_t slot = 0; slot < d.manager_teams.size(); ++slot) {
         const int team = d.manager_teams[slot];
         const auto& manager = d.managers[slot];
+        if(manager.canonical_slot&&(*manager.canonical_slot<0||*manager.canonical_slot>3||!canonical_seats.insert(*manager.canonical_slot).second))throw FormatError("desk: invalid active canonical manager mapping");
         if (team < 0 || !unique.insert(team).second || manager.runtime_club != team ||
             manager.club_identity_key < 0 || !unique_identities.insert(manager.club_identity_key).second ||
             manager.portrait < 0 || manager.portrait > 11 ||
             (team != kNoTeam && (manager.league < 0 || manager.league > 8)))
             throw FormatError("desk: invalid or duplicate manager runtime club");
     }
+    if(d.canonical_manager_slot&&(*d.canonical_manager_slot<0||*d.canonical_manager_slot>3||
+       (d.managers.at(size_t(d.manager_slot)).canonical_slot&&d.managers.at(size_t(d.manager_slot)).canonical_slot!=d.canonical_manager_slot)))
+        throw FormatError("desk: inconsistent canonical actor");
+    if(!d.world12_career_roster.empty()){
+        std::set<uint8_t> seats;for(const auto& member:d.world12_career_roster)if(member.seat>3||!seats.insert(member.seat).second||!member.club.valid()||member.portrait>11||member.name.empty())throw FormatError("desk: invalid canonical career roster");
+        if(!d.canonical_manager_slot||!seats.contains(uint8_t(*d.canonical_manager_slot)))throw FormatError("desk: actor absent from canonical career roster");
+    }
+    if(!d.world12_event_known&&!d.world12_event_groups.empty())throw FormatError("desk: unknown event has prepared group metadata");
     const bool national = d.runtime_club == kNoTeam;
     if (d.table_position && (*d.table_position < 0 || *d.table_position > 31))
         throw FormatError("desk: invalid Source table position");
@@ -709,6 +718,13 @@ std::string desk_json(const DeskState& d) {
     std::ostringstream out;
     out << "{\"screen\":\"desktop\",\"source\":" << json_quote(d.source) << ",\"revision\":" << d.revision
         << ",\"options\":" << setup_json(d.options) << ",\"manager_slot\":" << d.manager_slot
+        << ",\"canonical_manager_slot\":" << (d.canonical_manager_slot?std::to_string(*d.canonical_manager_slot):"null")
+        << ",\"world12_event_known\":" << (d.world12_event_known?"true":"false")
+        << ",\"world12_event_groups\":[";
+    for(size_t row=0;row<d.world12_event_groups.size();++row){if(row)out<<',';out<<'[';for(size_t column=0;column<5;++column){if(column)out<<',';out<<d.world12_event_groups[row][column];}out<<']';}
+    out<<"],\"world12_career_roster\":[";
+    for(size_t row=0;row<d.world12_career_roster.size();++row){if(row)out<<',';const auto& member=d.world12_career_roster[row];out<<"{\"seat\":"<<int(member.seat)<<",\"club\":"<<member.club.value<<",\"portrait\":"<<int(member.portrait)<<",\"name\":"<<json_quote(original_to_utf8(member.name))<<'}';}
+    out<<']'
         << ",\"manager_name\":" << json_quote(original_to_utf8(d.manager_name)) << ",\"runtime_club\":" << d.runtime_club
         << ",\"national_team\":" << (d.national_team ? "true" : "false")
         << ",\"national_coach_takeover\":" << (d.national_coach_takeover ? "true" : "false")
@@ -723,6 +739,7 @@ std::string desk_json(const DeskState& d) {
         const auto& manager = d.managers[i];
         out << "{\"slot\":" << i << ",\"runtime_club\":" << manager.runtime_club
             << ",\"club_identity_key\":" << manager.club_identity_key
+            << ",\"canonical_slot\":" << (manager.canonical_slot?std::to_string(*manager.canonical_slot):"null")
             << ",\"name\":" << json_quote(original_to_utf8(manager.name)) << ",\"league\":" << manager.league
             << ",\"portrait\":" << manager.portrait << ",\"badge\":" << manager.badge << '}';
     }

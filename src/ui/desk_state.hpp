@@ -27,7 +27,14 @@ struct DeskManagerIdentity {
     uint16_t badge = 0;
     std::string name;
     bmh::world12::ClubId world_club;
+    std::optional<int> canonical_slot;
     bool operator==(const DeskManagerIdentity&) const = default;
+};
+struct World12CareerIdentity {
+    uint8_t seat=0,portrait=0;
+    bmh::world12::ClubId club;
+    std::string name;
+    bool operator==(const World12CareerIdentity&)const=default;
 };
 struct DeskMatchCallargs {
     int competition = 33, opponent = -1;
@@ -58,6 +65,11 @@ struct DeskOpponentHistory {
 struct DeskState {
     SetupOptions options;
     int manager_slot = 0, runtime_club = -1, league = -1, portrait = 0;
+    // Rendered rows may be a sparse active-coach subset of the saved career.
+    std::optional<int> canonical_manager_slot;
+    std::vector<World12CareerIdentity> world12_career_roster;
+    bool world12_event_known=false;
+    std::vector<std::array<uint64_t,5>> world12_event_groups;
     // Authoritative slot -> runtime team mapping, copied from GameState::manager_teams.
     std::vector<int> manager_teams;
     std::vector<DeskManagerIdentity> managers;
@@ -117,6 +129,7 @@ struct DeskState {
     std::string source;
     uint64_t revision = 0;
 };
+inline int desk_actor(const DeskState& state){return state.canonical_manager_slot.value_or(state.manager_slot);}
 
 // Original DeskDate2, including its four-year leap cycle and edition-specific epoch.
 DeskDate desk_date(uint32_t day_counter, const LeImage& executable);

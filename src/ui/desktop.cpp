@@ -367,7 +367,7 @@ DeskRequest DesktopScreen::pointer_down(int x, int y, bool right) {
                             y > 0xce && y < 0xe3;
     if (socket_confirmation_armed_) {
         if (socket_hit && !socket_release_pending_) {
-            DeskRequest action{DeskRequestKind::end_session, state_.manager_slot, -1, -1, -1, state_.revision};
+            DeskRequest action{DeskRequestKind::end_session, desk_actor(state_), -1, -1, -1, state_.revision};
             pending_ = action;
             socket_confirmation_armed_ = false;
             return action;
@@ -529,14 +529,14 @@ std::vector<uint8_t> DesktopScreen::take_sound_ids() const {
 }
 
 DeskRequest DesktopScreen::request(DeskRequestKind kind, const DeskItem& item, int value) {
-    DeskRequest r{kind, state_.manager_slot, item.id, item.kind, value, state_.revision};
+    DeskRequest r{kind, desk_actor(state_), item.id, item.kind, value, state_.revision};
     shortcut_hover_record_ = -1;
     pending_ = r; last_rejection_.clear(); return r;
 }
 DeskRequest DesktopScreen::process_timer_expired() {
     if (pending_ || layout_drag_ || socket_release_pending_) return {};
     // DeskDate consumes the shared Source event8 without selecting a menu icon.
-    pending_ = DeskRequest{DeskRequestKind::advance_turn, state_.manager_slot,
+    pending_ = DeskRequest{DeskRequestKind::advance_turn, desk_actor(state_),
                            -1, 12, -1, state_.revision};
     shortcut_hover_record_ = -1;
     last_rejection_.clear();

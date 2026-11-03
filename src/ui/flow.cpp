@@ -731,7 +731,7 @@ void StartupFlow::open_world12_file_dialog(SaveLoadMode mode,const LeImage& refe
     int manager=-1;uint64_t revision=0;Image backdrop=setup_.render();bool gradient=true;
     if(desktop_){const auto& action=desktop_->pending();const int kind=mode==SaveLoadMode::load?10:11;
         if(desktop_->state().source!="world12"||!action||action->kind!=DeskRequestKind::open_menu||action->menu_kind!=kind)throw FormatError("world12: file dialog has no matching desktop owner");
-        manager=desktop_->state().manager_slot;revision=desktop_->state().revision;backdrop=desktop_->render();gradient=desktop_->state().gradient_text;
+        manager=desk_actor(desktop_->state());revision=desktop_->state().revision;backdrop=desktop_->render();gradient=desktop_->state().gradient_text;
     }else if(mode!=SaveLoadMode::load||setup_symbol_!=SetupLeagueSymbol::country_selection)throw FormatError("world12: setup can only load games");
     auto next=std::make_unique<SaveLoadScreen>(data_,save_directory_,mode,manager,revision,std::move(backdrop),gradient,SaveLoadFileKind::game,-1,reference,std::move(reader));
     auto owned_reference=std::make_unique<LeImage>(reference);
@@ -748,7 +748,7 @@ void StartupFlow::open_world12_layout_dialog(SaveLoadMode mode,const DeskRequest
 }
 StartupFlow::World12DesktopView StartupFlow::prepare_world12_layout_result(DeskState state,const LeImage& reference,const SaveLoadRequest& request)const {
     if(!world12_reference_||!desktop_||!save_load_||!save_load_->pending()||*save_load_->pending()!=request||request.file_kind!=SaveLoadFileKind::menu_layout||request.origin_item_id!=53||
-       state.source!="world12"||state.revision!=request.revision+1||state.manager_slot!=request.manager_slot||!desktop_->state().menu_layout_shortcut||desktop_->state().menu_layout_shortcut->id!=request.origin_item_id)
+       state.source!="world12"||state.revision!=request.revision+1||desk_actor(state)!=request.manager_slot||!desktop_->state().menu_layout_shortcut||desktop_->state().menu_layout_shortcut->id!=request.origin_item_id)
         throw FormatError("world12: layout acknowledgement has no matching file owner");
     validate_desk_state(state);auto expected=desktop_->state();expected.revision=state.revision;expected.items=state.items;
     expected.layout_records=state.layout_records;expected.folder_icon_slots=state.folder_icon_slots;expected.mailbox_shortcut=state.mailbox_shortcut;expected.menu_layout_shortcut=state.menu_layout_shortcut;
@@ -762,19 +762,34 @@ StartupFlow::World12DesktopView StartupFlow::prepare_world12_file_result(DeskSta
     if(request.action==SaveLoadAction::save&&(!desktop_||state.managers!=desktop_->state().managers||state.manager_slot!=desktop_->state().manager_slot||state.options!=desktop_->state().options||state.badge_atlas!=desktop_->state().badge_atlas))throw FormatError("world12: save changed current career identity");
     World12DesktopView view;view.reference=std::make_unique<LeImage>(reference);view.teams=state.manager_teams;view.desktop=std::make_unique<DesktopScreen>(data_,std::move(state),reference);return view;
 }
+namespace {
+bool same_world12_career_roster(const DeskState& next,const DeskState& previous){
+    return !next.world12_career_roster.empty()&&next.world12_career_roster==previous.world12_career_roster;
+}
+bool world12_turn_options(const DeskState& next,const DeskState& previous,bool annual){
+    auto expected=previous.options;
+    if(next.national_team||previous.national_team)expected.managers=next.options.managers;
+    if(annual&&expected.duration>1&&expected.duration<5)expected.duration-=1;
+    return next.options==expected;
+}
+}
 StartupFlow::World12DesktopView StartupFlow::prepare_world12_manager_result(DeskState state,const LeImage& reference,const DeskRequest& request)const {
     if(!desktop_||!desktop_->pending()||*desktop_->pending()!=request||request.kind!=DeskRequestKind::advance_turn||in_preparation_menu()||in_readonly_view()||state.source!="world12"||state.revision<=request.revision)
         throw FormatError("world12: manager transition has no current desktop owner");
     validate_desk_state(state);
-    if(state.options!=desktop_->state().options||state.managers!=desktop_->state().managers||state.day_counter!=desktop_->state().day_counter)throw FormatError("world12: initial manager transition changed roster or date");
+    if(state.options!=desktop_->state().options||!same_world12_career_roster(state,desktop_->state())||state.day_counter!=desktop_->state().day_counter)throw FormatError("world12: initial manager transition changed canonical roster or date");
     World12DesktopView view;view.reference=std::make_unique<LeImage>(reference);view.teams=state.manager_teams;view.desktop=std::make_unique<DesktopScreen>(data_,std::move(state),reference);return view;
 }
 StartupFlow::World12DesktopView StartupFlow::prepare_world12_turn_result(DeskState state,const LeImage& reference,const DeskRequest& request)const {
     if(!desktop_||!desktop_->pending()||*desktop_->pending()!=request||request.kind!=DeskRequestKind::advance_turn||in_preparation_menu()||in_readonly_view()||state.source!="world12"||state.revision<=request.revision)
         throw FormatError("world12: calendar turn has no current desktop owner");
     validate_desk_state(state);const auto& previous=desktop_->state();
-    if(state.options!=previous.options||state.managers!=previous.managers||state.day_counter<=previous.day_counter||state.season_index!=previous.season_index)
-        throw FormatError("world12: calendar turn changed roster/season or did not advance its date");
+    const bool annual=state.season_index==previous.season_index+1;
+    const bool same_season=state.season_index==previous.season_index;
+    const bool same_date_pass=same_season&&state.day_counter==previous.day_counter&&state.world12_event_known&&previous.world12_event_known&&state.world12_event_groups!=previous.world12_event_groups;
+    if(!world12_turn_options(state,previous,annual)||!same_world12_career_roster(state,previous)||
+       (!annual&&!same_season)||(!same_date_pass&&state.day_counter<=previous.day_counter))
+        throw FormatError("world12: calendar turn changed canonical roster or has no new date/pass/season owner");
     World12DesktopView view;view.reference=std::make_unique<LeImage>(reference);view.teams=state.manager_teams;view.desktop=std::make_unique<DesktopScreen>(data_,std::move(state),reference);return view;
 }
 void StartupFlow::finish_world12_desktop(World12DesktopView view) noexcept {
@@ -832,7 +847,7 @@ void StartupFlow::acknowledge_desk(DeskState state) {
 void StartupFlow::show_notified_mailbox(MailboxState state) {
     if (!desktop_ || !engine_attached_ || desktop_->pending() || in_preparation_menu() ||
         in_readonly_view() || matchday_results_ || !desktop_->state().mailbox_notification_pending ||
-        desktop_->state().national_team || state.manager_slot != desktop_->state().manager_slot ||
+        desktop_->state().national_team || state.manager_slot != desk_actor(desktop_->state()) ||
         state.revision != desktop_->state().revision)
         throw FormatError("mailbox: automatic notification requires the idle active club desk");
     mailbox_ = std::make_unique<MailboxScreen>(data_, std::move(state),
@@ -842,11 +857,11 @@ void StartupFlow::show_notified_mailbox(MailboxState state) {
 void StartupFlow::acknowledge_mailbox_close(const MailboxCloseRequest& request, DeskState desk,
                                              PreparationState preparation) {
     if (!mailbox_ || !pending_mailbox_close_ || *pending_mailbox_close_ != request || !desktop_ ||
-        !engine_attached_ || request.manager_slot != desktop_->state().manager_slot ||
+        !engine_attached_ || request.manager_slot != desk_actor(desktop_->state()) ||
         request.manager_slot != mailbox_->state().manager_slot || request.revision != desktop_->state().revision ||
         request.revision != mailbox_->state().revision || desk.source != desktop_->state().source ||
         desk.revision != request.revision || preparation.desktop.revision != request.revision ||
-        desk.manager_slot != request.manager_slot || desk.runtime_club != desktop_->state().runtime_club ||
+        desk_actor(desk) != request.manager_slot || desk.runtime_club != desktop_->state().runtime_club ||
         desk.day_counter != desktop_->state().day_counter || desk.mailbox_notification_pending)
         throw FormatError("mailbox: mismatched notification close acknowledgement");
     auto expected = desktop_->state();

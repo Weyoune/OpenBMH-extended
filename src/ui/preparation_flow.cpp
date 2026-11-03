@@ -665,7 +665,7 @@ void StartupFlow::show_world12_tables(World12TableState page,PreparationState pa
     if(!desktop_||!world12_reference_||desktop_->state().source!="world12"||!engine_attached_||in_preparation_menu()||in_readonly_view()||
        !desktop_->pending()||*desktop_->pending()!=owner||owner.kind!=DeskRequestKind::open_menu||(owner.menu_kind<0||owner.menu_kind>2)||
        owner.revision!=desktop_->state().revision||owner.manager_slot!=desktop_->state().manager_slot||page.identity.revision!=owner.revision+1||
-       parent.desktop.revision!=page.identity.revision||page.identity.club!=desktop_->state().managers.at(size_t(owner.manager_slot)).world_club)
+       parent.desktop.revision!=page.identity.revision||page.identity.club!=desktop_->state().managers.at(size_t(desktop_->state().manager_slot)).world_club)
         throw FormatError("world12: table opening lacks its desktop owner");
     auto before=desktop_->state();before.revision=parent.desktop.revision;if(desk_json(before)!=desk_json(parent.desktop))throw FormatError("world12: table opening changed unrelated desktop fields");
     validate_preparation_context(parent);World12TableView next;
@@ -689,7 +689,7 @@ void StartupFlow::reject_world12_table(std::string reason){if(!world12_table_scr
 void StartupFlow::show_world12_other_games(OtherGamesState page,PreparationState parent,const DeskRequest& owner) {
     if(!desktop_||!world12_reference_||desktop_->state().source!="world12"||!engine_attached_||in_preparation_menu()||in_readonly_view()||
        !desktop_->pending()||*desktop_->pending()!=owner||owner.kind!=DeskRequestKind::open_menu||owner.menu_kind!=5||
-       owner.revision!=desktop_->state().revision||owner.manager_slot!=desktop_->state().manager_slot||!page.world12_identity||
+       owner.revision!=desktop_->state().revision||owner.manager_slot!=desk_actor(desktop_->state())||!page.world12_identity||
        page.world12_identity->revision!=owner.revision+1||parent.desktop.revision!=owner.revision+1||parent.desktop.source!="world12"||
        page.world12_identity->club!=desktop_->state().managers.at(size_t(owner.manager_slot)).world_club)
         throw FormatError("world12: competition overview has no matching desktop owner");
