@@ -54,7 +54,13 @@ World12StatisticsState world12_statistics_state(const CareerSnapshot& snapshot,c
     out.menu.transfer_history_count=snapshot.transfers?int(snapshot.transfers->history[owner.manager].size()):0;
     out.menu.gradient_text=reference.memory.u8(layout::TextGradientDisabled)==0&&source.u8(layout::TextGradientMode)==2;
     if(world.economy&&world.economy->presentation_options)out.menu.gradient_text=(*world.economy->presentation_options)[layout::TextGradientDisabled-layout::LeaguePresentationOptions]==0&&source.u8(layout::TextGradientMode)==2;
+    const bool club_actor=world.clubs.at(owner.club).kind==ClubKind::club&&world.clubs.at(owner.club).league.valid();
+    if(!club_actor)for(size_t child:{0u,1u,2u,3u,6u})out.menu.available[child]=false;
+    out.menu.available[4]=world.national_campaigns.has_value();out.menu.available[7]=world.annual_title_archive.has_value();
+    if(club_actor){out.menu.available[1]=snapshot.transfers.has_value();out.menu.available[2]=actor->career&&actor->career->season_services&&actor->match_state&&actor->match_state->attendance&&world.economy&&world.economy->managers[owner.manager].monthly;out.menu.available[5]=actor->finance&&world.economy&&world.markets&&world.economy->managers[owner.manager].monthly;out.menu.available[8]=actor->match_state.has_value();}
+    else {out.menu.available[5]=world.national_coaches&&std::any_of(world.national_coaches->begin(),world.national_coaches->end(),[&](const auto& record){return record.active&&record.coach==owner.manager&&record.team==owner.club&&record.account.investment_balance&&record.account.depreciation;});out.menu.available[8]=std::any_of(world.national_squads.begin(),world.national_squads.end(),[&](const auto& squad){return squad.team==owner.club;});}
     if(selection.page<0)return out;
+    if(!out.menu.available[size_t(selection.page)])throw FormatError("world12: this statistics pane has no actual owned data in the current role");
     if(selection.page==7){out.rankings=rankings(snapshot,owner,selection,source,frame);return out;}
     if(selection.page==4){
         if(!world.national_campaigns)throw FormatError("world12: World-Cup statistics require the actual saved national history owner");
@@ -69,7 +75,6 @@ World12StatisticsState world12_statistics_state(const CareerSnapshot& snapshot,c
         for(size_t c=0;c<62;++c){const auto& crest=world.crests.at(world.clubs.at(nations[c]).crest);page.badge_atlases[c]=crest.path;page.badge_cells[c]=crest.cell;out.clubs.push_back(nations[c]);}
         out.world_cup=std::move(page);return out;
     }
-    const bool club_actor=world.clubs.at(owner.club).kind==ClubKind::club&&world.clubs.at(owner.club).league.valid();
     if(!club_actor&&(selection.page==0||selection.page==1||selection.page==2||selection.page==3||selection.page==6))throw FormatError("world12: this statistic requires actual owned club league/history facts; a national role cannot substitute a parked club");
     if(selection.page==1){
         if(!snapshot.transfers)throw FormatError("world12: transfer history is unknown in this saved career");

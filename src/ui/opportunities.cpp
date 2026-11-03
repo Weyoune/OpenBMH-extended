@@ -35,7 +35,7 @@ std::string original_text(const TextDb& texts, uint32_t at) {
 // Width is a count for the art, but ExpireQuestion includes both descriptor end coordinates.
 void original_button(Image& out, const Image& atlas, const SpriteFont& sprite,
                      const LeImage& exe, int x, int y, int width,
-                     std::string_view label, bool selected) {
+                     std::string_view label, bool selected,bool available=true) {
     constexpr int height = 10; // FormatError3 raises requested height 9 to 10.
     int dx = x, dy = y;
     if (selected) {
@@ -61,7 +61,7 @@ void original_button(Image& out, const Image& atlas, const SpriteFont& sprite,
     const int tail = width - used;
     copy(out, atlas, 45 - tail, sy + 20, dx + used, dy, tail, height, 0xc0);
     sprite.draw(out, dx + width / 2 - sprite.text_width(label) / 2,
-                dy + height / 2 + 2, label, exe.u8(::bmh::layout::Advertising_Button_RuntimeField + uint32_t(selected)));
+                dy + height / 2 + 2, label, available?exe.u8(::bmh::layout::Advertising_Button_RuntimeField + uint32_t(selected)):4);
 }
 
 void statistics_window(Image& out, const Image& background, const LeImage& exe, int index = 0,
@@ -122,7 +122,7 @@ Image StatisticsMenuScreen::render() const {
         const int x = 3 + (i % 3) * 0x6c, y = 0xcb + (i / 3) * 0x0c;
         const bool selected = pressed_ == i || (pending_ && pending_->selected_index == i);
         original_button(out, buttons_, sprite_, exe_, x, y, 0x60,
-                        original_text(texts_, ::bmh::layout::Opportunities_FormatError_TextPointer + uint32_t(i) * 4), selected);
+                        original_text(texts_, ::bmh::layout::Opportunities_FormatError_TextPointer + uint32_t(i) * 4), selected,state_.available[size_t(i)]);
     }
     if (!rejection_.empty()) sprite_.draw(out, 88, 198, rejection_, 5);
     return out;
@@ -174,7 +174,7 @@ bool StatisticsMenuScreen::pointer_down(int x, int y, bool right) {
     pressed_ = -1;
     for (int i = 0; i < 9; ++i) {
         const int left = 3 + (i % 3) * 0x6c, top = 0xcb + (i / 3) * 0x0c;
-        if (x >= left && x <= left + 0x60 && y >= top && y <= top + 10) {
+        if (state_.available[size_t(i)]&&x >= left && x <= left + 0x60 && y >= top && y <= top + 10) {
             pressed_ = i; return true;
         }
     }

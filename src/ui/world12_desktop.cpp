@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "ui/world12_desktop.hpp"
+#include "ui/world12_readonly_capabilities.hpp"
 #include "game/world12/desktop_projection.hpp"
 #include "game/match_engine.hpp"
 #include "formats/textd.hpp"
@@ -64,6 +65,6 @@ DeskState world12_initial_desktop(const std::filesystem::path& data,const bmh::w
     }}
     const auto id=desk.managers.at(size_t(desk.manager_slot)).world_club;
     const auto& crest=state.world.crests.at(state.world.clubs.at(id).crest);desk.badge=crest.cell;desk.badge_atlas=crest.path;
-    desk.rank_curves[0].league=desk.league;desk.source="world12";validate_desk_state(desk);return desk;
+    desk.rank_curves[0].league=desk.league;desk.source="world12";world12_readonly_capabilities(state,desk);validate_desk_state(desk);return desk;
 }
 }

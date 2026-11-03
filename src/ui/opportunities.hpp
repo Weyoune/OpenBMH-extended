@@ -52,6 +52,7 @@ struct StatisticsMenuState {
     Image underlay;
     int transfer_history_count = 0;
     bool gradient_text = true;
+    std::array<bool,9> available{true,true,true,true,true,true,true,true,true};
 };
 struct StatisticsMenuRequest {
     DeskRequest owner;

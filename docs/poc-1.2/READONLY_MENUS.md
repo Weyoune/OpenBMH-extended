@@ -29,3 +29,11 @@ club. Likewise national roles do not substitute club forecasts, transfer logs,
 facility-history graphs, all-time club tables or club streak records. Missing
 owners remain explicit prerequisites. This boundary does not suppress actual
 national fixtures, scores, group tables, podiums or coach accounts.
+
+Typed national desktops explicitly disable unsupported domestic family/scorer/
+fairplay/history icons. NoClub also disables Hall standings without German
+scope and ranked/unknown legacy highscore modes without their real backing.
+The Statistics selector mutes unavailable cells with the existing Original
+sprite font and ignores their input. Native callers retain all nine available
+cells by default. These masks belong only to the projected capability view;
+they are never written back as a saved MEN layout or used to create club facts.
