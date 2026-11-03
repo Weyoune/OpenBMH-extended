@@ -45,6 +45,7 @@ struct SeasonTaxEvent {
     int animation_variant = 0;
     bool caught = false;
     std::string text; // owned Original-encoding text, prepared by the accounting engine
+    bool operator==(const SeasonTaxEvent&)const=default;
 };
 struct SeasonTaxHooks {
     std::function<void(const GameState&, const SeasonTaxEvent&)> observe;
@@ -52,9 +53,15 @@ struct SeasonTaxHooks {
 };
 // SeasonProfitTax continues GameEndTaxAnimationScreen's loop without reinitialising its local fine.
 // This state lives for one annual-accounts pass across all human managers.
+struct ClubAttractionTitles;
 struct SeasonTaxState {
     int32_t carried_fine = 0;
 };
+
+// Complete Source manager pass with actual completed titles and next-season entries.
+// The outer staged owner supplies all human presenters and both RNG streams.
+void settle_manager_annual_accounts(GameState&,int manager,GameRandom&,WatcomRandom&,
+    MinuteReport&,const SeasonTaxHooks&,SeasonTaxState&,const ClubAttractionTitles&);
 
 // CupDrawFromGame: the generated order, then Getenv/CupGroupOverviewEffects.
 // Participants are owned copies of the current round at each boundary.
@@ -205,6 +212,16 @@ void initialize_european_qualification_seed(GameState& g);
 // Season boundary: reset manager boards, age/retire players and clear seasonal
 // histories. Kept separate from cup draws, accounts and calendar advancement.
 void season_players(GameState& g, GameRandom& game, WatcomRandom& rand, MinuteReport& report);
+
+// Shared physical-slot ageing/retirement loop, after every manager's annual
+// reset. Global adapters supply once-per-player identity and actual release
+// placement while the native pass retains its default allocator.
+struct SeasonPlayerRenewalHooks {
+    std::function<bool(int player)> first_visit;
+    std::function<bool(GameState&,int slot,GameRandom&,WatcomRandom&,MinuteReport&)> release;
+};
+bool renew_season_player_slots(GameState&,int first,int end,GameRandom&,WatcomRandom&,
+    MinuteReport&,const SeasonPlayerRenewalHooks&);
 
 // MonthChange(absolute squad slot): the player leaves his club for the free agents with new
 // values (W and game draws) and an age W(4, 15); his club closes the gap (ReleasePlayer,

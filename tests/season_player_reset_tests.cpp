@@ -5,6 +5,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <utility>
+#include <set>
 
 namespace {
 void check(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }
@@ -86,6 +87,23 @@ int main() try {
         run(g, game, rand);
         check(g.players[0].age() == 47 && game.calls() == 0 && rand.calls() == 0,
               "new-career setup unexpectedly aged market players");
+    }
+    {
+        auto g=fixture(0,20);g.squad_slots[2968]=0;
+        std::set<int> visited;bmh::SeasonPlayerRenewalHooks hooks;
+        hooks.first_visit=[&](int player){return visited.insert(player).second;};
+        bmh::GameRandom game(4711);bmh::WatcomRandom random(815);bmh::MinuteReport report;
+        check(bmh::renew_season_player_slots(g,0,24,game,random,report,hooks),"bounded club renewal failed");
+        check(bmh::renew_season_player_slots(g,2968,2969,game,random,report,hooks),"bounded cached-offer renewal failed");
+        check(g.players[0].age()==21&&random.calls()==1&&game.calls()==0&&visited.size()==1,
+            "global renewal identity was lost between bounded workspaces");
+    }
+    {
+        auto g=fixture(2928,47);bmh::GameRandom game(4711);bmh::WatcomRandom random(815);bmh::MinuteReport report;
+        bmh::SeasonPlayerRenewalHooks hooks;bool released=false;
+        hooks.release=[&](auto&,int slot,auto&,auto&,auto&){check(slot==2928,"renewal release callback lost physical slot");released=true;return false;};
+        check(!bmh::renew_season_player_slots(g,2928,2929,game,random,report,hooks)&&released,
+            "failed actual placement was silently accepted by bounded renewal");
     }
     std::cout << "Season player reset: market retirement and unchanged ageing passed\n";
     return 0;

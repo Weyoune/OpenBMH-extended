@@ -15,9 +15,9 @@ namespace {
 uint16_t flags(uint16_t source){return uint16_t(((source&1)?0x8000:0)|((source&2)?0x4000:0)|((source&4)?0x2000:0)|((source&8)?0x1000:0));}
 }
 AiMatchProjection AiMatchProjection::create(const World& world,const std::vector<ClubId>& requested,const GameState& base){return create_core(world,requested,base,false);}
-AiMatchProjection AiMatchProjection::create_core(const World& world,const std::vector<ClubId>& requested,const GameState& base,bool allow_empty){
-    if((requested.empty()&&!allow_empty)||requested.size()>64||requested.size()>size_t(runtime_dimensions.big_squad_teams))
-        throw std::invalid_argument("world12: match projection requires 1-64 clubs within the native squad workspace");
+AiMatchProjection AiMatchProjection::create_core(const World& world,const std::vector<ClubId>& requested,const GameState& base,bool allow_empty,size_t maximum_clubs){
+    if((requested.empty()&&!allow_empty)||requested.size()>maximum_clubs||(maximum_clubs<=64?requested.size()>size_t(runtime_dimensions.big_squad_teams):requested.size()*24>size_t(runtime_dimensions.pool_first)))
+        throw std::invalid_argument("world12: match projection requires bounded clubs within the native squad workspace");
     world.validate();
     for(const auto& manager:world.managers)if(std::find(requested.begin(),requested.end(),manager.club)!=requested.end())throw std::invalid_argument("world12: human manager projection is not integrated");
     if(runtime_dimensions.big_squad_teams<32)throw std::invalid_argument("world12: legacy match workspace is unavailable");
@@ -69,6 +69,9 @@ AiMatchProjection AiMatchProjection::create_core(const World& world,const std::v
     state.counts.players=uint32_t(state.players.size());return projection;
 }
 AiMatchProjection AiMatchProjection::create_for_humans(const CareerSnapshot& snapshot,const std::vector<ClubId>& requested,const GameState& base,HumanProjectionPolicy policy) {
+    return create_humans(snapshot,requested,base,policy,64);
+}
+AiMatchProjection AiMatchProjection::create_humans(const CareerSnapshot& snapshot,const std::vector<ClubId>& requested,const GameState& base,HumanProjectionPolicy policy,size_t maximum_clubs) {
     snapshot.validate();const auto& world=snapshot.world;
     if(world.settings&&(policy.mode!=world.settings->mode||policy.difficulty!=world.settings->difficulty||policy.foreign_rule!=world.settings->foreign_rule))throw std::invalid_argument("world12: human match policy differs from saved career settings");
     if(policy.mode<1||policy.mode>3||policy.difficulty<0||policy.difficulty>9||base.formations.size()<0x580)throw std::invalid_argument("world12: incomplete human projection policy/rules");
@@ -80,7 +83,7 @@ AiMatchProjection AiMatchProjection::create_for_humans(const CareerSnapshot& sna
         managers.push_back(&manager);
     }
     if(managers.empty())throw std::invalid_argument("world12: human projection has no participating manager");
-    auto ai_world=world;ai_world.managers.clear();auto result=create(ai_world,requested,base);auto& local=result.state;
+    auto ai_world=world;ai_world.managers.clear();auto result=create_core(ai_world,requested,base,false,maximum_clubs);auto& local=result.state;
     result.original_managers_=world.managers;result.manager_reference_clubs_=requested;
     local.level=policy.difficulty;local.projected_foreign_rule=policy.foreign_rule;local.date=snapshot.date;local.season=int(snapshot.season);
     if(snapshot.calendar){
@@ -155,6 +158,16 @@ AiMatchProjection AiMatchProjection::create_for_humans(const CareerSnapshot& sna
     }
     result.install_player_statistics(world,true);
     local.counts.players=uint32_t(local.players.size());return result;
+}
+AiMatchProjection AiMatchProjection::create_for_annual_accounts(const CareerSnapshot& snapshot,Country country,const GameState& base,HumanProjectionPolicy policy) {
+    if(!snapshot.world.catalogue.scope.domestic_enabled(country))throw FormatError("world12: annual donor country is disabled");
+    const auto group=country==Country::germany?TableGroup::germany:country==Country::england?TableGroup::england:throw FormatError("world12: annual donor country is not domestic");
+    std::vector<ClubId> clubs;
+    for(auto league:snapshot.world.catalogue.simulation_leagues(group))for(auto club:snapshot.world.membership[league.value].clubs)clubs.push_back(club);
+    if(runtime_dimensions.big_squad_teams<90)throw FormatError("world12: annual native workspace lacks 90 large squads");
+    if(clubs.size()!=90)throw FormatError("world12: annual donor pool must own all 90 physical country clubs");
+    for(const auto& manager:snapshot.world.managers)if(std::find(clubs.begin(),clubs.end(),manager.club)==clubs.end())clubs.push_back(manager.club);
+    return create_humans(snapshot,clubs,base,policy,94);
 }
 AiMatchProjection AiMatchProjection::create_for_european(const CareerSnapshot& snapshot,const std::vector<ClubId>& requested,const GameState& base,HumanProjectionPolicy policy) {
     snapshot.validate();if(requested.empty()||requested.size()>128)throw FormatError("world12: European projection needs 1-128 actual clubs");

@@ -14,6 +14,12 @@ public:
     static AiMatchProjection create(const World&,const std::vector<ClubId>&,const GameState& rules_template);
     static AiMatchProjection create_for_humans(const CareerSnapshot&,const std::vector<ClubId>&,
         const GameState& rules_template,HumanProjectionPolicy);
+    // Complete native academy donor pool (90 physical clubs), followed by every
+    // other actual human club. Those additional humans supply manager-count and
+    // exclusion context; only managers inside the first 90 clubs can run the
+    // account kernel. This wider workspace is annual-only.
+    static AiMatchProjection create_for_annual_accounts(const CareerSnapshot&,Country,
+        const GameState& rules_template,HumanProjectionPolicy);
     static AiMatchProjection create_for_desktop(const CareerSnapshot&,const std::vector<ClubId>&,
         const GameState& rules_template,HumanProjectionPolicy);
     // Rating-only foreign clubs retain the Original non-squad indices and Core
@@ -39,7 +45,9 @@ public:
     void commit_transfer_state(World&,PlayerId,ClubId seller,ClubId buyer,bool moved)const;
     void commit_released_players(World&,const std::vector<std::pair<PlayerId,ClubId>>&)const;
 private:
-    static AiMatchProjection create_core(const World&,const std::vector<ClubId>&,const GameState&,bool allow_empty);
+    static AiMatchProjection create_core(const World&,const std::vector<ClubId>&,const GameState&,bool allow_empty,size_t maximum_clubs=64);
+    static AiMatchProjection create_humans(const CareerSnapshot&,const std::vector<ClubId>&,
+        const GameState&,HumanProjectionPolicy,size_t maximum_clubs);
     std::vector<ClubRecord> abstract_clubs_;
     struct TransferMove {PlayerId player;ClubId seller,buyer;};
     void commit_state(World&,bool,const std::vector<TransferMove>&)const;

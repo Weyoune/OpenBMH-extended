@@ -151,3 +151,29 @@ lookup does not read beyond the final day. It still cannot claim a scheduled
 match event after calendar exhaustion. Annual accounts, actual academy donor
 selection, ageing/retirement, qualification/title archives, renewed calendars and
 closing/new desk presentation remain required. The Session annual guard remains.
+
+
+## Shared annual account and renewal kernels
+
+`settle_manager_annual_accounts` exposes the complete existing manager account
+pass with explicit completed-title and next-European-entry relations. The
+native caller still reads its original competition fields. Both paths retain
+summer events, youth settlement, bonuses, academy search, credit, tax/refund,
+ticket income, title premiums and the shared fine carry across managers.
+
+`create_for_annual_accounts` supplies the actual 90-club domestic donor pool in
+physical membership order. Other active humans retain their real records and
+rosters as manager-count/exclusion context beyond that pool. Only a manager in
+the first 90 clubs can execute the account kernel; normal match factories keep
+their previous bounds. No player or donor is synthesized.
+
+`renew_season_player_slots` shares the existing physical-slot ageing and
+retirement loop. Its optional global-identity visitor allows successive bounded
+workspaces to age each real player once, including cached offer/free-pool
+references. The caller must provide actual release placement and retain a failed
+placement as a failed unpublished transaction. The legacy whole-world pass uses
+its original allocator and once-per-player tracking.
+
+The kernels retain the Original native stream and random order in independent
+pre-extraction comparisons. Their availability alone does not publish a typed
+new season or close the accounting/archive release gates.

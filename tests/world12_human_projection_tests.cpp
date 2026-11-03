@@ -47,6 +47,23 @@ CareerSnapshot snapshot(const bmh::GameState& base) {
     for(auto league:{LeagueId{4},LeagueId{9}}){snapshot.league_rounds[league.value]=2;for(int r=1;r<=2;++r)for(int m=0;m<w.catalogue.league(league).clubs/2;++m)snapshot.results.result(w.catalogue,league,r,m)={true,0,0};}
     snapshot.validate();return snapshot;
 }
+void annual_donor_workspace(const bmh::GameState& base) {
+    const auto source=snapshot(base);
+    for(auto country:{Country::germany,Country::england}) {
+        const auto projection=AiMatchProjection::create_for_annual_accounts(source,country,base,{3,6,false,true});
+        check(projection.human_managers()==2,"annual donor search dropped another country's human manager");
+        size_t local=0;
+        for(auto league:source.world.catalogue.simulation_leagues(country==Country::germany?TableGroup::germany:TableGroup::england))
+            for(auto club:source.world.membership[league.value].clubs)check(projection.global_club(uint32_t(local++))==club,"annual donor search changed physical country slot order");
+        check(local==90,"annual donor workspace lost Source's 90 actual clubs");
+        auto roundtrip=source.world;projection.commit_match_state(roundtrip);
+        check(roundtrip==source.world,"unchanged annual projection changed real rosters or sparse human backing");
+    }
+    rejects([&]{AiMatchProjection::create_for_annual_accounts(source,Country::spain,base,{3,6,false,true});},"foreign country entered domestic academy donor search");
+    std::vector<ClubId> too_many;for(auto club:source.world.membership[0].clubs)too_many.push_back(club);
+    for(auto league:{1,2,3})for(auto club:source.world.membership[size_t(league)].clubs)too_many.push_back(club);
+    rejects([&]{AiMatchProjection::create_for_humans(source,too_many,base,{3,6,false,true});},"annual workspace widened the match factory");
+}
 void live_preferences_and_scopes(const bmh::GameState& base) {
     auto saved=snapshot(base);saved.world.markets.emplace();saved.world.free_players.emplace();saved.world.settings=CareerSettings{3,6,5,2,false};
     for(auto& manager:saved.world.managers){manager.career.emplace();manager.career->season_records.emplace();}
@@ -226,7 +243,7 @@ void statistics_bridge(const bmh::GameState& base) {
 }
 }
 int main()try {
-    bmh::set_fixture_tables(bmh::test::authored_fixture_tables());const auto base=rules();statistics_bridge(base);live_preferences_and_scopes(base);known_economy_match_oracle(base);const auto source=snapshot(base);auto world=source.world;
+    bmh::set_fixture_tables(bmh::test::authored_fixture_tables());const auto base=rules();statistics_bridge(base);annual_donor_workspace(base);live_preferences_and_scopes(base);known_economy_match_oracle(base);const auto source=snapshot(base);auto world=source.world;
     const auto de=world.membership[4].clubs[0],en=world.membership[9].clubs[0],de_other=world.membership[4].clubs[1],en_other=world.membership[9].clubs[1];
     const std::vector<ClubId> requested{de,de_other,en,en_other};
     rejects([&]{AiMatchProjection::create(world,requested,base);},"AI-only guard allowed a human participant");

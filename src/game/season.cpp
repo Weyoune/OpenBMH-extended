@@ -450,15 +450,15 @@ int32_t assets(const GameState& g, int m, int mask) {
 // ClubAttraction(club, pay): how popular a club is (0..100) - its European campaign, the
 // championship and the cups it holds, its strength and position. With `pay` the
 // manager (ActiveManager) gets the premiums for the titles (messages, record +0x874).
-int club_popularity(GameState& g, int m, int team, bool pay) {
+int club_popularity(GameState& g, int m, int team, bool pay, const ClubAttractionTitles* relations=nullptr) {
     StaticMemory& mem = g.memory;
     Entrants en{mem};
     static const uint8_t kKind[4] = {0, 1, 3, 2};                      // SeasonRuntimeField11
     static const uint8_t kEntry[4] = {0x00, 0x0f, 0x13, 0x15};         // SeasonRuntimeField12
     static const uint8_t kPlus[4] = {0x14, 0x1e, 0x14, 0x0f};          // SeasonRuntimeField13
     static const int32_t kPremium[4] = {500000, 1500000, 2500000, 1500000};  // SeasonRuntimeField14
-    int8_t p = int8_t(kKind[en.find(team)] * 10 + 10);
-    if (team == mem.u16(::bmh::layout::Cup_AdvanceCup_RuntimeField6)) {
+    int8_t p = int8_t(kKind[relations?relations->european_cup:en.find(team)] * 10 + 10);
+    if (relations?relations->champion:team == mem.u16(::bmh::layout::Cup_AdvanceCup_RuntimeField6)) {
         if (pay) {
             post_composed(g, m, kChampionshipBonusText);  // ChampionshipBonusText
             book_money(g, m, -700000, true);
@@ -467,7 +467,7 @@ int club_popularity(GameState& g, int m, int team, bool pay) {
         p = int8_t(p + 10);
     }
     for (int k = 0; k < 4; k++) {
-        if (team != mem.u16(::bmh::layout::Season_CareerSeasonSetup_RuntimeField + uint32_t(kEntry[k]) * 0x28)) continue;
+        if (!(relations?relations->holders[size_t(k)]:team == mem.u16(::bmh::layout::Season_CareerSeasonSetup_RuntimeField + uint32_t(kEntry[k]) * 0x28))) continue;
         p = int8_t(p + kPlus[k]);
         if (pay) {
             post_composed(g, m, message_text(g, ::bmh::layout::Season_ClubPopularity_TextPointer) + message_text(g, ::bmh::layout::CupDraw_FormatError_ExecutableField6 + uint32_t(k) * 4) +
@@ -489,13 +489,13 @@ int club_popularity(GameState& g, int m, int team, bool pay) {
 // CareerSeasonSetup2(manager): the season tickets - popularity above the league's base plus
 // W(0, 10) in steps of 300 on top of the base number (SeasonRuntimeField15), less 5 % per game
 // level, sold at the league's price (SeasonRuntimeField16); record +0x2ac, +0x754, +0x868
-void season_tickets(GameState& g, int m, WatcomRandom& rand) {
+void season_tickets(GameState& g, int m, WatcomRandom& rand, const ClubAttractionTitles* relations=nullptr) {
     static const uint8_t kBase[5] = {50, 40, 30, 30, 20};                  // SeasonRuntimeField17
     static const uint16_t kTickets[5] = {5000, 2000, 1000, 1000, 300};     // SeasonRuntimeField15
     static const uint16_t kPrice[5] = {330, 270, 240, 240, 225};           // SeasonRuntimeField16
     const int team = g.manager_teams.at(size_t(m));
     const int league = std::min(match_team_league(g,team), 4);
-    const int pop = club_popularity(g, m, team, true);
+    const int pop = club_popularity(g, m, team, true,relations);
     const int low = std::max(pop - kBase[league], 0);
     const int r = rand.range(low, low + 10);
     const int sold = ((100 - g.level * 5) * (kTickets[league] + r * 300)) / 100;
@@ -651,7 +651,7 @@ namespace {
 // Player search, strength bands, age and board setup retain the shared rules.
 bool youth_academy_player(GameState& g, int m, GameRandom& game, WatcomRandom& rand, MinuteReport& report) {
     const int team = g.manager_teams.at(size_t(m));
-    const int league = club_league(team);
+    const int league = match_team_league(g,team);
     if (!environment_academy_active(g, m)) return false;
     if (squad_count(g, team, 3) > 0x16) return false;
     const auto budget = g.memory.u32(::bmh::layout::Spending + uint32_t(m) * 0x24 + kYouthAcademy * 4);
@@ -706,7 +706,7 @@ namespace {
 // event, the players' season bonuses, the championship mark, the new credit line from
 // the season's result, taxes on a profit and refunds, then the season tickets
 void season_accounts(GameState& g, int m, GameRandom& game, WatcomRandom& rand, MinuteReport& report,
-                     const SeasonTaxHooks& tax_hooks, SeasonTaxState& tax_state) {
+                     const SeasonTaxHooks& tax_hooks, SeasonTaxState& tax_state,const ClubAttractionTitles* relations=nullptr) {
     for (size_t i = 0; i < 0xc; i++) rec8(g, m, 0x754 + i) = 0;
     finish_youth_season(g, m);
     if (!g.memory.has(::bmh::layout::Season_SeasonAccounts_RuntimeField)) g.memory.add_block(::bmh::layout::Season_SeasonAccounts_RuntimeField, 4);  // (runtime only, not saved)
@@ -717,7 +717,7 @@ void season_accounts(GameState& g, int m, GameRandom& game, WatcomRandom& rand, 
     rec8(g, m, 0x21f) = 0;
     if (g.manager_teams.size() > 1) rec8(g, m, 0x21c) = 0;
     const int pos = int16_t(table_position(g, team));
-    const int league = club_league(team);
+    const int league = match_team_league(g,team);
     const SquadRange range = squad_range(team);
     for (size_t s = 0; s < 24; s++)
         if (g.squad_slots.at(range.first + s) != 0x0FFF) season_bonus(g, m, int(s), uint8_t(pos), true);
@@ -753,7 +753,7 @@ void season_accounts(GameState& g, int m, GameRandom& game, WatcomRandom& rand, 
     set_rec32(g, m, 0x320, 0);
     set_rec32(g, m, 0x324, rec32(g, m, 0x314));
     for (size_t i = 0; i < 0x48; i++) rec8(g, m, 0x85c + i) = 0;
-    season_tickets(g, m, rand);  // ChangePlaces -> CareerSeasonSetup2
+    season_tickets(g, m, rand,relations);  // ChangePlaces -> CareerSeasonSetup2
 }
 
 // ClubsChangePlaces(a, b): two clubs (ids below 168) change places - every table per club id
@@ -874,6 +874,14 @@ void order_cup_ties(GameState& g, int teams, int offset) {
 }
 
 }  // namespace
+
+void settle_manager_annual_accounts(GameState& g,int manager,GameRandom& game,WatcomRandom& random,
+    MinuteReport& report,const SeasonTaxHooks& hooks,SeasonTaxState& tax,const ClubAttractionTitles& relations) {
+    if(relations.european_cup>3)throw std::invalid_argument("annual accounts: invalid European relation");
+    if(!g.projected_match_clubs.empty()&&g.manager_teams.at(size_t(manager))>=90)
+        throw std::invalid_argument("annual accounts: manager is outside the native donor country workspace");
+    season_accounts(g,manager,game,random,report,hooks,tax,&relations);
+}
 
 void clubs_change_places(GameState& g, int a, int b) { change_places(g, a, b); }
 
@@ -1141,6 +1149,121 @@ void reset_manager_season(GameState& g,int m,WatcomRandom& rand,MinuteReport& re
     for(size_t i=0;i<10;++i)rec8(g,m,0x8b6+i)=0xff;
 }
 
+bool renew_season_player_slots(GameState& g,int first,int end,GameRandom& game,WatcomRandom& rand,
+    MinuteReport& report,const SeasonPlayerRenewalHooks& hooks) {
+    if(first<0||end<first||size_t(end)>g.squad_slots.size())throw std::invalid_argument("annual player renewal: invalid slot range");
+    StaticMemory& mem=g.memory;
+    g.lineups_frozen = true;  // LineupRuntimeField
+    uint8_t loans[0x1d3] = {};
+    for (uint32_t k = 0; k < 200; k++) {
+        const uint32_t e = mem.u32(::bmh::layout::Career_RemoveJoinLoans_RuntimeField + k * 4);
+        if (e != 0) loans[(e >> 12) & 0x3ff]++;
+    }
+    uint16_t last_team = 0xffff;  // local_30
+    uint8_t count = 0xff;         // local_20
+    int8_t owner = -1;            // local_24: the club's human manager
+    size_t board_first = 0;       // local_3c
+    std::vector<bool> processed(g.players.size(), false);
+    for (int s = first; s < end && !report.unsupported; s++) {
+        for (;;) {
+            const int player = g.squad_slots.at(size_t(s)) & 0xFFF;
+            if (player == 0xFFF) break;
+            // OpenBMH deviates from the original: age/retire each player
+            // once, even when a temporary offer row references his club
+            // slot or regeneration moves him to a later free-agent slot.
+            if(hooks.first_visit) { if(!hooks.first_visit(player))break; }
+            else {if (processed.at(size_t(player))) break;processed.at(size_t(player)) = true;}
+            const int team = slot_team(s);
+            if (team != int(last_team)) {  // (-1 for the pool never equals 0xFFFF)
+                count = 0xff;
+                const int mm = g.manager_of(team);
+                owner = int8_t(mm >= 0 ? mm : -1);
+                if (mm >= 0) board_first = squad_range(team).first;
+            }
+            Player& p = g.players.at(size_t(player));
+            bool leaves = false;
+            if (s < runtime_dimensions.pool_first && (p.w35c >> 27) == 0x1f) {
+                // out for his career
+                bool gone = true;
+                if (owner != -1) {
+                    std::string text;
+                    const int doctor = int16_t(g.manager_records.at(size_t(owner) * 0xB0C + 0x8ae) |
+                                               g.manager_records.at(size_t(owner) * 0xB0C + 0x8af) << 8);
+                    if (doctor > rand.range(700, 0x4b0)) {
+                        text = message_text(g, ::bmh::layout::Season_SeasonPlayers_TextPointer) + g.player_name(player) + message_text(g, ::bmh::layout::Season_SeasonPlayers_TextPointer2);
+                        gone = false;
+                        p.w35c &= 0x07ffffffu;
+                        p.w364 &= ~(0x1fu << 16);
+                    } else {
+                        text = g.player_name(player) + message_text(g, ::bmh::layout::Season_SeasonPlayers_TextPointer3);
+                        const size_t board = size_t(owner) * 0x840 + size_t(s - int(board_first)) * 0x58;
+                        const int8_t insured = int8_t(g.tactics.at(board + 0x43));
+                        if (insured != 0) {
+                            const int k = (insured >> 6) & 3;
+                            const int32_t pay = int32_t(uint32_t(g.tactics.at(board + 0x50) | g.tactics.at(board + 0x51) << 8 |
+                                                                 g.tactics.at(board + 0x52) << 16) |
+                                                        uint32_t(g.tactics.at(board + 0x53)) << 24) *
+                                                int8_t(k * 3 + 3);
+                            book_money(g, owner, -pay, true);
+                            text += message_text(g, ::bmh::layout::Season_SeasonPlayers_TextPointer4) + format_amount(g, pay) + message_text(g, ::bmh::layout::Season_SeasonPlayers_TextPointer5);
+                        }
+                    }
+                    post_composed(g, owner, text);
+                }
+                if (gone) {
+                    if (count != 0xff) count = uint8_t(squad_count(g, team, 2) + loans[team]);
+                    if (owner == -1 && count <= 0xd) {
+                        set_age(g, player, rand.range(0x12, 0x19) - 0x10);
+                    } else {
+                        count--;
+                        leaves = true;
+                        // a loaned player: his club's manager is told
+                        for (uint32_t k = 0; k < 200; k++) {
+                            const uint32_t e = mem.u32(::bmh::layout::Career_RemoveJoinLoans_RuntimeField + k * 4);
+                            if (e == 0 || int(e & 0xFFF) != player) continue;
+                            const int mm = g.manager_of(int(e >> 12) & 0x3ff);
+                            owner = int8_t(mm >= 0 ? mm : -1);
+                            if (mm >= 0)
+                                post_composed(g, mm, message_text(g, ::bmh::layout::Season_SeasonPlayers_TextPointer6) + g.player_name(player) + message_text(g, ::bmh::layout::Season_SeasonPlayers_TextPointer7));
+                            break;
+                        }
+                    }
+                }
+            }
+            if (!leaves) {
+                // a year older
+                p.w368 &= 0xf8003fffu;
+                int age = int16_t(((p.w364 >> 21) & 0x1f) + 1);
+                // OpenBMH deviates from the original: includes transfer-market
+                // players in retirement so the five-bit age cannot wrap to 16.
+                if (rand.range(0x10, 0x16) < age && owner == -1) {
+                    if (count != 0xff) count = uint8_t(squad_count(g, team, 2) + loans[team]);
+                    if (count > 0xd) {
+                        count--;
+                        leaves = true;
+                    } else {
+                        age = rand.range(0x12, 0x19) - 0x10;
+                    }
+                }
+                if (!leaves) {
+                    set_age(g, player, age);  // SetAge
+                    last_team = uint16_t(team);
+                    break;
+                }
+            }
+            if (std::getenv("BMH_TRACE"))
+                std::printf("  [release slot %d player %d team %d age %u count %u]\n", s, player, team, (p.w364 >> 21) & 0x1f, count);
+            if (!(hooks.release?hooks.release(g,s,game,rand,report):release_player(g, s, game, rand, report))) return false;
+            // Club releases compact their squad in remove_from_seller. Pool
+            // releases have no club: retire this source entry explicitly after
+            // the regenerated player has been placed in the free-agent pool.
+            if (team < 0) g.squad_slots.at(size_t(s)) = 0x0fff;
+        }
+    }
+    g.lineups_frozen = false;
+    return !report.unsupported;
+}
+
 void season_players(GameState& g, GameRandom& game, WatcomRandom& rand, MinuteReport& report) {
     StaticMemory& mem = g.memory;
     auto fill8 = [&](uint32_t at, uint32_t n, uint8_t v) {
@@ -1160,116 +1283,8 @@ void season_players(GameState& g, GameRandom& game, WatcomRandom& rand, MinuteRe
     end_competition(mem, 0xd);  // EndCompetition
     fill8(::bmh::layout::Season_SeasonPlayers_ExecutableField, 1, 0);
     for(size_t m=0;m<g.manager_teams.size()&&!report.unsupported;++m){reset_manager_season(g,int(m),rand,report);if(report.unsupported)return;}
-    if (g.date > 0) {
-        g.lineups_frozen = true;  // LineupRuntimeField
-        uint8_t loans[0x1d3] = {};
-        for (uint32_t k = 0; k < 200; k++) {
-            const uint32_t e = mem.u32(::bmh::layout::Career_RemoveJoinLoans_RuntimeField + k * 4);
-            if (e != 0) loans[(e >> 12) & 0x3ff]++;
-        }
-        uint16_t last_team = 0xffff;  // local_30
-        uint8_t count = 0xff;         // local_20
-        int8_t owner = -1;            // local_24: the club's human manager
-        size_t board_first = 0;       // local_3c
-        std::vector<bool> processed(g.players.size(), false);
-        for (int s = 0; s < runtime_dimensions.national_slots_first && !report.unsupported; s++) {
-            for (;;) {
-                const int player = g.squad_slots.at(size_t(s)) & 0xFFF;
-                if (player == 0xFFF) break;
-                // OpenBMH deviates from the original: age/retire each player
-                // once, even when a temporary offer row references his club
-                // slot or regeneration moves him to a later free-agent slot.
-                if (processed.at(size_t(player))) break;
-                processed.at(size_t(player)) = true;
-                const int team = slot_team(s);
-                if (team != int(last_team)) {  // (-1 for the pool never equals 0xFFFF)
-                    count = 0xff;
-                    const int mm = g.manager_of(team);
-                    owner = int8_t(mm >= 0 ? mm : -1);
-                    if (mm >= 0) board_first = squad_range(team).first;
-                }
-                Player& p = g.players.at(size_t(player));
-                bool leaves = false;
-                if (s < runtime_dimensions.pool_first && (p.w35c >> 27) == 0x1f) {
-                    // out for his career
-                    bool gone = true;
-                    if (owner != -1) {
-                        std::string text;
-                        const int doctor = int16_t(g.manager_records.at(size_t(owner) * 0xB0C + 0x8ae) |
-                                                   g.manager_records.at(size_t(owner) * 0xB0C + 0x8af) << 8);
-                        if (doctor > rand.range(700, 0x4b0)) {
-                            text = message_text(g, ::bmh::layout::Season_SeasonPlayers_TextPointer) + g.player_name(player) + message_text(g, ::bmh::layout::Season_SeasonPlayers_TextPointer2);
-                            gone = false;
-                            p.w35c &= 0x07ffffffu;
-                            p.w364 &= ~(0x1fu << 16);
-                        } else {
-                            text = g.player_name(player) + message_text(g, ::bmh::layout::Season_SeasonPlayers_TextPointer3);
-                            const size_t board = size_t(owner) * 0x840 + size_t(s - int(board_first)) * 0x58;
-                            const int8_t insured = int8_t(g.tactics.at(board + 0x43));
-                            if (insured != 0) {
-                                const int k = (insured >> 6) & 3;
-                                const int32_t pay = int32_t(uint32_t(g.tactics.at(board + 0x50) | g.tactics.at(board + 0x51) << 8 |
-                                                                     g.tactics.at(board + 0x52) << 16) |
-                                                            uint32_t(g.tactics.at(board + 0x53)) << 24) *
-                                                    int8_t(k * 3 + 3);
-                                book_money(g, owner, -pay, true);
-                                text += message_text(g, ::bmh::layout::Season_SeasonPlayers_TextPointer4) + format_amount(g, pay) + message_text(g, ::bmh::layout::Season_SeasonPlayers_TextPointer5);
-                            }
-                        }
-                        post_composed(g, owner, text);
-                    }
-                    if (gone) {
-                        if (count != 0xff) count = uint8_t(squad_count(g, team, 2) + loans[team]);
-                        if (owner == -1 && count <= 0xd) {
-                            set_age(g, player, rand.range(0x12, 0x19) - 0x10);
-                        } else {
-                            count--;
-                            leaves = true;
-                            // a loaned player: his club's manager is told
-                            for (uint32_t k = 0; k < 200; k++) {
-                                const uint32_t e = mem.u32(::bmh::layout::Career_RemoveJoinLoans_RuntimeField + k * 4);
-                                if (e == 0 || int(e & 0xFFF) != player) continue;
-                                const int mm = g.manager_of(int(e >> 12) & 0x3ff);
-                                owner = int8_t(mm >= 0 ? mm : -1);
-                                if (mm >= 0)
-                                    post_composed(g, mm, message_text(g, ::bmh::layout::Season_SeasonPlayers_TextPointer6) + g.player_name(player) + message_text(g, ::bmh::layout::Season_SeasonPlayers_TextPointer7));
-                                break;
-                            }
-                        }
-                    }
-                }
-                if (!leaves) {
-                    // a year older
-                    p.w368 &= 0xf8003fffu;
-                    int age = int16_t(((p.w364 >> 21) & 0x1f) + 1);
-                    // OpenBMH deviates from the original: includes transfer-market
-                    // players in retirement so the five-bit age cannot wrap to 16.
-                    if (rand.range(0x10, 0x16) < age && owner == -1) {
-                        if (count != 0xff) count = uint8_t(squad_count(g, team, 2) + loans[team]);
-                        if (count > 0xd) {
-                            count--;
-                            leaves = true;
-                        } else {
-                            age = rand.range(0x12, 0x19) - 0x10;
-                        }
-                    }
-                    if (!leaves) {
-                        set_age(g, player, age);  // SetAge
-                        last_team = uint16_t(team);
-                        break;
-                    }
-                }
-                if (std::getenv("BMH_TRACE"))
-                    std::printf("  [release slot %d player %d team %d age %u count %u]\n", s, player, team, (p.w364 >> 21) & 0x1f, count);
-                if (!release_player(g, s, game, rand, report)) return;
-                // Club releases compact their squad in remove_from_seller. Pool
-                // releases have no club: retire this source entry explicitly after
-                // the regenerated player has been placed in the free-agent pool.
-                if (team < 0) g.squad_slots.at(size_t(s)) = 0x0fff;
-            }
-        }
-        g.lineups_frozen = false;
-    }
+    if(g.date>0&&!renew_season_player_slots(g,0,runtime_dimensions.national_slots_first,game,rand,report,{}))return;
+    if(report.unsupported)return;
     for (size_t l = 0; l < g.league_rounds.size() && l < 9; l++) g.league_rounds[l] = 0;
     fill8(::bmh::layout::DeskRecords_Teams_RuntimeField, uint32_t(g.counts.league_teams * 2), 0);
     for (size_t i = 0; i < size_t(runtime_dimensions.league_teams) * 0x1a && i < g.position_history.size(); i++) g.position_history[i] = 0;
