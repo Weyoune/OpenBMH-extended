@@ -7,6 +7,25 @@
 namespace bmh::app::world12 {
 using namespace bmh::world12;
 static_assert(std::is_nothrow_move_assignable_v<CareerSnapshot>);
+std::vector<AiLeagueRoundOutcome> simulate_scheduled_leagues(CareerSnapshot& state,const GameState& rules,
+    const std::vector<AiDayLeagueConditions>& conditions,const HumanProjectionPolicy* policy,
+    GameRandom& game,WatcomRandom& random,const HumanRoundHooks* hooks) {
+    std::vector<AiLeagueRoundOutcome> results(conditions.size());std::vector<size_t> human_indices;
+    std::vector<HumanLeagueRound> human_rounds;
+    for(size_t i=0;i<conditions.size();++i){const auto& input=conditions[i];
+        const bool human=std::any_of(state.world.managers.begin(),state.world.managers.end(),[&](const auto& manager){return state.world.clubs.at(manager.club).league==input.appointment.league;});
+        if(human){if(!policy||!hooks)throw FormatError("world12: human league lacks its presenter owner");human_indices.push_back(i);human_rounds.push_back({input.appointment.league,input.appointment.round,input.matches});}
+        if(policy)validate_league_conditions(input.matches);
+    }
+    if(!human_rounds.empty()){
+        auto batch=simulate_and_settle_human_league_rounds(state,rules,human_rounds,*policy,game,random,*hooks);
+        for(size_t n=0;n<human_indices.size();++n)results[human_indices[n]]=std::move(batch.leagues[n]);
+    }
+    for(size_t i=0;i<conditions.size();++i)if(std::find(human_indices.begin(),human_indices.end(),i)==human_indices.end()){
+        const auto& input=conditions[i];results[i]=simulate_and_settle_ai_league_round(state.world,rules,input.appointment.league,input.appointment.round,input.matches,game,random);
+    }
+    return results;
+}
 static AiDayOutcome play_league_day_impl(CareerSnapshot& state,AiDayOwner& owner,
     const AiDayIdentity& identity,const DayTicket& ticket,const GameState& rules,
     const std::vector<AiDayLeagueConditions>& conditions,const HumanProjectionPolicy* human_policy,const HumanRoundHooks* hooks) {
@@ -37,14 +56,11 @@ static AiDayOutcome play_league_day_impl(CareerSnapshot& state,AiDayOwner& owner
     const auto before=state;const auto old_owner=owner;
     auto candidate=before;GameRandom game(before.game_seed);WatcomRandom random(before.watcom_seed);
     AiDayOutcome outcome;std::vector<CompletedLeagueRound> scores;
-    for(size_t i=0;i<ticket.leagues.size();++i) {
-        const auto& appointment=ticket.leagues[i].appointment;
-        const bool human=std::any_of(candidate.world.managers.begin(),candidate.world.managers.end(),[&](const auto& manager){return candidate.world.clubs.at(manager.club).league==appointment.league;});
-        auto round=human?simulate_and_settle_human_league_round(candidate,rules,appointment.league,appointment.round,conditions[i].matches,*human_policy,game,random,*hooks):
-            simulate_and_settle_ai_league_round(candidate.world,rules,appointment.league,appointment.round,conditions[i].matches,game,random);
+    outcome.leagues=simulate_scheduled_leagues(candidate,rules,conditions,human_policy,game,random,hooks);
+    for(size_t i=0;i<ticket.leagues.size();++i){const auto& appointment=ticket.leagues[i].appointment;
         CompletedLeagueRound completed{appointment.league,appointment.round,{}};
-        for(const auto& match:round.matches)completed.results.push_back(match.score);
-        scores.push_back(std::move(completed));outcome.leagues.push_back(std::move(round));
+        for(const auto& match:outcome.leagues[i].matches)completed.results.push_back(match.score);
+        scores.push_back(std::move(completed));
     }
     candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();
     const auto clock=candidate.progress;candidate.progress.reset();

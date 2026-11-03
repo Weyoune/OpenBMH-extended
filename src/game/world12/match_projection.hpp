@@ -20,6 +20,9 @@ public:
     // account kernel. This wider workspace is annual-only.
     static AiMatchProjection create_for_annual_accounts(const CareerSnapshot&,Country,
         const GameState& rules_template,HumanProjectionPolicy);
+    // Complete human-involved league groups only, bounded by four 20-club leagues.
+    static AiMatchProjection create_for_human_leagues(const CareerSnapshot&,const std::vector<ClubId>&,
+        const GameState& rules_template,HumanProjectionPolicy);
     static AiMatchProjection create_for_desktop(const CareerSnapshot&,const std::vector<ClubId>&,
         const GameState& rules_template,HumanProjectionPolicy);
     // Rating-only foreign clubs retain the Original non-squad indices and Core

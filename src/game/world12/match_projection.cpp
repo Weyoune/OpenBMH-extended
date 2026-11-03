@@ -71,6 +71,20 @@ AiMatchProjection AiMatchProjection::create_core(const World& world,const std::v
 AiMatchProjection AiMatchProjection::create_for_humans(const CareerSnapshot& snapshot,const std::vector<ClubId>& requested,const GameState& base,HumanProjectionPolicy policy) {
     return create_humans(snapshot,requested,base,policy,64);
 }
+AiMatchProjection AiMatchProjection::create_for_human_leagues(const CareerSnapshot& snapshot,const std::vector<ClubId>& requested,const GameState& base,HumanProjectionPolicy policy) {
+    snapshot.validate();if(requested.size()>size_t(runtime_dimensions.big_squad_teams))throw FormatError("world12: human league batch exceeds native large-squad capacity");
+    std::map<LeagueId,std::set<ClubId>> groups;
+    for(auto club:requested)if(!groups[snapshot.world.clubs.at(club).league].insert(club).second)
+        throw FormatError("world12: human league projection repeats a club");
+    if(groups.empty()||groups.size()>4)throw FormatError("world12: human league projection needs 1-4 complete leagues");
+    for(const auto& [league,clubs]:groups){
+        const auto& members=snapshot.world.membership.at(league.value).clubs;
+        if(!snapshot.world.catalogue.league(league).active||clubs!=std::set<ClubId>(members.begin(),members.end())||
+            !std::any_of(snapshot.world.managers.begin(),snapshot.world.managers.end(),[&](const auto& manager){return clubs.contains(manager.club);}))
+            throw FormatError("world12: human league projection lacks a complete owned league");
+    }
+    return create_humans(snapshot,requested,base,policy,80);
+}
 AiMatchProjection AiMatchProjection::create_humans(const CareerSnapshot& snapshot,const std::vector<ClubId>& requested,const GameState& base,HumanProjectionPolicy policy,size_t maximum_clubs) {
     snapshot.validate();const auto& world=snapshot.world;
     if(world.settings&&(policy.mode!=world.settings->mode||policy.difficulty!=world.settings->difficulty||policy.foreign_rule!=world.settings->foreign_rule))throw std::invalid_argument("world12: human match policy differs from saved career settings");

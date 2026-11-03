@@ -66,4 +66,19 @@ AiLeagueRoundOutcome simulate_and_settle_ai_league_round(World&,const GameState&
 AiLeagueRoundOutcome simulate_and_settle_human_league_round(CareerSnapshot&,const GameState& rules_template,
     LeagueId,int round,const std::vector<AiLeagueConditions>&,HumanProjectionPolicy,
     GameRandom&,WatcomRandom&,const HumanRoundHooks& hooks={});
+struct HumanLeagueRound {
+    LeagueId league;int round=0;std::vector<AiLeagueConditions> matches;
+};
+struct HumanLeagueBatchOutcome {
+    std::vector<AiLeagueRoundOutcome> leagues;
+    uint64_t game_draws=0,watcom_draws=0;
+};
+// A single Source minute clock for 1-4 complete, human-involved league rounds.
+// Output follows input order. RNG belongs to this batch, not individual leagues.
+HumanLeagueBatchOutcome simulate_and_settle_human_league_rounds(CareerSnapshot&,const GameState&,
+    const std::vector<HumanLeagueRound>&,HumanProjectionPolicy,GameRandom&,WatcomRandom&,
+    const HumanRoundHooks& hooks={});
+// Validate complete condition payloads before any live presenter may run.
+void validate_league_conditions(const std::vector<AiLeagueConditions>&);
+
 }

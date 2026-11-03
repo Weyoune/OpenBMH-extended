@@ -16,6 +16,13 @@ struct AiDayOutcome {
     std::vector<bmh::world12::AiLeagueRoundOutcome> leagues;
     uint64_t game_draws=0,watcom_draws=0;
 };
+// Internal staged-day calculation shared by both calendar owners. Complete
+// human leagues run together first; remaining AI leagues follow ticket order.
+// The owning day transaction validates the ticket and publishes atomically.
+std::vector<bmh::world12::AiLeagueRoundOutcome> simulate_scheduled_leagues(
+    bmh::world12::CareerSnapshot&,const bmh::GameState&,
+    const std::vector<AiDayLeagueConditions>&,const bmh::world12::HumanProjectionPolicy*,
+    bmh::GameRandom&,bmh::WatcomRandom&,const bmh::world12::HumanRoundHooks*);
 // League-only match/calendar transaction. Conditions are authoritative engine
 // inputs, not UI proposals. Human fixtures and every non-league appointment
 // require their separate owners. This does not run daily/weekly finance.

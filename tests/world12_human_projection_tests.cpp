@@ -10,6 +10,7 @@
 #include "game/messages.hpp"
 #include "game/driver.hpp"
 #include "app/world12_ai_day.hpp"
+#include "app/world12_european.hpp"
 #include "app/world12_live_scope.hpp"
 #include "game/match.hpp"
 #include "game/matchday.hpp"
@@ -170,6 +171,66 @@ void known_economy_match_oracle(const bmh::GameState& base){
     std::cout<<"Known Source economy: full month/mailbox and sparse-seat Core oracles, unknown preservation and late-owner rollback passed\n";
 }
 
+void shared_human_clock(const bmh::GameState& base) {
+    for(const auto leagues:{std::vector<LeagueId>{{0},{5}},std::vector<LeagueId>{{0},{5},{6},{7}},std::vector<LeagueId>{{5},{6},{7},{8}}}) {
+        auto initial=snapshot(base);auto& w=initial.world;w.managers.clear();initial.league_rounds.fill(0);initial.results=SeasonResults::empty(w.catalogue);
+        w.markets.emplace();w.free_players.emplace();w.settings=CareerSettings{3,6,5,uint8_t(leagues.size()),false};
+        w.economy.emplace();w.economy->presentation_options.emplace();w.economy->presentation_options->fill(1);
+        for(size_t seat=0;seat<4;++seat){auto& finance=w.economy->managers[seat];finance.deposit=uint32_t(7000+seat);finance.monthly.emplace();finance.monthly->history_count=1;finance.monthly->counters[0]=uint32_t(10000+seat);finance.depreciation=80;}
+        uint32_t player_id=3000000;
+        // Exercise the real maximum: four English groups have 80 clubs/1920 players.
+        for(auto league:leagues)for(auto club:w.membership[league.value].clubs)for(size_t row=11;row<24;++row){
+            auto& slot=w.clubs.at(club).roster[row];if(!slot.empty())continue;
+            PlayerRecord player;player.id={player_id++};player.attributes={"Extra",60u|(75u<<7)|(85u<<14),0,uint32_t(row%4)};
+            w.players[player.id]=player;slot={player.id,uint16_t(row<17?2:0)};
+        }
+        bmh::WatcomRandom contracts(91);initial.desktop.emplace();
+        for(size_t n=0;n<leagues.size();++n){const uint8_t seat=leagues.size()==2&&n==1?3:uint8_t(n);const auto club=w.membership[leagues[n].value].clubs[0];
+            w.managers.push_back({seat,"Manager",club,leagues[n],seat});initialize_manager_contracts(w,seat,base,{3,false,false,false,6},contracts);
+            w.managers.back().career.emplace();w.managers.back().career->season_records.emplace();ManagerDesktop desk;desk.seat=seat;desk.display_word=uint16_t(0x1200+seat);initial.desktop->managers.push_back(desk);
+        }
+        initial.game_seed=17;initial.watcom_seed=91;initial.validate();
+        AiLeagueConditions condition;condition.date=initial.date;condition.month=8;condition.temperature=19;condition.spectators=15000;condition.referee_properties={24};condition.presentation_buttons.assign(180,1);
+        std::vector<HumanLeagueRound> inputs;for(auto league:leagues)inputs.push_back({league,1,std::vector<AiLeagueConditions>(w.catalogue.league(league).clubs/2,condition)});
+        auto played=initial;std::optional<CareerSnapshot> expected;std::vector<bmh::MatchGroup> source_groups;uint64_t expected_g=0,expected_w=0;
+        bmh::GameRandom game(17);bmh::WatcomRandom random(91);HumanRoundHooks hooks;hooks.decline_unpresented_events=true;
+        const bmh::MatchGroup* storage=nullptr;std::vector<const uint8_t*> descriptors;int last_minute=0,starts=0,owned_calls=0;
+        hooks.before_matchday=[&](auto& projection,auto& engine){
+            check(engine.groups.size()==leagues.size()&&projection.human_managers()==leagues.size(),"shared clock lost a human league/manager");
+            storage=engine.groups.data();size_t clubs=0;
+            for(size_t i=0;i<leagues.size();++i){const auto& group=engine.groups[i];descriptors.push_back(group.desc.data());const auto fixtures=league_fixtures(initial.world,leagues[i],1);
+                check(group.matches()==int(fixtures.size())&&group.desc[0]==0&&group.desc[1]==2,"shared group lost Source league flags");
+                const auto local=projection.local_club(fixtures[0].home);check((uint32_t(group.desc[0xcc])|(uint32_t(group.desc[0xcd])<<8)|(uint32_t(group.desc[0xce])<<16)|(uint32_t(group.desc[0xcf])<<24))==uint32_t(bmh::match_team_league(projection.state,int(local))),"canonical league ID leaked into Source calculator class");
+                for(size_t m=0;m<fixtures.size();++m)check(projection.global_club(group.fixtures[m*2])==fixtures[m].home&&projection.global_club(group.fixtures[m*2+1])==fixtures[m].away,"shared group changed canonical fixture/order");
+                clubs+=fixtures.size()*2;
+            }
+            check(projection.state.players.size()==clubs*24,"shared projection lost complete roster/player mapping");
+            bmh::post_composed(projection.state,0,"Shared clock Source mailbox oracle");
+            for(const auto& manager:initial.world.managers)projection.retain_live_preferences(manager.seat,uint16_t(0x3411+manager.seat),uint16_t(0x91f0+manager.seat),uint8_t(0x20+manager.seat));
+            auto oracle=projection;source_groups=engine.groups;auto source_game=engine.game;auto source_random=engine.rand;
+            bmh::MatchEngine source(oracle.state,source_groups,source_game,source_random,engine.referees);source.month=engine.month;source.buttons=engine.buttons;source.leave_screens=true;bmh::MinuteReport report;
+            bmh::play_matchday(source,oracle.state,source_groups,source.buttons,source_game,source_random,report);check(!report.unsupported,"common Source multi-group clock failed");
+            for(auto& group:source_groups)bmh::process_group(oracle.state,group,source_game,source_random,report);check(!report.unsupported,"common Source multi-group settlement failed");
+            expected=initial;oracle.commit_match_state(expected->world);capture_career_economy(expected->world,oracle);oracle.commit_desktop_preferences(*expected);
+            expected->game_seed=source_game.seed();expected->watcom_seed=source_random.seed();expected_g=source_game.calls();expected_w=source_random.calls();
+        };
+        hooks.before_owned=[&](auto&,auto& engine,const auto& owner){check(owner==initial&&engine.groups.data()==storage,"shared clock did not expose exact staged pre-minute owner");++owned_calls;};
+        hooks.after_minute=[&](auto&,auto& engine,int minute){check(owned_calls==1&&minute>last_minute,"human leagues ran separate minute clocks");if(minute==1)++starts;last_minute=minute;check(engine.groups.data()==storage,"shared group vector moved during callback");for(size_t i=0;i<descriptors.size();++i)check(engine.groups[i].desc.data()==descriptors[i],"shared descriptor moved during callback");};
+        const auto result=simulate_and_settle_human_league_rounds(played,base,inputs,{3,6,false,true},game,random,hooks);
+        check(expected&&played==*expected&&result.game_draws==expected_g&&result.watcom_draws==expected_w&&game.calls()==expected_g&&random.calls()==expected_w,"shared human batch differs from common Source scores/player/finance/monthly/mailbox/preferences/GW");
+        check(starts==1&&last_minute>=90&&result.leagues.size()==leagues.size(),"shared human batch never ran one complete clock");
+        for(size_t i=0;i<leagues.size();++i){check(result.leagues[i].game_draws==0&&result.leagues[i].watcom_draws==0,"shared RNG incorrectly attributed to individual league");for(size_t m=0;m<result.leagues[i].matches.size();++m){const auto& row=result.leagues[i].matches[m];check(row.score.home==(source_groups[i].results[m]>>4)&&row.score.away==(source_groups[i].results[m]&15)&&row.end_minute==source_groups[i].end_minute[m],"shared score/end-minute differs from Source oracle");}}
+        check(read_save(make_save(played))==played,"shared match state lost on save/reopen");
+        auto failed=initial;bmh::GameRandom failed_g(17);bmh::WatcomRandom failed_w(91);HumanRoundHooks abort;abort.decline_unpresented_events=true;abort.after_minute=[](auto&,auto&,int minute){if(minute==10)throw std::runtime_error("cancel live clock");};
+        rejects([&]{simulate_and_settle_human_league_rounds(failed,base,inputs,{3,6,false,true},failed_g,failed_w,abort);},"cancelled shared clock published");check(failed==initial&&failed_g.calls()==0&&failed_w.calls()==0,"cancelled shared clock leaked candidate or RNG");
+        auto stale=inputs;++stale.back().round;rejects([&]{simulate_and_settle_human_league_rounds(failed,base,stale,{3,6,false,true},failed_g,failed_w,abort);},"stale shared round accepted");
+        auto repeated=inputs;repeated.back()=repeated.front();rejects([&]{simulate_and_settle_human_league_rounds(failed,base,repeated,{3,6,false,true},failed_g,failed_w,abort);},"duplicate shared league accepted");
+        HumanRoundHooks external;external.decline_unpresented_events=true;external.after_minute=[&](auto&,auto&,int minute){if(minute==10)++failed.world.economy->managers[3].deposit;};
+        rejects([&]{simulate_and_settle_human_league_rounds(failed,base,inputs,{3,6,false,true},failed_g,failed_w,external);},"shared clock overwrote external economy mutation");auto retained=initial;++retained.world.economy->managers[3].deposit;check(failed==retained&&failed_g.calls()==0&&failed_w.calls()==0,"stale shared batch lost external owner state or leaked RNG");
+        std::cout<<leagues.size()<<" human leagues / "<<source_groups.size()<<" common Source groups: scores, full World, finance/monthly, preferences, exact GW and rollback passed\n";
+    }
+}
+
 void statistics_bridge(const bmh::GameState& base) {
     auto source=snapshot(base);
     const auto de=source.world.managers[0].club,en=source.world.managers[1].club;
@@ -243,7 +304,7 @@ void statistics_bridge(const bmh::GameState& base) {
 }
 }
 int main()try {
-    bmh::set_fixture_tables(bmh::test::authored_fixture_tables());const auto base=rules();statistics_bridge(base);annual_donor_workspace(base);live_preferences_and_scopes(base);known_economy_match_oracle(base);const auto source=snapshot(base);auto world=source.world;
+    bmh::set_fixture_tables(bmh::test::authored_fixture_tables());const auto base=rules();shared_human_clock(base);statistics_bridge(base);annual_donor_workspace(base);live_preferences_and_scopes(base);known_economy_match_oracle(base);const auto source=snapshot(base);auto world=source.world;
     const auto de=world.membership[4].clubs[0],en=world.membership[9].clubs[0],de_other=world.membership[4].clubs[1],en_other=world.membership[9].clubs[1];
     const std::vector<ClubId> requested{de,de_other,en,en_other};
     rejects([&]{AiMatchProjection::create(world,requested,base);},"AI-only guard allowed a human participant");
@@ -316,7 +377,12 @@ int main()try {
     }
     {
         namespace app=bmh::app::world12;
-        auto day=source;day.results=SeasonResults::empty(day.world.catalogue);day.league_rounds.fill(0);
+        auto day=source;
+        // The internal ten-club English league starts later than this fixture date.
+        // Put the second human in the actually scheduled Premier group.
+        day.world.managers[1]={3,"English",day.world.membership[5].clubs[0],{5},3};
+        bmh::WatcomRandom confirmation(91);initialize_manager_contracts(day.world,3,base,{3,false,false,false,6},confirmation);
+        day.results=SeasonResults::empty(day.world.catalogue);day.league_rounds.fill(0);
         std::vector<uint16_t> de(365),en(365);for(int r=0;r<34;++r)de[size_t(20+r*8)]=15;for(int r=0;r<38;++r)en[size_t(20+r*8)]=15;
         day.calendar=CalendarCursor{SeasonCalendar::from_sources(day.world.catalogue,de,en),20,0};day.game_seed=17;day.watcom_seed=91;
         const auto ticket=*prepare_day(day);std::vector<app::AiDayLeagueConditions> inputs;
@@ -324,12 +390,20 @@ int main()try {
         for(const auto& league:ticket.leagues)inputs.push_back({league.appointment,std::vector<AiLeagueConditions>(league.matches.size(),c)});
         const auto before=day;app::AiDayOwner owner{71,0};HumanRoundHooks hooks;hooks.live_event=[](auto&,auto&,const auto&){};
         rejects([&]{app::play_ai_league_day(day,owner,{71,0},ticket,base,inputs);},"AI day absorbed a human game");check(day==before&&owner.revision==0,"AI-only human rejection mutated day");
+        int clocks=0;hooks.before_owned=[&](auto&,auto& engine,const auto& staged){++clocks;check(engine.groups.size()==2&&staged.world==before.world&&staged.results==before.results,"AI-only future results/stats leaked into human minute one");};
         const auto played=app::play_league_day(day,owner,{71,0},ticket,base,inputs,{3,6,false,true},hooks);
+        check(clocks==1,"mixed day opened multiple human league clocks");
+        auto combined=before;app::ManagerActionOwner combined_owner{73,0};const auto source_rules=bmh::test::world12::country_rules(false);
+        const auto combined_result=app::play_competition_day(combined,combined_owner,{73,0},ticket,base,{source_rules,source_rules},inputs,{}, {},{3,6,false,true},hooks);
+        check(combined==day&&combined_result.game_draws==played.game_draws&&combined_result.watcom_draws==played.watcom_draws&&combined_owner.revision==1&&clocks==2,"combined day did not share the league owner clock/results/GW/order");
         check(day.date==before.date+1&&day.calendar->next_day==21&&owner.revision==1&&day.league_rounds[4]==1&&played.leagues.size()==ticket.leagues.size(),"mixed human/AI day did not publish one complete transition");
         check(read_save(make_save(day))==day,"committed mixed day lost calendar/results/manager data");const auto after=day;
         rejects([&]{app::play_league_day(day,owner,{71,0},ticket,base,inputs,{3,6,false,true},hooks);},"mixed day replay accepted");check(day==after&&owner.revision==1,"mixed replay changed completed day");
         auto failed=before;app::AiDayOwner failed_owner{72,0};inputs.back().matches.back().month=0;
-        rejects([&]{app::play_league_day(failed,failed_owner,{72,0},ticket,base,inputs,{3,6,false,true},hooks);},"bad final group committed earlier human match");check(failed==before&&failed_owner.revision==0,"late group failure leaked mixed day records/RNG/date");
+        rejects([&]{app::play_league_day(failed,failed_owner,{72,0},ticket,base,inputs,{3,6,false,true},hooks);},"bad final group committed earlier human match");check(failed==before&&failed_owner.revision==0&&clocks==2,"invalid late group opened a presenter or leaked mixed day records/RNG/date");
+        app::ManagerActionOwner combined_failed_owner{74,0};
+        rejects([&]{app::play_competition_day(failed,combined_failed_owner,{74,0},ticket,base,{source_rules,source_rules},inputs,{}, {},{3,6,false,true},hooks);},"combined owner accepted invalid late conditions");
+        check(failed==before&&combined_failed_owner.revision==0&&clocks==2,"combined preflight opened a presenter or leaked candidate state");
         std::cout<<"Complete mixed human/AI league day, replay/snapshot and late-group atomic rollback passed\n";
     }
     std::cout<<total_matches<<" actual human/AI league fixtures, goals="<<total_goals<<", presented human events="<<events<<"; repeat/snapshot/calendar-owner checks passed\n";
