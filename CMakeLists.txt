@@ -1242,6 +1242,7 @@ add_library(bmhworld12 STATIC
     src/game/world12/season_transition.cpp
     src/game/world12/season_awards.cpp
     src/game/world12/annual_qualification.cpp
+    src/game/world12/annual_accounts.cpp
     src/game/world12/calendar.cpp
     src/game/world12/cups.cpp
     src/game/world12/cup_draw.cpp
@@ -1526,3 +1527,7 @@ add_test(NAME world12_clock_presenters_tests COMMAND world12_clock_presenters_te
 add_executable(world12_annual_qualification_tests tests/world12_annual_qualification_tests.cpp)
 target_link_libraries(world12_annual_qualification_tests PRIVATE bmhworld12)
 add_test(NAME world12_annual_qualification_tests COMMAND world12_annual_qualification_tests)
+
+add_executable(world12_annual_accounts_tests tests/world12_annual_accounts_tests.cpp)
+target_link_libraries(world12_annual_accounts_tests PRIVATE bmhworld12)
+add_test(NAME world12_annual_accounts_tests COMMAND world12_annual_accounts_tests)

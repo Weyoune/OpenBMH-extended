@@ -184,3 +184,30 @@ its original allocator and once-per-player tracking.
 The kernels retain the Original native stream and random order in independent
 pre-extraction comparisons. Their availability alone does not publish a typed
 new season or close the accounting/archive release gates.
+
+## Unpublished complete annual accounts
+
+`stage_annual_accounts` requires the exact paid-awards qualification receipt and
+known Source account, tax, monthly-youth, depreciation and attendance backing.
+It starts both generators at that receipt's returned seeds and executes all
+managers in canonical order. Youth promotion, summer events, actual player
+bonuses, the real academy donor search, credit, taxes/refunds, title premiums
+and season tickets remain one Source pass. The fine local continues across
+managers. New sanctions remain pending until promotion has finished.
+
+Tax notices, animation and outcome acknowledgements require an owned presenter;
+the real question requires an explicit answer. Missing presenters or a cancelled
+choice reject the unpublished stage. The packet retains its canonical manager
+and club identity, actual event/choice transcript, academy donor/player/recipient,
+pending sanctions, fine carry and both draw counts. Revalidation replays those
+recorded decisions against the exact binding without prompting again. Changed
+relations, backing, events or result fields cannot reuse a receipt.
+
+An academy recruit retains a real donor's global player ID and moves through the
+same canonical transfer/statistics adapter as ordinary player movement. It is
+never added as a new player. Authored tests cover Germany, England and mixed
+scope, missing/cancelled choices, old unknown tax state, packet tampering,
+snapshot roundtrips and academy movement through the subsequent promotion
+roster inheritance. These authored closing programmes are not played seasons.
+Player renewal, cup/calendar reset, full title archives, closing/new desks and
+final atomic season publication remain required.

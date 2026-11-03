@@ -25,3 +25,12 @@ Closing awards now have an atomic scope/revision owner with schema38 exactly-onc
 payment and fresh annual account/title backing. This does not complete closing
 desks, accounts/academy, player renewal, qualification/archive or new-calendar
 publication; no annual/three-season/Beta gate is closed by that component.
+
+The complete per-manager Source annual account pass now has an unpublished,
+qualification-bound adapter: youth settlement, bonuses, real academy donor
+movement, tax choices/refunds, credit, pending sanctions and tickets retain both
+RNG streams and their transcript. Missing presenters/unknown imported backing
+reject atomically. English promotion now uses the actual four visible groups,
+protects the lowest visible human and preserves the hidden internal division.
+The annual transaction still needs player renewal, cup/calendar reset, the full
+canonical title archive and final publication before any season/Beta gate closes.
