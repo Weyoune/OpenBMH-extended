@@ -1258,6 +1258,7 @@ add_library(bmhworld12 STATIC
     src/game/world12/manager_creation.cpp
     src/game/world12/indoor_match.cpp
     src/game/world12/indoor.cpp
+    src/game/world12/national_campaign.cpp
     src/game/world12/european_campaign.cpp
     src/game/world12/european.cpp
     src/game/world12/initialization.cpp
@@ -1536,3 +1537,6 @@ add_test(NAME world12_annual_accounts_tests COMMAND world12_annual_accounts_test
 add_executable(world12_annual_moods_tests tests/world12_annual_moods_tests.cpp)
 target_link_libraries(world12_annual_moods_tests PRIVATE bmhworld12)
 add_test(NAME world12_annual_moods_tests COMMAND world12_annual_moods_tests)
+add_executable(world12_national_campaign_tests tests/world12_national_campaign_tests.cpp)
+target_link_libraries(world12_national_campaign_tests PRIVATE bmhworld12)
+add_test(NAME world12_national_campaign_tests COMMAND world12_national_campaign_tests)

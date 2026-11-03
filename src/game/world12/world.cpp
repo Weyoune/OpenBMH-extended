@@ -92,6 +92,7 @@ for(auto player:m.takers)if(player.valid()&&(!m.designated_takers||!players.cont
 for(const auto* refs:{&manager.tactics->backing->marks,&manager.tactics->backing->marked_by})for(auto id:*refs)if(id.valid()&&!players.contains(id))throw std::invalid_argument("world12: missing tactical player reference");}}const auto it=clubs.find(manager.club);if(manager.seat>=4||manager.name.empty()||manager.name.size()>20||manager.portrait>=12||!seats.insert(manager.seat).second||!portraits.insert(manager.portrait).second||!owned.insert(manager.club).second||it==clubs.end()||!it->second.league.valid()||!catalogue.selectable(it->second.country)||catalogue.league(manager.start_league).country!=it->second.country)throw std::invalid_argument("world12: invalid manager selection");}
     for(const auto& manager:managers)if(manager.match_state)validate_manager_attendance(*this,*manager.match_state);
     validate_national_squads(*this);
+    validate_national_campaigns(*this);
 }
 std::vector<ClubId> World::selectable_clubs(Country country,LeagueId id)const {if(!catalogue.selectable(country)||catalogue.league(id).country!=country)throw std::invalid_argument("world12: unavailable manager country/league");return membership.at(id.value).clubs;}
 Country World::manager_country(uint8_t seat)const {for(const auto& manager:managers)if(manager.seat==seat)return clubs.at(manager.club).country;throw std::out_of_range("world12: manager seat is not occupied");}

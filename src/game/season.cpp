@@ -14,6 +14,7 @@
 #include "game/career.hpp"
 #include "game/cup_draw_rules.hpp"
 #include "game/european_rules.hpp"
+#include "game/national_draw.hpp"
 #include "game/market_rules.hpp"
 #include "game/matchday.hpp"
 #include "game/match.hpp"
@@ -313,45 +314,18 @@ void european_setup(GameState& g, GameRandom& game, WatcomRandom& rand, const Se
         for (size_t i = 0; i < 2; i++) g.manager_records.at(m * 0xB0C + 0xdb + size_t(g.season) * 3 + i) = 0;
     // the international tournament: its host (or last winner and finalist) and more teams
     // drawn from four pools, none twice and none of the last field
-    static const uint8_t kPoolFixed[16] = {2, 0, 0, 0, 7, 0, 0, 0, 3, 0, 0, 0, 10, 4, 8, 0};  // SeasonRuntimeField2
-    static const uint8_t kField[4] = {4, 8, 6, 24};                                        // SeasonRuntimeField3
-    static const uint8_t kPoolFrom[4] = {0x00, 0x0f, 0x20, 0x2f};                           // SeasonRuntimeField4
-    static const uint8_t kPoolTo[4] = {0x0f, 0x20, 0x2f, 0x3e};                             // SeasonRuntimeField5
     constexpr uint32_t kField0 = ::bmh::layout::Field0;
     if (!mem.has(kField0)) mem.add_block(kField0, 0x30);
     const int s = g.season % 4;
-    const int base = 0xbd + runtime_dimensions.league_teams + 0x1e;  // ClubPlayerDetail_ClubPlayerDetailFromGame_RuntimeField3 + CareerSession_DispatchLineup_RuntimeField + CareerSession_InstallLeagueSizes_RuntimeField6
-    int n = 1;
-    std::vector<uint16_t> last;
-    if (s % 2 == 0) {
-        mem.set16(kField0, uint16_t(base));
-    } else {
-        const uint32_t e = cup_entry_address(0xe - s / 2);
-        const int count = mem.u8(e + 0x1a);
-        for (int i = 0; i < count; i++) last.push_back(mem.u16(kField0 + uint32_t(i) * 2));
-        mem.set16(kField0, mem.u16(e + 0x22));
-        if (mem.u8(e + 0x1f) == 2) mem.set16(kField0 + 2, mem.u16(e + 0x24)), n = 2;
+    const int base = 0xbd + runtime_dimensions.league_teams + 0x1e;
+    std::vector<uint16_t> previous;std::optional<uint16_t> previous_winner,previous_runner;
+    if(s%2){const uint32_t entry=cup_entry_address(0xe - s/2);const auto count=mem.u8(entry+0x1a);
+        for(uint32_t i=0;i<count;++i)previous.push_back(uint16_t(mem.u16(kField0+i*2)-base));
+        previous_winner=uint16_t(mem.u16(entry+0x22)-base);
+        if(mem.u8(entry+0x1f)==2)previous_runner=uint16_t(mem.u16(entry+0x24)-base);
     }
-    if(s==0){const auto field=initial_national_four(game,rand);for(size_t i=0;i<field.size();++i)mem.set16(kField0+uint32_t(i*2),uint16_t(base+field[i]));}
-    else {
-    for (int k = 0; k < 4; k++) {
-        const int fixed = kPoolFixed[k + s * 4];
-        int left = fixed != 0 ? rand.range(fixed - 2, fixed) : kField[s] - n;
-        while (int16_t(left) != 0) {
-            const uint16_t t = uint16_t(rand.range(base + kPoolFrom[k], kPoolTo[k] + base - 1));
-            mem.set16(kField0 + uint32_t(n) * 2, t);
-            bool twice = false;
-            for (int i = 0; i < n && !twice; i++) twice = mem.u16(kField0 + uint32_t(i) * 2) == t;
-            if (!twice && std::find(last.begin(), last.end(), t) == last.end()) n++, left--;
-        }
-    }
-    for (uint32_t i = 0; i < kField[s]; i++) {  // PrepareEvent
-        const uint32_t j = uint32_t(game.range(0, kField[s] - 1));
-        const uint16_t a = mem.u16(kField0 + i * 2);
-        mem.set16(kField0 + i * 2, mem.u16(kField0 + j * 2));
-        mem.set16(kField0 + j * 2, a);
-    }
-    }
+    const auto national=draw_national_tournament_field(uint32_t(g.season),previous,previous_winner,previous_runner,game,rand);
+    for(size_t i=0;i<national.size();++i)mem.set16(kField0+uint32_t(i*2),uint16_t(base+national[i]));
     // CupDrawFromGame(entry of competition 7 - s): the draw of the tournament's first round,
     // shown unless switched off
     const int shown_type = 7 - s;

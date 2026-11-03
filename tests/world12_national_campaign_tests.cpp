@@ -1,0 +1,41 @@
+// SPDX-License-Identifier: GPL-3.0-only
+#include "world12_fixture.hpp"
+#include "fixture_tables.hpp"
+#include "game/world12/national_campaign.hpp"
+#include "game/world12/codec.hpp"
+#include "game/world12/save.hpp"
+#include "game/national_draw.hpp"
+#include <algorithm>
+#include <iostream>
+#include <set>
+using namespace bmh;using namespace bmh::world12;
+namespace {
+void check(bool ok,const char* why){if(!ok)throw std::runtime_error(why);}
+template<class F>void rejects(F function){bool rejected=false;try{function();}catch(const std::exception&){rejected=true;}check(rejected,"invalid national campaign accepted");}
+World fixture(){auto world=bmh::test::world12::complete_world();for(uint32_t i=0;i<62;++i){ClubRecord club;club.id={900000+i};club.name="Nation "+std::to_string(i);club.country=Country(i);club.kind=ClubKind::national_team;club.crest={club.id.value};club.rating=uint8_t(100+i);world.crests[club.crest]={"W/TEST.VGA",0};world.clubs.emplace(club.id,club);}world.validate();return world;}
+LeImage rules(){auto source=LeImage::from_bytes(layout::LeagueSizes,Bytes(0x1000));const auto put8=[&](uint32_t at,uint8_t v){source.patch(at,&v,1);};const auto put16=[&](uint32_t at,uint16_t v){const uint8_t bytes[]={uint8_t(v),uint8_t(v>>8)};source.patch(at,bytes,2);};for(int e=0;e<kCupEntries;++e)put16(cup_entry_address(e)+0x18,65535);
+ const auto stage=[&](int entry,int type,int flags,int teams,int rounds,int previous,int next,int parallel,int groups,int index,int quota){const auto at=cup_entry_address(entry);put16(at+0x18,uint16_t(type));for(const auto [offset,value]:std::initializer_list<std::pair<int,int>>{{0x14,flags},{0x15,previous},{0x16,next},{0x17,parallel},{0x1a,teams},{0x1b,rounds},{0x1e,groups|(index<<4)},{0x1f,quota}})put8(at+uint32_t(offset),uint8_t(value));};
+ for(int group=0;group<6;++group)stage(group+1,4,192,4,3,255,7,group<5?group+2:0,6,group,16);
+ stage(7,4,140,16,3,1,8,0,1,0,4);stage(8,4,200,2,1,7,0,9,2,0,4);stage(9,4,200,2,1,7,0,0,2,1,4);
+ stage(10,6,192,4,3,255,12,11,2,0,4);stage(11,6,192,4,3,255,12,0,2,1,4);stage(12,6,204,4,2,10,0,0,1,0,3);
+ stage(13,5,195,6,10,255,0,0,1,0,2);stage(14,7,195,4,6,255,0,0,1,0,1);return source;}
+void run(World world,const LeImage& source,Country primary=Country::germany){GameRandom game(17);WatcomRandom random(91);const size_t matches[]={12,15,30,52},dates[]={6,5,10,7};
+ for(uint32_t season=0;season<8;++season){const auto before=world;const auto draw=prepare_national_campaign(world,source,season,game,random,primary);check(draw.game_draws==(season%4==0?4:season%4==1?8:season%4==2?6:24),"field shuffle used the wrong number of Source game draws");
+  const auto selected=world.national_campaigns->seasons.at(season).entrants;std::set<ClubId> unique(selected.begin(),selected.end());check(unique.size()==selected.size(),"field repeats a nation");
+  if(season%2){const auto& last=before.national_campaigns->seasons.at(season-1);for(auto id:selected)if(id!=last.winner&&id!=last.runner_up)check(std::find(last.entrants.begin(),last.entrants.end(),id)==last.entrants.end(),"odd-year field admitted another previous entrant");check(unique.contains(last.winner),"Source last winner was lost");if(season%4==3)check(unique.contains(last.runner_up),"Source last runner-up was lost");}
+  size_t played=0,appointments=0;while(!world.national_campaigns->seasons.at(season).complete){const auto& campaign=world.national_campaigns->seasons.at(season);const auto groups=prepare_national_groups(campaign);NationalResults result{season,campaign.revision,{}};for(const auto& group:groups){result.groups.push_back({group.source_entry,group.played,std::vector<uint16_t>(group.matches.size(),uint16_t(2<<5))});played+=group.matches.size();}const auto old=world;auto incomplete=result;incomplete.groups.pop_back();const auto seed=random.seed();const auto calls=random.calls();rejects([&]{commit_national_results(world,incomplete,source,random);});check(world==old&&random.seed()==seed&&random.calls()==calls,"incomplete result mutated world/RNG");commit_national_results(world,result,source,random);++appointments;
+   const auto encoded=encode_world(world);check(decode_world(encoded)==world,"national stage did not survive exact world codec roundtrip");
+   const auto current=world;rejects([&]{commit_national_results(world,result,source,random);});check(world==current,"replayed national result changed the campaign");}
+  check(played==matches[season%4]&&appointments==dates[season%4],"Source programme match/date counts changed");
+  const auto& completed=world.national_campaigns->seasons.at(season);check(completed.winner.valid(),"completed tournament lacks its Source winner");if(season%4==3)check(world.national_campaigns->honours.front()==completed.places,"World-Cup Source podium/honours were not retained");
+ }
+ check(world.national_campaigns->honours.size()==2,"World-Cup honours duplicated or omitted");auto invalid=world;++invalid.national_campaigns->seasons.at(0).revision;rejects([&]{invalid.validate();});invalid=world;invalid.national_campaigns->honours[0][1]=invalid.national_campaigns->honours[0][0];rejects([&]{invalid.validate();});
+ const auto encoded=encode_world(world);auto old=cli::parse_json(std::string(encoded.begin(),encoded.end()));old.object()->at("version")=38;auto bytes=cli::dump_json(old);rejects([&]{decode_world(Bytes(bytes.begin(),bytes.end()));});old.object()->at("national_campaigns")=nullptr;bytes=cli::dump_json(old);check(!decode_world(Bytes(bytes.begin(),bytes.end())).national_campaigns,"old schema invented national results");
+ auto reserved=cli::parse_json(std::string(encoded.begin(),encoded.end()));reserved.object()->at("national_coaches")=cli::Json::Object{};const auto reserved_bytes=cli::dump_json(reserved);rejects([&]{decode_world(Bytes(reserved_bytes.begin(),reserved_bytes.end()));});
+ std::cout<<"National Source programmes12/15/30/52 games,6/5/10/7 dates; eight controlled-score seasons, prior-field draws, World-Cup honours, stale/codec checks passed (not played-season proof)\n";
+}
+void compatibility_kernel(){GameRandom game(17);WatcomRandom random(91);const auto opaque=uint16_t(0xcccc-357);const auto field=draw_national_tournament_field(1,{0,1,2,3},opaque,{},game,random);check(field.size()==8&&std::find(field.begin(),field.end(),opaque)!=field.end()&&game.calls()==8,"inactive Native national scratch was changed into a fabricated country or lost its Source shuffle");}
+void initial_receipt(){auto world=fixture();world.players_initialized=true;world.markets=CareerMarkets{};world.free_players=CareerPlayerPools{};world.settings=CareerSettings{};InitialCompetitionFields fields;auto club=world.clubs.begin();for(size_t k=0;k<3;++k){const size_t sizes[]={64,24,32};for(size_t n=0;n<sizes[k];++n)fields.fields[k].push_back((club++)->first);fields.holders[k]=fields.fields[k][0];}fields.national_field={{900000},{900002},{900007},{900015}};world.initial_competitions=fields;GameRandom game(17);WatcomRandom random(91);const auto receipt=prepare_national_campaign(world,rules(),0,game,random);check(!receipt.game_draws&&!receipt.watcom_draws&&world.national_campaigns->seasons.at(0).entrants==fields.national_field,"already-owned initial field was redrawn");}
+
+}
+int main(int argc,char** argv)try{auto fixtures=bmh::test::authored_fixture_tables();fixtures[4]={"abcd","acdb","adbc"};set_fixture_tables(fixtures);compatibility_kernel();initial_receipt();run(fixture(),rules());run(select_world_scope(fixture(),{false,false,true}),rules(),Country::england);if(argc==3){const auto source=load_le(argv[1]);install_fixture_tables(source);run(decode_world(read_file(argv[2])),source);}return 0;}catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}
