@@ -13,6 +13,17 @@ struct World12OtherSelection {
     OtherGamesDisplayMode mode=OtherGamesDisplayMode::detail;
     bool operator==(const World12OtherSelection&)const=default;
 };
+struct World12CompetitionOverlay {
+    uint64_t revision=0;
+    uint8_t source_entry=0,played=0;
+    std::vector<bmh::world12::Fixture> matches;
+    std::vector<uint16_t> scores;
+};
+// Pure saved European programme projection, optionally overlaid with this exact
+// active group's actual current scores. It never commits a result or draws.
+OtherGamesState world12_european_games_state(const bmh::world12::CareerSnapshot&,
+    const World12OtherGamesIdentity&,World12OtherSelection,
+    const std::vector<World12CompetitionOverlay>& overlay={});
 World12OtherSelection default_world12_other_selection(const bmh::world12::World&);
 OtherGamesState world12_other_games_state(const bmh::world12::CareerSnapshot&,
     const World12OtherGamesIdentity&,World12OtherSelection);
