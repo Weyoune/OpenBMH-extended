@@ -35,6 +35,37 @@ void captured_draw(){
     for(auto address:{layout::PlainBackground,layout::TextGradientDisabled,layout::SolidPanelBackground,layout::CupDraw_FormatError_RuntimeField})reference.memory.add_block(address,1);
     const auto before=state;const auto view=world12_cup_draw_notice(state,notice,reference,rules,texts);check(view.projection.count==notice.fixtures.size()*2&&view.clubs.size()==view.projection.count,"captured cup draw lost actual participants");for(size_t n=0;n<notice.fixtures.size();++n)for(size_t side=0;side<2;++side){const auto club=side?notice.fixtures[n].away:notice.fixtures[n].home;const auto token=uint16_t(n*2+side);check(view.clubs.at(token)==club&&view.projection.clubs[token].badge_atlas==state.world.crests.at(state.world.clubs.at(club).crest).path,"captured cup draw invented identity or crest path");}check(state==before,"captured cup draw projection changed state");auto stale=notice;std::swap(stale.fixtures[0].home,stale.fixtures[0].away);rejects([&]{world12_cup_draw_notice(state,stale,reference,rules,texts);},"forged captured draw order accepted");
 }
+void english_draw_rounds(){
+    CareerSnapshot state;state.world=bmh::test::world12::complete_world();state.results=SeasonResults::empty(state.world.catalogue);state.world.managers={{3,"Authored English draw",state.world.membership[5].clubs[0],{5},3}};
+    auto rules=bmh::test::world12::country_rules(true);
+    // Reproduce the English TEXT-table offset that collides with German
+    // Champions-League qualification, independently of the actual cup stages.
+    const uint8_t foreign_text_offset=10;for(uint8_t entry:{0,25,26,27,28})rules.patch(cup_entry_address(entry)+0x1c,&foreign_text_offset,1);
+    GameRandom game(17);WatcomRandom random(91);state.cups=initial_domestic_cup_fields(state.world,Country::england,bmh::test::world12::membership_ranking(state.world,Country::england),rules,game);
+    TextDb texts;texts.strings.resize(2000,"Authored foreign table collision");const auto base=size_t((layout::CupDraw_FormatError_ExecutableField4-layout::TextPointerTable)/4);
+    const std::array<std::string,6> labels={"1. Authored round","2. Authored round","Authored last16","Authored quarterfinal","Authored semifinal","Authored final"};for(size_t n=0;n<labels.size();++n)texts.strings[base+n+1]=labels[n];
+    GameState reference;for(auto address:{layout::PlainBackground,layout::TextGradientDisabled,layout::SolidPanelBackground,layout::CupDraw_FormatError_RuntimeField})reference.memory.add_block(address,1);
+    size_t views=0;
+    for(const auto cup:{DomesticCup::fa_cup,DomesticCup::league_cup}){
+        size_t ordinal=0;
+        for(;;){
+            const auto active=std::find_if(state.cups.rbegin(),state.cups.rend(),[&](const auto& value){return value.cup==cup;});const auto index=size_t(active.base()-state.cups.begin()-1);
+            const auto& stage=state.cups[index];if(stage.complete())break;
+            if(stage.next_leg()==1){
+                const auto notice=*cup_draw_notice(state.world,stage);const auto before=state;const auto seed=random.seed();const auto calls=random.calls();const auto game_seed=game.seed();const auto game_calls=game.calls();
+                const auto view=world12_cup_draw_notice(state,notice,reference,rules,texts);
+                const size_t total=cup==DomesticCup::fa_cup?7:6;const auto remaining=total-ordinal;
+                const std::string expected=remaining<=4?labels[7-remaining-1]:ordinal<2?labels[ordinal]:"3. Authored round";
+                check(view.projection.heading==expected&&view.projection.footer==(cup==DomesticCup::fa_cup?"FA CUP":"KOKA KOLA CUP"),"English domestic draw used foreign TEXT index or wrong linked-round label");
+                check(state==before&&random.seed()==seed&&random.calls()==calls&&game.seed()==game_seed&&game.calls()==game_calls,"English draw label changed programme or RNG");++ordinal;++views;
+            }
+            std::vector<uint16_t> scores(stage.next_fixtures().size(),uint16_t(stage.next_leg()==1?2<<5:1));
+            const auto result=draw_after_cup_leg(state.world,stage,scores,rules,random);commit_cup_leg(state.cups[index],result,state.world);if(result.next_stage)state.cups.push_back(*result.next_stage);
+        }
+        check(ordinal==(cup==DomesticCup::fa_cup?7:6),"English round-label regression skipped a real Source stage");
+    }
+    check(views==13,"English round-label regression omitted domestic rounds");std::cout<<"13English FA/LeagueCup draw labels follow actual linked stages through final, ignore foreign TEXT offsets and preserve state/RNG\n";
+}
 void domestic_live(){
     CareerSnapshot snapshot;snapshot.world=bmh::test::world12::complete_world();snapshot.results=SeasonResults::empty(snapshot.world.catalogue);const auto actor=snapshot.world.membership[0].clubs[0];snapshot.world.managers={{3,"Authored viewer",actor,{0},3}};const World12OtherGamesIdentity owner{3,actor,8,71,1ull<<32};
     const auto de=bmh::test::world12::country_rules(false),en=bmh::test::world12::country_rules(true);GameRandom game(17);snapshot.cups=initial_domestic_cup_fields(snapshot.world,Country::germany,bmh::test::world12::membership_ranking(snapshot.world,Country::germany),de,game);const auto before=snapshot;const auto& stage=snapshot.cups[0];World12CompetitionOverlay half{stage.revision,stage.source_entry,0,stage.next_fixtures(),std::vector<uint16_t>(stage.next_fixtures().size(),0)};
@@ -44,4 +75,4 @@ void domestic_live(){
 }
 
 }
-int main(int argc,char** argv)try{if(argc==2){render_data=argv[1];render_reference=load_reference_le(asset_path(*render_data,"BMH.exe"),DataProfile{});}set_fixture_tables(bmh::test::authored_fixture_tables());saved_european();captured_draw();domestic_live();return 0;}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
+int main(int argc,char** argv)try{if(argc==2){render_data=argv[1];render_reference=load_reference_le(asset_path(*render_data,"BMH.exe"),DataProfile{});}set_fixture_tables(bmh::test::authored_fixture_tables());saved_european();captured_draw();english_draw_rounds();domestic_live();return 0;}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}

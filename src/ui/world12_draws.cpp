@@ -3,8 +3,46 @@
 #include "ui/manager.hpp"
 #include "game/cup.hpp"
 #include <algorithm>
+#include <array>
 namespace bmh::ui {
 using namespace bmh::world12;
+namespace {
+std::string english_domestic_round(const KnockoutStage& stage,uint8_t round,
+                                 const LeImage& rules,const TextDb& texts){
+    // English +1c indexes its own TEXT table. German menus instead use the
+    // actual linked knockout programme: FA 2+5 rounds, League Cup 1+4+1.
+    std::array<bool,kCupEntries> seen{};
+    int total=0,first=-1;
+    uint8_t entry=stage.cup==DomesticCup::fa_cup?0:25;
+    for(;;){
+        if(entry>=kCupEntries||seen[entry])throw FormatError("world12: cyclic English draw round programme");
+        seen[entry]=true;const auto at=cup_entry_address(entry);
+        if(!rules.contains(at+0x27)||!(rules.u8(at+0x14)&4)||rules.u16(at+0x18)!=(stage.cup==DomesticCup::fa_cup?0:11))throw FormatError("world12: English draw round programme has no matching knockout rules");
+        const auto rounds=rules.u8(at+0x1b),next=rules.u8(at+0x16);
+        if(!rounds||rounds>7)throw FormatError("world12: invalid English draw round count");
+        if(entry==stage.source_entry){
+            if(rounds!=stage.planned_rounds||next!=stage.next_entry)throw FormatError("world12: English draw round metadata changed");
+            first=total;
+        }
+        total+=rounds;if(!next)break;entry=next;
+    }
+    if(first<0||!round||round>stage.planned_rounds)throw FormatError("world12: English draw round is outside its Source programme");
+    const int ordinal=first+round,remaining=total-ordinal+1;
+    const auto base=size_t((layout::CupDraw_FormatError_ExecutableField4-layout::TextPointerTable)/4);
+    // German TEXTD has 1./2. Runde and the final four named knockout rounds.
+    const auto index=base+size_t(remaining<=4?7-remaining:std::min(ordinal,2));
+    if(index>=texts.strings.size())throw FormatError("world12: missing German domestic round text");
+    auto label=original_to_utf8(texts[index]);
+    if(remaining>4&&ordinal>2){
+        const auto first_round=base+1;
+        if(first_round>=texts.strings.size())throw FormatError("world12: missing German ordinal round text");
+        label=original_to_utf8(texts[first_round]);
+        if(label.empty()||label.front()!='1')throw FormatError("world12: German ordinal round template is unavailable");
+        label.replace(0,1,std::to_string(ordinal));
+    }
+    return label;
+}
+}
 World12CupDrawView world12_cup_draw_notice(const CareerSnapshot& state,const CupDrawNotice& notice,
     const GameState& reference,const LeImage& rules,const TextDb& texts){
     state.world.validate();validate_cup_programmes(state.world,state.cups);
@@ -27,6 +65,7 @@ World12CupDrawView world12_cup_draw_notice(const CareerSnapshot& state,const Cup
     for(size_t i=0;i<participants;++i)event.participants.push_back(uint16_t(i));
     World12CupDrawView out;out.projection=cup_draw_from_game(game,event,rules,texts);
     for(size_t i=0;i<participants;++i){const auto id=ids[i];const auto& club=state.world.clubs.at(id);const auto& crest=state.world.crests.at(club.crest);auto& row=out.projection.clubs.at(i);row.badge_atlas=crest.path;row.badge_selector=crest.cell;row.league_tier=club.league.valid()?state.world.catalogue.league(club.league).local_index:255;row.country=0;out.clubs[uint16_t(i)]=id;}
+    if(notice.cup==DomesticCup::fa_cup||notice.cup==DomesticCup::league_cup)out.projection.heading=english_domestic_round(*stage,notice.round,rules,texts);
     if(notice.cup==DomesticCup::fa_cup)out.projection.footer="FA CUP";
     if(notice.cup==DomesticCup::league_cup)out.projection.footer="KOKA KOLA CUP";
     return out;

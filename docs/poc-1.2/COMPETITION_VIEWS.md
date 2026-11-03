@@ -44,3 +44,15 @@ campaign and its saved stage/round selection. Its linked-stage controls and
 round arrows retain that owner; no national competition number is reinterpreted
 as a domestic LeagueId. A missing text/programme context is explicit, rather
 than a placeholder national fixture page.
+
+English domestic draw notices use the German menu round labels independently of
+English rule field `entry+0x1c`, whose text-table offset belongs to the English
+TEXTD layout. The UI follows the actual Source successor chain and authenticated
+saved stage round count/cursor. FA Cup has two preliminary and five main rounds;
+League Cup has one preliminary, four main rounds and a linked final. Earlier
+rounds retain their consecutive cup ordinal; the final four use the existing
+German knockout labels. The FA Cup third-round ordinal uses the Original first
+round text as its numeric template. Only the draw heading changes: fixture order,
+programme, scores and both RNG streams remain untouched. The synthetic competition
+view regression walks all thirteen English cup rounds, including linked stages
+and two legs, with a deliberately colliding foreign text offset.
