@@ -135,6 +135,21 @@ void free_offer_slots(GameState& g) {
     for (uint32_t k = 0; k < 4; k++) g.memory.set32(kOffers + k * 4, 0xFFFFFFFFu);
 }
 
+void reset_annual_club_mood(GameState& g,int team,bool holder,GameRandom& game,WatcomRandom& rand) {
+    g.team_morale.at(size_t(team)) = uint8_t((g.team_morale.at(size_t(team)) & 0xc0) | rand.range(0x14, 0x1e));
+    g.team_flags.at(size_t(team)) = uint16_t(game.range(0, 2) * 2);
+    int high = 3, low = 0;  // iVar7 (bits 14-15), iVar8 (bits 12-13)
+    if (!holder) {
+        const int pos = int16_t(table_position(g, team));  // TablePosition
+        high = std::max(3 - pos / 6, 0);
+        if (rand.range(0, 4) == 0) high = rand.range(0, 3);
+        low = std::min(pos / 5, 3);
+        if (rand.range(0, 6) == 0) low = rand.range(0, 3);
+    }
+    g.team_flags.at(size_t(team)) = uint16_t(g.team_flags.at(size_t(team)) | low << 12 | high << 14);
+    club_balance(g, team, rand);  // CareerSeasonSetup4
+}
+
 void reset_club_moods(GameState& g, GameRandom& game, WatcomRandom& rand, bool new_career) {
     const StaticMemory& mem = g.memory;
     // the title holders (cup table entries 0, 15, 19 and 21, +0x22) start at the top
@@ -145,18 +160,7 @@ void reset_club_moods(GameState& g, GameRandom& game, WatcomRandom& rand, bool n
             initialize_career_club_mood(g, int(team), game, rand);
             continue;
         }
-        g.team_morale.at(team) = uint8_t((g.team_morale.at(team) & 0xc0) | rand.range(0x14, 0x1e));
-        g.team_flags.at(team) = uint16_t(game.range(0, 2) * 2);
-        int high = 3, low = 0;  // iVar7 (bits 14-15), iVar8 (bits 12-13)
-        if (std::find(std::begin(holders), std::end(holders), uint16_t(team)) == std::end(holders)) {
-            const int pos = int16_t(table_position(g, int(team)));  // TablePosition
-            high = std::max(3 - pos / 6, 0);
-            if (rand.range(0, 4) == 0) high = rand.range(0, 3);
-            low = std::min(pos / 5, 3);
-            if (rand.range(0, 6) == 0) low = rand.range(0, 3);
-        }
-        g.team_flags.at(team) = uint16_t(g.team_flags.at(team) | low << 12 | high << 14);
-        club_balance(g, int(team), rand);  // CareerSeasonSetup4
+        reset_annual_club_mood(g,int(team),std::find(std::begin(holders),std::end(holders),uint16_t(team))!=std::end(holders),game,rand);
     }
 }
 
@@ -1120,7 +1124,8 @@ bool release_player(GameState& g, int slot, GameRandom& game, WatcomRandom& rand
 // cards, position histories and results of the old season are cleared.
 void initialize_season_tickets(GameState& g,int manager,WatcomRandom& random) {season_tickets(g,manager,random);}
 
-void reset_manager_season(GameState& g,int m,WatcomRandom& rand,MinuteReport& report) {
+namespace {
+void reset_manager_season_impl(GameState& g,int m,WatcomRandom& rand,MinuteReport& report,const ClubAttractionTitles* relations) {
     StaticMemory& mem=g.memory;
     // CareerSeasonSetup3 invokes StartingSponsors for each manager before resetting
     // seasonal records and constructing new advertising offers.
@@ -1133,7 +1138,8 @@ void reset_manager_season(GameState& g,int m,WatcomRandom& rand,MinuteReport& re
     for (size_t i = 0; i < 0x48; i++) rec8(g, m, 0x1ae + i) = 0;
     for (size_t i = 0; i < 0x30; i++) rec8(g, m, 0x718 + i) = 0;
     for (size_t i = 0; i < 0xc; i++) rec8(g, m, 0x8c0 + i) = 0, rec8(g, m, 0x748 + i) = 0;
-    advertising_offers(g, m, rand, report);  // TransferListCountdown2
+    if(relations)advertising_offers(g,m,rand,report,*relations);
+    else advertising_offers(g, m, rand, report);  // TransferListCountdown2
     if (report.unsupported) return;
     set_rec32(g, m, 0x33c, 0), set_rec32(g, m, 0x338, 0), set_rec32(g, m, 0x334, 0);
     for (size_t s = 0; s < 24; s++) {
@@ -1147,6 +1153,15 @@ void reset_manager_season(GameState& g,int m,WatcomRandom& rand,MinuteReport& re
             mem.set8(::bmh::layout::Season_SeasonPlayers_RuntimeField2 + i * 0x58, uint8_t(rand.range(0x14, 0x32)));
         }
     for(size_t i=0;i<10;++i)rec8(g,m,0x8b6+i)=0xff;
+}
+
+} // namespace
+void reset_manager_season(GameState& g,int m,WatcomRandom& random,MinuteReport& report) {
+    reset_manager_season_impl(g,m,random,report,nullptr);
+}
+void reset_manager_season(GameState& g,int m,WatcomRandom& random,MinuteReport& report,const ClubAttractionTitles& relations) {
+    if(relations.european_cup>3)throw std::invalid_argument("annual manager reset: invalid European relation");
+    reset_manager_season_impl(g,m,random,report,&relations);
 }
 
 bool renew_season_player_slots(GameState& g,int first,int end,GameRandom& game,WatcomRandom& rand,

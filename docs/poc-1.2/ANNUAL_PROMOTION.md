@@ -211,3 +211,22 @@ snapshot roundtrips and academy movement through the subsequent promotion
 roster inheritance. These authored closing programmes are not played seasons.
 Player renewal, cup/calendar reset, full title archives, closing/new desks and
 final atomic season publication remain required.
+
+## Annual mood phase and retained country order
+
+`stage_annual_moods` runs before European qualification and accounts. It obtains
+completed titles/ranks without drawing qualification RNG, consumes Source's
+initial unused W draw, then updates every actual club/national identity through
+the shared per-club Source mood kernel. Domestic amateur clubs use their saved
+physical pool order, including preceding years' exchanges. Known national
+nominations supply the primary national roster; abstract clubs retain their real
+rating. No player is synthesized or added to a non-league club.
+
+The unpublished packet binds its source, physical order, changed World and both
+random streams. Qualification continues from the returned seeds. Old unknown
+amateur order and a changed owner reject the stage. The annual manager-reset
+kernel also accepts explicit completed-title/next-entry relations for its
+advertising pass, while the native call retains its existing competition-memory
+path. Original full-stream/RNG comparisons include moods, accounts and complete
+native player reset; typed tests separately exercise mood-to-qualification-to-
+account continuation. Final season publication remains a separate requirement.
