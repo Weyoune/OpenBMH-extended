@@ -72,14 +72,13 @@ FriendlyCalendarCell friendly_calendar_cell(const LeImage& executable, uint32_t 
     return {cell.x, cell.y, cell.width, cell.height};
 }
 
-FriendlyMatchScreen::FriendlyMatchScreen(const std::filesystem::path& data, FriendlyMatchState state,
-                                         int desk_menu_kind)
-    : state_(std::move(state)), desk_menu_kind_(desk_menu_kind),
-      table_(data, state_.leagues, initial_league(state_), LeagueTableScreen::OpponentMode{}),
-      font_(load_font(asset_path(data / "F", "BMH2.FNT"))),
-      exe_(load_le(asset_path(data, "BMH.exe"))),
-      data_(data), next_request_id_(state_.first_request_id) {
-    const bool valid_national_slot = state_.national_team && state_.runtime_team == bmh::kNoTeam;
+FriendlyMatchScreen::FriendlyMatchScreen(const std::filesystem::path& data,FriendlyMatchState state,int menu)
+    : FriendlyMatchScreen(data,std::move(state),load_le(asset_path(data,"BMH.exe")),menu) {}
+FriendlyMatchScreen::FriendlyMatchScreen(const std::filesystem::path& data,FriendlyMatchState state,const LeImage& reference,int desk_menu_kind)
+    : state_(std::move(state)),desk_menu_kind_(desk_menu_kind),font_(load_font(asset_path(data/"F","BMH2.FNT"))),exe_(reference),data_(data),next_request_id_(state_.first_request_id) {
+    if(state_.owned_world12){if(!state_.accepted_background||state_.accepted_background->width!=320||state_.accepted_background->height!=240||state_.selected_opponent<0)throw FormatError("friendly screen: owned source selection/background is missing");}
+    else table_.emplace(data,state_.leagues,initial_league(state_),LeagueTableScreen::OpponentMode{});
+    const bool valid_national_slot = state_.national_team && (state_.runtime_team == bmh::kNoTeam||state_.owned_world12);
     if (state_.manager_slot < 0 || state_.manager_slot > 3 || state_.runtime_team < 0 ||
         (state_.runtime_team >= runtime_dimensions.record_teams && !valid_national_slot) ||
         state_.revision == UINT64_MAX || !state_.first_request_id || state_.planner_count < 0 ||
@@ -88,7 +87,7 @@ FriendlyMatchScreen::FriendlyMatchScreen(const std::filesystem::path& data, Frie
     if (!state_.mode_three) {
         stage_ = FriendlyStage::unavailable;
         feedback_ = "Freundschaftsspiele sind nur in Modus III verfuegbar.";
-    } else if (state_.national_team || state_.runtime_team == bmh::kNoTeam) {
+    } else if ((state_.national_team || state_.runtime_team == bmh::kNoTeam)&&!state_.owned_world12) {
         stage_ = FriendlyStage::unavailable;
         feedback_ = "Freundschaftsspiele fuer die Nationalmannschaft sind hier nicht verfuegbar.";
     } else if (desk_menu_kind_ != 6) {
@@ -97,13 +96,16 @@ FriendlyMatchScreen::FriendlyMatchScreen(const std::filesystem::path& data, Frie
     }
     if (state_.selected_opponent>=0) {
         if (stage_!=FriendlyStage::opponents || state_.selected_opponent==state_.runtime_team ||
-            std::none_of(table_.state().rows.begin(),table_.state().rows.end(),
-                [&](const auto& row){return row.runtime_team_id==state_.selected_opponent;}))
+            (!state_.owned_world12&&std::none_of(table_->state().rows.begin(),table_->state().rows.end(),
+                [&](const auto& row){return row.runtime_team_id==state_.selected_opponent;})))
             throw FormatError("friendly screen: invalid authoritative opponent return");
         selected_opponent_=state_.selected_opponent;
         stage_=FriendlyStage::venue;
     }
 }
+
+FriendlyMatchScreen::FriendlyMatchScreen(const FriendlyMatchScreen& other)
+    :state_(other.state_),desk_menu_kind_(other.desk_menu_kind_),font_(other.font_),exe_(other.exe_),data_(other.data_),calendar_(other.calendar_),stage_(other.stage_),selected_opponent_(other.selected_opponent_),manager_home_(other.manager_home_),cost_confirmed_(other.cost_confirmed_),owner_approved_(other.owner_approved_),close_requested_(other.close_requested_),next_request_id_(other.next_request_id_),pending_booking_request_id_(other.pending_booking_request_id_),quote_(other.quote_),national_booking_(other.national_booking_),selected_day_(other.selected_day_),feedback_(other.feedback_),pressed_question_(other.pressed_question_){if(!state_.owned_world12||other.table_)throw FormatError("friendly screen: only an owned World12 modal can be cloned");}
 
 FriendlyMatchScreen::FriendlyMatchScreen(const std::filesystem::path& data, FriendlyMatchState state,
         FriendlyQuoteProjection national_quote, NationalFriendlyBookingRequest national_booking,
@@ -146,6 +148,7 @@ FriendlyMatchScreen::FriendlyMatchScreen(const std::filesystem::path& data, Frie
     prepare_calendar();
 }
 
+Image FriendlyMatchScreen::accepted_background()const {if(table_)return table_->render();if(state_.accepted_background)return *state_.accepted_background;throw FormatError("friendly screen: no actual parent background");}
 void FriendlyMatchScreen::prepare_calendar() {
     if (!quote_) throw FormatError("friendly calendar: missing owned quote");
     std::array<bool, 366> seen{};
@@ -168,11 +171,11 @@ void FriendlyMatchScreen::prepare_calendar() {
         day.friendly_target = option != quote_->dates.end() &&
             (option->mark == FriendlyDateMark::available || option->mark == FriendlyDateMark::available_flagged);
     }
-    calendar_.emplace(data_, std::move(calendar), state_.manager_name, true, state_.runtime_team);
+    calendar_.emplace(data_, std::move(calendar), state_.manager_name, true, state_.runtime_team, DeskRequest{},exe_);
 }
 
 bool FriendlyMatchScreen::move(int x, int y) {
-    if (!close_requested_ && stage_==FriendlyStage::opponents) return table_.move(x,y);
+    if (!close_requested_ && stage_==FriendlyStage::opponents) return table_->move(x,y);
     if(pressed_question_&&*pressed_question_!=GameEndTaxDialog::Button::none&&
        question_button(x,y)!=*pressed_question_) {
         pressed_question_=GameEndTaxDialog::Button::none;return true;
@@ -192,11 +195,11 @@ const TaxDialogProjection* FriendlyMatchScreen::question_projection() const {
 GameEndTaxDialog::Button FriendlyMatchScreen::question_button(int x,int y) const {
     const auto* p=question_projection();
     if(!p)return GameEndTaxDialog::Button::none;
-    return GameEndTaxDialog(data_,*p,{},table_.render()).hit_test(x,y);
+    return GameEndTaxDialog(data_,*p,{},accepted_background(),exe_).hit_test(x,y);
 }
 
 bool FriendlyMatchScreen::pointer_down(int x,int y,bool right) {
-    if (!close_requested_ && stage_==FriendlyStage::opponents) return table_.pointer_down(x,y,right);
+    if (!close_requested_ && stage_==FriendlyStage::opponents) return table_->pointer_down(x,y,right);
     if(close_requested_||right||!question_projection())return false;
     pressed_question_=question_button(x,y);return true;
 }
@@ -228,24 +231,24 @@ Image FriendlyMatchScreen::render_modal(Image image, std::string_view heading, s
 
 Image FriendlyMatchScreen::render() const {
     if (stage_ == FriendlyStage::opponents) {
-        return table_.render();
+        return accepted_background();
     }
     if(stage_==FriendlyStage::venue||stage_==FriendlyStage::cost_confirmation||
        stage_==FriendlyStage::owner_approval) {
         const auto* p=question_projection();
         if(!p||p->kind!=TaxDialogKind::question)
             throw FormatError("friendly question: missing Source question projection");
-        return GameEndTaxDialog(data_,*p,{},table_.render()).render(pressed_question_);
+        return GameEndTaxDialog(data_,*p,{},accepted_background(),exe_).render(pressed_question_);
     }
     if (stage_ == FriendlyStage::quote_pending)
-        return render_modal(table_.render(), "Freundschaftsspiel", "Kosten und Termine werden geprueft.", "", "");
+        return render_modal(accepted_background(), "Freundschaftsspiel", "Kosten und Termine werden geprueft.", "", "");
     if (stage_ == FriendlyStage::booking_pending)
-        return render_modal(table_.render(), "Freundschaftsspiel", "Termin wird verbindlich geprueft.", "", "");
+        return render_modal(accepted_background(), "Freundschaftsspiel", "Termin wird verbindlich geprueft.", "", "");
     if (stage_ == FriendlyStage::complete)
-        return render_modal(table_.render(), "Freundschaftsspiel vereinbart", feedback_, "WEITER", "");
+        return render_modal(accepted_background(), "Freundschaftsspiel vereinbart", feedback_, "WEITER", "");
     if (stage_ == FriendlyStage::unavailable)
-        return render_modal(table_.render(), "Nicht verfuegbar", feedback_, "ZURUECK", "");
-    if (stage_ != FriendlyStage::calendar || !quote_) return table_.render();
+        return render_modal(accepted_background(), "Nicht verfuegbar", feedback_, "ZURUECK", "");
+    if (stage_ != FriendlyStage::calendar || !quote_) return accepted_background();
 
     if (!calendar_) throw FormatError("friendly calendar: missing Source calendar view");
     return calendar_->render();
@@ -256,11 +259,11 @@ std::string FriendlyMatchScreen::state_json() const {
     out << "{\"screen\":\"friendly_match\",\"stage\":" << json_quote(stage_name(stage_))
         << ",\"menu_kind\":" << desk_menu_kind_ << ",\"revision\":" << state_.revision
         << ",\"manager_slot\":" << state_.manager_slot << ",\"runtime_team\":" << state_.runtime_team
-        << ",\"league\":" << table_.selected_league() << ",\"opponent\":" << selected_opponent_
+        << ",\"league\":" << selected_league() << ",\"opponent\":" << selected_opponent_
         << ",\"close_requested\":" << (close_requested_ ? "true" : "false")
         << ",\"feedback\":" << json_quote(feedback_)
         << ",\"planner_count\":" << state_.planner_count;
-    if (stage_==FriendlyStage::opponents) out << ",\"picker\":" << table_.state_json();
+    if (stage_==FriendlyStage::opponents) out << ",\"picker\":" << table_->state_json();
     if (quote_) out << ",\"quote_id\":" << quote_->request_id << ",\"payer_manager\":" << quote_->payer_manager
         << ",\"opponent_manager\":" << quote_->opponent_manager << ",\"quoted_planner_count\":" << quote_->planner_count
         << ",\"cost\":" << quote_->cost << ",\"home_team\":" << quote_->home_team
@@ -335,11 +338,11 @@ std::optional<FriendlyMatchRequest> FriendlyMatchScreen::click(int x, int y, boo
     if(pressed_question_&&answer!=*pressed_question_)answer=GameEndTaxDialog::Button::none;
     pressed_question_.reset();
     if (stage_ == FriendlyStage::opponents) {
-        if (table_.click(x,y)) {
-            close_requested_=table_.close_requested();
+        if (table_->click(x,y)) {
+            close_requested_=table_->close_requested();
             return std::nullopt;
         }
-        const auto& rows = table_.state().rows;
+        const auto& rows = table_->state().rows;
         // FriendlyMatchScreen checks only the row interval, not the name-column x.
         if (y<=0x1c || y>=int(rows.size())*7+0x1c) return std::nullopt;
         const int row = (y-0x1d)/7;
@@ -389,7 +392,7 @@ std::optional<FriendlyMatchRequest> FriendlyMatchScreen::key(std::string_view va
     if (question_projection()) return std::nullopt;
     if (value == "ESC") { close_requested_ = true; return std::nullopt; }
     if (stage_ == FriendlyStage::opponents && (value == "LEFT" || value == "RIGHT")) {
-        table_.key(value);
+        table_->key(value);
         return std::nullopt;
     }
     return std::nullopt;

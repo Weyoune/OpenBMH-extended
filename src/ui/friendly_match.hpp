@@ -112,17 +112,20 @@ struct FriendlyMatchState {
 
 class FriendlyMatchScreen {
 public:
+    FriendlyMatchScreen(const FriendlyMatchScreen&);
+    FriendlyMatchScreen(FriendlyMatchScreen&&)=default;
     FriendlyMatchScreen(const std::filesystem::path& data, FriendlyMatchState state,
                         int desk_menu_kind = 6);
     FriendlyMatchScreen(const std::filesystem::path& data, FriendlyMatchState state,
                         FriendlyQuoteProjection national_quote,
                         NationalFriendlyBookingRequest national_booking,
                         int desk_menu_kind = 6);
+    FriendlyMatchScreen(const std::filesystem::path&,FriendlyMatchState,const LeImage& actual_reference,int desk_menu_kind=6);
     FriendlyStage stage() const { return stage_; }
-    int selected_league() const { return table_.selected_league(); }
+    int selected_league() const { return table_?table_->selected_league():state_.selected_league; }
     int selected_opponent() const { return selected_opponent_; }
     const LeagueTableScreen* opponent_table() const {
-        return stage_==FriendlyStage::opponents ? &table_ : nullptr;
+        return stage_==FriendlyStage::opponents&&table_ ? &*table_ : nullptr;
     }
     const std::optional<FriendlyQuoteProjection>& quote() const { return quote_; }
     bool close_requested() const { return close_requested_; }
@@ -147,7 +150,8 @@ public:
 private:
     FriendlyMatchState state_;
     int desk_menu_kind_ = 23;
-    LeagueTableScreen table_;
+    std::optional<LeagueTableScreen> table_;
+    Image accepted_background() const;
     Font font_;
     LeImage exe_;
     std::filesystem::path data_;
