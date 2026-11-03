@@ -2,6 +2,7 @@
 #include "world12_fixture.hpp"
 #include "fixture_tables.hpp"
 #include "game/world12/national_campaign.hpp"
+#include "game/world12/national_final_facts.hpp"
 #include "game/world12/codec.hpp"
 #include "game/world12/save.hpp"
 #include "game/national_draw.hpp"
@@ -27,11 +28,12 @@ void run(World world,const LeImage& source,Country primary=Country::germany){Gam
    const auto encoded=encode_world(world);check(decode_world(encoded)==world,"national stage did not survive exact world codec roundtrip");
    const auto current=world;rejects([&]{commit_national_results(world,result,source,random);});check(world==current,"replayed national result changed the campaign");}
   check(played==matches[season%4]&&appointments==dates[season%4],"Source programme match/date counts changed");
-  const auto& completed=world.national_campaigns->seasons.at(season);check(completed.winner.valid(),"completed tournament lacks its Source winner");if(season%4==3)check(world.national_campaigns->honours.front()==completed.places,"World-Cup Source podium/honours were not retained");
+  const auto& completed=world.national_campaigns->seasons.at(season);check(completed.winner.valid(),"completed tournament lacks its Source winner");const auto facts=national_final_facts(completed);check(facts.winner==completed.winner&&facts.runner_up==completed.runner_up,"pure Source final facts disagree");auto tampered=world;auto& corrupted=tampered.national_campaigns->seasons.at(season);auto& final=*std::find_if(corrupted.stages.begin(),corrupted.stages.end(),[&](const auto& s){return s.rules.entry==corrupted.active_entry;});const auto wrong=*std::find_if(corrupted.entrants.begin(),corrupted.entrants.end(),[&](auto id){return id!=corrupted.winner;});corrupted.winner=wrong;final.winner=wrong;rejects([&]{(void)national_final_facts(corrupted);});if(season%4==3)check(world.national_campaigns->honours.front()==completed.places,"World-Cup Source podium/honours were not retained");
  }
  check(world.national_campaigns->honours.size()==2,"World-Cup honours duplicated or omitted");auto invalid=world;++invalid.national_campaigns->seasons.at(0).revision;rejects([&]{invalid.validate();});invalid=world;invalid.national_campaigns->honours[0][1]=invalid.national_campaigns->honours[0][0];rejects([&]{invalid.validate();});
  const auto encoded=encode_world(world);auto old=cli::parse_json(std::string(encoded.begin(),encoded.end()));old.object()->at("version")=38;auto bytes=cli::dump_json(old);rejects([&]{decode_world(Bytes(bytes.begin(),bytes.end()));});old.object()->at("national_campaigns")=nullptr;bytes=cli::dump_json(old);check(!decode_world(Bytes(bytes.begin(),bytes.end())).national_campaigns,"old schema invented national results");
  auto reserved=cli::parse_json(std::string(encoded.begin(),encoded.end()));reserved.object()->at("national_coaches")=cli::Json::Object{};const auto reserved_bytes=cli::dump_json(reserved);rejects([&]{decode_world(Bytes(reserved_bytes.begin(),reserved_bytes.end()));});
+ auto fixtureless=bmh::test::authored_fixture_tables();fixtureless.erase(4);fixtureless.erase(6);set_fixture_tables(fixtureless);check(decode_world(encoded)==world,"structural national codec unexpectedly requires fixture assets");rejects([&]{(void)national_final_facts(world.national_campaigns->seasons.at(0));});auto restored_fixtures=bmh::test::authored_fixture_tables();restored_fixtures[4]={"abcd","acdb","adbc"};set_fixture_tables(restored_fixtures);
  std::cout<<"National Source programmes12/15/30/52 games,6/5/10/7 dates; eight controlled-score seasons, prior-field draws, World-Cup honours, stale/codec checks passed (not played-season proof)\n";
 }
 void compatibility_kernel(){GameRandom game(17);WatcomRandom random(91);const auto opaque=uint16_t(0xcccc-357);const auto field=draw_national_tournament_field(1,{0,1,2,3},opaque,{},game,random);check(field.size()==8&&std::find(field.begin(),field.end(),opaque)!=field.end()&&game.calls()==8,"inactive Native national scratch was changed into a fabricated country or lost its Source shuffle");}

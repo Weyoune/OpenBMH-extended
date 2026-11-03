@@ -52,3 +52,9 @@ Remaining work: real DE/EN nominee match projections, rating-only other nations,
 separate Source national coach accounts/monthly context, scoped nomination
 origins, current-order coach selection, Session national mode and actual native
 presenters. No Beta/playable flag follows from these module checks.
+
+`national_final_facts` is the annual archive's score-authority boundary. It
+checks stored winner/runner labels against Core group tables or the actual last
+knockout score, and checks both World-Cup finals. It consumes no RNG and requires
+the currently installed Source4/6 fixture tables for group rankings. Structural
+World/codec validation deliberately remains fixture-asset independent.

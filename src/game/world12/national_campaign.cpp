@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "game/world12/national_campaign.hpp"
+#include "game/world12/national_final_facts.hpp"
 #include "game/world12/world.hpp"
 #include "game/world12/calendar.hpp"
 #include "game/national_draw.hpp"
@@ -56,6 +57,25 @@ void validate_storage(const NationalStage& s,const std::set<ClubId>& entrants){
     }else {std::set<ClubId> unique;for(auto id:s.teams)require(id.valid()==begun&&(!begun||unique.insert(id).second),"group field is incomplete or repeated");
         for(size_t i=0;i<s.scores[0].size();++i){require((s.scores[0][i]!=0xcccc)==(begun&&i<size_t(s.played)*r.teams/2),"group score/cursor disagrees");require(s.scores[1][i]==0xcccc,"group stage owns knockout return-leg scores");}}
 }
+std::pair<ClubId,ClubId> source_stage_awards(const NationalStage& s){
+    const auto& r=s.rules;require(s.played==duration(r),"stage facts require complete scores");
+    for(auto word:s.scores[0])require(word!=0xcccc&&(word>>10)<=2&&(!(word>>10)||(r.flags&8)),"final facts require actual played scores");
+    if(r.knockout()){
+        if((r.teams>>r.rounds)!=1)return {};
+        size_t first=0;for(int round=0;round<int(r.rounds)-1;++round)first+=size_t(r.teams)>>round;
+        MatchGroup group;group.desc.assign(0xd0,0);group.desc[1]=r.flags;group.cup_results=s.scores[0];group.cup_other_leg=s.scores[1];
+        const auto winner=cup_tie(group,int(first/2));require(winner!=2,"final score is unresolved");
+        return {s.teams.at(first+size_t(winner)),s.teams.at(first+size_t(1-winner))};
+    }
+    StaticMemory memory;const auto entry=cup_entry_address(r.entry);memory.add_block(entry,0x28);
+    memory.set8(entry+0x14,r.flags);memory.set8(entry+0x1a,r.teams);memory.set8(entry+0x1b,r.rounds);memory.set8(entry+0x1d,s.played);
+    memory.set_pointer(entry+8,r.teams==6?layout::CareerSession_RuntimeError_RuntimeField2:layout::CareerSession_RuntimeError_RuntimeField);
+    constexpr uint32_t results=0x1e00000;memory.add_block(results,s.scores[0].size()*2);memory.set_pointer(entry+12,results);
+    for(size_t i=0;i<s.scores[0].size();++i)memory.set16(results+uint32_t(i*2),s.scores[0][i]);
+    const auto table=cup_group_table(memory,entry);ClubId winner,runner;
+    for(int row=0;row<r.teams;++row){if(table.rank(row)==0)winner=s.teams.at(size_t(row));if(table.rank(row)==1&&r.quota>1)runner=s.teams.at(size_t(row));}
+    require(winner.valid()&&(r.quota==1||runner.valid()),"Source ranking has no final places");return {winner,runner};
+}
 struct Workspace {
     GameState game;std::array<ClubId,62> ids;Country primary=Country::germany;
     Workspace(const NationalCampaign& c,const World& world):ids(nations(world)),primary(world.national_campaigns->primary_country){
@@ -83,6 +103,14 @@ struct Workspace {
     void capture(NationalCampaign& c)const{const auto& m=game.memory;for(auto& s:c.stages){const auto at=cup_entry_address(s.rules.entry);s.played=m.u8(at+0x1d);for(size_t i=0;i<s.teams.size();++i)s.teams[i]=global(m.u16(m.pointer(at)+uint32_t(i*2)));for(size_t leg=0;leg<2;++leg)if(m.pointer(at+uint32_t(12+4*leg)))for(size_t i=0;i<s.scores[leg].size();++i)s.scores[leg][i]=m.u16(m.pointer(at+uint32_t(12+4*leg))+uint32_t(i*2));s.winner=global(m.u16(at+0x22));s.runner_up=global(m.u16(at+0x24));}}
     void capture_honours(NationalCampaignHistory& history)const{history.honours.clear();for(uint32_t row=0;row<20;++row){std::array<ClubId,4> places;bool complete=true;for(uint32_t p=0;p<4;++p){const auto raw=game.memory.u8(layout::Placements+row*4+p);if(!(raw&128)){complete=false;break;}require((raw&127)<62,"Core honour country is invalid");places[p]=ids[source_country(raw&127)];}if(!complete)break;history.honours.push_back(places);}}
 };
+}
+NationalFinalFacts national_final_facts(const NationalCampaign& c){
+    require(c.complete&&c.season<=32767&&c.competition==7-c.season%4,"final facts require completed known tournament");std::vector<NationalStageRules> rules;for(const auto& s:c.stages)rules.push_back(s.rules);validate_rules(rules,c.season);const std::set<ClubId> entrants(c.entrants.begin(),c.entrants.end());for(const auto& s:c.stages)validate_storage(s,entrants);const auto& final=stage(c,c.active_entry);require(!final.rules.next&&!final.rules.group_index,"final owner is not terminal");
+    const auto [winner,runner]=source_stage_awards(final);NationalFinalFacts facts;facts.season=c.season;facts.competition=c.competition;facts.winner=winner;facts.runner_up=runner;
+    if(c.competition==4){require(final.rules.parallel!=0,"World-Cup third-place score is missing");const auto third=source_stage_awards(stage(c,final.rules.parallel));facts.places={winner,runner,third.first,third.second};}
+    require(final.winner==facts.winner&&final.runner_up==facts.runner_up&&c.winner==facts.winner&&c.runner_up==facts.runner_up&&c.places==facts.places,"stored awards disagree with actual Source final scores");
+    if(c.competition==4){const auto& third=stage(c,final.rules.parallel);require(third.winner==facts.places[2]&&third.runner_up==facts.places[3],"stored third-place awards disagree with Source scores");}
+    return facts;
 }
 uint16_t national_calendar_flag(uint32_t season){return uint16_t(1u<<(12-season%4));}
 bool national_appointment(const OtherAppointment& a,uint32_t season){return a.domain==CalendarDomain::shared&&!(a.source_entry&0x4000)&&(a.source_entry&national_calendar_flag(season));}
@@ -119,7 +147,7 @@ void validate_national_campaigns(const World& world){
         require(c.revision==revisions,"revision disagrees with played history");const auto& active=stage(c,c.active_entry);require(!active.rules.group_index,"active entry is not the primary group");
         for(const auto& s:c.stages)if(!s.rules.knockout()&&!s.rules.group_index){std::set<ClubId> group_ids;for(const auto& other:c.stages)if(!other.rules.knockout()&&other.rules.previous==s.rules.previous&&other.rules.groups==s.rules.groups){require(other.played==s.played&&started(other)==started(s),"parallel group cursor/field differs");if(started(other))for(auto id:other.teams)require(group_ids.insert(id).second,"parallel groups repeat a nation");}}
         if(c.complete){require(active.played==duration(active.rules)&&!active.rules.next&&c.winner==active.winner&&c.winner.valid()&&entrants.contains(c.winner)&&c.runner_up==active.runner_up,"terminal winner/cursor is invalid");if(season%4!=0)require(c.runner_up.valid()&&c.runner_up!=c.winner,"terminal runner-up is missing");}
-        else {require(!c.winner.valid()&&!c.runner_up.valid(),"premature campaign awards");(void)prepare_national_groups(c);}
+        else {require(!c.winner.valid()&&!c.runner_up.valid(),"premature campaign awards");require(started(active)&&active.played<duration(active.rules),"active stage is not playable");}
         if(c.complete&&c.competition==4){const auto& final=stage(c,c.active_entry);const auto& third=stage(c,final.rules.parallel);require(c.places==std::array<ClubId,4>{final.winner,final.runner_up,third.winner,third.runner_up},"podium differs from completed finals");}
         else require(std::none_of(c.places.begin(),c.places.end(),[](auto id){return id.valid();}),"premature or non-World-Cup podium");
     }
