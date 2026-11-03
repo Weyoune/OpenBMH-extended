@@ -92,6 +92,7 @@ public:
     bmh::world12::ClubId world_club_of(int selection_id)const;
 
 private:
+    bool national_only()const;
     bool club_locked(int id) const;
     bool selection_locked(int selection)const;
     void select_club(int selection);

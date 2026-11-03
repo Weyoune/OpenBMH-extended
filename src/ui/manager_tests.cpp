@@ -4,6 +4,7 @@
 #include <numeric>
 
 #include "ui/flow.hpp"
+#include "formats/executable_layout.hpp"
 
 using namespace bmh::ui;
 static void check(bool condition, const char* message) {
@@ -14,6 +15,23 @@ int main(int argc, char** argv) {
     try {
         if (argc != 2) throw std::runtime_error("ui_manager_tests requires original data directory");
         const std::filesystem::path data = argv[1];
+        {
+            auto choices=std::make_shared<ManagerWorldSelection>();choices->scope={false,false,true};choices->national_only=true;choices->revision=9;
+            const auto rules=bmh::load_le(asset_path(data,"BMH.exe"));
+            const auto database=bmh::load_database(asset_path(data,"M3D.MAN"),{rules.u32(bmh::layout::CareerSession_DataDirectory_RuntimeField),rules.u32(bmh::layout::CareerSession_DataDirectory_RuntimeField3),rules.u32(bmh::layout::CareerSession_DataDirectory_RuntimeField2),rules.u32(bmh::layout::CareerSession_DataDirectory_RuntimeField4)});
+            const auto badge=bmh::le16(database.raw_club_badge_selectors,0)&511;const auto atlas="W/"+std::to_string(badge>>3)+".VGA";
+            choices->national_teams={{bmh::world12::Country::germany,{900001},"DEUTSCHLAND",atlas,uint8_t(badge&7)},{bmh::world12::Country::england,{900002},"ENGLAND",atlas,uint8_t(badge&7)}};
+            SelectionContext context;context.world=choices;context.revision=9;context.source="synthetic_national_choice";
+            ManagerScreen national(data,0,{},context);check(national.choice().master_club==-1&&national.choice().world_club==bmh::world12::ClubId{900001}&&national.visible_league_count()==0,"national-only default impersonates a club league");
+            const auto original=national.choice();check(!national.click(30,140)&&!national.click(220,140)&&national.choice()==original,"national-only league/strength fields are editable");
+            check(national.click(200,95)&&national.choice().country==bmh::world12::Country::england&&national.choice().world_club==bmh::world12::ClubId{900002},"national country switch lost its real nation identity");
+            check(national.click(250,95)&&national.view()==ManagerView::club_picker,"actual national picker did not open");
+            check(!national.click(180,180),"national picker exposed a fake domestic league group");
+            national.click(70,25);national.click(5,225,true);check(national.choice().country==bmh::world12::Country::germany&&national.choice().world_club==bmh::world12::ClubId{900001},"national tile selection did not survive return");
+            check(national.render().pixels.size()==320*240,"national-only original selector does not render");
+            bool rejected=false;try{ManagerScreen invalid(data,1,{},context);}catch(const bmh::FormatError&){rejected=true;}check(rejected,"national-only accepted a second human manager");
+            auto fake=std::make_shared<ManagerWorldSelection>(*choices);fake->scope.germany=true;context.world=fake;rejected=false;try{ManagerScreen invalid(data,0,{},context);}catch(const bmh::FormatError&){rejected=true;}check(rejected,"national choices accepted a fabricated club scope");
+        }
         ManagerScreen s(data, 0);
         check(s.choice().master_club == 0 && s.choice().portrait == 0, "default available identity");
         check(s.render().pixels.size() == 320 * 240, "original manager framebuffer");

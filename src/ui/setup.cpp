@@ -35,6 +35,8 @@ void copy_rect(Image& dst, const Image& src, int sx, int sy, int dx, int dy,
 
 std::filesystem::path asset_path(const std::filesystem::path& directory, const std::string& name) {
     if (!std::filesystem::exists(directory / name) && resource_exists(directory / name)) return directory / name;
+    const std::filesystem::path relative(name);
+    if(relative.has_parent_path())return asset_path(directory/relative.parent_path(),relative.filename().string());
     std::filesystem::path found;
     for (const auto& e : std::filesystem::directory_iterator(directory)) {
         if (e.is_regular_file() && folded(e.path().filename().string()) == folded(name)) {
