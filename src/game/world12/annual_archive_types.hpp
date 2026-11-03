@@ -2,6 +2,7 @@
 #pragma once
 #include "game/world12/identity.hpp"
 #include "game/long_career.hpp"
+#include "game/world12/sorted_map.hpp"
 #include <optional>
 #include <vector>
 namespace bmh::world12 {
@@ -30,7 +31,7 @@ struct AnnualTitleArchive {
     std::vector<AnnualSeasonTitles> seasons;
     // Exact Original-encoding labels remain separate from resolved identities.
     // A matching name is never accepted as historical identity evidence.
-    bmh::TitleHistoryArchive unresolved_source_labels;
+    SortedMap<uint32_t,std::array<std::string,9>> unresolved_source_labels;
     bool operator==(const AnnualTitleArchive&)const=default;
 };
 void validate_annual_title_archive(const World&);

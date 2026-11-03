@@ -21,7 +21,7 @@ std::array<uint16_t,6> dates(const SeasonCalendar& calendar){
 std::map<ClubId,uint8_t> deductions(const World& world){
     std::map<ClubId,uint8_t> result;for(const auto& manager:world.managers)if(manager.match_state){const auto league=world.clubs.at(manager.club).league;const auto value=manager.match_state->point_deduction;if((league.value==2||league.value==3)&&(value>>5)==3)result[manager.club]=value&31;}return result;
 }
-std::array<ClubId,4> entrants(const CareerSnapshot& state,const std::map<ClubId,uint8_t>& cuts){
+std::array<ClubId,4> entrants(const CareerSnapshot& state,const auto& cuts){
     std::array<ClubId,4> result;size_t count=0;
     for(auto league:{LeagueId{2},LeagueId{3}}){
         const auto& definition=state.world.catalogue.league(league);

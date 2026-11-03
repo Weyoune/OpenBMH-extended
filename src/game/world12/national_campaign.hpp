@@ -3,7 +3,7 @@
 #include "game/world12/identity.hpp"
 #include "game/random.hpp"
 #include <array>
-#include <map>
+#include "game/world12/sorted_map.hpp"
 #include <optional>
 #include <vector>
 namespace bmh {class LeImage;}
@@ -30,7 +30,7 @@ struct NationalCampaign {
 };
 struct NationalCampaignHistory {
     Country primary_country=Country::germany;
-    std::map<uint32_t,NationalCampaign> seasons;
+    SortedMap<uint32_t,NationalCampaign> seasons;
     // The Source's twenty newest World-Cup podiums, newest first.
     std::vector<std::array<ClubId,4>> honours;
     bool operator==(const NationalCampaignHistory&)const=default;

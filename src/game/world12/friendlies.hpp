@@ -2,7 +2,7 @@
 #pragma once
 #include "game/world12/identity.hpp"
 #include <optional>
-#include <map>
+#include "game/world12/sorted_map.hpp"
 #include <vector>
 namespace bmh {struct GameState;class LeImage;}
 namespace bmh::world12 {
@@ -18,7 +18,7 @@ struct PlayedFriendly {
 };
 struct FriendlyPlan {
     uint32_t season=0;uint64_t revision=0,next_id=1;
-    std::map<ClubId,uint8_t> national_progress; // Actual Source national record byte210, retained across annual plan resets.
+    SortedMap<ClubId,uint8_t> national_progress; // Actual Source national record byte210, retained across annual plan resets.
     std::vector<PlannedFriendly> pending;std::vector<PlayedFriendly> completed;
     bool operator==(const FriendlyPlan&)const=default;
 };

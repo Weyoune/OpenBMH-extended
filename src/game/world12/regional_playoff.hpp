@@ -4,7 +4,7 @@
 #include "game/random.hpp"
 #include <array>
 #include <optional>
-#include <map>
+#include "game/world12/sorted_map.hpp"
 #include <vector>
 namespace bmh {class LeImage;}
 namespace bmh::world12 {
@@ -19,7 +19,7 @@ struct RegionalPlayoffSeason {
     std::array<uint16_t,6> dates{};
     std::optional<uint16_t> activation_day;
     std::array<ClubId,4> entrants;
-    std::map<ClubId,uint8_t> activation_deductions;
+    SortedMap<ClubId,uint8_t> activation_deductions;
     uint8_t played=0;
     uint64_t revision=0;
     std::array<uint16_t,12> scores{};
