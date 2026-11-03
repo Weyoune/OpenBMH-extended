@@ -20,7 +20,7 @@ struct CupScores {
 // subsequent fields; it neither simulates scores nor invents match RNG effects.
 bmh::world12::DayPresentation commit_day_with_domestic_draws(bmh::world12::CareerSnapshot&,
     const bmh::world12::DayTicket&,const std::vector<bmh::world12::CompletedLeagueRound>&,
-    const std::vector<CupScores>&,const CupSources&,const std::vector<bmh::world12::EuropeanResults>& european={},const std::optional<bmh::world12::IndoorResults>& indoor=std::nullopt,const GameState* indoor_reference=nullptr,const std::optional<bmh::world12::RegionalPlayoffResults>& regional=std::nullopt);
+    const std::vector<CupScores>&,const CupSources&,const std::vector<bmh::world12::EuropeanResults>& european={},const std::optional<bmh::world12::IndoorResults>& indoor=std::nullopt,const GameState* indoor_reference=nullptr,const std::optional<bmh::world12::RegionalPlayoffResults>& regional=std::nullopt,const std::optional<bmh::world12::NationalResults>& national=std::nullopt);
 struct CupDayConditions {
     bmh::world12::DomesticCup cup=bmh::world12::DomesticCup::german_cup;
     uint8_t source_entry=0;uint64_t revision=0;

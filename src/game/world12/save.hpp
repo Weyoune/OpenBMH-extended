@@ -78,6 +78,7 @@ struct PreparedGroup {
     std::optional<LeagueId> league;
     std::optional<DomesticCup> cup;
     std::optional<EuropeanCompetition> european;
+    std::optional<uint8_t> national;
     bool indoor=false,regional_playoff=false;uint8_t indoor_tournament=0;
     uint8_t source_entry=0,round=0,leg=0,flags=2;
     uint64_t revision=0;

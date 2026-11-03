@@ -14,7 +14,7 @@ int main()try {
     auto world=bmh::test::world12::complete_world();world.catalogue.scope.international=true;world.players_initialized=true;world.free_players.emplace();world.markets.emplace();world.settings=CareerSettings{3,2,5,1,false};
     for(auto country:{Country::germany,Country::england}){const auto c=uint32_t(country);ClubRecord nation;nation.id={0xff000000u+c};nation.country=country;nation.kind=ClubKind::national_team;nation.name="Authored nation "+std::to_string(c);nation.crest=world.clubs.begin()->second.crest;world.clubs[nation.id]=nation;}
     GameState reference;reference.manager_records.resize(5*0xb0c);initialize_national_coaches(world,reference);
-    world.national_coaches->at(0).account.investment_balance=0xffffffffu;world.national_coaches->at(1).account.depreciation=0;
+    world.national_coaches->at(0).account.investment_balance=0xffffffffu;world.national_coaches->at(0).account.finance.baseline->starting_balance=0xffffffffu;world.national_coaches->at(1).account.depreciation=0;
     check(decode_world(encode_world(world))==world,"schema42 lost known maximum/zero national bank facts");
     const auto bytes=encode_world(world);auto json=cli::parse_json(std::string(bytes.begin(),bytes.end()));json.object()->at("version")=41;rejects42(json,"forged41 silently dropped known national bank facts");
     for(auto& role:*world.national_coaches){role.account.investment_balance.reset();role.account.depreciation.reset();}

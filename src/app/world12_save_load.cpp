@@ -36,18 +36,18 @@ Session::Session(RuntimeResources resources,bmh::world12::CareerSnapshot state,u
     const bool desk_owned=state_.desktop&&state_.desktop->initial_event&&state_.desktop->active_seat;
     const bool clock_owned=state_.progress&&state_.desktop&&!state_.desktop->initial_event&&!state_.desktop->active_seat;
     const bool annual_opening=bmh::world12::annual_opening_ready(state_);
-    if(!scope||!revision||revision==std::numeric_limits<uint64_t>::max()||(!desk_owned&&!clock_owned&&!annual_opening)||!state_.calendar||!state_.world.transfer_market||!state_.world.initial_competitions||!state_.world.initial_competitions->manager_services_complete||state_.world.managers.size()!=size_t(options_.managers))
+    const bool national_only=!state_.world.catalogue.scope.club_play();
+    if(!scope||!revision||revision==std::numeric_limits<uint64_t>::max()||(!desk_owned&&!clock_owned&&!annual_opening)||!state_.calendar||(!national_only&&(!state_.world.transfer_market||!state_.world.initial_competitions||!state_.world.initial_competitions->manager_services_complete))||(national_only&&(!state_.world.national_campaigns||!state_.world.national_coaches))||state_.world.managers.size()!=size_t(options_.managers))
         throw FormatError("world12: snapshot has no resumable event/progression owner");
     if(clock_owned){const auto epoch=calendar_epoch_from_executable(resources_.german);if(state_.progress->epoch_year!=epoch.year||state_.progress->epoch_weekday!=epoch.weekday)throw FormatError("world12: saved clock requires another calendar epoch");}
-    for(const auto& m:state_.world.managers)if(!m.finance||!m.tactics||!m.tactics->backing||!m.match_state||!m.career||!m.career->season_services)throw FormatError("world12: saved manager state is incomplete");
+    if(!national_only)for(const auto& m:state_.world.managers)if(!m.finance||!m.tactics||!m.tactics->backing||!m.match_state||!m.career||!m.career->season_services)throw FormatError("world12: saved manager state is incomplete");
     for(const auto& stage:state_.cups)if(auto notice=bmh::world12::cup_draw_notice(state_.world,stage))draws_.domestic_draws.push_back(std::move(*notice));
-    for(const auto& m:state_.world.managers){const auto& tickets=*m.career->season_services;services_.tickets.push_back({m.seat,tickets.tickets_sold,tickets.ticket_income});}
+    if(!national_only)for(const auto& m:state_.world.managers){const auto& tickets=*m.career->season_services;services_.tickets.push_back({m.seat,tickets.tickets_sold,tickets.ticket_income});}
 }
 Session Session::resume(RuntimeResources resources,bmh::world12::CareerSnapshot state,uint64_t scope,uint64_t revision){return Session(std::move(resources),std::move(state),scope,revision,ResumeTag{});}
 void Session::validate_file_owner(int manager_slot,uint64_t revision)const {
     if(preparation_menu_||revision!=owner_.revision||owner_.revision==std::numeric_limits<uint64_t>::max())throw FormatError("world12: stale or unavailable file owner");
-    const auto local=bmh::world12::project_manager_desktop(state_,resources_.reference);
-    if(manager_slot!=local.state.memory.u8(layout::ActiveManager))throw FormatError("world12: file request belongs to another manager");
+    if(!state_.desktop||!state_.desktop->active_seat||manager_slot!=*state_.desktop->active_seat)throw FormatError("world12: file request belongs to another canonical manager");
 }
 Savegame Session::prepare_manual_save(const ui::SaveLoadRequest& request){
     validate_file_owner(request.manager_slot,request.revision);
@@ -134,7 +134,7 @@ void publish_menu_layout(const std::filesystem::path& target,const Bytes& bytes,
 ui::SaveLoadInfoReader save_info_reader(LeImage rules){return [rules=std::move(rules)](const std::filesystem::path& path){
     const auto state=bmh::world12::read_save(load_savegame(path));const auto date=ui::desk_date(state.date,rules);
     ui::SaveLoadInfo info;const auto filename=path.stem().u8string();info.path.assign(filename.begin(),filename.end());const auto two=[](int n){return (n<10?"0":"")+std::to_string(n);};info.date=two(date.day)+"."+two(date.month)+"."+std::to_string(date.year);
-    for(const auto& m:state.world.managers){const auto& club=state.world.clubs.at(m.club);info.rows.push_back({ui::original_to_utf8(m.name),ui::original_to_utf8(club.name),state.world.catalogue.league(club.league).name});}return info;
+    for(const auto& m:state.world.managers){const auto& club=state.world.clubs.at(m.club);info.rows.push_back({ui::original_to_utf8(m.name),ui::original_to_utf8(club.name),club.league.valid()?state.world.catalogue.league(club.league).name:std::string{}});}return info;
 };}
 }
 

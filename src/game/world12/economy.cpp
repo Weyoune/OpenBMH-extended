@@ -98,18 +98,24 @@ void initialize_career_economy(CareerSnapshot& state,const GameState& reference)
     if(reference.memory.has(layout::CareerSession_FormatError_RuntimeField7+1))candidate.world.highscore_signature=reference.memory.u16(layout::CareerSession_FormatError_RuntimeField7);
     candidate.validate();state=std::move(candidate);
 }
+void install_career_pools(AiMatchProjection& projection,const World& world){if(!world.economy||!world.economy->pools)throw FormatError("world12: pools ledger is unavailable");const auto map=seats(projection);auto& g=projection.state;g.memory.add_block(layout::Coupon,100);for(size_t n=0;n<4;++n)write_coupon(g,n,world.economy->pools->managers[map[n]]);for(uint32_t n=0;n<11;++n)g.memory.set8(layout::MatchdaySetup_EvaluatePoolsCoupon_RuntimeField+n,world.economy->pools->previous_outcomes[n]);}
+void capture_career_pools(World& world,const AiMatchProjection& projection){if(!world.economy||!world.economy->pools)throw FormatError("world12: pools ledger is unavailable");const auto map=seats(projection);for(size_t n=0;n<projection.human_managers();++n)world.economy->pools->managers[map[n]]=read_coupon(projection.state,n);for(uint32_t n=0;n<11;++n)world.economy->pools->previous_outcomes[n]=projection.state.memory.u8(layout::MatchdaySetup_EvaluatePoolsCoupon_RuntimeField+n);}
 void install_career_mailbox(AiMatchProjection& projection,const World& world){
     if(!world.economy)throw std::invalid_argument("world12: canonical mailbox is unavailable");install_mailbox(projection.state,*world.economy,seats(projection));
 }
 void capture_career_mailbox(World& world,const AiMatchProjection& projection){
     if(!world.economy)throw std::invalid_argument("world12: canonical mailbox is unavailable");capture_mailbox(*world.economy,projection.state,seats(projection));
 }
-void install_career_economy(AiMatchProjection& projection,const World& world){
-    if(!world.economy||!world.markets)throw std::invalid_argument("world12: career economy/market is missing");
-    const auto map=seats(projection);auto& g=projection.state;const auto& e=*world.economy;
-    if(e.pools){g.memory.add_block(layout::Coupon,100);for(size_t n=0;n<4;++n)write_coupon(g,n,e.pools->managers[map[n]]);for(uint32_t n=0;n<11;++n)g.memory.set8(layout::MatchdaySetup_EvaluatePoolsCoupon_RuntimeField+n,e.pools->previous_outcomes[n]);}
-    if(e.advertising_group){g.memory.add_block(layout::AdGroupId,1);g.memory.set8(layout::AdGroupId,*e.advertising_group);}
-    g.memory.add_block(layout::Savestate_Layout_ExecutableField,1);g.memory.set8(layout::Savestate_Layout_ExecutableField,e.week);
+void install_career_loan_ledger(AiMatchProjection& projection,const World& world){
+    if(!world.economy)throw FormatError("world12: personal loan ledger is unavailable");const auto map=seats(projection);auto& g=projection.state;g.memory.add_block(layout::Loans,4*0x78);
+    for(size_t local=0;local<4;++local)for(size_t lender=0;lender<5;++lender)for(size_t n=0;n<6;++n)g.memory.set32(layout::Loans+uint32_t(local*0x78+lender*0x18+n*4),world.economy->managers[map[local]].loans[lender?size_t(map[lender-1])+1:0][n]);
+}
+void capture_career_loan_ledger(World& world,const AiMatchProjection& projection){
+    if(!world.economy)throw FormatError("world12: personal loan ledger is unavailable");const auto map=seats(projection);const auto& g=projection.state;
+    for(size_t local=0;local<4;++local)for(size_t lender=0;lender<5;++lender)for(size_t n=0;n<6;++n)world.economy->managers[map[local]].loans[lender?size_t(map[lender-1])+1:0][n]=g.memory.u32(layout::Loans+uint32_t(local*0x78+lender*0x18+n*4));
+}
+void install_career_portfolios(AiMatchProjection& projection,const World& world){
+    if(!world.markets)throw FormatError("world12: actual career market portfolio is unavailable");const auto map=seats(projection);auto& g=projection.state;
     g.stocks.assign(world.markets->stocks.begin(),world.markets->stocks.end());g.memory.add_block(layout::FundBlock,world.markets->funds.size());
     for(size_t n=0;n<world.markets->funds.size();++n)g.memory.set8(layout::FundBlock+uint32_t(n),world.markets->funds[n]);
     for(size_t local=0;local<4;++local){const auto global=map[local];
@@ -120,6 +126,14 @@ void install_career_economy(AiMatchProjection& projection,const World& world){
         for(size_t fund=0;fund<6;++fund)for(size_t b=0;b<4;++b)
             g.memory.set8(layout::FundBlock+uint32_t(fund*0x1c+4+local*4+b),world.markets->funds[fund*0x1c+4+global*4+b]);
     }
+}
+void install_career_economy(AiMatchProjection& projection,const World& world){
+    if(!world.economy||!world.markets)throw std::invalid_argument("world12: career economy/market is missing");
+    const auto map=seats(projection);auto& g=projection.state;const auto& e=*world.economy;
+    if(e.pools){g.memory.add_block(layout::Coupon,100);for(size_t n=0;n<4;++n)write_coupon(g,n,e.pools->managers[map[n]]);for(uint32_t n=0;n<11;++n)g.memory.set8(layout::MatchdaySetup_EvaluatePoolsCoupon_RuntimeField+n,e.pools->previous_outcomes[n]);}
+    if(e.advertising_group){g.memory.add_block(layout::AdGroupId,1);g.memory.set8(layout::AdGroupId,*e.advertising_group);}
+    g.memory.add_block(layout::Savestate_Layout_ExecutableField,1);g.memory.set8(layout::Savestate_Layout_ExecutableField,e.week);
+    install_career_portfolios(projection,world);
     for(uint8_t n=0;n<projection.human_managers();++n)write_manager(g,n,e.managers[map[n]],map);
     install_mailbox(g,e,map);
 }

@@ -11,9 +11,14 @@ void install_career_economy(AiMatchProjection&,const World&);
 void capture_career_economy(World&,const AiMatchProjection&);
 // Shared notices without substituting parked club financial/portfolio state.
 void install_career_mailbox(AiMatchProjection&,const World&);
+void install_career_pools(AiMatchProjection&,const World&);
+void capture_career_pools(World&,const AiMatchProjection&);
 void capture_career_mailbox(World&,const AiMatchProjection&);
 // Prices/history and every manager's paid totals/holdings use canonical seats.
 void capture_career_portfolios(World&,const AiMatchProjection&);
+void install_career_portfolios(AiMatchProjection&,const World&);
+void install_career_loan_ledger(AiMatchProjection&,const World&);
+void capture_career_loan_ledger(World&,const AiMatchProjection&);
 void append_economy_message(CareerEconomy&,const EconomyMessage&);
 Bytes career_mailbox_bytes(const CareerEconomy&);
 MailboxEditFailure edit_career_message(CareerEconomy&,int global_actor,int row,

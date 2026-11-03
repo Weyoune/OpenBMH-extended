@@ -6,6 +6,7 @@
 #include "game/world12/manager_tactics.hpp"
 #include "game/world12/manager_finance.hpp"
 #include "game/world12/manager_creation.hpp"
+#include "game/world12/national_coach.hpp"
 #include <algorithm>
 #include <set>
 #include <stdexcept>
@@ -87,6 +88,7 @@ AiMatchProjection AiMatchProjection::create_for_human_leagues(const CareerSnapsh
 }
 AiMatchProjection AiMatchProjection::create_humans(const CareerSnapshot& snapshot,const std::vector<ClubId>& requested,const GameState& base,HumanProjectionPolicy policy,size_t maximum_clubs) {
     snapshot.validate();const auto& world=snapshot.world;
+    if(national_roles_active(world))throw FormatError("world12: active national role must return its parked club context before club service");
     if(world.settings&&(policy.mode!=world.settings->mode||policy.difficulty!=world.settings->difficulty||policy.foreign_rule!=world.settings->foreign_rule))throw std::invalid_argument("world12: human match policy differs from saved career settings");
     if(policy.mode<1||policy.mode>3||policy.difficulty<0||policy.difficulty>9||base.formations.size()<0x580)throw std::invalid_argument("world12: incomplete human projection policy/rules");
     std::vector<const Manager*> managers;

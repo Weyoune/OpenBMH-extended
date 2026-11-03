@@ -19,6 +19,8 @@
 #include "app/world12_weather.hpp"
 #include "formats/resource_bundle.hpp"
 #include <stdexcept>
+#include <algorithm>
+#include "game/world12/national_setup.hpp"
 namespace bmh::app::world12 {
 using namespace bmh::world12;
 RuntimeResources load_runtime_resources(const std::filesystem::path& data) {
@@ -44,19 +46,29 @@ RuntimeResources load_runtime_resources(const std::filesystem::path& data) {
 }
 Session::Session(RuntimeResources resources,ui::SetupOptions options,uint32_t seed,uint64_t scope):resources_(std::move(resources)),options_(options),owner_{scope,1} {
     if(!scope||!options.country_selection||options.managers<1||options.managers>4||options.mode<1||options.mode>3||options.difficulty<0||options.difficulty>9||options.duration<0||options.duration>5)throw FormatError("world12: invalid session setup");
-    const auto game_scope=ui::setup_game_scope(options);if(!game_scope.club_play())throw FormatError("world12: national-only session ownership remains unavailable");
+    const auto game_scope=ui::setup_game_scope(options);if(!game_scope.club_play()&&options.managers!=1)throw FormatError("world12: Source national-only careers allow exactly one manager");
     state_.world=select_world_scope(resources_.master,game_scope);
     const auto ranges=read_initial_strength_ranges(state_.world.catalogue,resources_.german,resources_.english);const auto plan=make_player_initialization_plan(resources_.master,game_scope,ranges);
     GameRandom game(0);WatcomRandom random(seed);
-    initialize_club_player_state(state_.world,owner_,owner_,plan,resources_.reference,resources_.german.u8(layout::ForeignPlayerLimitEnabled)!=0,game,random);
+    if(game_scope.club_play())initialize_club_player_state(state_.world,owner_,owner_,plan,resources_.reference,resources_.german.u8(layout::ForeignPlayerLimitEnabled)!=0,game,random);
     state_.game_seed=game.seed();state_.watcom_seed=random.seed();state_.results=SeasonResults::empty(state_.world.catalogue);
 }
+bool Session::national_desktop_active()const {return state_.world.national_coaches&&std::any_of(state_.world.national_coaches->begin(),state_.world.national_coaches->end(),[](const auto& record){return record.active;});}
+std::vector<NationalDesktopActor> Session::national_desktop_actors()const {return bmh::world12::national_desktop_actors(state_);}
+AiMatchProjection Session::make_national_desktop_projection()const {const auto actors=national_desktop_actors();if(actors.empty()||!state_.world.settings)throw FormatError("world12: no active national desktop actors");std::vector<ClubId> teams;for(const auto& actor:actors){const auto record=std::find_if(state_.world.national_coaches->begin(),state_.world.national_coaches->end(),[&](const auto& c){return c.team==actor.team;});if(record==state_.world.national_coaches->end()||!record->desktop_layout)throw FormatError("world12: actual national Source desktop layout is unknown");teams.push_back(actor.team);}const auto& s=*state_.world.settings;return AiMatchProjection::create_for_national_desktop(state_,teams,resources_.reference,{s.mode,s.difficulty,s.foreign_rule,true});}
 ui::SelectionContext Session::selection_context()const {return ui::world12_manager_selection_context(state_.world,owner_.revision);}
 void Session::confirm_manager(const ui::ManagerChoice& choice,uint64_t revision) {
     if(choice.slot!=int(state_.world.managers.size())||choice.roster_revision!=revision||choice.master_club!=-1||!choice.world_club.valid()||choice.start_league<0||choice.start_league>4||choice.strength<0||choice.strength>2||choice.portrait<0||choice.portrait>11||prepared())throw FormatError("world12: stale or invalid manager chooser result");
     const auto found=state_.world.clubs.find(choice.world_club);if(found==state_.world.clubs.end()||found->second.country!=choice.country)throw FormatError("world12: manager chooser country/club mismatch");
     const auto before=state_;const auto before_owner=owner_;auto candidate=state_;auto staged_owner=owner_;GameRandom game(state_.game_seed);WatcomRandom random(state_.watcom_seed);
     const auto ranges=read_initial_strength_ranges(state_.world.catalogue,resources_.german,resources_.english);
+    if(!candidate.world.catalogue.scope.club_play()){
+        if(revision!=owner_.revision||choice.slot!=0||choice.start_league!=0||choice.selection_club<0||!candidate.world.managers.empty())throw FormatError("world12: stale/invalid single national manager confirmation");const auto caps=national_capabilities(candidate.world);if(size_t(choice.selection_club)>=caps.national_only_choices.size()||caps.national_only_choices[size_t(choice.selection_club)].team!=choice.world_club||caps.national_only_choices[size_t(choice.selection_club)].country!=choice.country)throw FormatError("world12: national choice is not an actual current selection");
+        const auto receipt=initialize_national_only_players(candidate.world,resources_.master,choice.country,ranges,resources_.reference,resources_.german.u8(layout::ForeignPlayerLimitEnabled)!=0,game,random);
+        candidate.world.settings=CareerSettings{uint8_t(options_.mode),uint8_t(options_.difficulty),uint8_t(options_.duration),1,resources_.german.u8(layout::ForeignPlayerLimitEnabled)!=0};initialize_national_coaches(candidate.world,resources_.reference);
+        auto record=std::find_if(candidate.world.national_coaches->begin(),candidate.world.national_coaches->end(),[&](const auto& c){return c.team==choice.world_club;});if(record==candidate.world.national_coaches->end())throw FormatError("world12: national manager has no Source account");record->startup=receipt;record->view_preferences=initial_national_view_preferences(resources_.reference,0);candidate.world.managers.push_back({0,choice.name,choice.world_club,{},uint8_t(choice.portrait)});candidate.world.annual_awards_completed=0;candidate.world.annual_title_archive.emplace();candidate.world.highscore_signature=0;
+        candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();candidate.validate();if(state_!=before||owner_.scope!=before_owner.scope||owner_.revision!=before_owner.revision)throw FormatError("world12: national confirmation owner changed");state_=std::move(candidate);++owner_.revision;return;
+    }
     add_initial_manager(candidate.world,staged_owner,{owner_.scope,revision},{uint8_t(choice.slot),choice.world_club,candidate.world.catalogue.starting_league(choice.country,uint8_t(choice.start_league)),choice.name,uint8_t(choice.portrait),uint8_t(choice.strength)},
         {uint8_t(options_.mode),uint8_t(options_.difficulty),uint8_t(options_.duration),uint8_t(options_.managers),resources_.german.u8(layout::ForeignPlayerLimitEnabled)!=0},ranges,resources_.reference,choice.country==Country::germany?resources_.german:resources_.english,game,random);
     candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();candidate.validate();if(state_!=before||owner_.scope!=before_owner.scope||owner_.revision!=before_owner.revision)throw FormatError("world12: session changed during manager confirmation");state_=std::move(candidate);owner_=staged_owner;
@@ -68,12 +80,19 @@ void Session::prepare_start(uint64_t revision) {
     // country appointments are retained from the immutable full catalogue.
     std::vector<uint16_t> de(366),en(366);for(uint32_t d=0;d<366;++d){de[d]=resources_.german.u16(layout::CompetitionCalendar+d*2);en[d]=resources_.english.u16(layout::CompetitionCalendar+d*2);}
     const auto epoch=calendar_epoch_from_executable(resources_.german);const auto aligned=align_source_calendar(en,int(resources_.english.runtime_policy()->weekday),epoch.weekday,366);
-    calendar=SeasonCalendar::from_sources(candidate.world.catalogue,de,aligned.entries);
+    if(candidate.world.catalogue.scope.club_play())calendar=SeasonCalendar::from_sources(candidate.world.catalogue,de,aligned.entries);
+    if(!candidate.world.catalogue.scope.club_play()){
+        const auto primary=candidate.world.manager_country(candidate.world.managers.front().seat);calendar=make_national_only_calendar(candidate.world.catalogue,primary==Country::england?aligned.entries:de);
+        GameRandom game(candidate.game_seed);WatcomRandom random(candidate.watcom_seed);prepare_national_campaign(candidate.world,primary==Country::germany?resources_.german:resources_.english,0,game,random,primary);activate_national_coaches(candidate.world,{candidate.world.managers.front().seat});for(auto country:{Country::germany,Country::england})nominate_national_squad(candidate.world,country,candidate.date,resources_.reference,random);candidate.calendar=CalendarCursor{calendar,0,0};candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();initialize_career_economy(candidate,resources_.reference);initialize_desktops(candidate,resources_.reference);
+        for(auto& desk:candidate.desktop->managers){const auto record=std::find_if(candidate.world.national_coaches->begin(),candidate.world.national_coaches->end(),[&](const auto& c){return c.coach==desk.seat;});if(record==candidate.world.national_coaches->end()||!record->desktop_layout)throw FormatError("world12: Source national desktop template is missing");desk.layout=*record->desktop_layout;}
+        candidate.validate();if(state_!=before||owner_.scope!=before_owner.scope||owner_.revision!=before_owner.revision)throw FormatError("world12: national preparation owner changed");state_=std::move(candidate);++owner_.revision;return;
+    }
     auto draws=prepare_initial_competitions(candidate,staged_owner,staged_owner,calendar,{resources_.german,resources_.english},resources_.reference);
     auto services=initialize_first_season_manager_services(candidate,staged_owner,staged_owner,resources_.reference);
     initialize_first_season_market(candidate,staged_owner,staged_owner,&resources_.reference);
     initialize_career_economy(candidate,resources_.reference);
     initialize_desktops(candidate,resources_.reference);
+    if(candidate.world.catalogue.scope.international){initialize_national_coaches(candidate.world,resources_.reference);GameRandom game(candidate.game_seed);WatcomRandom random(candidate.watcom_seed);prepare_national_campaign(candidate.world,resources_.german,0,game,random);candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();}
     if(state_!=before||owner_.scope!=before_owner.scope||owner_.revision!=before_owner.revision)throw FormatError("world12: session changed during preparation");
     state_=std::move(candidate);owner_=staged_owner;draws_=std::move(draws);services_=std::move(services);
 }
@@ -163,7 +182,7 @@ void Session::play_prepared_matches(uint64_t revision,const HumanRoundHooks& hoo
         throw FormatError("world12: prepared match receipt is not ready");
     const auto before=state_;auto candidate=state_;const auto event=*candidate.prepared_event;
     const auto ticket=*prepare_day(candidate);const auto settings=*candidate.world.settings;
-    std::vector<CupDayConditions> cups;std::vector<AiDayLeagueConditions> leagues;std::vector<EuropeanDayConditions> european;std::vector<IndoorDayConditions> indoor;std::optional<RegionalDayConditions> regional;
+    std::vector<CupDayConditions> cups;std::vector<AiDayLeagueConditions> leagues;std::vector<EuropeanDayConditions> european;std::vector<IndoorDayConditions> indoor;std::optional<RegionalDayConditions> regional;std::vector<NationalDayConditions> national;
     for(const auto& group:event.groups) {
         std::vector<AiLeagueConditions> conditions;
         for(const auto& match:group.matches){AiLeagueConditions c;c.date=candidate.date;c.month=month_code(candidate.date);
@@ -177,13 +196,14 @@ void Session::play_prepared_matches(uint64_t revision,const HumanRoundHooks& hoo
         else if(group.indoor){const auto planned=std::find_if(ticket.indoor.begin(),ticket.indoor.end(),[&](const auto& plan){return plan.source_entry==group.source_entry&&plan.tournament==group.indoor_tournament;});if(planned==ticket.indoor.end())throw FormatError("world12: prepared indoor group lost its pass ticket");indoor.push_back({*planned,std::move(conditions)});}
         else if(group.european){const auto planned=std::find_if(ticket.european.begin(),ticket.european.end(),[&](const auto& plan){return plan.competition==*group.european&&plan.source_entry==group.source_entry;});if(planned==ticket.european.end())throw FormatError("world12: prepared European group lost its ticket");european.push_back({*planned,std::move(conditions)});}
         else if(group.regional_playoff){if(!ticket.regional_playoff)throw FormatError("world12: prepared regional group lost its ticket");regional=RegionalDayConditions{*ticket.regional_playoff,std::move(conditions)};}
+        else if(group.national){const auto planned=std::find_if(ticket.national.begin(),ticket.national.end(),[&](const auto& plan){return plan.competition==*group.national&&plan.source_entry==group.source_entry;});if(planned==ticket.national.end())throw FormatError("world12: prepared national group lost its ticket");national.push_back({*planned,std::move(conditions)});}
         else cups.push_back({*group.cup,group.source_entry,group.revision,std::move(conditions)});
     }
     candidate.prepared_event.reset();
     const HumanProjectionPolicy policy{settings.mode,settings.difficulty,settings.foreign_rule,true};
     auto staged_owner=owner_;
     const auto result=play_competition_day(candidate,staged_owner,{owner_.scope,revision},ticket,resources_.reference,
-        {resources_.german,resources_.english},leagues,cups,european,policy,hooks,indoor,regional);
+        {resources_.german,resources_.english},leagues,cups,european,policy,hooks,indoor,regional,national);
     const auto& receipts=result.pools;
     if(candidate.world.economy&&candidate.world.economy->pools){if(!resources_.texts)throw FormatError("world12: Toto settlement needs owned Source texts");settle_scheduled_pools(candidate,event,receipts,resources_.reference,*resources_.texts);}
     if(state_!=before||owner_.revision!=revision)throw FormatError("world12: prepared match owner changed during calculation");

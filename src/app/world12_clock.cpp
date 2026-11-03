@@ -3,6 +3,7 @@
 #include "game/world12/annual_opening.hpp"
 #include "game/week.hpp"
 #include "game/world12/match_projection.hpp"
+#include "game/world12/national_coach.hpp"
 #include "game/matchday_setup.hpp"
 #include "game/turn.hpp"
 #include "game/driver.hpp"
@@ -30,7 +31,7 @@ static void finish_empty_opening_event(CareerSnapshot& state,ManagerActionOwner&
     // retained bidder history; actual pending offers were rejected above.
     if(candidate.world.transfer_market)for(size_t n=40;n<44;++n){const auto& row=candidate.world.transfer_market->rows[n];if(row&&std::any_of(row->bids.begin(),row->bids.end(),[](const auto& bid){return bid.bidder.valid();}))throw FormatError("world12: unresolved special offer at event end");candidate.world.transfer_market->rows[n].reset();}
     std::vector<ClubId> clubs;for(const auto& m:candidate.world.managers)clubs.push_back(m.club);
-    const auto& settings=*candidate.world.settings;auto p=AiMatchProjection::create_for_humans(candidate,clubs,reference,{settings.mode,settings.difficulty,settings.foreign_rule,true});
+    const auto& settings=*candidate.world.settings;auto p=national_roles_active(candidate.world)?AiMatchProjection::create_for_nationals(candidate,clubs,reference,{settings.mode,settings.difficulty,settings.foreign_rule,true}):AiMatchProjection::create_for_humans(candidate,clubs,reference,{settings.mode,settings.difficulty,settings.foreign_rule,true});
     auto& g=p.state;g.pools_open=event.pools_open;g.memory.add_block(layout::CareerSession_DispatchToto_RuntimeField,1);
     const auto saved_records=g.manager_records,saved_options=g.manager_options;std::vector<MatchGroup> groups;std::vector<uint8_t> referees;
     MatchdayContext context;context.month=month_code(candidate.date);context.weekday=weekday_code(candidate.date);context.referees=&referees;
@@ -42,6 +43,8 @@ static void finish_empty_opening_event(CareerSnapshot& state,ManagerActionOwner&
     // references. They need no fabricated full-world numeric roster.
     const auto clear=[&](PlayerId id){if(id.valid())candidate.world.players.at(id).attributes.w364&=~0x1000u;};
     for(const auto& [id,club]:candidate.world.clubs)for(const auto& row:club.roster)clear(row.player);
+    if(candidate.world.national_origins)for(const auto& origin:*candidate.world.national_origins)for(const auto& row:origin.club.roster)clear(row.player);
+    for(const auto& squad:candidate.world.national_squads)for(const auto& row:squad.roster)clear(row.player);
     if(candidate.world.free_players){for(auto id:candidate.world.free_players->domestic)clear(id);for(auto id:candidate.world.free_players->foreign)clear(id);}
     if(candidate.world.transfer_market)for(const auto& row:candidate.world.transfer_market->rows)if(row)clear(row->player);
     candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();
@@ -71,7 +74,7 @@ ClockStepOutcome advance_clock_step(CareerSnapshot& state,ManagerActionOwner& ow
     switch(clock.phase){
     case ProgressPhase::daily_services:{
         DailyServiceContext context;context.previous_date=clock.previous_date;context.season=candidate.season;context.epoch={clock.epoch_year,clock.epoch_weekday};context.entry=clock.entry==DayEntry::after_event?DailyEconomyKind::after_event:DailyEconomyKind::plain_day;
-        if(weekday_code(clock.previous_date)==2&&weekday_code(candidate.date)==3){if(!hooks.relations)throw FormatError("world12: weekly progression needs current title relations");context.weekly_relations=hooks.relations(candidate);}
+        if(candidate.world.catalogue.scope.club_play()&&weekday_code(clock.previous_date)==2&&weekday_code(candidate.date)==3){if(!hooks.relations)throw FormatError("world12: weekly progression needs current title relations");context.weekly_relations=hooks.relations(candidate);}
         auto services=hooks.services;
         for(auto* active:{&services.auctions.active_seat,&services.loans.active_seat}){if(*active&&**active!=clock.last_manager)throw FormatError("world12: daily service presenter belongs to another manager");*active=clock.last_manager;}
         const auto result=process_daily_services(candidate,reference,texts,context,services);

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 #include "app/world12_manager.hpp"
+#include "app/world12_desktop.hpp"
 #include "game/world12/national.hpp"
 #include "game/world12/progression.hpp"
 namespace bmh::app::world12 {
@@ -17,4 +18,6 @@ NationalAppointmentOutcome prepare_national_appointment(bmh::world12::CareerSnap
 // shuffle and event closure. Daily economy remains the next saved phase.
 NationalAppointmentOutcome finish_uncoached_national_appointment(bmh::world12::CareerSnapshot&,
     ManagerActionOwner&,ManagerActionOwner expected,const GameState&);
+DesktopEntryOutcome begin_national_nomination_desks(bmh::world12::CareerSnapshot&,ManagerActionOwner&,ManagerActionOwner expected,const GameState&);
+NationalAppointmentOutcome finish_national_nomination_desks(bmh::world12::CareerSnapshot&,ManagerActionOwner&,ManagerActionOwner expected,const GameState&);
 }

@@ -7,6 +7,7 @@
 #include "game/world12/desktop_projection.hpp"
 #include "game/desk_actions.hpp"
 #include "game/lineup.hpp"
+#include "game/national_identity.hpp"
 #include "ui/world12_preparation.hpp"
 #include "ui/desktop.hpp"
 #include <algorithm>
@@ -20,7 +21,7 @@ void actor(const GameState& local,int manager,int club,uint64_t revision,uint64_
         throw FormatError("world12: stale preparation actor/revision");
 }
 void row_identity(const GameState& local,int club,int row,int player,uint16_t slot) {
-    if(row<0||row>=24||local.squad_slots.at(squad_range(club).first+size_t(row))!=slot||((slot&0xfff)==0xfff?-1:int(slot&0xfff))!=player)
+    if(row<0||row>=24||local.squad_slots.at(squad_range(local,club).first+size_t(row))!=slot||((slot&0xfff)==0xfff?-1:int(slot&0xfff))!=player)
         throw FormatError("world12: stale preparation player/row");
 }
 void prepare_lineup(GameState& local,int manager,int club) {
@@ -28,7 +29,7 @@ void prepare_lineup(GameState& local,int manager,int club) {
     if(!initialize_pitch_set_piece_source(local,manager,club))throw FormatError("world12: set-piece initialization failed");
     const auto display=layout::CareerSession_AnyOf_ExecutableField+uint32_t(manager*2);
     if((local.memory.u16(display)&0x80)&&!normalize_pitch_set_piece_source(local,manager,club))throw FormatError("world12: set-piece reentry failed");
-    std::array<bool,4096> seen{};const auto first=squad_range(club).first;
+    std::array<bool,4096> seen{};const auto first=squad_range(local,club).first;
     for(size_t row=0;row<11;++row){const auto slot=local.squad_slots.at(first+row);const auto id=slot&0xfff;const auto at=size_t(manager)*0x840+row*0x58;
         if(id==0xfff||size_t(id)>=local.players.size()||seen[id]||!(slot&0x8000)||(slot&0x4000)||int8_t(local.tactics.at(at+0x41))<0||int8_t(local.tactics.at(at+0x41))>19||int8_t(local.tactics.at(at+0x42))<0||int8_t(local.tactics.at(at+0x42))>8)
             throw FormatError("world12: incomplete prepared eleven");seen[id]=true;}
@@ -40,19 +41,21 @@ void capture_display(CareerSnapshot& candidate,const AiMatchProjection& projecti
 }
 void Session::open_preparation(const ui::DeskRequest& request) {
     if(preparation_menu_||request.kind!=ui::DeskRequestKind::open_menu||(request.menu_kind!=3&&request.menu_kind!=18&&request.menu_kind!=16&&request.menu_kind!=14&&request.menu_kind!=15)||owner_.revision==std::numeric_limits<uint64_t>::max())throw FormatError("world12: unsupported or occupied preparation menu");
+    validate_file_owner(request.manager_slot,request.revision);
     const auto before=state_;auto candidate=state_;auto projection=project_manager_desktop(candidate,resources_.reference);auto& local=projection.state;
-    actor(local,request.manager_slot,request.manager_slot>=0&&size_t(request.manager_slot)<local.manager_teams.size()?local.manager_teams[size_t(request.manager_slot)]:-1,request.revision,owner_.revision);
-    const auto team=local.manager_teams.at(size_t(request.manager_slot));
+    const auto native_manager=int(local.memory.u8(layout::ActiveManager));
+    const auto team=local.manager_teams.at(size_t(native_manager));
+    actor(local,native_manager,team,request.revision,owner_.revision);
     if(request.menu_kind==15) {
-        const auto seat=projection.global_manager(uint8_t(request.manager_slot));
+        const auto seat=projection.global_manager(uint8_t(native_manager));
         const auto& manager=*std::find_if(candidate.world.managers.begin(),candidate.world.managers.end(),[&](const auto& m){return m.seat==seat;});
         if(!manager.career||!manager.career->camp_focus)throw FormatError("world12: old career lacks saved camp focus; start a current fresh career");
-        const auto camp=ui::training_camp_from_game(local,resources_.german,request.manager_slot,owner_.revision);
-        if(camp.focus_normalization_required&&!set_training_camp_focus(local,request.manager_slot,camp.focus))throw FormatError("world12: camp entry normalization failed");
+        const auto camp=ui::training_camp_from_game(local,resources_.german,native_manager,owner_.revision);
+        if(camp.focus_normalization_required&&!set_training_camp_focus(local,native_manager,camp.focus))throw FormatError("world12: camp entry normalization failed");
     }
-    if(request.menu_kind==3)prepare_lineup(local,request.manager_slot,team);
+    if(request.menu_kind==3)prepare_lineup(local,native_manager,team);
     if(request.menu_kind==16){if(options_.mode<2)throw FormatError("world12: training unavailable in mode I");const auto training=ui::training_from_game(local,resources_.german,owner_.revision);
-        if(training.needs_initialization()){ui::TrainingRequest r;r.kind=ui::TrainingRequestKind::initialize;r.manager_slot=request.manager_slot;r.runtime_club=team;r.revision=owner_.revision;r.desired_types=training.types;r.desired_areas=training.areas;r.desired_automation=0x9f;
+        if(training.needs_initialization()){ui::TrainingRequest r;r.kind=ui::TrainingRequestKind::initialize;r.manager_slot=native_manager;r.runtime_club=team;r.revision=owner_.revision;r.desired_types=training.types;r.desired_areas=training.areas;r.desired_automation=0x9f;
             auto revision=owner_.revision;std::string error;if(!apply_training_request_source(local,resources_.german,r,revision,error))throw FormatError(error);}}
     projection.commit_match_state(candidate.world);capture_display(candidate,projection);candidate.validate();
     if(state_!=before||request.revision!=owner_.revision)throw FormatError("world12: preparation owner changed during opening");

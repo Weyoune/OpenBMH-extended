@@ -20,6 +20,7 @@ struct DayTicket {
     std::vector<OtherAppointment> others;
     std::vector<ScheduledCupLeg> cups;
     std::vector<EuropeanGroup> european;
+    std::vector<NationalGroup> national;
     std::vector<IndoorGroup> indoor;
     std::optional<RegionalPlayoffGroup> regional_playoff;
     bool indoor_date=false,indoor_ordinary_phase=false;
@@ -36,5 +37,5 @@ std::optional<DayTicket> prepare_day(const CareerSnapshot&);
 void commit_league_day(CareerSnapshot&,const DayTicket&,const std::vector<CompletedLeagueRound>&);
 struct DayPresentation {std::vector<CupDrawNotice> cup_draws;uint64_t watcom_draws=0,game_draws=0;};
 DayPresentation commit_day(CareerSnapshot&,const DayTicket&,const std::vector<CompletedLeagueRound>&,
-    const std::vector<CupLegResult>&,const std::vector<EuropeanResults>& european={},const LeImage* shared_rules=nullptr,const std::optional<IndoorResults>& indoor=std::nullopt,const GameState* indoor_reference=nullptr,const std::optional<RegionalPlayoffResults>& regional=std::nullopt);
+    const std::vector<CupLegResult>&,const std::vector<EuropeanResults>& european={},const LeImage* shared_rules=nullptr,const std::optional<IndoorResults>& indoor=std::nullopt,const GameState* indoor_reference=nullptr,const std::optional<RegionalPlayoffResults>& regional=std::nullopt,const std::optional<NationalResults>& national=std::nullopt,const LeImage* national_rules=nullptr);
 }

@@ -5,6 +5,7 @@
 #include "game/world12/european_match.hpp"
 #include "game/world12/indoor_match.hpp"
 #include "game/world12/regional_playoff_match.hpp"
+#include "game/world12/national_match.hpp"
 namespace bmh::app::world12 {
 struct EuropeanDayConditions {
     bmh::world12::EuropeanGroup group;
@@ -12,9 +13,10 @@ struct EuropeanDayConditions {
 };
 struct IndoorDayConditions {bmh::world12::IndoorGroup group;std::vector<bmh::world12::AiLeagueConditions> matches;};
 struct RegionalDayConditions {bmh::world12::RegionalPlayoffGroup group;std::vector<bmh::world12::AiLeagueConditions> matches;};
+struct NationalDayConditions {bmh::world12::NationalGroup group;std::vector<bmh::world12::AiLeagueConditions> matches;};
 struct CompetitionDayOutcome {
     std::vector<bmh::world12::AiLeagueRoundOutcome> leagues;
-    std::vector<bmh::world12::CupRoundOutcome> cups,european,indoor;
+    std::vector<bmh::world12::CupRoundOutcome> cups,european,indoor,national;
     std::optional<bmh::world12::CupRoundOutcome> regional_playoff;
     bmh::world12::DayPresentation presentation;
     std::vector<bmh::world12::PoolsMatchOutcome> pools;
@@ -27,5 +29,5 @@ CompetitionDayOutcome play_competition_day(bmh::world12::CareerSnapshot&,Manager
     ManagerActionOwner expected,const bmh::world12::DayTicket&,const GameState&,
     const CupSources&,const std::vector<AiDayLeagueConditions>&,
     const std::vector<CupDayConditions>&,const std::vector<EuropeanDayConditions>&,
-    bmh::world12::HumanProjectionPolicy,const bmh::world12::HumanRoundHooks&,const std::vector<IndoorDayConditions>& indoor={},const std::optional<RegionalDayConditions>& regional=std::nullopt);
+    bmh::world12::HumanProjectionPolicy,const bmh::world12::HumanRoundHooks&,const std::vector<IndoorDayConditions>& indoor={},const std::optional<RegionalDayConditions>& regional=std::nullopt,const std::vector<NationalDayConditions>& national={});
 }

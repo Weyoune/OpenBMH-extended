@@ -2,6 +2,8 @@
 #include "app/world12_weather.hpp"
 #include "cli/json.hpp"
 #include "game/world12/prepared_event.hpp"
+#include "game/world12/national_coach.hpp"
+#include "game/world12/national.hpp"
 #include "game/week.hpp"
 #include <bit>
 #include <limits>
@@ -75,9 +77,14 @@ WeatherPreparation prepare_event_weather(CareerSnapshot& state,ManagerActionOwne
     if(candidate.world.catalogue.scope.germany&&candidate.league_rounds[0]==17&&candidate.world.economy&&candidate.world.economy->presentation_options&&!(*candidate.world.economy->presentation_options)[16*9+4]&&(!candidate.world.indoor||candidate.world.indoor->tournaments.empty())){
         if(!indoor_reference)throw FormatError("world12: first indoor draw needs its Source reference owner");invitation=prepare_indoor_draw(candidate,*indoor_reference,sources.german);
     }
+    const auto appointments=admitted_other_appointments(candidate,candidate.calendar->next_day);
+    uint64_t nomination_draws=0;
+    const bool national=std::any_of(appointments.begin(),appointments.end(),[&](const auto& a){return national_appointment(a,candidate.season);});
+    if(national){if(!indoor_reference)throw FormatError("world12: national appointment needs its actual Source reference");if(!candidate.world.national_coaches)throw FormatError("world12: national coach account history is unknown");activate_national_coaches(candidate.world,candidate.desktop->manager_order);WatcomRandom nominees(candidate.watcom_seed);for(auto country:{Country::germany,Country::england}){const auto squad=std::find_if(candidate.world.national_squads.begin(),candidate.world.national_squads.end(),[&](const auto& s){return candidate.world.clubs.at(s.team).country==country;});if(squad==candidate.world.national_squads.end())nominate_national_squad(candidate.world,country,candidate.date,*indoor_reference,nominees);}candidate.watcom_seed=nominees.seed();nomination_draws=nominees.calls();}
+    else if(candidate.world.catalogue.scope.club_play()&&national_roles_active(candidate.world))park_national_coaches(candidate.world);
     const auto ticket=prepare_day(candidate);
-    if(!ticket||ticket->leagues.empty()&&ticket->cups.empty()&&ticket->european.empty()&&ticket->indoor.empty()&&!ticket->regional_playoff)throw FormatError("world12: event weather has no scheduled matches");
-    for(const auto& appointment:ticket->others)if(!domestic_cups_on(appointment)&&!european_cups_on(appointment)&&!german_indoor_appointment(appointment)&&!regional_playoff_appointment(appointment))throw FormatError("world12: weather for this shared/national appointment needs its competition owner");
+    if(!ticket||ticket->leagues.empty()&&ticket->cups.empty()&&ticket->european.empty()&&ticket->indoor.empty()&&!ticket->regional_playoff&&ticket->national.empty())throw FormatError("world12: event weather has no scheduled matches");
+    for(const auto& appointment:ticket->others)if(!domestic_cups_on(appointment)&&!european_cups_on(appointment)&&!german_indoor_appointment(appointment)&&!regional_playoff_appointment(appointment)&&!national_appointment(appointment,candidate.season))throw FormatError("world12: weather for this shared/national appointment needs its competition owner");
     PreparedEvent event;
     event.day=ticket->day;event.calendar_revision=ticket->revision;
     std::copy(catalogue.begin(),catalogue.end(),event.referee_properties.begin());
@@ -113,11 +120,18 @@ WeatherPreparation prepare_event_weather(CareerSnapshot& state,ManagerActionOwne
         PreparedGroup group;group.regional_playoff=true;group.source_entry=35;group.round=uint8_t(plan.played+1);group.leg=1;group.flags=plan.flags;group.revision=plan.revision;
         for(auto fixture:plan.matches){requests.push_back({fixture,group.flags});group.matches.push_back({fixture});}event.groups.push_back(std::move(group));
     }
+    for(const auto& plan:ticket->national){
+        const auto primary=candidate.world.national_campaigns->primary_country;const auto& source=primary==Country::england?sources.english:sources.german;
+        const auto rules=national_programme_rules(source,candidate.season);const auto& campaign=candidate.world.national_campaigns->seasons.at(candidate.season);
+        if(rules.size()!=campaign.stages.size())throw FormatError("world12: national Source programme changed before weather");for(size_t n=0;n<rules.size();++n)if(rules[n]!=campaign.stages[n].rules)throw FormatError("world12: national Source stage changed before weather");
+        PreparedGroup group;group.national=plan.competition;group.source_entry=plan.source_entry;group.round=plan.round;group.leg=plan.leg;group.flags=plan.flags;group.revision=plan.revision;
+        for(auto fixture:plan.matches){requests.push_back({fixture,group.flags});group.matches.push_back({fixture});}event.groups.push_back(std::move(group));
+    }
     GameRandom game(candidate.game_seed);WatcomRandom random(candidate.watcom_seed);
     WeatherPreparation weather;
     if(ticket->indoor.empty())weather=prepare_fixture_weather(candidate.world,month_code(candidate.date),requests,catalogue,game,random);
     else {auto referees=catalogue;for(auto& property:referees)property&=0x7f;for(const auto& request:requests){const auto& home=candidate.world.clubs.at(request.fixture.home);const auto drawn=draw_match_weather(int(home.country),month_code(candidate.date),!(request.flags&0x80),referees,game,random);weather.matches.push_back({request,drawn,Country::germany});}weather.game_draws=game.calls();weather.watcom_draws=random.calls();}
-    weather.game_draws+=invitation.game_draws;weather.watcom_draws+=invitation.watcom_draws;
+    weather.game_draws+=invitation.game_draws;weather.watcom_draws+=invitation.watcom_draws+nomination_draws;
     size_t index=0;
     for(auto& group:event.groups)for(auto& match:group.matches) {
         const auto& prepared=weather.matches.at(index++);match.temperature=std::bit_cast<int8_t>(prepared.weather.temperature);

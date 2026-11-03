@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "app/world12_attendance.hpp"
 #include "game/world12/economy.hpp"
+#include "game/world12/national_coach.hpp"
 #include "game/matchday_setup.hpp"
 #include "game/match.hpp"
 #include "game/lineup.hpp"
@@ -18,7 +19,8 @@ AttendanceOutcome book_event_attendance(CareerSnapshot& state,ManagerActionOwner
        !state.world.settings||!state.world.economy||!state.progress||
        state.prepared_event->desk_phase==PreparedEvent::DeskPhase::desks)
         throw FormatError("world12: missing or stale gate-income owner");
-    for(const auto& manager:state.world.managers)
+    const bool national_only_event=std::all_of(state.prepared_event->groups.begin(),state.prepared_event->groups.end(),[](const auto& group){return group.national.has_value();});
+    if(!national_only_event)for(const auto& manager:state.world.managers)
         if(!manager.career||!manager.career->season_services||!manager.match_state||!manager.match_state->attendance)
             throw FormatError("world12: gate history is unknown; a current fresh career is required");
     const auto before=state;auto candidate=state;const auto settings=*state.world.settings;
@@ -27,12 +29,12 @@ AttendanceOutcome book_event_attendance(CareerSnapshot& state,ManagerActionOwner
     GameRandom game(candidate.game_seed);WatcomRandom random(candidate.watcom_seed);AttendanceOutcome out;
     for(const auto& group:candidate.prepared_event->groups)for(const auto& match:group.matches) {
         if(group.indoor){out.spectators.push_back(10000);continue;}
-        std::vector<ClubId> clubs;for(const auto& manager:candidate.world.managers)clubs.push_back(manager.club);
+        std::vector<ClubId> clubs;if(group.national){for(const auto& record:*candidate.world.national_coaches)if(record.active)clubs.push_back(record.team);}else for(const auto& manager:candidate.world.managers)clubs.push_back(manager.club);
         for(auto club:{match.fixture.home,match.fixture.away})if(std::find(clubs.begin(),clubs.end(),club)==clubs.end())clubs.push_back(club);
-        auto p=group.european?AiMatchProjection::create_for_european(candidate,clubs,reference,
+        auto p=group.national?AiMatchProjection::create_for_nationals(candidate,clubs,reference,{settings.mode,settings.difficulty,settings.foreign_rule,true}):group.european?AiMatchProjection::create_for_european(candidate,clubs,reference,
             {settings.mode,settings.difficulty,settings.foreign_rule,true}):AiMatchProjection::create_for_humans(candidate,clubs,reference,
             {settings.mode,settings.difficulty,settings.foreign_rule,true});
-        install_career_economy(p,candidate.world);auto& local=p.state;local.texts=&texts;
+        if(group.national)install_career_mailbox(p,candidate.world);else install_career_economy(p,candidate.world);auto& local=p.state;local.texts=&texts;
         local.season=int(candidate.season);local.season_start=candidate.progress->season_start;
         const auto home=int(p.local_club(match.fixture.home)),away=int(p.local_club(match.fixture.away));
         MatchGroup descriptor;descriptor.desc.assign(0xd0,0);descriptor.desc[1]=group.flags;descriptor.desc[2]=1;
@@ -41,6 +43,11 @@ AttendanceOutcome book_event_attendance(CareerSnapshot& state,ManagerActionOwner
         uint32_t competition=uint32_t(match_team_league(local,home));uint8_t type=0;
         if(group.league){context.projected_matchdays=candidate.world.catalogue.league(*group.league).rounds();
             context.projected_completed_rounds=candidate.league_rounds[group.league->value];}
+        else if(group.national){
+            const auto& campaign=candidate.world.national_campaigns->seasons.at(candidate.season);const auto& source=candidate.world.national_campaigns->primary_country==Country::england?sources.english:sources.german;
+            competition=cup_entry_address(group.source_entry);type=uint8_t(*group.national+1);
+            for(const auto& stage:campaign.stages){const auto at=cup_entry_address(stage.rules.entry);local.memory.add_block(at,0x28);for(uint32_t b=0;b<0x28;++b)local.memory.set8(at+b,source.u8(at+b));local.memory.set8(at+0x1d,stage.played);}
+        }
         else if(group.european){
             competition=cup_entry_address(group.source_entry);type=uint8_t(*group.european)+1;const auto& campaign=(*candidate.world.european_campaigns)[size_t(uint8_t(*group.european)-1)];
             for(const auto& stage:campaign.stages){const auto at=cup_entry_address(stage.rules.entry);local.memory.add_block(at,0x28);for(uint32_t b=0;b<0x28;++b)local.memory.set8(at+b,sources.german.u8(at+b));local.memory.set8(at+0x1d,stage.played);}
@@ -67,7 +74,7 @@ AttendanceOutcome book_event_attendance(CareerSnapshot& state,ManagerActionOwner
         if(report.unsupported)throw FormatError(report.reason);
         const auto amount=attendance(local,home,away,bits,match.temperature,match.rain,type,game,random,report);
         if(report.unsupported||amount<0)throw FormatError(report.reason.empty()?"world12: invalid calculated attendance":report.reason);
-        p.commit_match_state(candidate.world,true);capture_career_economy(candidate.world,p);
+        p.commit_match_state(candidate.world,!group.national);if(group.national)capture_career_mailbox(candidate.world,p);else capture_career_economy(candidate.world,p);
         out.spectators.push_back(uint32_t(amount));
     }
     size_t index=0;for(auto& group:candidate.prepared_event->groups)for(auto& match:group.matches)match.spectators=out.spectators.at(index++);

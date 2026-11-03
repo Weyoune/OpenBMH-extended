@@ -7,6 +7,7 @@
 #include "app/world12_clock.hpp"
 #include "app/world12_annual_transition.hpp"
 #include "app/world12_national.hpp"
+#include "game/world12/national_coach.hpp"
 #include "app/world12_ai_day.hpp"
 #include "app/world12_weather.hpp"
 #include "app/world12_attendance.hpp"
@@ -57,6 +58,9 @@ public:
     void validate_file_owner(int manager_slot,uint64_t revision)const;
     bool preparation_open()const{return preparation_menu_.has_value();}
     ui::SelectionContext selection_context()const;
+    bool national_desktop_active()const;
+    std::vector<bmh::world12::NationalDesktopActor> national_desktop_actors()const;
+    bmh::world12::AiMatchProjection make_national_desktop_projection()const;
     void confirm_manager(const ui::ManagerChoice&,uint64_t expected_revision);
     void prepare_start(uint64_t expected_revision);
     DesktopEntryOutcome begin_first_event(uint64_t expected_revision);
@@ -138,7 +142,7 @@ public:
     const InitialManagerServicesOutcome& initial_services()const{return services_;}
     const GameState& reference()const{return resources_.reference;}
     const LeImage& rules()const{return resources_.german;}
-    bool prepared()const{return state_.world.transfer_market.has_value();}
+    bool prepared()const{return state_.world.catalogue.scope.club_play()?state_.world.transfer_market.has_value():state_.world.national_campaigns.has_value()&&state_.calendar.has_value()&&state_.desktop.has_value();}
 private:
     friend class LiveFamilyScope;
     ui::World12TableState open_table_owned(uint8_t seat,uint8_t child);

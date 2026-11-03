@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "game/national_identity.hpp"
 #include "formats/executable_layout.hpp"
 #include "game/desk.hpp"
 
@@ -75,13 +76,13 @@ void enter_desk(GameState& g, int manager, GameRandom& game, WatcomRandom& rand,
             // EN AlwaysHidesRecordIndoorTableIncluding always hides record 10 (IndoorTable), including
             // Modus III. DE HasNoEquivalentCondition has no equivalent condition.
             if ((kEnglishCompetitions && b == 10) ||
-                (team == kNoTeam && kButtons[b] == 0) || (mode < 3 && kButtons[mode * 0x36 + b] == 0) ||
+                (is_national_team(g,team) && kButtons[b] == 0) || (mode < 3 && kButtons[mode * 0x36 + b] == 0) ||
                 (b == 0x16 && mode2 == 1 && g.date < 0x16e))
                 v |= 0x10;
             g.memory.set8(at, v);
         }
     stir_random(game, rand);  // StirRandom
-    if (team != kNoTeam) {
+    if (!is_national_team(g,team)) {
         std::array<uint8_t, 24> buf;
         table_prediction(g, team, 1, buf);
     }

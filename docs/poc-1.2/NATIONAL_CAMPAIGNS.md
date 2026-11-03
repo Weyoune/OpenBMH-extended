@@ -3,8 +3,9 @@
 World schema39 adds optional `NationalCampaignHistory`. It records each owned
 season's field, exact Source programme, round/leg scores, cursor, winner and any
 known runner-up. The twenty latest World-Cup podiums follow the Core
-`national_tournament_end` honours shift. This backend does not claim human coach,
-GUI, calendar or played-season integration.
+`national_tournament_end` honours shift. The saved Session event pipeline owns
+actual nominee preparation, coach desks, weather, attendance and match receipts.
+Native GUI checks and whole-career release evidence are separate verification.
 
 | season modulo4 | Source competition | Source entries | games | appointments |
 | --- | --- | --- | --- | --- |
@@ -32,9 +33,10 @@ calendar flag is `1 << (12 - season % 4)`.
 Club worlds retain the existing German Source draw identity. National-only
 England can explicitly use England as the primary Source nation, with the
 bijective0/2 country mapping; it does not rename or duplicate global entities.
-This is a campaign API, not yet a national-only manager-creation API. The Source
-setup permits only one manager when club play is off; the later context owner
-must expose that limit rather than inventing simultaneous national-only coaches.
+The confirmed national-only manager path exposes the actual German and English
+choices and permits one manager. Opening or toggling the chooser does not draw
+players or consume either random stream. Confirmation initializes the actual
+master population and retains its roster origins and free-pool receipts.
 
 The Source four-nation quota stores only its winner. An unknown runner-up is not
 inferred. Six-nation, European and World-Cup programmes retain actual runner-up
@@ -48,10 +50,9 @@ missing results from an older midseason snapshot. Future coach/origin context
 keys are explicitly reserved as null and non-null unavailable owners reject,
 so intermediate readers cannot silently discard later financial contexts.
 
-Remaining work: real DE/EN nominee match projections, rating-only other nations,
-separate Source national coach accounts/monthly context, scoped nomination
-origins, current-order coach selection, Session national mode and actual native
-presenters. No Beta/playable flag follows from these module checks.
+The match adapter runs real DE/EN nominated players and rating-only other
+nations on the shared Core national clock. No invented players or scores fill
+missing national squads. Module checks alone do not establish a playable release.
 
 `national_final_facts` is the annual archive's score-authority boundary. It
 checks stored winner/runner labels against Core group tables or the actual last
@@ -80,8 +81,13 @@ The optional `national_coaches` context owns a separate Source spare-record
 account for each real DE/EN team. Only fresh initialization captures it; missing
 older national financial history remains unknown. Cash/baseline, the verified
 monthly categories, deposit/interest counters, robbery guard and thirteen
-training preferences/quality are independent of parked club managers. Club loans,
-property and facility state do not enter this account. Coach selection validates
+training preferences/quality are independent of parked club managers. Known
+national starting investment baselines and depreciation remain account facts;
+the optional investment field mirrors the same Source324 starting baseline,
+with equality enforced when both are known;
+unknown older backing is retained as unknown. Personal canonical investment
+holdings and loan ledgers follow Source slot ownership. Club facilities never
+substitute for a national account. Coach selection validates
 the saved manager order and appoints its first eligible nonzero Source21c manager
 per country, with the Original automatic single-manager case retained. The
 backend national-only capability is limited to one manager and reports actual
@@ -120,3 +126,30 @@ save roundtrips after every batch. These are isolated tournament-programme tests
 whole calendar seasons, supplied-data gameplay and native GUI admission require
 separate evidence. The single-leg final-facts regression also covers narrow away
 wins, which must not read the unused0xCCCC return-leg array.
+
+## Saved events and national-only scope
+
+Snapshot stream `K`, prepared group kind5, owns national competitions4–7 after
+ordinary, European, indoor and regional groups. Each group retains its exact
+Source entry, round, leg, flags and revision. Only the current season's national
+calendar flag is admitted; the saved source calendar remains unchanged. Weather,
+coach desks and gates survive a normal save. Actual shared-clock receipts commit
+all groups, campaign advancement and the date together, or publish nothing.
+
+The canonical desktop manager order retains every person. A national desk event
+contains only active national coaches, in the corresponding saved order. Sparse
+canonical seats remain explicit; projected row0 is not a substitute identity.
+Nomination and national match dates choose the then-current first eligible coach
+per country. Club roles return before ordinary club services and awards; annual
+opening does not appoint a new national coach.
+
+Extended national-only play deliberately has no dormant human club. It chooses
+one actual nation and trains its real nominated squad once on each applicable
+daily training rule, using the independent national account. It does not create
+a hidden club choice, facilities, club finances, advertising, tickets or a dummy
+manager career. The Original's hidden club-selection and club-processing lineage
+is outside this explicit scope. Match and nomination kernels, stable player IDs,
+save ownership, rollback and random-stream determinism remain authoritative;
+this boundary is not a claim of whole-career Original RNG parity. Independently
+owned inactive master scratch may retain real Source draws without admitting
+club matches, scores or a human club owner.

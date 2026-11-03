@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "game/world12/desktop_projection.hpp"
 #include "game/world12/economy.hpp"
+#include "game/world12/national_coach.hpp"
 #include <algorithm>
 namespace bmh::world12 {
 AiMatchProjection project_manager_desktop(const CareerSnapshot& state,const GameState& reference,const std::vector<ClubId>& extra_clubs) {
     state.validate();
     if(!state.desktop||!state.desktop->active_seat||!state.world.settings)throw FormatError("world12: manager desktop is unavailable");
+    const auto actors=national_desktop_actors(state);if(!actors.empty()){
+        if(std::none_of(actors.begin(),actors.end(),[&](const auto& actor){return actor.seat==*state.desktop->active_seat;}))throw FormatError("world12: current national desktop actor is parked");std::vector<ClubId> teams;for(const auto& actor:actors)teams.push_back(actor.team);for(auto id:extra_clubs)if(std::find(teams.begin(),teams.end(),id)==teams.end()){if(state.world.clubs.at(id).kind!=ClubKind::national_team)throw FormatError("world12: national desktop cannot substitute a club scope");teams.push_back(id);}const auto s=*state.world.settings;auto projection=AiMatchProjection::create_for_national_desktop(state,teams,reference,{s.mode,s.difficulty,s.foreign_rule,true});for(size_t local=0;local<projection.human_managers();++local)if(projection.global_manager(uint8_t(local))==*state.desktop->active_seat)projection.state.memory.set8(layout::ActiveManager,uint8_t(local));if(state.world.economy){install_career_mailbox(projection,state.world);install_career_loan_ledger(projection,state.world);if(state.world.economy->pools)install_career_pools(projection,state.world);}if(state.world.markets)install_career_portfolios(projection,state.world);return projection;
+    }
     std::vector<ClubId> clubs;for(const auto& manager:state.world.managers)clubs.push_back(manager.club);
     for(auto id:extra_clubs)if(std::find(clubs.begin(),clubs.end(),id)==clubs.end())clubs.push_back(id);
     const auto settings=*state.world.settings;auto projection=AiMatchProjection::create_for_desktop(state,clubs,reference,{settings.mode,settings.difficulty,settings.foreign_rule,true});

@@ -20,6 +20,11 @@ NationalStartupReceipt initialize_national_only_players(World& selected,const Wo
     if(selected!=before||master!=original_master||game.seed()!=gs.seed()||game.calls()!=gs.calls()||random.seed()!=ws.seed()||random.calls()!=ws.calls())throw FormatError("world12: national startup master/owner/RNG changed");
     selected=std::move(candidate);game=staged_game;random=staged_random;return receipt;
 }
+SeasonCalendar make_national_only_calendar(const Catalogue& catalogue,const std::vector<uint16_t>& source){
+    if(catalogue.scope.club_play()||!catalogue.scope.international||(source.size()!=365&&source.size()!=366))throw FormatError("world12: national calendar requires its actual sole Source programme");
+    SeasonCalendar result;result.days=uint16_t(source.size());for(size_t day=0;day<source.size();++day){const auto raw=source[day];if(raw&0x8000u)throw FormatError("world12: initial national calendar contains a runtime postponement");if(raw==0x4006)result.others.push_back({uint16_t(day),CalendarDomain::shared,raw});else if(!(raw&0x4000)&&(raw&0x1e00u))result.others.push_back({uint16_t(day),CalendarDomain::shared,uint16_t(raw&0x1e00u)});}
+    result.validate(catalogue);return result;
+}
 NationalViewPreferences initial_national_view_preferences(const GameState& reference,uint8_t seat){
     if(seat>3)throw FormatError("world12: invalid national preference actor");NationalViewPreferences p;
     const auto word=[&](uint32_t at,std::optional<uint16_t>& value){if(reference.memory.has(at+1))value=reference.memory.u16(at);};

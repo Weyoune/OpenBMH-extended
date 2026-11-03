@@ -3,6 +3,7 @@
 #include "game/national_identity.hpp"
 #include "formats/executable_layout.hpp"
 #include "game/lineup.hpp"
+#include "game/national_identity.hpp"
 #include "ui/pitch.hpp"
 namespace bmh::app::world12 {
 inline void verify_world12_pitch_row(const GameState& local,int club,int row,int player,uint16_t slot){

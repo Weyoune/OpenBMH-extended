@@ -9,6 +9,7 @@
 #include "game/lineup.hpp"
 #include "game/world12/market_bids.hpp"
 #include "game/world12/pools.hpp"
+#include "game/world12/national_coach.hpp"
 #include <algorithm>
 #include <limits>
 #include <stdexcept>
@@ -21,7 +22,7 @@ bool human(const World& world,ClubId club) {
 std::optional<PendingDeskOffer> initial_offer(CareerSnapshot& state,uint8_t seat,
     const GameState& reference,WatcomRandom& random) {
     const auto& world=state.world;const auto& settings=*world.settings;
-    if(settings.mode==1)return {};
+    if(settings.mode==1||national_roles_active(world))return {};
     const auto& manager=*std::find_if(world.managers.begin(),world.managers.end(),[&](const auto& m){return m.seat==seat;});
     if(!manager.match_state||!manager.tactics||!manager.finance||!manager.career)throw std::invalid_argument("world12: initial offer needs complete human state");
     const int chance=random.range(0,0x46-int16_t(manager.match_state->staff_ratings[0])/0x32);
@@ -96,6 +97,7 @@ std::optional<PendingDeskOffer> initial_offer(CareerSnapshot& state,uint8_t seat
 }
 std::optional<PendingDeskOffer> prepare_manager_desk_offer(CareerSnapshot& state,uint8_t seat,
     const GameState& reference,WatcomRandom& random) {
+    if(national_roles_active(state.world))return {};
     if(!state.prepared_event&&!annual_opening_ready(state)&&!annual_closing_ready(state))return initial_offer(state,seat,reference,random);
     const auto notice=prepare_unsolicited_offer(state,seat,reference,random,{true});
     if(!notice)return {};
@@ -105,7 +107,7 @@ static DesktopEntryOutcome prepare_empty_desk_event(CareerSnapshot& state,Manage
     ManagerActionOwner expected,const GameState& reference,bool annual,bool closing=false) {
     state.validate();
     if(!owner.scope||owner.scope!=expected.scope||owner.revision!=expected.revision||owner.revision==std::numeric_limits<uint64_t>::max()||
-        (closing?!annual_closing_ready(state):annual?!annual_opening_ready(state):bool(state.date||state.season))||!state.world.settings||state.world.managers.empty()||state.world.managers.size()!=state.world.settings->planned_managers||!state.calendar||(!closing&&state.calendar->next_day)||!state.world.transfer_market||!state.desktop||state.desktop->active_seat||state.desktop->initial_event||
+        (closing?!annual_closing_ready(state):annual?!annual_opening_ready(state):bool(state.date||state.season))||!state.world.settings||state.world.managers.empty()||state.world.managers.size()!=state.world.settings->planned_managers||!state.calendar||(!closing&&state.calendar->next_day)||(state.world.catalogue.scope.club_play()&&!state.world.transfer_market)||!state.desktop||state.desktop->active_seat||state.desktop->initial_event||
         (!annual&&!closing&&!state.world.loans.empty())||(!closing&&(!state.calendar->schedule.leagues_on(0).empty()||!state.calendar->schedule.others_on(0).empty())))
         throw std::invalid_argument("world12: invalid initial empty event owner/phase");
     const auto before=state;if(closing)(void)completed_annual_titles(state);auto candidate=state;GameRandom game(state.game_seed);WatcomRandom random(state.watcom_seed);

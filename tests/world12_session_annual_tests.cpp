@@ -14,7 +14,7 @@ using namespace bmh;using namespace bmh::world12;namespace application=::bmh::ap
 void check(bool yes,const char* text){if(!yes)throw std::runtime_error(text);}
 template<class F>void rejects(F f,const char* text){bool refused=false;try{f();}catch(const std::exception&){refused=true;}check(refused,text);}
 struct Temporary {std::filesystem::path path;~Temporary(){std::error_code ignored;std::filesystem::remove_all(path,ignored);}};
-ui::DeskRequest exit_request(const application::Session& session){ui::DeskRequest request;request.kind=ui::DeskRequestKind::advance_turn;request.manager_slot=0;request.revision=session.revision();return request;}
+ui::DeskRequest exit_request(const application::Session& session){ui::DeskRequest request;request.kind=ui::DeskRequestKind::advance_turn;request.manager_slot=*session.snapshot().desktop->active_seat;request.revision=session.revision();return request;}
 void pending(application::Session& session,const std::filesystem::path& data) {
     if(!session.snapshot().desktop->initial_event->offer)return;
     PendingOfferHooks hooks;hooks.answer=[](const auto&,const auto&){return PendingOfferAnswer::no;};hooks.select_transfer=[](const auto&,const auto&){return PendingOfferTransferChoice{PendingOfferTransferChoiceKind::decline,-1};};hooks.notice=[](const auto&,const auto&){};hooks.human_buyer_allocator_gate=PendingOfferAllocatorGate::zero;

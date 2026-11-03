@@ -15,7 +15,8 @@ Board initialization and automatic lineup use a bounded numeric workspace and
 the same Core functions as Classic. Global club/player identities never enter
 12-bit roster words. The ordinary single-manager coaching rule selects that
 manager's own country; adding a manager removes this implicit appointment at the
-next nomination. Future explicit national-coach awards need their own owner.
+next nomination. Known national contexts select the first eligible coach per
+country from the actual saved manager order.
 
 `prepare_national_appointment` authenticates revision, scope, calendar ticket and
 saved event order. Every represented country commits with the random seed or the
@@ -35,5 +36,6 @@ that order from their actual event when it closes.
 Current verification covers twelve direct Core comparisons, the 4,680-player
 synthetic world, both countries, sparse seats, single/multiple managers, malformed
 references, rollback, codec/snapshot migration and a real four-manager continuation
-to its next appointment. Human national preparation and full scheduled-match GUI
-integration are separate work; this module does not claim a playable Beta.
+to its next appointment. Saved human national preparation and the complete scheduled-match transaction
+are also exercised with sparse active coaches and regular saves. Native GUI and
+whole-career release evidence remain separate checks.

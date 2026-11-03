@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "app/world12_event.hpp"
+#include "game/world12/progression.hpp"
 #include "app/world12_first_event.hpp"
 #include "game/world12/pools.hpp"
+#include "game/world12/national_coach.hpp"
 #include "game/world12/match_projection.hpp"
 #include "game/matchday_setup.hpp"
 #include "game/lineup.hpp"
@@ -30,6 +32,23 @@ DesktopEntryOutcome begin_scheduled_desks(CareerSnapshot& state,ManagerActionOwn
         throw FormatError("world12: scheduled desks are already prepared or lack their settings");
     const auto before=state;auto candidate=state;const auto settings=*state.world.settings;
     const HumanProjectionPolicy policy{settings.mode,settings.difficulty,settings.foreign_rule,true};
+    const bool national=!prepare_day(candidate)->national.empty();
+    if(national){
+        std::vector<ClubId> teams;for(const auto& group:candidate.prepared_event->groups)for(const auto& match:group.matches)for(auto id:{match.fixture.home,match.fixture.away})if(std::find(teams.begin(),teams.end(),id)==teams.end())teams.push_back(id);
+        for(const auto& record:*candidate.world.national_coaches)if(record.active&&std::find(teams.begin(),teams.end(),record.team)==teams.end())teams.push_back(record.team);
+        auto p=AiMatchProjection::create_for_nationals(candidate,teams,reference,policy);auto& local=p.state;
+        for(const auto& group:candidate.prepared_event->groups){if(!group.national)throw FormatError("world12: a national coach window cannot present parked club desks");for(const auto& match:group.matches){const int home=int(p.local_club(match.fixture.home)),away=int(p.local_club(match.fixture.away));prepare_team(local,home,match_competition_class(uint8_t(*group.national+1)),0);prepare_team(local,away,match_competition_class(uint8_t(*group.national+1)),1);auto_lineup(local,home,100);auto_lineup(local,away,100);}}
+        cycle_manager_options(local);local.memory.add_block(layout::CurrentMatchday,4);
+        GameRandom game(candidate.game_seed);WatcomRandom random(candidate.watcom_seed);draw_matchday_number(local,random);const auto shuffled=shuffle_manager_order(local,game);p.commit_match_state(candidate.world);
+        std::vector<uint8_t> actors;for(auto index:shuffled)actors.push_back(p.global_manager(uint8_t(index)));
+        size_t index=0;for(auto& seat:candidate.desktop->manager_order)if(std::find(actors.begin(),actors.end(),seat)!=actors.end())seat=actors.at(index++);
+        candidate.desktop->matchday_number=uint16_t(local.memory.u32(layout::CurrentMatchday));candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();
+        DesktopEntryOutcome out{game.calls(),random.calls(),false};
+        if(actors.empty())candidate.prepared_event->desk_phase=PreparedEvent::DeskPhase::complete;
+        else {InitialDeskEvent event;event.matchday_number=*candidate.desktop->matchday_number;event.manager_order=actors;candidate.desktop->initial_event=event;candidate.prepared_event->desk_phase=PreparedEvent::DeskPhase::desks;prepare_scheduled_pools(candidate,reference,random);candidate.watcom_seed=random.seed();ManagerActionOwner staged{owner.scope,0};const auto entered=enter_initial_manager_desktop(candidate,staged,staged,actors.front(),reference);out.game_draws+=entered.game_draws;out.watcom_draws=random.calls()+entered.watcom_draws;out.autosave_due=entered.autosave_due;}
+        if(actors.empty())candidate.prepared_event->pools_matches.emplace();
+        candidate.validate();if(state!=before||owner.scope!=expected.scope||owner.revision!=expected.revision)throw FormatError("world12: national desk owner changed");state=std::move(candidate);++owner.revision;return out;
+    }
     for(const auto& group:candidate.prepared_event->groups)for(const auto& match:group.matches) {
         auto p=group.european?AiMatchProjection::create_for_european(candidate,participants(candidate.world,match.fixture),reference,policy):AiMatchProjection::create_for_humans(candidate,participants(candidate.world,match.fixture),reference,policy);
         const auto home=int(p.local_club(match.fixture.home)),away=int(p.local_club(match.fixture.away));
