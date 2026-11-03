@@ -3,11 +3,16 @@
 #include "fixture_tables.hpp"
 #include "ui/world12_other_games.hpp"
 #include "ui/world12_draws.hpp"
+#include "ui/other_games.hpp"
+#include "ui/setup.hpp"
+#include "formats/data_profile.hpp"
 #include "game/world12/european_campaign.hpp"
 #include "game/cup.hpp"
 #include <iostream>
 using namespace bmh;using namespace bmh::world12;using namespace bmh::ui;
 namespace {
+std::optional<std::filesystem::path> render_data;
+std::optional<LeImage> render_reference;
 void check(bool value,const char* message){if(!value)throw std::runtime_error(message);}
 template<class F>void rejects(F action,const char* message){bool rejected=false;try{action();}catch(const std::exception&){rejected=true;}check(rejected,message);}
 void saved_european(){
@@ -15,7 +20,7 @@ void saved_european(){
     const World12OtherGamesIdentity identity{3,snapshot.world.managers[0].club,8,71,1ull<<32};
     for(size_t k=0;k<3;++k){auto& campaign=(*snapshot.world.european_campaigns)[k];while(!campaign.complete){const auto groups=prepare_european_groups(campaign);EuropeanResults results{campaign.competition,campaign.revision,{}};
         for(const auto& group:groups){const auto stage=std::find_if(campaign.stages.begin(),campaign.stages.end(),[&](const auto& value){return value.rules.entry==group.source_entry;});World12OtherSelection selection;selection.page=World12OtherPage(k+1);selection.stage=int(stage-campaign.stages.begin());const auto before=snapshot;const auto seed=random.seed();const auto calls=random.calls();
-            const auto page=world12_european_games_state(snapshot,identity,selection);check(page.projection.fixtures_available&&page.projection.entry_index==group.source_entry&&page.projection.rows.size()==std::min<size_t>(8,group.matches.size()),"European saved page lost actual active fixtures/stage");
+            const auto page=world12_european_games_state(snapshot,identity,selection);if(render_data)check(OtherGamesScreen(*render_data,page,*render_reference).render().pixels.size()==320*240,"actual Original renderer rejected a typed saved European page");check(page.projection.entry_address==0&&page.projection.fixtures_available&&page.projection.entry_index==group.source_entry&&page.projection.rows.size()==std::min<size_t>(8,group.matches.size()),"European saved page lost actual active fixtures/stage");
             for(size_t m=0;m<page.projection.rows.size();++m){const auto& row=page.projection.rows[m];check(page.world12_teams.at(row.home_team)==group.matches[m].home&&page.world12_teams.at(row.away_team)==group.matches[m].away,"European renderer tokens changed canonical club identities");}
             std::vector<uint16_t> scores(group.matches.size(),group.leg==2?uint16_t(1):uint16_t(2<<5));const World12CompetitionOverlay overlay{campaign.revision,group.source_entry,group.played,group.matches,scores};const auto live=world12_european_games_state(snapshot,identity,selection,{overlay});check(live.projection.rows.front().source_result==scores.front(),"actual current score overlay was not projected");if(group.leg==2){check(page.projection.rows[0].source_result==0xcccc&&live.projection.rows[0].source_second_leg==page.projection.rows[0].source_second_leg&&live.projection.rows[0].source_second_leg==group.other_leg[0]&&live.projection.rows[0].second_leg_visible,"return-leg view did not preserve Source swapped prior-leg buffer/current primary");check(live.projection.rows[0].second_leg_home_goals==int(group.other_leg[0]&31)&&live.projection.rows[0].second_leg_away_goals==int(group.other_leg[0]>>5&31),"return-leg displayed prior score lost physical orientation");}
             if(!stage->rules.knockout())check(live.table_rows.size()==4&&live.projection.group_tables.size()==1,"European real group table/ranks are missing");
@@ -39,4 +44,4 @@ void domestic_live(){
 }
 
 }
-int main()try{set_fixture_tables(bmh::test::authored_fixture_tables());saved_european();captured_draw();domestic_live();return 0;}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
+int main(int argc,char** argv)try{if(argc==2){render_data=argv[1];render_reference=load_reference_le(asset_path(*render_data,"BMH.exe"),DataProfile{});}set_fixture_tables(bmh::test::authored_fixture_tables());saved_european();captured_draw();domestic_live();return 0;}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
