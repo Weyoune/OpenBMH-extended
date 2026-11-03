@@ -13,9 +13,9 @@ The former1.2 branch is now Extended `main`; its previous version number remains
 in internal `world12` source paths, data profiles and save magic. These identifiers
 are not the product's new release number and are intentionally not rewritten.
 
-Development builds identify as 1.0.0-beta.1. This is a development version, not a
-claim that the first playable Beta is finished. The shared-career release still
-requires its documented integration, played-season and native GUI checks.
+The first shared-career release identifies as 1.0.0-beta.1. Release archives are
+bound to a successful platform CI revision; supported features and remaining Beta
+limitations are listed in [the release notes](release/extended-1.0/RELEASE_NOTES.md).
 The executable remains `OpenBMH.exe`; new packages use the `OpenBMH-Extended-`
 prefix. The native editor remains `obdeddi.exe` and a separate download.
 

@@ -1,6 +1,6 @@
 # OpenBMH-Extended 1.0 Beta implementation contract
 
-Development continues on `main` in OpenBMH-Extended. This contract originated on the former OpenBMH `1.2` branch, based on c051dd6 (1.1 Beta/editor). Classic1.0.2 remains independent in Weyoune/openbmh. Internal data/save names retain their previous identifiers.
+Development continues on `main` in OpenBMH-Extended. This contract originated on the former OpenBMH `1.2` branch, based on c051dd6 (1.1 Beta/editor). Classic1.0.x remains independent in Weyoune/openbmh. Internal data/save names retain their previous identifiers.
 
 Accepted scope: one shared 1–4-manager world, including mixed German/English careers. Germany retains five 18-club leagues; England uses five FLTD-sized leagues 20/20/20/20/10. Europe contains Spain/France/Italy at 18 clubs each, AI-only. When England is disabled during club play, its 20-team Premier League remains AI-only in the international group; its lower divisions and domestic cups are removed. There is no Portuguese league. German menus and the existing Diamond currency apply everywhere. Both original national cup structures run together, with shared European competitions. A national-coach appointment selects Germany or England according to the manager's club country, retaining the other existing eligibility rules.
 
@@ -17,3 +17,16 @@ Implementation gates:
 5. Three complete seasons, mixed two/four-manager sessions, promotions/cups/transfers/save/reload, native package/UI checks and private screenshot/save receipts. Deliver a separate Beta; Windows community ZIP remains below 10 MB without sources or raster studies.
 
 A foundational commit is not evidence of a playable or completed 1.2 world. Each gate records executable verification and unresolved work before the next delivery.
+
+## First Beta boundaries
+
+The shared runtime release uses the graphical game. The earlier native editor
+and console are separate Classic-profile tools; they are not presented as an
+editor or console for the authoritative shared World model.
+
+Manual postponement of an individual league fixture and joining a running
+career need separate saved transaction models. They are explicit Beta limitations,
+not silent calls into the incompatible packed Classic state. Current accounting
+is shown from actual saved values; interactive future balance planning remains
+separate. These controls must never manufacture a calendar, manager, score or
+financial history to make a screen appear complete.

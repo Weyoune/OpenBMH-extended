@@ -1,8 +1,9 @@
 # OpenBMH-Extended
 
-**1.0 Beta — in development.** This is the extended branch of the original-game
-reconstruction. The current shared German/English career implementation is still
-being integrated; a successful build is not a playable Beta release.
+**1.0 Beta.** The Classic interface and match calculations with a shared
+German/English world for one to four managers. See the
+[release notes](docs/release/extended-1.0/RELEASE_NOTES.md) for installation,
+verification and the explicit Beta limitations.
 
 The faithful Classic line remains **[OpenBMH 1.0.x](https://github.com/Weyoune/openbmh)**.
 Use that repository for the original league structures and original-game community
@@ -13,10 +14,11 @@ live here. See [the project split](docs/PROJECT_SPLIT.md).
 
 OpenBMH-Extended retains the Classic SDL2 interface and shared match calculations,
 while extending the database, squad sizes, foreign club crests and country support.
-The first Beta targets one world for 1–4 managers with German and English clubs,
+This Beta supports one world for 1–4 managers with German and English clubs,
 shared European competitions and separate national domestic cups. Its accepted
 scope and remaining release gates are in [the implementation contract](docs/poc-1.2/IMPLEMENTATION.md)
-and [status](docs/poc-1.2/STATUS.md).
+and [status](docs/poc-1.2/STATUS.md); the release notes distinguish supported
+actions from the remaining Beta limitations.
 
 The earlier OpenBMH 1.1 Betas are available as clearly marked historical releases.
 They predate the shared-career implementation and are not the new 1.0 Beta.
@@ -29,25 +31,28 @@ in this public repository. Use your own supported data. Code is GPL-3.0-only;
 third-party notices and asset rights remain applicable. This independent project
 is not affiliated with the original rights holders or football organizations.
 
-## Running development builds
+## Running the game
 
-The executable is `OpenBMH.exe` on Windows and `OpenBMH` elsewhere. Beta runtime
-downloads contain the graphical game and its notices. The developer console
-`openbmh_cli` and the separate Windows editor `obdeddi.exe` support the earlier
-Classic-profile data. Editing the shared-country `WORLD12.JSON` model requires
-its typed data tooling; the earlier editor's M3D edits do not change that model.
-
-The shared-career development path requires an explicitly prepared Extended data
-directory. Its temporary entry is `--extended-dev` (`--world12-dev` remains an
-internal compatibility alias):
+Extract the complete archive for your operating system. The executable is
+`OpenBMH.exe` on Windows and `OpenBMH` elsewhere. Place compatible Extended
+`COMMUNITY.OBD` data beside it, or choose an explicit location:
 
 ```sh
-./OpenBMH --extended-dev --data "path/to/extended-data" --save-directory "path/to/saves"
+./OpenBMH --data "path/to/extended-data" --save-directory "path/to/saves"
 ```
 
-The existing data-only community path and loose Classic reference installations
-are retained during development. Original1.1 or Classic saved games are not
-converted into shared-career snapshots. Keep saves and data backups separate.
+The finalized Extended data package contains the required runtime resources;
+no launcher or original DOS executable is needed. The public runtime download
+contains the graphical game and notices, without original game content.
+
+Classic, historical 1.1 and original DOS saves are not converted into shared
+careers. Use separate save directories. The separate `obdeddi` editor and
+`openbmh_cli` developer console support the earlier Classic-profile data;
+they do not edit or run the shared `WORLD12.JSON` career model.
+
+Unpublished data marked `playable:false` is refused by normal startup.
+Developers may explicitly use `--extended-dev` (`--world12-dev` is an alias)
+with a prepared development dataset.
 
 ## Build from source
 

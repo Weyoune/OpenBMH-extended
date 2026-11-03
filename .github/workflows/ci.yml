@@ -84,6 +84,13 @@ jobs:
           subprocess.run([str(build / ('OpenBMH' + suffix)), '--version'], check=True)
       - name: Package products and licenses
         run: python3 tools/package/make_package.py --build build --out dist --platform ${{ matrix.platform }}
+      - name: Preserve native Windows session diagnostics
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: qa-windows-x64
+          path: build/world12_session_tests.exe
+          if-no-files-found: error
       - name: Package native Windows editor
         if: runner.os == 'Windows'
         shell: pwsh

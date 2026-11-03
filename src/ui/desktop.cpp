@@ -301,6 +301,10 @@ Image DesktopScreen::render() const {
             rect(out, item.x + w - 1, item.y, 1, h, 0x27);
         }
     }
+    if(state_.source=="world12"&&!last_rejection_.empty()) {
+        rect(out,0,228,320,11,0x44);
+        text(out,1,235,utf8_to_original(last_rejection_),0x5f,319);
+    }
     return out;
 }
 

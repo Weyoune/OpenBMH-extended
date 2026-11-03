@@ -259,6 +259,13 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
             session->validate_file_owner(action.desk_action.manager_slot,action.desk_action.revision);
             flow.open_world12_file_dialog(action.desk_action.menu_kind==10?ui::SaveLoadMode::load:ui::SaveLoadMode::save,session->rules(),save_info_reader(session->rules()));return {};
         }
+        if(action.desk_action.kind==ui::DeskRequestKind::open_menu&&
+           (action.desk_action.menu_kind==7||action.desk_action.menu_kind==29)) {
+            session->validate_file_owner(action.desk_action.manager_slot,action.desk_action.revision);
+            throw FormatError(action.desk_action.menu_kind==7?
+                "Spielverlegung ist in dieser Beta noch nicht verfuegbar.":
+                "Neue Mitspieler bitte beim Spielstart festlegen (1-4).");
+        }
         auto staged=std::make_unique<Session>(*session);staged->open_preparation(action.desk_action);
         auto view=staged->preparation_view(data);flow.show_world12_preparation(std::move(view),action.desk_action.menu_kind);session.swap(staged);return {};
     }
