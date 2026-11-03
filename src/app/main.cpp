@@ -221,6 +221,7 @@ int main(int argc, char** argv) {
     }
     if (save_directory.empty()) save_directory = data;
     try {
+        fs::create_directories(save_directory);
         if(world12_development&&(!fs::is_directory(data)||!resource_exists(data/"WORLD12.JSON")||!resource_exists(data/"RULES-EN.DAT")||!resource_exists(data/"KB"/"SETUP12.VGA")))throw FormatError("world12 development requires a data directory with WORLD12.JSON, RULES-EN.DAT and the country setup assets");
         if(!world12_development)install_runtime_profile(load_data_profile(data));
         const Palette palette = load_palette(ui::asset_path(data, "M3PC.COL"));
