@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 #include "game/state.hpp"
+#include "game/national_identity.hpp"
 #include "ui/desktop.hpp"
 #include <algorithm>
 namespace bmh::app {
 inline bool apply_desk_setting_source(GameState& g,int manager,bool price,int index,int value,std::string& error) {
     const size_t rec = size_t(manager) * 0xb0c;
-    const bool national = g.manager_teams[size_t(manager)] == kNoTeam;
+    const bool national = is_national_team(g,g.manager_teams[size_t(manager)]);
     if (price) {
         // Uint8T4: local offsets35..86 map to admission values8..25.
         if (national || value < 8 || value > 25) { error = "invalid_ticket_price"; return false; }

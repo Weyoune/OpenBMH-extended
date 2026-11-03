@@ -92,7 +92,10 @@ AnnualTransitionOutcome publish_annual_transition(CareerSnapshot& state,ManagerA
         const auto calendar=make_annual_calendar(candidate.world.catalogue,german,english,candidate.date);candidate.calendar=CalendarCursor{calendar,0,before.calendar->revision+1};
         if(candidate.world.catalogue.scope.germany){candidate.world.indoor=make_annual_indoor_season(candidate.world,before,german);candidate.world.regional_playoff=make_regional_playoff_season(candidate.world,german,calendar,target);}
     }
-    candidate.validate();unchanged();if(score)commit_score(score_file,*score,out.highscore.rows,owner.scope,owner.revision);
+    candidate.validate();unchanged();if(score){
+        if(hooks.defer_score_write){const auto encoded=encode_highscore_table(out.highscore.rows);hooks.defer_score_write({score_file,score->present?std::optional(score->bytes):std::nullopt,Bytes(encoded.begin(),encoded.end())});unchanged();}
+        else commit_score(score_file,*score,out.highscore.rows,owner.scope,owner.revision);
+    }
     state=std::move(candidate);++owner.revision;return out;
 }
 }

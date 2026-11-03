@@ -1094,8 +1094,10 @@ set(BMH_TEST_SPORTSCHAU_APP_TESTS_INPUT_1 "" CACHE PATH "External input 1 for sp
 bmh_add_data_test(NAME sportschau_app_tests REQUIRED_OPTIONS BMH_TEST_SPORTSCHAU_APP_TESTS_INPUT_1 COMMAND sportschau_app_tests "${BMH_DATA}"
     "${BMH_TEST_SPORTSCHAU_APP_TESTS_INPUT_1}")
 
-# The runtime component deliberately contains only the two products and notices.
-install(TARGETS openbmh_play openbmh_cli RUNTIME DESTINATION . COMPONENT Runtime)
+# The shared-country Beta ships the graphical game. The legacy console remains
+# a developer tool for Classic-profile data, with a separate install component.
+install(TARGETS openbmh_play RUNTIME DESTINATION . COMPONENT Runtime)
+install(TARGETS openbmh_cli RUNTIME DESTINATION . COMPONENT ClassicTools)
 install(FILES README.md LICENSE THIRD_PARTY_NOTICES.md ACKNOWLEDGEMENTS.md CONTRIBUTING.md
     DESTINATION . COMPONENT Runtime)
 install(DIRECTORY docs/ DESTINATION docs COMPONENT Runtime)
@@ -1654,3 +1656,7 @@ add_test(NAME world12_national_annual_tests COMMAND world12_national_annual_test
 add_executable(world12_friendly_plan_tests tests/world12_friendly_plan_tests.cpp)
 target_link_libraries(world12_friendly_plan_tests PRIVATE bmhworld12)
 add_test(NAME world12_friendly_plan_tests COMMAND world12_friendly_plan_tests)
+
+add_executable(world12_owned_publication_tests tests/world12_owned_publication_tests.cpp)
+target_link_libraries(world12_owned_publication_tests PRIVATE bmhworld12_session)
+add_test(NAME world12_owned_publication_tests COMMAND world12_owned_publication_tests)

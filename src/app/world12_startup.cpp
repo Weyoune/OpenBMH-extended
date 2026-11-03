@@ -2,10 +2,26 @@
 #include "app/world12_startup.hpp"
 #include "formats/textd.hpp"
 #include "game/messages.hpp"
+#include "game/save.hpp"
 #include "ui/world12_desktop.hpp"
+#include "ui/desktop.hpp"
 #include "app/world12_save_load.hpp"
 #include <limits>
 namespace bmh::app::world12 {
+namespace {
+std::optional<OwnedFilePublication> prepare_automatic_save(Session& session,const std::filesystem::path& data,const std::filesystem::path& directory){
+    const auto& state=session.snapshot();if(!state.desktop||!state.desktop->autosave_pending)return {};
+    if(!state.desktop->active_seat)throw FormatError("world12: automatic save has no actual desk actor");
+    const auto texts=load_textd(ui::asset_path(data,"TEXTD.BLK"));
+    const std::filesystem::path name(texts[(layout::CareerSession_Name_TextPointer-layout::TextPointerTable)/4]);
+    if(name.empty()||name!=name.filename()||name.extension()!=".FBM")throw FormatError("world12: invalid Original automatic save name");
+    ui::SaveLoadRequest request;request.action=ui::SaveLoadAction::save;request.file_kind=ui::SaveLoadFileKind::game;request.manager_slot=*state.desktop->active_seat;request.revision=session.revision();request.path=std::filesystem::absolute(directory/name);request.overwrite=true;
+    const auto path=checked_game_path(directory,request);std::optional<Bytes> expected;if(std::filesystem::exists(path))expected=read_file(path);
+    const auto save=session.prepare_manual_save(request);(void)bmh::world12::read_save(save);
+    return OwnedFilePublication{path,std::move(expected),savegame_bytes(save)};
+}
+void publish_automatic_save(const std::optional<OwnedFilePublication>& save){if(save)publish_owned_files({*save});}
+}
 StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,std::unique_ptr<Session>& session,
     const std::filesystem::path& data,uint32_t seed,uint64_t scope,const PendingOfferHooks& hooks,const StartupTurnHooks* turn,const AdvertisingRenewalPresenter& advertising,const ConstructionNoticeHook& construction,const SeasonTicketCompensationNoticeHook& compensation,std::optional<ui::SettingsSoundCapabilities> sound,const SettingsNoticePresenter& settings_notice,const ClubInformationPresenter& club_information,const TableRangePresenter& table_range,const MarketPresenters& market)try {
     if(action.request==ui::FlowRequest::load_game){
@@ -125,28 +141,40 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
             auto next=std::make_unique<Session>(load_runtime_resources(data),request->options,seed,scope);const auto context=next->selection_context();flow.begin_world_manager_selection(context);session=std::move(next);return {StartupProgress::selecting,{}};
         }
         if(!session||request->managers.size()!=session->snapshot().world.managers.size()+1)throw FormatError("world12: incomplete manager confirmation sequence");
+        auto* const original=session.get();const auto before=session->snapshot();const auto before_revision=session->revision();const auto choices=request->managers;
         const auto& choice=request->managers.back();const auto options=request->options;auto staged=std::make_unique<Session>(*session);staged->confirm_manager(choice,choice.roster_revision);staged->prepare_start(staged->revision());if(turn&&turn->initial)turn->initial(*staged);staged->begin_first_event(staged->revision());
-        auto desktop=ui::world12_initial_desktop(data,staged->snapshot(),staged->reference(),staged->rules(),options,staged->revision());flow.attach_world12_career(std::move(desktop),staged->rules());session.swap(staged);return {StartupProgress::prepared,{}};
+        const auto automatic=prepare_automatic_save(*staged,data,flow.save_directory());
+        auto desktop=ui::world12_initial_desktop(data,staged->snapshot(),staged->reference(),staged->rules(),options,staged->revision());
+        (void)ui::DesktopScreen(data,desktop,staged->rules()).render();
+        if(session.get()!=original||session->revision()!=before_revision||session->snapshot()!=before||!flow.pending_career()||flow.pending_career()->options!=options||flow.pending_career()->managers!=choices)throw FormatError("world12: initial presentation changed its outer career or confirmation owner");
+        publish_automatic_save(automatic);flow.attach_world12_career(std::move(desktop),staged->rules());session.swap(staged);return {StartupProgress::prepared,{}};
     }
     if(action.request==ui::FlowRequest::manager_confirmed){const auto* choice=flow.pending_manager();if(!session||!choice)throw FormatError("world12: missing manager confirmation owner");
         auto staged=std::make_unique<Session>(*session);staged->confirm_manager(*choice,choice->roster_revision);flow.resume_manager_selection(staged->selection_context());session.swap(staged);return {StartupProgress::selecting,{}};
     }
     if(action.request==ui::FlowRequest::kickoff){
         if(!session||!flow.desktop()||!flow.desktop()->pending()||*flow.desktop()->pending()!=action.desk_action)throw FormatError("world12: manager transition has no matching view owner");
-        auto staged=std::make_unique<Session>(*session);bool completed_turn=false;
+        auto* const original=session.get();const auto before=session->snapshot();const auto before_revision=session->revision();
+        const auto unchanged=[&]{if(session.get()!=original||session->revision()!=before_revision||session->snapshot()!=before||!flow.desktop()||!flow.desktop()->pending()||*flow.desktop()->pending()!=action.desk_action)throw FormatError("world12: turn presentation changed its outer career or physical request owner");};
+        std::vector<OwnedFilePublication> publications;std::optional<AnnualTransitionHooks> annual;if(turn)annual=turn->annual;
+        if(annual)annual->defer_score_write=[&](OwnedFilePublication file){publications.push_back(std::move(file));};
+        auto staged=std::make_unique<Session>(*session);bool completed_turn=false,career_complete=false;
         if(staged->snapshot().desktop->initial_event->offer){
             staged->resolve_pending(data,action.desk_action,hooks);
             const auto& event=*staged->snapshot().desktop->initial_event;
             if(size_t(event.manager_position)+1<event.manager_order.size()&&!staged->snapshot().desktop->autosave_pending){auto next=action.desk_action;next.revision=staged->revision();staged->advance_manager(next);}
-            else if(turn&&!staged->snapshot().desktop->autosave_pending){auto next=action.desk_action;next.revision=staged->revision();staged->advance_to_next_desktop(next,data,turn->clock,turn->matches);completed_turn=true;}
+            else if(turn&&!staged->snapshot().desktop->autosave_pending){auto next=action.desk_action;next.revision=staged->revision();career_complete=staged->advance_to_next_desktop(next,data,turn->clock,turn->matches,annual?&*annual:nullptr,turn->score_file);completed_turn=true;}
         }else {
             const auto& event=*staged->snapshot().desktop->initial_event;
-            if(turn&&size_t(event.manager_position)+1==event.manager_order.size()){staged->advance_to_next_desktop(action.desk_action,data,turn->clock,turn->matches);completed_turn=true;}
+            if(turn&&size_t(event.manager_position)+1==event.manager_order.size()){career_complete=staged->advance_to_next_desktop(action.desk_action,data,turn->clock,turn->matches,annual?&*annual:nullptr,turn->score_file);completed_turn=true;}
             else staged->advance_manager(action.desk_action);
         }
+        if(career_complete){unchanged();publish_owned_files(publications);session.swap(staged);return {StartupProgress::complete,{}};}
+        const auto automatic=prepare_automatic_save(*staged,data,flow.save_directory());
+        if(automatic)publications.push_back(*automatic);
         auto desk=ui::world12_initial_desktop(data,staged->snapshot(),staged->reference(),staged->rules(),staged->options(),staged->revision());
         auto view=completed_turn?flow.prepare_world12_turn_result(std::move(desk),staged->rules(),action.desk_action):
-            flow.prepare_world12_manager_result(std::move(desk),staged->rules(),action.desk_action);session.swap(staged);flow.finish_world12_desktop(std::move(view));return {};
+            flow.prepare_world12_manager_result(std::move(desk),staged->rules(),action.desk_action);unchanged();publish_owned_files(publications);session.swap(staged);flow.finish_world12_desktop(std::move(view));return {};
     }
     if(action.request==ui::FlowRequest::desk_action){
         if(!session||!flow.desktop()||!flow.desktop()->pending()||*flow.desktop()->pending()!=action.desk_action)throw FormatError("world12: desktop command has no matching view owner");

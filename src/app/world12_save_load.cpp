@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "game/world12/annual_opening.hpp"
 #include "app/world12_save_load.hpp"
+#include "app/owned_file_publication.hpp"
 #include "app/menu_layout_source.hpp"
 #include "game/save.hpp"
 #include "game/calendar.hpp"
@@ -13,6 +14,8 @@
 #include <cstdio>
 #include <limits>
 #include <system_error>
+#include <set>
+#include <exception>
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -121,6 +124,37 @@ void publish_checked_bytes(const std::filesystem::path& target,const Bytes& byte
         std::error_code ignored;std::filesystem::remove(temporary,ignored);throw;
     }
 }
+}
+void publish_owned_files(const std::vector<OwnedFilePublication>& files){
+    const auto current=[](const std::filesystem::path& path)->std::optional<Bytes>{
+        std::error_code error;const auto status=std::filesystem::symlink_status(path,error);
+        if(error==std::errc::no_such_file_or_directory||(!error&&!std::filesystem::exists(status)))return {};
+        if(error)throw std::system_error(error,"world12: cannot inspect publication target");
+        if(!std::filesystem::is_regular_file(status))throw FormatError("world12: publication target is not a regular file");
+        return read_file(path);
+    };
+    std::set<std::filesystem::path> unique;std::vector<size_t> applied;applied.reserve(files.size());
+    for(const auto& file:files){
+        if(file.path.empty()||!unique.insert(std::filesystem::absolute(file.path).lexically_normal()).second)throw FormatError("world12: duplicate or empty publication target");
+        if(current(file.path)!=file.expected)throw FormatError("world12: publication file changed before commit");
+    }
+    try{
+        for(size_t i=0;i<files.size();++i){const auto& file=files[i];
+            if(current(file.path)!=file.expected)throw FormatError("world12: publication file changed during commit");
+            if(!file.path.parent_path().empty())std::filesystem::create_directories(file.path.parent_path());
+            publish_checked_bytes(file.path,file.bytes,file.expected.has_value(),[&](const auto& temporary){if(read_file(temporary)!=file.bytes)throw FormatError("world12: publication byte verification differs");});
+            applied.push_back(i);
+        }
+    }catch(...){
+        const auto original=std::current_exception();bool restore_failed=false;
+        for(auto it=applied.rbegin();it!=applied.rend();++it){const auto& file=files[*it];try{
+            if(current(file.path)!=std::optional(file.bytes))throw FormatError("world12: externally changed publication cannot be restored");
+            if(file.expected)publish_checked_bytes(file.path,*file.expected,true,[&](const auto& temporary){if(read_file(temporary)!=*file.expected)throw FormatError("world12: publication restoration differs");});
+            else if(!std::filesystem::remove(file.path))throw FormatError("world12: cannot remove uncommitted publication");
+        }catch(...){restore_failed=true;}}
+        if(restore_failed)throw FormatError("world12: file publication failed and an externally changed file could not be restored");
+        std::rethrow_exception(original);
+    }
 }
 void publish_game_save(const std::filesystem::path& target,const Savegame& save,bool overwrite) {
     const auto expected=bmh::world12::read_save(save);const auto bytes=savegame_bytes(save);

@@ -709,3 +709,30 @@ actual frame height and subtitles retain the ordinal dot/space. KI forecast and
 pairings/strength family switches stay hidden until their owners are connected.
 Remaining management/live/calendar/competition/annual/three-season Beta gates
 remain open; this is not a playable release qualification.
+
+### Native annual and competition integration
+
+The native runtime now routes actual domestic/European/national/indoor/regional
+phase overviews through the Original screens and retained current-score overlays.
+Initial entrant/draw pages observe already prepared receipts. Full club closing
+and opening desks, annual choices and finite-career completion are connected to
+the shared turn controller; National-only years use their explicit independent
+career path.
+
+Outer turn publication verifies the original Session, snapshot, revision and
+physical request after synchronous presenters. Ranked score replacement is
+staged until the next view is prepared; score and automatic-save files publish
+as an owned group with restoration after a later write failure. Automatic saves
+use the supplied Source filename and the existing four save-header random draws.
+Sparse national desktop/layout/settings/mailbox actions retain canonical people
+and independent coach accounts.
+
+Eight focused integration suites, the complete synthetic Session regression and
+the actual-data live family/settings/player-card probe pass. The private native
+Linux live-menu proof includes seven desktops, a shared match, G/T/strengths/S,
+a speed edit and a saved FBM. Actual multi-year National-only runs are recorded
+separately with their pre-final-kickoff-integration limits. A complete club career
+probe has found a real later-day failure and remains under investigation.
+
+The data package remains unpublished until the final calendar, friendly,
+platform and packaging checks pass. This status does not announce the Beta.

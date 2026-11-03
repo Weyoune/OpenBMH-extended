@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "formats/vga.hpp"
+namespace bmh {class LeImage;}
 
 namespace bmh::ui {
 
@@ -29,6 +30,7 @@ struct GameEndTaxAnimationAssets {
     std::vector<TaxAnimationStep> steps; // Original EXE GameEndTaxAnimation_LoadGameEndTaxAnimationAssets_ExecutableField
 };
 GameEndTaxAnimationAssets load_game_end_tax_animation_assets(const std::filesystem::path& data);
+GameEndTaxAnimationAssets load_game_end_tax_animation_assets(const std::filesystem::path& data,const LeImage& reference);
 
 // GameEndTaxAnimationScreen calls SourceInput with variant1..4 and param4=0 (no interrupt input).
 // This owned renderer has no GameState/RNG/event loop; callers present and wait.

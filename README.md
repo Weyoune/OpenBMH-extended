@@ -31,8 +31,11 @@ is not affiliated with the original rights holders or football organizations.
 
 ## Running development builds
 
-The executable remains `OpenBMH.exe` on Windows and `OpenBMH` elsewhere. The CLI
-remains `openbmh_cli`; the native Windows data editor is `obdeddi.exe`.
+The executable is `OpenBMH.exe` on Windows and `OpenBMH` elsewhere. Beta runtime
+downloads contain the graphical game and its notices. The developer console
+`openbmh_cli` and the separate Windows editor `obdeddi.exe` support the earlier
+Classic-profile data. Editing the shared-country `WORLD12.JSON` model requires
+its typed data tooling; the earlier editor's M3D edits do not change that model.
 
 The shared-career development path requires an explicitly prepared Extended data
 directory. Its temporary entry is `--extended-dev` (`--world12-dev` remains an

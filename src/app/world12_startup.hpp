@@ -3,10 +3,15 @@
 #include "app/world12_session.hpp"
 #include "ui/flow.hpp"
 namespace bmh::app::world12 {
-enum class StartupProgress { idle,selecting,prepared };
+enum class StartupProgress { idle,selecting,prepared,complete };
 struct StartupResult {StartupProgress progress=StartupProgress::idle;std::string error;};
 using SettingsNoticePresenter=std::function<bool(const GameState&,uint32_t message_address)>;
-struct StartupTurnHooks {ClockHooks clock;bmh::world12::HumanRoundHooks matches;std::function<void(const Session&)> initial;};
+struct StartupTurnHooks {
+    ClockHooks clock;bmh::world12::HumanRoundHooks matches;
+    std::function<void(const Session&)> initial;
+    std::optional<AnnualTransitionHooks> annual;
+    std::filesystem::path score_file;
+};
 // Same request boundary used by the development SDL entry and input tests.
 // Prepared includes the owned initial empty event and explicit typed desktop.
 // Optional synchronous startup presentation observes the actual unpublished

@@ -18,6 +18,10 @@ void refresh(GameState& g,const LeImage& rules) {
         {g.memory.u8(layout::GameMode),g.memory.u32(layout::CompetitionSelection),0,0},rules);
     for(uint32_t i=0;i<180;++i)if(i!=5&&i!=6)g.memory.set8(layout::LeaguePresentationOptions+i,shown[i]);
 }
+void capture_options(bmh::world12::World& world,const bmh::world12::AiMatchProjection& projection){
+    if(!world.economy||!world.economy->presentation_options)throw FormatError("world12: settings have no saved global owner");
+    for(uint32_t i=0;i<180;++i)(*world.economy->presentation_options)[i]=projection.state.memory.u8(layout::LeaguePresentationOptions+i);
+}
 }
 std::optional<DesktopClockContext> Session::process_timer_context()const {
     if(!state_.desktop||!state_.desktop->active_seat||!state_.desktop->initial_event||
@@ -48,8 +52,9 @@ ui::SettingsState Session::open_settings(const ui::DeskRequest& request,std::opt
     const auto item=std::find_if(desk.items.begin(),desk.items.end(),[&](const auto& i){return i.id==request.item_id;});
     if(item==desk.items.end()||item->kind!=19||item->disabled)throw FormatError("world12: settings source item unavailable");
     auto candidate=*this;refresh(p.state,resources_.german);
-    bmh::world12::capture_career_economy(candidate.state_.world,p);
+    capture_options(candidate.state_.world,p);
     candidate.preparation_menu_=19;candidate.settings_owner_=request;candidate.settings_sound_=sound;
+    candidate.settings_owner_->manager_slot=p.state.memory.u8(layout::ActiveManager);
     ++candidate.owner_.revision;++candidate.settings_generation_;
     auto view=candidate.settings_view();candidate.state_.validate();*this=std::move(candidate);return view;
 }
@@ -65,7 +70,7 @@ void Session::apply_settings(const ui::SettingsWriteRequest& request,uint64_t se
     if(request.manager_slot!=settings_owner_->manager_slot||request.row>=20||request.column>=9||deferred(size_t(request.row)*9+request.column))throw FormatError("world12: settings field needs its separate runtime owner");
     const auto before=state_;auto candidate=state_;auto p=bmh::world12::project_manager_desktop(candidate,resources_.reference);auto revision=owner_.revision;std::string error;
     if(!apply_settings_request_source(p.state,resources_.german,settings_sound_,true,request,revision,error))throw FormatError(error);
-    refresh(p.state,resources_.german);bmh::world12::capture_career_economy(candidate.world,p);candidate.validate();
+    refresh(p.state,resources_.german);capture_options(candidate.world,p);candidate.validate();
     if(state_!=before)throw FormatError("world12: settings owner changed during edit");state_=std::move(candidate);owner_.revision=revision;
 }
 Bytes Session::prepare_settings_file(const ui::SaveLoadRequest& request,uint64_t sequence,const std::optional<Bytes>& incoming) {
@@ -86,7 +91,7 @@ Bytes Session::prepare_settings_file(const ui::SaveLoadRequest& request,uint64_t
             if(!apply_settings_request_source(p.state,resources_.german,settings_sound_,true,write,revision,error))throw FormatError(error);
         }
         for(uint32_t i=0;i<180;++i)p.state.memory.set8(layout::LeaguePresentationOptions+i,bytes[i]);
-        refresh(p.state,resources_.german);bmh::world12::capture_career_economy(candidate.world,p);
+        refresh(p.state,resources_.german);capture_options(candidate.world,p);
     }else if(incoming)throw FormatError("world12: settings save has unexpected payload");
     candidate.validate();state_=std::move(candidate);++owner_.revision;return bytes;
 }

@@ -5,9 +5,15 @@
 #include <algorithm>
 namespace bmh::ui {
 std::vector<SeasonEntrantsState> world12_season_entrants(const bmh::world12::CareerSnapshot& snapshot,const LeImage& rules,const TextDb& texts){
-    using namespace bmh::world12;snapshot.validate();const auto& world=snapshot.world;std::vector<SeasonEntrantsState> pages;
+    snapshot.validate();if(!snapshot.world.catalogue.scope.club_play())return {};
+    if(!snapshot.world.initial_competitions)throw FormatError("world12: entrant presentation has no actual field owner");
+    return world12_season_entrants(snapshot.world,snapshot.world.initial_competitions->fields,rules,texts);
+}
+std::vector<SeasonEntrantsState> world12_season_entrants(const bmh::world12::World& world,
+    const std::array<std::vector<bmh::world12::ClubId>,3>& actual_fields,const LeImage& rules,const TextDb& texts){
+    using namespace bmh::world12;world.validate();std::vector<SeasonEntrantsState> pages;
     if(!world.catalogue.scope.club_play())return pages;
-    if(!world.initial_competitions||!world.economy||!world.economy->presentation_options)throw FormatError("world12: entrant presentation has no actual field/options owner");
+    if(!world.economy||!world.economy->presentation_options)throw FormatError("world12: entrant presentation has no saved options owner");
     const auto& options=*world.economy->presentation_options;
     if(options[9*9+6]!=0)return pages;
     for(const auto country:{Country::germany,Country::england}){
@@ -17,7 +23,7 @@ std::vector<SeasonEntrantsState> world12_season_entrants(const bmh::world12::Car
             const auto kind=uint32_t(competition+2);const auto address=(rules.u8(layout::SeasonEntrants_FormatError_TextPointer+kind)?layout::CupDraw_FormatError_ExecutableField6:layout::SeasonEntrants_FormatError_TextPointer2)+uint32_t(rules.u8(layout::SeasonEntrants_FormatError_RuntimeField+kind))*4;
             page.footer=original_to_utf8(texts[(address-layout::TextPointerTable)/4]);
             page.decorated_background=rules.u8(layout::PlainBackground)==0;page.gradient_text=rules.u8(layout::TextGradientDisabled)==0&&rules.u8(layout::TextGradientMode)==2;
-            std::vector<ClubId> clubs;for(auto id:world.initial_competitions->fields[competition])if(world.clubs.at(id).country==country)clubs.push_back(id);
+            std::vector<ClubId> clubs;for(auto id:actual_fields[competition])if(world.clubs.at(id).country==country)clubs.push_back(id);
             if(clubs.size()>=8)throw FormatError("world12: entrant count exceeds Original placement slots");
             if(!clubs.empty()){
                 const auto first=rules.u8(layout::SeasonEntrants_FormatError_ExecutableField3+uint32_t(clubs.size()));

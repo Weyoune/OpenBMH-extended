@@ -25,7 +25,8 @@ DeskState world12_initial_desktop(const std::filesystem::path& data,const bmh::w
     if(state.prepared_event)local.manager_records.at(size_t(local.memory.u8(layout::ActiveManager))*0xb0c+0x28a)=away?1:0;
     const auto texts=load_textd(asset_path(data,"TEXTD.BLK"));local.texts=&texts;
     std::vector<MatchGroup> groups;DeskMatchCallargs call;
-    call.competition=state.prepared_event?34:33;
+    const bool closing=state.progress&&state.progress->phase==ProgressPhase::season_end;
+    call.competition=closing?32:state.prepared_event?34:33;
     if(upcoming) {
         call.opponent=int(projection.local_club(opponent));
         if(upcoming->league)call.competition=rules.u8(layout::LeagueCalendarBits+state.world.catalogue.league(*upcoming->league).local_index);
@@ -37,8 +38,9 @@ DeskState world12_initial_desktop(const std::filesystem::path& data,const bmh::w
         else if(upcoming->source_entry==35)call.competition=18;
         else throw FormatError("world12: upcoming desk competition has no Source identity");
     }
-    auto desk=desk_from_game(local,rules,revision,state.prepared_event?&groups:nullptr,call.competition,
-        state.prepared_event?&call:nullptr,&options);
+    auto desk=desk_from_game(local,rules,revision,state.prepared_event||closing?&groups:nullptr,call.competition,
+        state.prepared_event||closing?&call:nullptr,&options);
+    if(closing)desk.next_competition_label=texts[(layout::DeskState_DeskFromGame_TextPointer-layout::TextPointerTable)/4+32];
     if(upcoming) {
         const auto& crest=state.world.crests.at(state.world.clubs.at(opponent).crest);
         desk.next_opponent_badge=crest.cell;desk.next_opponent_badge_atlas=crest.path;desk.next_opponent_badge_fallback=false;

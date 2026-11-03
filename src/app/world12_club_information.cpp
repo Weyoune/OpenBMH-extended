@@ -3,6 +3,7 @@
 #include "formats/executable_layout.hpp"
 #include "game/world12/desktop_projection.hpp"
 #include <memory>
+#include <algorithm>
 namespace bmh::app::world12 {
 void inspect_club_information(bmh::world12::CareerSnapshot& candidate,const GameState& reference,
     const LeImage& rules,const TextDb& texts,bmh::world12::ClubId club,
@@ -11,8 +12,17 @@ void inspect_club_information(bmh::world12::CareerSnapshot& candidate,const Game
     const auto before=candidate;
     const auto& target=candidate.world.clubs.at(club);
     const bool rostered=target.league.valid();
-    auto projection=bmh::world12::project_manager_desktop(candidate,reference,rostered?std::vector{club}:std::vector<bmh::world12::ClubId>{});
-    if(!rostered)projection.include_club_references(candidate.world,{club});
+    auto projection=[&]{
+        if(candidate.desktop&&candidate.desktop->active_seat)return bmh::world12::project_manager_desktop(candidate,reference,rostered?std::vector{club}:std::vector<bmh::world12::ClubId>{});
+        if(!candidate.world.settings)throw FormatError("world12: club information lacks its actual career settings");
+        const auto& settings=*candidate.world.settings;
+        const bmh::world12::HumanProjectionPolicy policy{settings.mode,settings.difficulty,settings.foreign_rule,true};
+        if(target.kind==bmh::world12::ClubKind::national_team)return bmh::world12::AiMatchProjection::create_for_nationals(candidate,{club},reference,policy);
+        std::vector<bmh::world12::ClubId> teams;for(const auto& manager:candidate.world.managers)if(candidate.world.clubs.at(manager.club).league.valid())teams.push_back(manager.club);
+        if(rostered&&std::find(teams.begin(),teams.end(),club)==teams.end())teams.push_back(club);
+        return bmh::world12::AiMatchProjection::create_for_humans(candidate,teams,reference,policy);
+    }();
+    if(!rostered&&target.kind!=bmh::world12::ClubKind::national_team)projection.include_club_references(candidate.world,{club});
     struct Context {
         bool active=true,drawn=false,rostered=false;
         int team=-1;

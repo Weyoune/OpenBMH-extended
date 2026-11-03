@@ -10,7 +10,7 @@ import zipfile
 
 
 def validate(directory, windows):
-    products = {'OpenBMH.exe', 'openbmh_cli.exe'} if windows else {'OpenBMH', 'openbmh_cli'}
+    products = {'OpenBMH.exe'} if windows else {'OpenBMH'}
     documents = {'README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'ACKNOWLEDGEMENTS.md', 'CONTRIBUTING.md'}
     licenses = {'README.md', 'LGPL-2.1.txt', 'Nuked-OPL3-notices.txt', 'LZMA-SDK.txt', 'SDL2-HIDAPI-BSD.txt',
                 'SDL2-HIDAPI-options.txt', 'SDL2-HIDAPI-original.txt', 'SDL2-yuv2rgb.txt',
@@ -33,7 +33,7 @@ def validate(directory, windows):
         if not allowed:
             raise RuntimeError('Unexpected package entry: ' + relative.as_posix())
     required = products | documents | {'docs/licenses/' + name for name in licenses}
-    required.add('docs/release/1.0/RELEASE_NOTES.md')
+    required.add('docs/release/extended-1.0/RELEASE_NOTES.md')
     if required - present:
         raise RuntimeError('Missing package entries: ' + ', '.join(sorted(required - present)))
     if windows and not {'vcruntime140.dll', 'msvcp140.dll'} <= present:
@@ -54,8 +54,8 @@ def main():
                         '--component', 'Runtime', '--prefix', str(stage)], check=True)
         windows = args.platform == 'windows-x64'
         validate(stage, windows)
-        cli = stage / ('openbmh_cli.exe' if windows else 'openbmh_cli')
-        version = subprocess.check_output([str(cli.resolve()), '--version'], text=True).strip().split()[-1]
+        game = stage / ('OpenBMH.exe' if windows else 'OpenBMH')
+        version = subprocess.check_output([str(game.resolve()), '--version'], text=True).strip().split()[-1]
         if not re.fullmatch(r'\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?', version):
             raise RuntimeError('Invalid product version')
         name = 'OpenBMH-Extended-' + version + '-' + args.platform

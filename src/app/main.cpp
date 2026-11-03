@@ -40,6 +40,7 @@
 #include "app/world12_clock_presenters.hpp"
 #include "app/quit_confirmation.hpp"
 #include "launch/archive.hpp"
+#include "launch/extended_data.hpp"
 #include "launch/file_dialog.hpp"
 #include "launch/game_data.hpp"
 #include "version.hpp"
@@ -71,6 +72,8 @@
 #include "ui/pending_offer.hpp"
 #include "ui/season_entrants.hpp"
 #include "ui/world12_start.hpp"
+#include "ui/world12_draws.hpp"
+#include "ui/world12_other_games.hpp"
 #include "ui/season_promotion.hpp"
 #include "ui/cup_draw.hpp"
 #include "ui/club_info.hpp"
@@ -168,6 +171,7 @@ int main(int argc, char** argv) {
             data = launch::path_from_utf8(args[i]);
         }
     }
+    const bool allow_extended_development=world12_development;
     std::optional<app::VideoSession> video;
     try { video.emplace(); }
     catch (const std::exception& error) { show_start_error(error.what()); return 1; }
@@ -179,8 +183,9 @@ int main(int argc, char** argv) {
             const fs::path here = launch::path_from_utf8(base);
             SDL_free(base);
             try {
-                const launch::ResolvedGame game = launch::resolve_game(here, launch::default_cache_directory());
-                if (game.error.empty() && game.check.playable) data = here;
+                const auto extended=launch::inspect_extended_data(here,allow_extended_development);
+                if(extended.recognized)data=here;
+                else {const launch::ResolvedGame game = launch::resolve_game(here, launch::default_cache_directory());if (game.error.empty() && game.check.playable) data = here;}
             } catch (const std::exception&) {
                 // (not a game directory: fall through to the file dialog)
             }
@@ -198,15 +203,21 @@ int main(int argc, char** argv) {
         }
     }
     bool english_game = false;  // (the window title marks the English version as experimental)
-    if(!world12_development){
+    const auto direct_extended=launch::inspect_extended_data(data,allow_extended_development);
+    if(direct_extended.recognized){
+        if(!direct_extended.error.empty()){show_start_error(direct_extended.error);return 1;}
+        data=direct_extended.directory;world12_development=true;
+    }else if(!world12_development){
         const launch::ResolvedGame game = launch::resolve_game(data, launch::default_cache_directory());
-        if (!game.error.empty() || !game.check.playable) {
+        const auto extended=launch::inspect_extended_data(game.check.directory,allow_extended_development);
+        if(extended.recognized){if(!extended.error.empty()){show_start_error(extended.error);return 1;}data=extended.directory;world12_development=true;}
+        else if (!game.error.empty() || !game.check.playable) {
             show_start_error("The game cannot be started:\n" + launch::describe(game));
             return 1;
-        }
-        english_game = game.check.family == launch::GameFamily::english;
+        }else {english_game = game.check.family == launch::GameFamily::english;
         // (from an archive: its unpacked copy in the cache, which then also keeps the saves)
         data = game.check.directory;
+        }
     }
     if (save_directory.empty()) save_directory = data;
     try {
@@ -227,7 +238,7 @@ int main(int argc, char** argv) {
         playback.set_volume(volume);
         std::optional<uint64_t> audio_session;
         SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
-        const std::string window_title = world12_development?"OpenBMH-Extended 1.0 Beta (development)":"OpenBMH-Extended 1.0 Beta";
+        const std::string window_title = allow_extended_development?"OpenBMH-Extended 1.0 Beta (development)":"OpenBMH-Extended 1.0 Beta";
         SDL_Window* window = SDL_CreateWindow(window_title.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 960, 720, SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
         if (!window) throw FormatError(SDL_GetError());
         SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_PRESENTVSYNC);
@@ -705,7 +716,8 @@ int main(int argc, char** argv) {
                 ("OpenBMH - sportschau_teaminfo_" + std::to_string(view.group)).c_str());
             wait_sportschau_ack();
         };
-        auto show_tax = [&](const GameState& state, const SeasonTaxEvent& event) -> bool {
+        auto show_tax = [&](const GameState& state, const SeasonTaxEvent& event,
+                const bmh::world12::CrestResource* crest=nullptr) -> bool {
             if (!running) return false;
             const size_t base = size_t(event.manager_slot) * 0xb0c;
             ui::TaxDialogProjection view;
@@ -718,8 +730,9 @@ int main(int argc, char** argv) {
             view.portrait = state.manager_records[base + 0x221];
             view.badge_fallback = original_badge_fallback(event.team);
             view.badge_sprite = view.badge_fallback ? 0 : le16(state.club_heap_78, size_t(event.team) * 2) & 0x1ff;
+            if(crest){view.badge_atlas=crest->path;view.badge_sprite=crest->cell;view.badge_fallback=false;}
             ui::GameEndTaxDialog screen(data, std::move(view), game_end_options(state),
-                event.kind == SeasonTaxEventKind::outcome ? season_backdrop : std::optional<Image>{});
+                event.kind == SeasonTaxEventKind::outcome ? season_backdrop : std::optional<Image>{},season_exe);
             auto complete = [&](bool answer) {
                 present_season(screen.backdrop(), "OpenBMH - season_tax_restored");
                 return answer;
@@ -761,7 +774,7 @@ int main(int argc, char** argv) {
             if (event.kind == SeasonTaxEventKind::notice || event.kind == SeasonTaxEventKind::outcome)
                 (void)show_tax(state, event);
             if (running && event.kind == SeasonTaxEventKind::animation) {
-                ui::GameEndTaxAnimationScreen animation(ui::load_game_end_tax_animation_assets(data),
+                ui::GameEndTaxAnimationScreen animation(ui::load_game_end_tax_animation_assets(data,season_exe),
                     unsigned(event.animation_variant), season_backdrop ? *season_backdrop : flow.render(),
                     state.memory.has(::bmh::layout::SolidPanelBackground) && state.memory.u8(::bmh::layout::SolidPanelBackground) != 0);
                 while (running && animation.advance_step()) {
@@ -1330,6 +1343,7 @@ int main(int argc, char** argv) {
                     if (!services.state().memory.has(flags))
                         throw FormatError("club player statistics: active preference block missing");
                     services.state().memory.set8(flags, request.statistics_flags);
+                    if(services.retain_player_statistics_flags)services.retain_player_statistics_flags(request.statistics_flags);
                     card.replace_redraw(rebuild()); // One actual42dbd rebuild, never per presentation.
                     held_left_since.reset();
                     show(); wait_prior_left_release();
@@ -1733,14 +1747,45 @@ int main(int argc, char** argv) {
                 [&](uint16_t club,const Image&){auto services=session->live_club_modal_services(revision);(void)present_club_information(services,club);},
                 [&]{return ui::cup_draw_from_game(session->state(),event,season_exe,season_texts);});
         };
-        auto show_highscore = [&](const GameState& state, bool display) {
-            if (!running) return;
-            const auto options = game_end_options(state);
-            const uint16_t signature = state.memory.u16(::bmh::layout::CareerSession_FormatError_RuntimeField7);
-            if (signature == 0) {
+        const auto present_world12_competition_page = [&](ui::OtherGamesState page,
+                const std::function<ui::OtherGamesState(const ui::OtherGamesRequest&)>& navigate={}) {
+            qa_view.begin_scope();
+            auto screen=std::make_unique<ui::OtherGamesScreen>(data,std::move(page),season_exe);
+            bool closed=false,left=false,right=false,redraw=true;
+            while(running&&!closed){
+                if(redraw){present_season(screen->render(),"OpenBMH - live_competition_overview");redraw=false;}
+                SDL_Event input;bool changed=false;
+                while(quit_confirmation.poll(&input)){
+                    if(input.type==SDL_QUIT){running=false;break;}
+                    if(input.type==SDL_MOUSEBUTTONDOWN&&(input.button.button==SDL_BUTTON_LEFT||input.button.button==SDL_BUTTON_RIGHT)){
+                        if(input.button.button==SDL_BUTTON_LEFT)left=true;else right=true;
+                        changed|=screen->pointer_down(input.button.x,input.button.y,input.button.button==SDL_BUTTON_RIGHT);
+                    }else if(input.type==SDL_MOUSEBUTTONUP){if(input.button.button==SDL_BUTTON_LEFT)left=false;if(input.button.button==SDL_BUTTON_RIGHT)right=false;changed|=screen->release(input.button.x,input.button.y);}
+                    else if(input.type==SDL_MOUSEMOTION)changed|=screen->move(input.motion.x,input.motion.y);
+                    if(screen->pending()){
+                        const auto request=*screen->pending();
+                        if(request.action==ui::OtherGamesAction::close)closed=true;
+                        else if(navigate){
+                            try{screen=std::make_unique<ui::OtherGamesScreen>(data,navigate(request),season_exe);}
+                            catch(const std::exception& error){screen->reject_action(error.what());}
+                        }else screen->reject_action("Diese Übersicht zeigt den aktuellen Wettbewerb.");
+                        changed=true;
+                    }
+                    if(closed||!running)break;
+                }
+                redraw|=changed;if(!changed&&!closed)SDL_Delay(8);
+            }
+            while(running&&(left||right)){
+                SDL_Event input;while(quit_confirmation.poll(&input)){if(input.type==SDL_QUIT){running=false;break;}if(input.type==SDL_MOUSEBUTTONUP){if(input.button.button==SDL_BUTTON_LEFT)left=false;if(input.button.button==SDL_BUTTON_RIGHT)right=false;}}
+                if(left||right)SDL_Delay(8);
+            }
+            if(!running)throw FormatError("world12: competition overview interrupted");
+            press.reset();SDL_FlushEvents(SDL_MOUSEMOTION,SDL_MOUSEBUTTONUP);
+        };
+        const auto show_alternate_highscore = [&](ui::GameEndRenderOptions options) {
                 // Source GameEndAlternateScoreScreen's alternate branch ignores display: both calls
                 // open the calculator, followed by one presentation for each point.
-                ui::GameEndAlternateScoreScreen screen(ui::load_game_end_alternate_score_assets(data),
+                ui::GameEndAlternateScoreScreen screen(ui::load_game_end_alternate_score_assets(data,season_exe),
                     season_backdrop ? *season_backdrop : flow.render(), options.gradient_text);
                 present_season(screen.render(), "OpenBMH - game_end_calculator");
                 bool right_cancel = false;
@@ -1788,6 +1833,13 @@ int main(int argc, char** argv) {
                     present_season(screen.render(), "OpenBMH - game_end_points_ack");
                     wait_season_ack();
                 }
+        };
+        auto show_highscore = [&](const GameState& state, bool display) {
+            if (!running) return;
+            const auto options = game_end_options(state);
+            const uint16_t signature = state.memory.u16(::bmh::layout::CareerSession_FormatError_RuntimeField7);
+            if (signature == 0) {
+                show_alternate_highscore(options);
             } else {
                 const auto file = highscore_file(save_directory, signature, season_texts[889]);
                 auto scores = make_highscore_projection(state, load_highscore_table(file), HighscoreContext::SeasonBoundary);
@@ -2421,8 +2473,63 @@ int main(int argc, char** argv) {
             if(!running)throw FormatError("world12: live overview interrupted");
         };
 
+        const auto present_world12_live_competition = [&](const bmh::world12::CareerSnapshot& staged,
+                bmh::world12::AiMatchProjection& projection,MatchEngine& engine,size_t group_index,uint8_t seat) {
+            using namespace bmh::world12;
+            if(!staged.prepared_event||group_index>=engine.groups.size()||world_live_nonce==UINT64_MAX)
+                throw FormatError("world12: competition view lacks its retained actual group");
+            const auto plan_for=[&](const MatchGroup& group)->const PreparedGroup& {
+                std::vector<Fixture> matches;for(int row=0;row<group.matches();++row)matches.push_back({projection.global_club(uint32_t(group.fixtures[size_t(row)*2])),projection.global_club(uint32_t(group.fixtures[size_t(row)*2+1]))});
+                const PreparedGroup* found=nullptr;for(const auto& plan:staged.prepared_event->groups){if(plan.matches.size()!=matches.size())continue;bool same=true;for(size_t row=0;row<matches.size();++row)same&=plan.matches[row].fixture==matches[row];if(same){if(found)throw FormatError("world12: repeated actual competition view group");found=&plan;}}
+                if(!found)throw FormatError("world12: competition view group has no saved fixture identity");return *found;
+            };
+            const auto& initial=plan_for(engine.groups[group_index]);
+            if(initial.league)throw FormatError("world12: league group requires its family view");
+            std::vector<ui::World12CompetitionOverlay> domestic,national;
+            std::map<EuropeanCompetition,std::vector<ui::World12CompetitionOverlay>> european;
+            std::map<uint8_t,ui::World12CompetitionOverlay> indoor;std::optional<ui::World12CompetitionOverlay> regional;
+            for(const auto& group:engine.groups){if(group.desc.at(0)==0)continue;const auto& plan=plan_for(group);ui::World12CompetitionOverlay overlay;overlay.revision=plan.revision;overlay.source_entry=plan.source_entry;overlay.scores=group.cup_results;for(const auto& fixture:plan.matches)overlay.matches.push_back(fixture.fixture);
+                if(plan.cup){const auto stage=std::find_if(staged.cups.begin(),staged.cups.end(),[&](const auto& value){return value.cup==plan.cup&&value.source_entry==plan.source_entry;});if(stage==staged.cups.end())throw FormatError("world12: live domestic programme disappeared");overlay.played=uint8_t((stage->rounds.size()-1)*(stage->two_legs()?2:1)+stage->next_leg()-1);domestic.push_back(overlay);}
+                else if(plan.european){const auto& campaign=staged.world.european_campaigns->at(size_t(*plan.european));const auto stage=std::find_if(campaign.stages.begin(),campaign.stages.end(),[&](const auto& value){return value.rules.entry==plan.source_entry;});if(stage==campaign.stages.end())throw FormatError("world12: live European stage disappeared");overlay.played=stage->played;european[*plan.european].push_back(overlay);}
+                else if(plan.national){const auto& campaign=staged.world.national_campaigns->seasons.at(staged.season);const auto stage=std::find_if(campaign.stages.begin(),campaign.stages.end(),[&](const auto& value){return value.rules.entry==plan.source_entry;});if(stage==campaign.stages.end())throw FormatError("world12: live national stage disappeared");overlay.played=stage->played;national.push_back(overlay);}
+                else if(plan.indoor){overlay.played=uint8_t(plan.round-1);indoor.emplace(plan.source_entry,overlay);}
+                else if(plan.regional_playoff){overlay.played=uint8_t(plan.round-1);regional=overlay;}
+            }
+            const auto person=std::find_if(staged.world.managers.begin(),staged.world.managers.end(),[&](const auto& value){return value.seat==seat;});if(person==staged.world.managers.end())throw FormatError("world12: live competition has no actual human viewer");
+            ClubId viewer=person->club;for(size_t row=0;row<projection.human_managers();++row)if(projection.global_manager(uint8_t(row))==seat)viewer=projection.global_club(uint32_t(projection.state.manager_teams[row]));
+            ui::World12OtherGamesIdentity owner{seat,viewer,world_session->revision(),world_session->scope()^(uint64_t(1)<<61),++world_live_nonce};
+            ui::World12OtherSelection selection;uint8_t entry=initial.source_entry;int round=-1;
+            if(initial.cup)switch(*initial.cup){case DomesticCup::german_cup:selection.page=ui::World12OtherPage::german_cup;break;case DomesticCup::fa_cup:selection.page=ui::World12OtherPage::fa_cup;break;case DomesticCup::league_cup:selection.page=ui::World12OtherPage::league_cup;break;default:selection.page=ui::World12OtherPage::supercups;break;}
+            else if(initial.european){selection.page=ui::World12OtherPage(1+int(*initial.european));const auto& stages=staged.world.european_campaigns->at(size_t(*initial.european)).stages;selection.stage=int(std::find_if(stages.begin(),stages.end(),[&](const auto& value){return value.rules.entry==entry;})-stages.begin());}
+            else if(initial.national)selection.page=ui::World12OtherPage::national_qualifiers;
+            const auto build=[&] {
+                if(initial.indoor)return ui::world12_indoor_games_state(staged,owner,initial.indoor_tournament,entry,round,indoor.contains(entry)?std::optional(indoor.at(entry)):std::nullopt);
+                if(initial.regional_playoff)return ui::world12_regional_games_state(staged,owner,season_texts,round,regional);
+                if(selection.page==ui::World12OtherPage::national_qualifiers)return ui::world12_national_games_state(staged,owner,season_texts,entry,round,national);
+                const int page=int(selection.page);if(page>=1&&page<=3){const auto competition=EuropeanCompetition(page-1);return ui::world12_european_games_state(staged,owner,selection,european[competition]);}
+                return ui::world12_other_games_state(staged,owner,selection,domestic);
+            };
+            auto page=build();
+            const auto navigate=[&](const ui::OtherGamesRequest& request){
+                if(!request.world12_identity||*request.world12_identity!=owner)throw FormatError("world12: stale competition view input");
+                const auto previous_selection=selection;const auto previous_entry=entry;const auto previous_round=round;
+                try {
+                if(request.action==ui::OtherGamesAction::team_info){
+                    if(!request.world12_team.valid()||!page.world12_teams.contains(request.value)||page.world12_teams.at(request.value)!=request.world12_team)throw FormatError("world12: competition club token changed");
+                    auto display=staged;app::world12::inspect_club_information(display,world_session->reference(),season_exe,season_texts,request.world12_team,[&](const auto& provider,const Image&){app::ClubModalServices services;services.club_projection=provider;return present_club_information(services,0)&&running;},{});return page;
+                }
+                if(request.action==ui::OtherGamesAction::previous_round||request.action==ui::OtherGamesAction::next_round){if(!page.projection.round_arrows_visible)throw FormatError("world12: no competition round arrows");round=(page.projection.round+page.projection.rounds+(request.action==ui::OtherGamesAction::next_round?1:-1))%page.projection.rounds;selection.round=round;selection.participant_offset=0;}
+                else if(request.action==ui::OtherGamesAction::select_linked_page){if(request.value<0||size_t(request.value)>=page.projection.linked_pages.size())throw FormatError("world12: no selected linked competition stage");selection.stage=request.value;selection.round=round=-1;selection.participant_offset=0;if(initial.national)entry=staged.world.national_campaigns->seasons.at(staged.season).stages.at(size_t(request.value)).rules.entry;else if(initial.indoor)entry=staged.world.indoor->rules.at(size_t(request.value)).entry;}
+                else if(request.action==ui::OtherGamesAction::toggle_display_mode){if(!page.projection.display_mode_toggle_available)throw FormatError("world12: no competition display toggle");selection.mode=selection.mode==ui::OtherGamesDisplayMode::detail?ui::OtherGamesDisplayMode::compact:ui::OtherGamesDisplayMode::detail;}
+                else if(request.action==ui::OtherGamesAction::select_competition){if(initial.indoor||initial.regional_playoff){if(request.value!=0)throw FormatError("world12: another competition does not own this stage view");}else if(request.value<0||request.value>=8||!page.projection.selectors.at(size_t(request.value)).active)throw FormatError("world12: disabled competition selector");else if(request.value==int(selection.page)&&page.projection.source_participant_count>16){selection.participant_offset+=16;if(selection.participant_offset>=page.projection.source_participant_count)selection.participant_offset=0;}else {selection={};selection.page=ui::World12OtherPage(request.value);entry=255;round=-1;}}
+                else throw FormatError("world12: unsupported competition view control");
+                page=build();return page;
+                }catch(...){selection=previous_selection;entry=previous_entry;round=previous_round;throw;}
+            };
+            present_world12_competition_page(page,navigate);
+        };
         const auto present_world12_live_settings = [&](bmh::world12::AiMatchProjection& projection,
-                MatchEngine& engine,int minute) {
+                MatchEngine& engine,int minute,const bmh::world12::CareerSnapshot& staged) {
             app::world12::LiveSettingsScope scope(projection,engine,season_exe,minute,world_live_nonce,
                 ui::SettingsSoundCapabilities{playback.original_ready()&&playback.available(),playback.original_ready()&&playback.available()});
             ui::SettingsScreen screen(data,scope.view(),-1,season_exe);
@@ -2489,6 +2596,7 @@ int main(int argc, char** argv) {
                         catch(const std::exception& error){
                             if(const auto notice=ui::settings_source_refusal(scope.state(),request,request.revision)){
                                 auto dialog=ui::environment_notice_dialog(scope.state(),request.manager_slot,message_text(scope.state(),*notice));
+                                const auto team=projection.state.manager_teams.at(size_t(request.manager_slot));const auto& crest=staged.world.crests.at(staged.world.clubs.at(projection.global_club(uint32_t(team))).crest);dialog.badge_atlas=crest.path;dialog.badge_sprite=crest.cell;dialog.badge_fallback=false;
                                 (void)present_pending_dialog(scope.state(),std::move(dialog),screen.render(),"OpenBMH - live_settings_notice");screen.reject({});screen.consume_release();down.reset();SDL_FlushEvents(SDL_MOUSEMOTION,SDL_MOUSEBUTTONUP);
                             }else screen.reject(error.what());
                         }
@@ -2576,8 +2684,8 @@ int main(int argc, char** argv) {
                 engine.live_reality=[owner,clock,callback=observers.reality](const auto& event){return callback(event,clock->groups,owner->state);};
                 engine.original_sound=[&,owner](uint8_t id){app::original_match_audio_command(playback,owner->state,id);};
                 engine.phase_results=[&,owner,clock,live,overview_viewer](const PhaseResultRequest& request,const auto&,const auto&) {
-                    if(request.kind!=PhaseResultKind::League)return;
                     if(!live->staged_snapshot)throw FormatError("world12: phase overview lacks its staged match owner");
+                    if(request.kind!=PhaseResultKind::League){present_world12_live_competition(*live->staged_snapshot,*owner,*clock,request.group_index,overview_viewer(*owner,*live->staged_snapshot));return;}
                     const auto league=app::world12::live_group_league(live->staged_snapshot->world,*owner,clock->groups.at(request.group_index));bool visible=false;
                     for(int group=0;group<3;++group){const auto ids=live->staged_snapshot->world.catalogue.table_leagues(bmh::world12::TableGroup(group));visible|=std::find(ids.begin(),ids.end(),league)!=ids.end();}
                     if(visible)present_world12_live_family(*live->staged_snapshot,*owner,*clock,overview_viewer(*owner,*live->staged_snapshot),0,league);
@@ -2617,13 +2725,22 @@ int main(int argc, char** argv) {
                     }
                     if(live->live_skipped)continue;
                     if(!start&&input.type==SDL_KEYDOWN&&!input.key.repeat&&input.key.keysym.sym==SDLK_s&&season_exe.u8(layout::Main_FileScreen_RuntimeField3)=='s'){
-                        present_world12_live_settings(projection,engine,minute);draw();continue;
+                        if(!live->staged_snapshot)throw FormatError("world12: live settings lacks its staged owner");present_world12_live_settings(projection,engine,minute,*live->staged_snapshot);draw();continue;
                     }
                     if(!start&&input.type==SDL_KEYDOWN&&!input.key.repeat&&
                         ((input.key.keysym.sym==SDLK_g&&season_exe.u8(layout::Main_FileScreen_RuntimeField)=='g')||
                          (input.key.keysym.sym==SDLK_t&&season_exe.u8(layout::Main_FileScreen_RuntimeField2)=='t'))) {
                         if(!live->staged_snapshot)throw FormatError("world12: manual overview lacks its staged owner");
-                        present_world12_live_family(*live->staged_snapshot,projection,engine,overview_viewer(projection,*live->staged_snapshot),input.key.keysym.sym==SDLK_g?0:1);draw();continue;
+                        if(!engine.groups.empty()&&engine.groups.front().desc.at(0)!=0)present_world12_live_competition(*live->staged_snapshot,projection,engine,0,overview_viewer(projection,*live->staged_snapshot));
+                        else present_world12_live_family(*live->staged_snapshot,projection,engine,overview_viewer(projection,*live->staged_snapshot),input.key.keysym.sym==SDLK_g?0:1);draw();continue;
+                    }
+                    if(!start&&minute>2&&input.type==SDL_MOUSEBUTTONDOWN&&(input.button.button==SDL_BUTTON_LEFT||input.button.button==SDL_BUTTON_RIGHT)&&input.button.x>=0&&input.button.x<=63&&input.button.y>49&&input.button.y<65){
+                        if(!live->staged_snapshot)throw FormatError("world12: live toolbar lacks its staged owner");
+                        for(int child=0;child<3&&running;++child)if(input.button.x>=child*21&&input.button.x<=child*21+21){
+                            if(child==2)present_world12_live_settings(projection,engine,minute,*live->staged_snapshot);
+                            else if(!engine.groups.empty()&&engine.groups.front().desc.at(0)!=0)present_world12_live_competition(*live->staged_snapshot,projection,engine,0,overview_viewer(projection,*live->staged_snapshot));
+                            else present_world12_live_family(*live->staged_snapshot,projection,engine,overview_viewer(projection,*live->staged_snapshot),uint8_t(child));
+                        }draw();continue;
                     }
                     if(const auto side=app::live_matchday_board_side(input,minute,projection.state.indoor)) {
                         const auto frame=ui::live_matchday_frame(minute,engine.groups,projection.state);
@@ -2718,6 +2835,73 @@ int main(int argc, char** argv) {
             };
             return hooks;
         };
+        const auto present_world12_national_draw = [&](const bmh::world12::CareerSnapshot& candidate,
+                const bmh::world12::NationalCampaign& campaign,uint8_t seat) {
+            auto display=candidate;display.season=campaign.season;
+            const auto actor=std::find_if(display.world.managers.begin(),display.world.managers.end(),[&](const auto& value){return value.seat==seat;});
+            if(actor==display.world.managers.end())throw FormatError("world12: national draw has no actual viewer");
+            if(world_live_nonce==UINT64_MAX)throw FormatError("world12: annual view generation exhausted");
+            const ui::World12OtherGamesIdentity owner{seat,actor->club,world_session->revision(),world_session->scope()^(uint64_t(1)<<62),++world_live_nonce};
+            for(const auto& stage:campaign.stages)if(!stage.teams.empty()&&stage.teams.front().valid()){
+                present_world12_competition_page(ui::world12_national_games_state(display,owner,season_texts,stage.rules.entry));if(!running)return false;
+            }return running;
+        };
+        const auto make_world12_annual_hooks = [&](Image backdrop,uint8_t seat) {
+            if(!world_session)throw FormatError("world12: annual presenter has no career");
+            auto binding=std::make_shared<const bmh::world12::CareerSnapshot>(world_session->snapshot());
+            app::world12::AnnualTransitionHooks hooks;
+            hooks.market=make_world12_clock_hooks(backdrop,seat).services.auctions;
+            const auto tax_context=[&,binding](const bmh::world12::AnnualTaxEvent& notice){
+                const auto& settings=*binding->world.settings;
+                auto projection=bmh::world12::AiMatchProjection::create_for_annual_accounts(*binding,binding->world.manager_country(notice.manager),world_session->reference(),
+                    {settings.mode,settings.difficulty,settings.foreign_rule,true});
+                auto event=notice.source;event.team=int(projection.local_club(notice.club));
+                bool found=false;for(size_t local=0;local<projection.human_managers();++local)if(projection.global_manager(uint8_t(local))==notice.manager){event.manager_slot=int(local);found=true;break;}
+                if(!found)throw FormatError("world12: tax notice lost its canonical person");
+                return std::pair{std::move(projection),event};
+            };
+            hooks.tax.present=[&,binding,tax_context](const auto& notice){
+                if(!running)return false;auto [projection,event]=tax_context(notice);
+                if(event.kind==SeasonTaxEventKind::animation)tax_presenter.observe(projection.state,event);
+                else {const auto& crest=binding->world.crests.at(binding->world.clubs.at(notice.club).crest);(void)show_tax(projection.state,event,&crest);}
+                return running;
+            };
+            hooks.tax.choose=[&,binding,tax_context](const auto& notice)->std::optional<bool>{
+                if(!running)return {};auto [projection,event]=tax_context(notice);const auto& crest=binding->world.crests.at(binding->world.clubs.at(notice.club).crest);
+                const bool answer=show_tax(projection.state,event,&crest);if(!running)return {};return answer;
+            };
+            hooks.qualification=[&](const auto& packet){
+                for(auto page:ui::world12_season_entrants(packet.source_binding.world,packet.next_european.fields,season_exe,season_texts)){
+                    ui::SeasonEntrantsScreen screen(data,std::move(page),season_exe);present_season(screen.render(),"OpenBMH - annual_european_entrants");wait_season_ack();if(!running)return false;
+                }return running;
+            };
+            hooks.promotion=[&,binding](const auto& notice){
+                if(!running||!notice.result)return false;const auto& plan=*notice.result;ui::SeasonPromotionProjection page;page.group=int(notice.group);page.count=plan.count;
+                const auto leagues=binding->world.catalogue.simulation_leagues(notice.country==bmh::world12::Country::germany?bmh::world12::TableGroup::germany:bmh::world12::TableGroup::england);
+                if(notice.group>=leagues.size())throw FormatError("world12: promotion view has no country league");page.league_footer=binding->world.catalogue.league(leagues[notice.group]).name;
+                const auto club=[&](bmh::world12::ClubId id){const auto& value=binding->world.clubs.at(id);const auto& crest=binding->world.crests.at(value.crest);ui::SeasonPromotionClub out;out.club_id=0;out.original_name=value.name;out.badge_selector=crest.cell;out.badge_atlas=crest.path;return out;};
+                for(auto id:plan.relegated)page.relegated.push_back(club(id));for(auto id:plan.promoted)page.promoted.push_back(club(id));
+                ui::SeasonPromotionScreen screen(data,std::move(page),season_exe);present_season(screen.render(0),"OpenBMH - annual_promotion");wait_promotion_time(50*20);
+                for(int step=1;running&&step<=38;++step)present_season(screen.render(step),"OpenBMH - annual_promotion");if(running)wait_promotion_time(50*20);return running;
+            };
+            hooks.cup_draw_owned=[&](const auto& candidate,const auto& notice){
+                if(!bmh::world12::show_domestic_draw(candidate.world,notice.cup))return running;
+                const auto& rules=bmh::world12::cup_country(notice.cup)==bmh::world12::Country::germany?world_session->rules():world_session->english_rules();
+                auto page=ui::world12_cup_draw_notice(candidate,notice,world_session->reference(),rules,season_texts);
+                present_cup_projection(world_session->reference(),page.projection);if(!running)return false;
+                page.projection.phase=SeasonCupDrawPhase::overview;present_cup_projection(world_session->reference(),std::move(page.projection));return running;
+            };
+            hooks.national_draw_owned=[&,seat](const auto& candidate,const auto& campaign){
+                return present_world12_national_draw(candidate,campaign,seat);
+            };
+            hooks.highscore=[&](const bmh::world12::OwnedHighscoreProjection& score,bool final){
+                const auto options=game_end_options(world_session->reference());
+                if(!score.ranked)show_alternate_highscore(options);
+                else if(final){ui::GameEndHighscoreScreen screen(data,{score.signature,true,score.rows},options,season_exe);present_season(screen.render(),"OpenBMH - game_end_highscore");wait_season_ack();}
+                if(final&&running){ui::GameEndFinalScreen screen(data,options);present_season(screen.render(),"OpenBMH - game_end_final");wait_season_ack();}return running;
+            };
+            return hooks;
+        };
         auto handle = [&](const ui::FlowResult& r) {
             pitch_pointer.show({}, renderer);
             if(world12_development){
@@ -2776,6 +2960,18 @@ int main(int argc, char** argv) {
                             ui::SeasonEntrantsScreen screen(data,std::move(page),staged.rules());present_season(screen.render(),"OpenBMH - initial_european_entrants");wait_season_ack();
                             if(!running)throw FormatError("world12: initial entrants interrupted");
                         }
+                        for(const auto& draw:staged.initial_draws().domestic_draws){
+                            if(!bmh::world12::show_domestic_draw(staged.snapshot().world,draw.cup))continue;
+                            const auto& rules=bmh::world12::cup_country(draw.cup)==bmh::world12::Country::germany?staged.rules():staged.english_rules();
+                            auto page=ui::world12_cup_draw_notice(staged.snapshot(),draw,staged.reference(),rules,season_texts);
+                            present_cup_projection(staged.reference(),page.projection);if(!running)throw FormatError("world12: initial cup draw interrupted");
+                            page.projection.phase=SeasonCupDrawPhase::overview;present_cup_projection(staged.reference(),std::move(page.projection));
+                            if(!running)throw FormatError("world12: initial cup overview interrupted");
+                        }
+                        if(staged.snapshot().world.national_campaigns){
+                            const auto& campaign=staged.snapshot().world.national_campaigns->seasons.at(staged.snapshot().season);
+                            if(!present_world12_national_draw(staged.snapshot(),campaign,staged.snapshot().world.managers.front().seat))throw FormatError("world12: initial national draw interrupted");
+                        }
                     };
                 }
                 if(r.request==ui::FlowRequest::kickoff){
@@ -2784,8 +2980,12 @@ int main(int argc, char** argv) {
                     process_timer.pause(process_source_seconds());process_timer_frame.reset();
                     turn.emplace();turn->clock=make_world12_clock_hooks(flow.render(),*world_session->snapshot().desktop->active_seat);
                     turn->matches=make_world12_match_hooks();
+                    turn->annual=make_world12_annual_hooks(flow.render(),*world_session->snapshot().desktop->active_seat);
+                    if(world_session->snapshot().world.highscore_signature&&*world_session->snapshot().world.highscore_signature)
+                        turn->score_file=highscore_file(save_directory,*world_session->snapshot().world.highscore_signature,season_texts[889]);
                 }
                 const auto result=app::world12::serve_startup(flow,r,world_session,data,seed,1,r.request==ui::FlowRequest::kickoff?make_pending_offer_hooks(flow.render()):PendingOfferHooks{},turn?&*turn:nullptr,advertising,construction,compensation,ui::SettingsSoundCapabilities{playback.original_ready()&&playback.available(),playback.original_ready()&&playback.available()},settings_notice,club_information,table_range,r.request==ui::FlowRequest::world12_market_action?make_ordinary_transfer_presenters(flow.render(),[&](const GameState& state,int team){const int local=state.manager_of(team);if(!world_session||local<0||size_t(local)>=world_session->snapshot().world.managers.size())throw FormatError("world12: market crest has no canonical human manager");const auto& world=world_session->snapshot().world;return world.crests.at(world.clubs.at(world.managers[size_t(local)].club).crest);}):app::world12::MarketPresenters{});
+                if(result.error.empty()&&result.progress==app::world12::StartupProgress::complete){running=false;return;}
                 if(result.error.empty()&&(result.progress==app::world12::StartupProgress::prepared||
                    (r.request==ui::FlowRequest::file_action&&r.file_action.file_kind==ui::SaveLoadFileKind::game&&r.file_action.action==ui::SaveLoadAction::load))) {
                     world_process_timer.reset();process_timer_frame.reset();

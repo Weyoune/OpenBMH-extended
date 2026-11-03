@@ -17,7 +17,9 @@ def package(build,game,out):
             relative=Path(*parts[1:]).as_posix()
             if relative.lower().endswith('.dll') or relative in ('LICENSE','THIRD_PARTY_NOTICES.md','ACKNOWLEDGEMENTS.md') or relative.startswith('docs/licenses/'):
                 if not name.endswith('/'):files[relative]=z.read(name)
-    files['README.txt']=('obdeddi 0.1.0 – nativer OpenBMH-Extended-Dateneditor\n\n'
+    files['README.txt']=('obdeddi 0.1.0 – nativer Editor fuer Classic-Profile der historischen 1.1-Version\n\n'
+        'Unterstuetzt das classic-plus-1-Profil. Das gemeinsame WORLD12-Datenmodell der\n'
+        'Extended 1.0 Beta wird von diesem Editor nicht bearbeitet.\n\n'
         'Vollstaendig entpacken und obdeddi.exe starten. COMMUNITY.OBD ueber Oeffnen waehlen.\n'
         'Spieler und Vereine bearbeiten; Suche, Sortierung und Kaderwechsel stehen zur Verfuegung.\n'
         'Speichern ersetzt die OBD erst nach geprueftem Backup im Unterverzeichnis backups.\n'

@@ -8,6 +8,7 @@
 #include "game/world12/national_campaign.hpp"
 #include "game/world12/cups.hpp"
 #include "formats/le.hpp"
+#include "app/owned_file_publication.hpp"
 namespace bmh::app::world12 {
 struct AnnualPromotionNotice {bmh::world12::Country country;size_t group=0;const bmh::world12::AnnualPromotionGroup* result=nullptr;};
 struct AnnualTransitionHooks {
@@ -23,6 +24,8 @@ struct AnnualTransitionHooks {
     // already belong to this staged snapshot, never the live Session.
     std::function<bool(const bmh::world12::CareerSnapshot&,const bmh::world12::CupDrawNotice&)> cup_draw_owned;
     std::function<bool(const bmh::world12::CareerSnapshot&,const bmh::world12::NationalCampaign&)> national_draw_owned;
+    // Outer GUI/session transactions publish after their next view is prepared.
+    std::function<void(OwnedFilePublication)> defer_score_write;
 };
 struct AnnualTransitionOutcome {
     bool career_complete=false;

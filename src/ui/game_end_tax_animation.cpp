@@ -56,7 +56,9 @@ std::vector<TaxAnimationStep> decode_tax_animation_script(std::span<const uint8_
 }
 
 GameEndTaxAnimationAssets load_game_end_tax_animation_assets(const std::filesystem::path& data) {
-    const auto exe=load_le(asset_path(data,"BMH.exe"));
+    return load_game_end_tax_animation_assets(data,load_le(asset_path(data,"BMH.exe")));
+}
+GameEndTaxAnimationAssets load_game_end_tax_animation_assets(const std::filesystem::path& data,const LeImage& exe) {
     std::vector<uint8_t> script;
     // Read complete commands so zero/255 inside rectangles cannot end the script.
     uint32_t address=::bmh::layout::GameEndTaxAnimation_LoadGameEndTaxAnimationAssets_ExecutableField;

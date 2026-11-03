@@ -86,8 +86,10 @@ public:
     void finish_scheduled_desks(const ui::DeskRequest&);
     // One staged transition from the last desk to the next owned desktop.
     // Synchronous questions/matches need actual presenters; missing owners reject.
-    void advance_to_next_desktop(const ui::DeskRequest&,const std::filesystem::path& data,
-        const ClockHooks&,const bmh::world12::HumanRoundHooks&);
+    // True means the finite career completed after its owned final presentation.
+    bool advance_to_next_desktop(const ui::DeskRequest&,const std::filesystem::path& data,
+        const ClockHooks&,const bmh::world12::HumanRoundHooks&,
+        const AnnualTransitionHooks* annual=nullptr,const std::filesystem::path& score_file={});
     AttendanceOutcome book_scheduled_attendance(uint64_t expected_revision,const std::filesystem::path& data);
     void play_prepared_matches(uint64_t expected_revision,const bmh::world12::HumanRoundHooks&);
 
@@ -146,6 +148,7 @@ public:
     const InitialManagerServicesOutcome& initial_services()const{return services_;}
     const GameState& reference()const{return resources_.reference;}
     const LeImage& rules()const{return resources_.german;}
+    const LeImage& english_rules()const{return resources_.english;}
     bool prepared()const{return state_.world.catalogue.scope.club_play()?state_.world.transfer_market.has_value():state_.world.national_campaigns.has_value()&&state_.calendar.has_value()&&state_.desktop.has_value();}
 private:
     friend class LiveFamilyScope;
