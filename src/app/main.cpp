@@ -2026,6 +2026,7 @@ int main(int argc, char** argv) {
                     };
                     bool left_held = false, left_release_consumed = false, right_held = false;
                     while (running && !closed) {
+                        qa_view.note(live_title());
                         pitch_pointer.show(screen.pointer_cursor(palette), renderer);
                         const Image image = screen.render();
                         for (size_t i = 0; i < pixels.size(); ++i)
