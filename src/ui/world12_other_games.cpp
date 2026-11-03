@@ -25,7 +25,9 @@ bool enabled(const World& world,int page) {
 void validate_owner(const World& world,const World12OtherGamesIdentity& owner) {
     if(!owner.scope || owner.manager_slot>3 || !owner.club.valid())throw FormatError("other games: invalid typed owner");
     const auto manager=std::find_if(world.managers.begin(),world.managers.end(),[&](const auto& m){return m.seat==owner.manager_slot;});
-    if(manager==world.managers.end() || manager->club!=owner.club)throw FormatError("other games: stale typed manager owner");
+    const bool club=manager!=world.managers.end()&&manager->club==owner.club;
+    const bool national=world.national_coaches&&std::any_of(world.national_coaches->begin(),world.national_coaches->end(),[&](const auto& record){return record.active&&record.coach==owner.manager_slot&&record.team==owner.club;});
+    if(!club&&!national)throw FormatError("other games: stale typed manager owner");
 }
 std::vector<const KnockoutStage*> stages(const CareerSnapshot& snapshot,DomesticCup cup) {
     std::vector<const KnockoutStage*> out;
@@ -40,12 +42,14 @@ void add_fixture(OtherGamesState& state,const World& world,const bmh::world12::F
     state.world12_teams[token]=fixture.home;state.world12_teams[token+1]=fixture.away;
     row.source_match=source_match;row.played=score.has_value();row.source_result=score.value_or(0xcccc);
     row.home_goals=score?int(*score>>5&31):0;row.away_goals=score?int(*score&31):0;
-    row.source_second_leg=other.value_or(0xcccc);row.second_leg_visible=other.has_value();row.second_leg_array_present=other.has_value();
+    row.source_second_leg=other.value_or(0xcccc);row.second_leg_visible=other.has_value();row.second_leg_array_present=other.has_value();if(other){row.second_leg_home_goals=*other&31;row.second_leg_away_goals=*other>>5&31;}
     const auto metadata=[&](ClubId id){
         const auto& club=world.clubs.at(id);OtherGamesClubMetadata result;
-        if(!club.league.valid()){result.foreign_strength=club.rating;return result;}
+        const auto squad=std::find_if(world.national_squads.begin(),world.national_squads.end(),[&](const auto& value){return value.team==id;});
+        if(!club.league.valid()&&squad==world.national_squads.end()){result.foreign_strength=club.rating;return result;}
         GameState view;view.squad_slots.assign(24,0xfff);view.team_morale={club.morale};
-        for(const auto& slot:club.roster)if(!slot.empty()){
+        const auto& roster=squad==world.national_squads.end()?club.roster:squad->roster;
+        for(const auto& slot:roster)if(!slot.empty()){
             const auto index=view.players.size();view.players.push_back(world.players.at(slot.player).attributes);view.squad_slots[index]=uint16_t(index);
         }
         result.has_squad_values=true;result.averages=other_games_club_averages(view,0);return result;
@@ -53,12 +57,12 @@ void add_fixture(OtherGamesState& state,const World& world,const bmh::world12::F
     row.home_metadata=metadata(fixture.home);row.away_metadata=metadata(fixture.away);
     OtherGamesDisplayRow display;display.name_colors={0x5f,0x5f};display.countries={0xff,0xff};
     const auto result=[](uint16_t value){return std::to_string(value>>5&31)+":"+std::to_string(value&31);};
-    display.primary_result=score?result(*score):"-";if(other)display.second_leg_result=result(*other);
+    display.primary_result=score?result(*score):"-";if(other)display.second_leg_result=std::to_string(*other&31)+":"+std::to_string(*other>>5&31);
     for(size_t side=0;side<2;++side) {
         const auto club_id=side?fixture.away:fixture.home;const auto& club=world.clubs.at(club_id);
         display.league_tiers[side]=club.league.valid()?world.catalogue.league(club.league).local_index:255;
         if(!club.league.valid()||!world.catalogue.league(club.league).playable)display.countries[side]=uint8_t(club.country);
-        for(const auto& manager:world.managers)if(manager.club==club_id)display.name_colors[side]=manager.seat==state.world12_identity->manager_slot?0x7a:0x75;
+        for(const auto& manager:world.managers)if(manager.club==club_id)display.name_colors[side]=manager.seat==state.world12_identity->manager_slot?0x7a:0x75;if(world.national_coaches)for(const auto& coach:*world.national_coaches)if(coach.active&&coach.team==club_id)display.name_colors[side]=coach.coach==state.world12_identity->manager_slot?0x7a:0x75;
     }
     state.projection.rows.push_back(std::move(row));state.rows.push_back(std::move(display));
     if(baseline>=0)state.fixture_baselines.push_back(baseline);
@@ -104,6 +108,65 @@ OtherGamesState world12_european_games_state(const bmh::world12::CareerSnapshot&
     if(!p.knockout){const auto standings=project_source_group_table(stage.teams,rules.flags,rules.rounds,stage.played,stage.scores[0]);p.group_tables.push_back(standings.table);state.previous_rank_visible=stage.played>1;
         for(size_t i=0;i<stage.teams.size();++i){const auto club=stage.teams[i];const int token=1000+int(i);state.world12_teams[token]=club;OtherGamesTableRow row;row.runtime_team=token;row.rank=standings.table.rank(int(i))+1;row.previous_rank=standings.table.previous_rank(int(i))+1;row.name=utf8_to_original(world.clubs.at(club).name);row.name_color=0x6a;row.rank_color=0x7a;for(const auto& manager:world.managers)if(manager.club==club)row.name_color=manager.seat==owner.manager_slot?0x7a:0x75;row.form=standings.table.form[i];row.games=standings.table.games(int(i));row.wins=standings.table.wins[i];row.defeats=standings.table.defeats[i];row.draws=row.games-row.wins-row.defeats;row.goals_for=standings.table.goals_for[i];row.goals_against=standings.table.goals_against[i];row.points=standings.table.points[i];state.table_rows.push_back(std::move(row));}
     }
+    return state;
+}
+OtherGamesState world12_national_games_state(const bmh::world12::CareerSnapshot& snapshot,
+    const World12OtherGamesIdentity& owner,const TextDb& texts,uint8_t source_entry,int requested_round,const std::vector<World12CompetitionOverlay>& overlays){
+    World12OtherSelection selection;selection.page=World12OtherPage::national_qualifiers;selection.round=requested_round;
+    const auto& world=snapshot.world;world.validate();validate_owner(world,owner);const int page=4;
+    if(!world.catalogue.scope.international)throw FormatError("other games: national page lacks its actual country scope");
+    OtherGamesState state;state.world12_identity=owner;auto& p=state.projection;p.competition=page;p.descriptor_competition=page;p.title=labels[page];p.rounds=1;p.knockout=true;
+    for(int slot=0;slot<8;++slot){const bool active=enabled(world,slot);p.selectors.push_back({slot,active?slot:-1,active?labels[slot]:"",active});state.selector_labels[size_t(slot)]=active?labels[slot]:"";}
+    if(!world.national_campaigns){p.fixtures_available=false;state.unavailable_message="Nationaler Verlauf unbekannt";return state;}
+    if(!world.national_campaigns->seasons.contains(snapshot.season))throw FormatError("other games: current national campaign is unknown");
+    const auto& campaign=world.national_campaigns->seasons.at(snapshot.season);p.competition=p.descriptor_competition=campaign.competition;p.title=texts[(layout::CupDraw_FormatError_ExecutableField6-layout::TextPointerTable)/4+campaign.competition];
+    if(source_entry!=255){const auto found=std::find_if(campaign.stages.begin(),campaign.stages.end(),[&](const auto& stage){return stage.rules.entry==source_entry;});if(found==campaign.stages.end())throw FormatError("other games: national source stage is not owned");selection.stage=int(found-campaign.stages.begin());}
+    p.selectors[4].competition=campaign.competition;
+    const auto active=std::find_if(campaign.stages.begin(),campaign.stages.end(),[&](const auto& stage){return stage.rules.entry==campaign.active_entry;});if(active==campaign.stages.end())throw FormatError("other games: national active stage is missing");
+    const int selected=selection.stage<0?int(active-campaign.stages.begin()):selection.stage;if(selected<0||size_t(selected)>=campaign.stages.size())throw FormatError("other games: national stage selector is stale");
+    auto stage=campaign.stages[size_t(selected)];const auto& rules=stage.rules;const int legs=(rules.flags&1)+1;
+    std::vector<NationalGroup> current;if(!campaign.complete)current=prepare_national_groups(campaign);
+    std::set<uint8_t> overlaid;for(const auto& overlay:overlays){if(!overlaid.insert(overlay.source_entry).second)throw FormatError("other games: repeated live national score owner");const auto group=std::find_if(current.begin(),current.end(),[&](const auto& value){return value.source_entry==overlay.source_entry;});
+        if(group==current.end()||overlay.revision!=campaign.revision||overlay.played!=group->played||overlay.matches!=group->matches||overlay.scores.size()!=group->matches.size())throw FormatError("other games: live national score overlay has another actual owner");
+        if(overlay.source_entry!=rules.entry)continue;size_t offset=0;if(rules.knockout())for(int round=0;round<stage.played/legs;++round)offset+=size_t(rules.teams)>>(round+1);else offset=size_t(stage.played)*rules.teams/2;
+        for(size_t match=0;match<overlay.scores.size();++match){if(overlay.scores[match]==0xcccc||(overlay.scores[match]>>10)>2||(!(rules.flags&8)&&(overlay.scores[match]>>10)))throw FormatError("other games: invalid actual live national score");stage.scores[0].at(offset+match)=overlay.scores[match];}
+    }
+    p.entry_index=rules.entry;p.entry_address=cup_entry_address(rules.entry);p.linked_page=selected;p.flags=rules.flags;p.knockout=rules.knockout();p.two_legs=(rules.flags&1)!=0;p.rounds=rules.rounds;p.current_round=p.knockout?stage.played/legs:stage.played;p.round=selection.round<0?std::min(p.current_round,p.rounds-1):selection.round;
+    if(p.round<0||p.round>=p.rounds)throw FormatError("other games: national round selector is stale");p.group_index=rules.group_index;p.group_count=rules.groups;
+    p.round_heading=p.knockout?std::to_string(p.round+1)+". RUNDE":"GRUPPE "+std::to_string(rules.group_index+1);p.round_arrows_visible=p.rounds>1;
+    for(size_t i=0;i<campaign.stages.size();++i){const auto& linked=campaign.stages[i].rules;p.linked_pages.push_back({int(i),linked.entry,page,linked.group_index,linked.groups});}
+    const bool started=!stage.teams.empty()&&stage.teams.front().valid();p.source_participant_count=p.knockout?rules.teams>>p.round:rules.teams;p.display_mode_toggle_available=p.source_participant_count>16;p.display_mode=p.display_mode_toggle_available?selection.mode:OtherGamesDisplayMode::detail;
+    if(selection.participant_offset<0||selection.participant_offset%16||selection.participant_offset>=std::max(1,p.source_participant_count))throw FormatError("other games: national participant cursor is invalid");state.source_participant_offset=selection.participant_offset;p.participant_offset=p.display_mode==OtherGamesDisplayMode::detail?selection.participant_offset:0;
+    if(!started||(p.knockout&&p.round>p.current_round)){p.fixtures_available=false;state.unavailable_message="Auslosung noch nicht erfolgt";return state;}
+    std::vector<bmh::world12::Fixture> fixtures;size_t score_offset=0;
+    if(p.knockout){size_t start=0;for(int round=0;round<p.round;++round)start+=size_t(rules.teams)>>round;score_offset=start/2;for(int i=0;i<p.source_participant_count;i+=2)fixtures.push_back({stage.teams.at(start+size_t(i)),stage.teams.at(start+size_t(i+1))});}
+    else {score_offset=size_t(p.round)*rules.teams/2;for(const auto& fixture:bmh::generate_fixtures(std::max(4,int(rules.teams)),p.round+1,rules.rounds/legs,0))fixtures.push_back({stage.teams.at(size_t(fixture.home)),stage.teams.at(size_t(fixture.away))});}
+    const size_t first=p.knockout&&p.display_mode==OtherGamesDisplayMode::detail?size_t(selection.participant_offset/2):0,last=std::min(fixtures.size(),p.knockout&&p.display_mode==OtherGamesDisplayMode::detail?first+8:fixtures.size());
+    for(size_t match=first;match<last;++match){const auto primary=stage.scores[0].at(score_offset+match);const auto secondary=stage.scores[1].at(score_offset+match);const bool show_second=p.knockout&&p.two_legs&&(stage.played%2||p.round<stage.played/2);
+        add_fixture(state,world,fixtures[match],primary==0xcccc?std::nullopt:std::optional(primary),show_second&&secondary!=0xcccc?std::optional(secondary):std::nullopt,int(match));
+        auto& row=p.rows.back();row.second_leg_array_present=p.knockout&&p.two_legs;row.source_second_leg=secondary;row.second_leg_visible=show_second;
+        if(primary!=0xcccc&&p.knockout){MatchGroup tie;tie.desc.assign(0xd0,0);tie.desc[1]=rules.flags;tie.cup_results={primary};if(p.two_legs)tie.cup_other_leg={secondary};row.source_winner=bmh::cup_tie(tie,0);}
+    }
+    if(!p.knockout&&rules.teams>2){const auto standings=project_source_group_table(stage.teams,rules.flags,rules.rounds,stage.played,stage.scores[0]);p.group_tables.push_back(standings.table);state.previous_rank_visible=stage.played>1;
+        for(size_t i=0;i<stage.teams.size();++i){const auto club=stage.teams[i];const int token=1000+int(i);state.world12_teams[token]=club;OtherGamesTableRow row;row.runtime_team=token;row.rank=standings.table.rank(int(i))+1;row.previous_rank=standings.table.previous_rank(int(i))+1;row.name=utf8_to_original(world.clubs.at(club).name);row.name_color=0x6a;row.rank_color=0x7a;for(const auto& manager:world.managers)if(manager.club==club)row.name_color=manager.seat==owner.manager_slot?0x7a:0x75;row.form=standings.table.form[i];row.games=standings.table.games(int(i));row.wins=standings.table.wins[i];row.defeats=standings.table.defeats[i];row.draws=row.games-row.wins-row.defeats;row.goals_for=standings.table.goals_for[i];row.goals_against=standings.table.goals_against[i];row.points=standings.table.points[i];state.table_rows.push_back(std::move(row));}
+    }
+    return state;
+}
+OtherGamesState world12_regional_games_state(const bmh::world12::CareerSnapshot& snapshot,
+    const World12OtherGamesIdentity& owner,const TextDb& texts,int requested_round,const std::optional<World12CompetitionOverlay>& overlay){
+    snapshot.validate();const auto& world=snapshot.world;validate_owner(world,owner);
+    if(!world.regional_playoff||!world.catalogue.scope.germany)throw FormatError("other games: actual regional playoff owner is unknown or disabled");
+    const auto& campaign=*world.regional_playoff;if(campaign.season!=snapshot.season||!campaign.activation_day)throw FormatError("other games: regional playoff has not actually activated");
+    OtherGamesState state;state.world12_identity=owner;auto& p=state.projection;
+    p.competition=p.descriptor_competition=13;p.entry_index=35;p.entry_address=cup_entry_address(35);p.title=texts[(layout::CupDraw_FormatError_ExecutableField6-layout::TextPointerTable)/4+13];p.flags=campaign.rules.flags;p.knockout=false;p.rounds=6;p.current_round=campaign.played;p.round=requested_round<0?std::min<int>(5,campaign.played):requested_round;
+    if(p.round<0||p.round>=6)throw FormatError("other games: regional round selector is stale");
+    p.round_heading=std::to_string(p.round+1)+". RUNDE";p.round_arrows_visible=true;p.source_participant_count=4;p.display_mode=OtherGamesDisplayMode::detail;
+    for(int slot=0;slot<8;++slot){p.selectors.push_back({slot,slot==0?13:-1,slot==0?p.title:"",slot==0});state.selector_labels[size_t(slot)]=slot==0?p.title:"";}
+    std::vector<ClubId> teams(campaign.entrants.begin(),campaign.entrants.end());std::vector<uint16_t> scores(campaign.scores.begin(),campaign.scores.end());
+    if(overlay){const auto actual=prepare_regional_playoff_group(snapshot);if(!actual||overlay->source_entry!=35||overlay->revision!=campaign.revision||overlay->played!=campaign.played||overlay->matches!=actual->matches||overlay->scores.size()!=2)throw FormatError("other games: stale or mismatched actual regional overlay");for(size_t m=0;m<2;++m){if(overlay->scores[m]==0xcccc||overlay->scores[m]>>10)throw FormatError("other games: invalid actual regional score");scores.at(size_t(campaign.played)*2+m)=overlay->scores[m];}}
+    const auto fixtures=bmh::generate_fixtures(4,p.round+1,3,0);for(size_t m=0;m<fixtures.size();++m){const auto& fixture=fixtures[m];const auto score=scores.at(size_t(p.round)*2+m);add_fixture(state,world,{teams.at(fixture.home),teams.at(fixture.away)},score==0xcccc?std::nullopt:std::optional(score),{},int(m));}
+    const auto table=project_source_group_table(teams,campaign.rules.flags,6,campaign.played,scores);p.group_tables.push_back(table.table);state.previous_rank_visible=campaign.played>1;
+    for(size_t i=0;i<4;++i){const auto club=teams[i];const int token=1000+int(i);state.world12_teams[token]=club;OtherGamesTableRow row;row.runtime_team=token;row.rank=table.table.rank(int(i))+1;row.previous_rank=table.table.previous_rank(int(i))+1;row.name=utf8_to_original(world.clubs.at(club).name);row.name_color=0x6a;row.rank_color=0x7a;for(const auto& manager:world.managers)if(manager.club==club)row.name_color=manager.seat==owner.manager_slot?0x7a:0x75;row.form=table.table.form[i];row.games=table.table.games(int(i));row.wins=table.table.wins[i];row.defeats=table.table.defeats[i];row.draws=row.games-row.wins-row.defeats;row.goals_for=table.table.goals_for[i];row.goals_against=table.table.goals_against[i];row.points=table.table.points[i];state.table_rows.push_back(std::move(row));}
     return state;
 }
 OtherGamesState world12_indoor_games_state(const bmh::world12::CareerSnapshot& snapshot,

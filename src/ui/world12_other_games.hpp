@@ -24,6 +24,12 @@ struct World12CompetitionOverlay {
 OtherGamesState world12_european_games_state(const bmh::world12::CareerSnapshot&,
     const World12OtherGamesIdentity&,World12OtherSelection,
     const std::vector<World12CompetitionOverlay>& overlay={});
+OtherGamesState world12_national_games_state(const bmh::world12::CareerSnapshot&,
+    const World12OtherGamesIdentity&,const TextDb&,uint8_t source_entry=255,int round=-1,
+    const std::vector<World12CompetitionOverlay>& overlay={});
+OtherGamesState world12_regional_games_state(const bmh::world12::CareerSnapshot&,
+    const World12OtherGamesIdentity&,const TextDb&,int round=-1,
+    const std::optional<World12CompetitionOverlay>& overlay=std::nullopt);
 OtherGamesState world12_indoor_games_state(const bmh::world12::CareerSnapshot&,
     const World12OtherGamesIdentity&,uint8_t tournament,uint8_t source_entry,int round=-1,
     const std::optional<World12CompetitionOverlay>& overlay=std::nullopt);
