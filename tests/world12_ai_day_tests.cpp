@@ -77,6 +77,28 @@ void actual_days(const bmh::GameState& base) {
     }
     std::cout<<match_count<<" actual fixtures across full/German-fallback/English days matched direct Core groups, with replay and reload checks\n";
 }
+void observed_ai_tests(const bmh::GameState& base) {
+    for(uint8_t category:{uint8_t(0),uint8_t(1),uint8_t(2)}){
+        auto state=snapshot();const auto ticket=*prepare_day(state);const auto input=inputs(state,ticket).front();
+        const auto fixture=ticket.leagues.front().matches.front();state.world.clubs.at(fixture.home).presentation_category=category;
+        auto expected=state;bmh::GameRandom game(state.game_seed),oracle_game(state.game_seed);bmh::WatcomRandom random(state.watcom_seed),oracle_random(state.watcom_seed);
+        const auto direct=simulate_and_settle_ai_league_round(expected.world,base,input.appointment.league,input.appointment.round,input.matches,oracle_game,oracle_random);
+        expected.game_seed=oracle_game.seed();expected.watcom_seed=oracle_random.seed();
+        HumanRoundHooks hooks;int clocks=0,minutes=0;
+        hooks.before_owned=[&](auto& projection,auto&,const auto& owner){
+            ++clocks;check(owner.world.clubs.at(fixture.home).presentation_category==category,"observed AI lost staged presentation ownership");
+            check((projection.state.team_morale.at(projection.local_club(fixture.home))>>6)==category,"observed AI lost Original display/radio category");
+        };
+        hooks.after_minute=[&](auto&,auto&,int){++minutes;};
+        const auto result=simulate_observed_ai_league_fixtures(state,base,input.appointment.league,input.appointment.round,{},input.matches,{},game,random,hooks);
+        check(clocks==1&&minutes>90&&result.matches.size()==direct.matches.size(),"observed AI did not expose its actual complete clock");
+        check(state==expected&&game.seed()==oracle_game.seed()&&random.seed()==oracle_random.seed(),"AI observation changed scores/settlement/RNG");
+        auto interrupted=snapshot();const auto original=interrupted;bmh::GameRandom interrupted_game(original.game_seed);bmh::WatcomRandom interrupted_random(original.watcom_seed);
+        hooks.before_owned=[](auto&,auto&,const auto&){throw std::runtime_error("cancelled observer");};
+        rejects([&]{simulate_observed_ai_league_fixtures(interrupted,base,input.appointment.league,input.appointment.round,{},input.matches,{},interrupted_game,interrupted_random,hooks);},"interrupted AI observer accepted");
+        check(interrupted==original&&interrupted_game.calls()==0&&interrupted_random.calls()==0,"interrupted observer leaked world/RNG");
+    }
+}
 void rejection_tests(const bmh::GameState& base) {
     auto state=snapshot();auto ticket=*prepare_day(state);auto conditions=inputs(state,ticket);
     app::AiDayOwner owner{71,8};const auto initial_owner=owner;const auto before=state;
@@ -119,6 +141,6 @@ void rejection_tests(const bmh::GameState& base) {
 }
 int main()try {
     bmh::set_fixture_tables(bmh::test::authored_fixture_tables());const auto base=rules();
-    actual_days(base);rejection_tests(base);
+    actual_days(base);observed_ai_tests(base);rejection_tests(base);
     std::cout<<"Atomic AI league days: stale owners, late rollback, human/competition guards and external-change preservation passed\n";return 0;
 }catch(const std::exception& error){bmh::draw_hook=nullptr;std::cerr<<error.what()<<'\n';return 1;}

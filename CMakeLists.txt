@@ -5,7 +5,7 @@ if(APPLE)
     # Enable native languages before dependencies/subdirectories inherit rules.
     enable_language(OBJC OBJCXX)
 endif()
-set(OPENBMH_PRERELEASE "beta.2" CACHE STRING "Prerelease identifier; empty for final release")
+set(OPENBMH_PRERELEASE "beta.3" CACHE STRING "Prerelease identifier; empty for final release")
 set(OPENBMH_PRODUCT_VERSION "${PROJECT_VERSION}")
 if(OPENBMH_PRERELEASE)
     string(APPEND OPENBMH_PRODUCT_VERSION "-${OPENBMH_PRERELEASE}")
@@ -1276,7 +1276,7 @@ add_library(bmhworld12 STATIC
     src/game/world12/manager_match_state.cpp
     src/game/world12/manager_finance.cpp
     src/game/world12/manager_tactics.cpp
-    src/game/world12/manager_creation.cpp src/game/world12/manager_join.cpp src/game/world12/rescheduling.cpp
+    src/game/world12/manager_creation.cpp src/game/world12/manager_join.cpp src/game/world12/rescheduling.cpp src/game/world12/presentation.cpp
     src/game/world12/indoor_match.cpp
     src/game/world12/indoor.cpp
     src/game/world12/national_campaign.cpp
@@ -1675,3 +1675,10 @@ add_test(NAME world12_running_join_tests COMMAND world12_running_join_tests)
 add_executable(world12_rescheduling_tests tests/world12_rescheduling_tests.cpp)
 target_link_libraries(world12_rescheduling_tests PRIVATE bmhworld12)
 add_test(NAME world12_rescheduling_tests COMMAND world12_rescheduling_tests)
+
+add_executable(world12_presentation_tests tests/world12_presentation_tests.cpp)
+target_link_libraries(world12_presentation_tests PRIVATE bmhworld12)
+add_test(NAME world12_presentation_tests COMMAND world12_presentation_tests)
+
+add_executable(world12_validate_presentation tools/world12/validate_presentation.cpp)
+target_link_libraries(world12_validate_presentation PRIVATE bmhworld12_session)

@@ -34,6 +34,7 @@ struct AiLeagueRoundOutcome {
     uint64_t game_draws=0,watcom_draws=0;
     std::vector<PoolsMatchOutcome> pools;
 };
+struct DayTicket;
 struct HumanRoundHooks {
     // Trusted synchronous presenters; group storage must stay stable while
     // MatchEngine retains references. Gameplay changes use existing Core actions.
@@ -46,6 +47,8 @@ struct HumanRoundHooks {
     // The actual staged owner includes gate/monthly receipts already posted
     // before play. The outer desktop snapshot is not an equivalent live view.
     std::function<void(AiMatchProjection&,bmh::MatchEngine&,const CareerSnapshot&)> before_owned;
+    std::function<void(const CareerSnapshot&,const DayTicket&)> kickoff;
+    std::function<void(const CareerSnapshot&,const CareerSnapshot&)> completed_titles;
 };
 // Actual Original scoring phases and AI events; no generated/test score input.
 // Conditions/formation tables come from the session owner. After-match economy,
@@ -70,6 +73,9 @@ AiLeagueRoundOutcome simulate_and_settle_ai_league_round(World&,const GameState&
 AiLeagueRoundOutcome simulate_and_settle_human_league_round(CareerSnapshot&,const GameState& rules_template,
     LeagueId,int round,const std::vector<AiLeagueConditions>&,HumanProjectionPolicy,
     GameRandom&,WatcomRandom&,const HumanRoundHooks& hooks={});
+AiLeagueRoundOutcome simulate_observed_ai_league_fixtures(CareerSnapshot&,const GameState&,
+    LeagueId,int,const std::vector<uint8_t>&,const std::vector<AiLeagueConditions>&,HumanProjectionPolicy,
+    GameRandom&,WatcomRandom&,const HumanRoundHooks&);
 struct HumanLeagueRound {
     LeagueId league;int round=0;std::vector<AiLeagueConditions> matches;
     std::vector<uint8_t> match_indices;bool ordinary=true;

@@ -18,8 +18,10 @@ This view is an inspection interface, but Original roster entry has real selecti
 flag effects. Each actual A/B rebuild calls the shared `prepare_club_info_entry`
 once. The displayed rows retain its pre-injury-cleanup flags; the resulting saved
 roster retains its post-cleanup flags. Only those flags of the target club are
-published after the presenter returns successfully. Player attributes, roster
-membership, finances, dates, scores, preferences and both random streams stay
+published after the presenter returns successfully. Opening a nested player card
+also retains its actual Source random consumption and explicit statistics
+preferences. Display/radio changes update only the relevant presentation
+categories. Player attributes, roster membership, finances, dates and scores stay
 unchanged. Derived desktop strength, rank-curve strengths and lineup/bench warning
 lights refresh if that entry changed its active selection.
 
@@ -29,18 +31,25 @@ career and releases pending input. A changed/reentrant owner cannot be resurrect
 Retained providers are inactive after success, cancellation or an exception; they
 own their workspace and reject subsequent calls without dangling references.
 
-No new save schema is needed: roster flags already belong to the typed world.
-A club without a stored league roster displays the existing no-squad view, with
-its actual name. No squad or statistics are fabricated for cup-only opponents.
+World schema 44 adds nullable per-club presentation categories (off/radio/watched).
+Absent categories retain the Original human/AI default. The older roster-only
+inspection needed no extra state. Non-rostered cup opponents still show the
+existing no-squad view; no players or statistics are invented for them.
 
-## Scope
+## Nested inspection
 
-This packet supports the two roster data pages. Nested player cards, club
-statistics and the global category setter still require separate typed owners.
-Their controls/hitboxes are absent in the typed inspection view. The legacy
-projection defaults retain all original controls and interactions unchanged.
-The explicit-reference constructor allows the typed package to render without
-locating an original executable.
+The typed owner supplies player redraw, category changes and team-statistics
+factories to the existing SDL modal loop. Actual global identities are checked
+before resolving bounded player selections. Team statistics project the actual
+country's league, results and point rules, while the Original renderer retains
+its home/away/combined controls. Canonical crests and nationality labels are
+supplied explicitly instead of deriving them from temporary German drawing IDs.
+Missing position-history curves remain absent. The four-watched-game limit uses
+all configured clubs, not just the clubs present in a temporary drawing workspace.
+
+The explicit-reference constructors work without an original executable in the
+runtime package. See [the follow-up packet](REPORTED_BUGS_2026-11-03.md) for the
+expanded verification; the earlier roster-only milestone is recorded below.
 
 ## Verification
 

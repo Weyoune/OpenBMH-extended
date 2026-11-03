@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <array>
 #include <functional>
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -57,6 +58,7 @@ struct GameState {
     // Runtime-only context for bounded typed-world projections. Empty retains
     // the original positional lookup; never serialized into a legacy save.
     std::vector<ProjectedMatchClub> projected_match_clubs;
+    std::map<uint8_t,std::string> projected_nationality_names; // Full master labels; no positional drawing-ID lookup.
     struct ProjectedNationalTeam {
         int team=0;
         std::optional<size_t> squad_first; // Actual nominated squad, or rating only.

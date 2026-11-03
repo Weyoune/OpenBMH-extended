@@ -151,8 +151,9 @@ void restore_source_rect(const Image& source, int source_x, int source_y,
 
 } // namespace
 
-CompetitionWinnerScreen::CompetitionWinnerScreen(const std::filesystem::path& data)
-    : exe_(load_le(asset_path(data, "BMH.exe"))), font_(load_font(data / "F" / "BMH2.FNT")) {
+CompetitionWinnerScreen::CompetitionWinnerScreen(const std::filesystem::path& data):CompetitionWinnerScreen(data,load_le(asset_path(data,"BMH.exe"))){}
+CompetitionWinnerScreen::CompetitionWinnerScreen(const std::filesystem::path& data,const LeImage& reference)
+    : exe_(reference), font_(load_font(data / "F" / "BMH2.FNT")) {
     for (size_t i = 0; i < 2; ++i) {
         const std::string background = i ? "131.VGA" : "128.VGA";
         backdrop_[i] = load_kb(data, background.c_str());
@@ -178,7 +179,7 @@ Image CompetitionWinnerScreen::render(const GameState& state, const CompetitionW
     if (view.title != 0 && view.title != 7)
         copy_opaque(trophies_[view.title], 0, 0, out, 64, 60, 79, 98);
     const uint32_t table = exe_.u8(::bmh::layout::SeasonEntrants_FormatError_TextPointer + view.title) ? ::bmh::layout::CupDraw_FormatError_ExecutableField6 : ::bmh::layout::SeasonEntrants_FormatError_TextPointer2;
-    const std::string caption = message_text(state, ::bmh::layout::Sportschau_Render_TextPointer3) + exe_.cstring(::bmh::layout::Sportschau_Render_TextPointer) +
+    const std::string caption = !view.caption_override.empty()?view.caption_override:message_text(state, ::bmh::layout::Sportschau_Render_TextPointer3) + exe_.cstring(::bmh::layout::Sportschau_Render_TextPointer) +
         message_text(state, table + uint32_t(exe_.u8(::bmh::layout::SeasonEntrants_FormatError_RuntimeField + view.title)) * 4);
     const std::string club = state.club_name(view.team);
     const uint8_t color = view.title == 7 ? 0x76 : 0x92;

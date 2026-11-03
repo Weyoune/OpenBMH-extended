@@ -259,7 +259,15 @@ Image ClubInfoScreen::render() const {
             if (p.borrowed) name_color = 0x65;
             if (p.offer_name_color) name_color = 0x75;
             if (hovered_row_ == p.rendered_row) name_color = 0x3e;
-            text(out, 13, baseline, p.original_name, name_color);
+            // Extended rosters may carry longer names than the Original column.
+            // Keep the full name in the owned selection/card, fit only this label.
+            auto displayed_name = p.original_name;
+            if (font_.text_width(displayed_name) > 51) {
+                while (!displayed_name.empty() && font_.text_width(displayed_name + "...") > 51)
+                    displayed_name.pop_back();
+                displayed_name += "...";
+            }
+            text(out, 13, baseline, displayed_name, name_color);
             if (projection_.view == ClubInfoView::data_a) {
                 const size_t pos = size_t(a.position());
                 text(out, 66, baseline, texts_[(::bmh::layout::ClubInfo_Render_TextPointer2 - ::bmh::layout::TextPointerTable) / 4 + pos], 0x6c, 82);

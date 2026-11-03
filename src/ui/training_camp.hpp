@@ -25,6 +25,10 @@ struct TrainingCampState {
     std::string manager_name;
     uint16_t badge = 0;
     std::string badge_atlas;
+    std::string map_asset="KB/12.VGA",resorts_one_asset="KB/8.VGA",resorts_two_asset="KB/9.VGA";
+    std::array<std::array<uint8_t,2>,8> coordinates{};
+    bool explicit_coordinates=false;
+    std::array<std::string,8> resort_names{};
     uint8_t portrait = 0;
     std::array<uint8_t, 4> focus{};
     bool focus_normalization_required = false;

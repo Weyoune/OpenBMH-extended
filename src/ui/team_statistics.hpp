@@ -52,6 +52,7 @@ struct TeamStatisticsProjection {
     std::array<uint8_t, 9> source_extrema{};
     std::vector<uint8_t> badge_heap;
     bool source_badge_fallback = false;
+    std::string badge_atlas;uint8_t badge_cell=0;
     std::array<uint8_t, 0x1a> position_history{};
     bool source_has_position_history = false;
 };
@@ -72,6 +73,7 @@ class TeamStatisticsScreen {
 public:
     TeamStatisticsScreen(const std::filesystem::path& data_directory,
                          TeamStatisticsProjection projection, Image club_info_backdrop);
+    TeamStatisticsScreen(const std::filesystem::path&,TeamStatisticsProjection,Image,const LeImage&);
     Image render() const;
     std::optional<TeamStatisticsButton> button_at(int x, int y) const;
     void press(int x, int y);

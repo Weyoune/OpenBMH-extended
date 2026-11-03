@@ -32,6 +32,7 @@
 
 #include "app/controller.hpp"
 #include "app/world12_startup.hpp"
+#include "game/world12/presentation.hpp"
 #include "app/world12_live_scope.hpp"
 #include "app/world12_live_family.hpp"
 #include "app/world12_live_settings.hpp"
@@ -255,11 +256,12 @@ int main(int argc, char** argv) {
         std::unique_ptr<ui::LiveMatchdayScreen> live_screen;
         std::unique_ptr<ui::RealityReporterPanel> reality_reporter;
         std::unique_ptr<ui::SportschauIntro> sportschau_intro;if(!world12_development)sportschau_intro=std::make_unique<ui::SportschauIntro>(data);
-        std::unique_ptr<ui::MatchdayIntro> matchday_intro;if(!world12_development)matchday_intro=std::make_unique<ui::MatchdayIntro>(data);
+        std::unique_ptr<ui::MatchdayIntro> matchday_intro=std::make_unique<ui::MatchdayIntro>(data);
         std::unique_ptr<ui::SportschauEleven> sportschau_eleven;if(!world12_development)sportschau_eleven=std::make_unique<ui::SportschauEleven>(data);
         std::unique_ptr<ui::SportschauTeamInfo> sportschau_team_info;if(!world12_development)sportschau_team_info=std::make_unique<ui::SportschauTeamInfo>(data);
         std::unique_ptr<ui::CompetitionWinnerScreen> competition_winner;if(!world12_development)competition_winner=std::make_unique<ui::CompetitionWinnerScreen>(data);
         const auto season_exe = world12_development?load_reference_le(ui::asset_path(data,"BMH.exe"),DataProfile{}):load_le(ui::asset_path(data,"BMH.exe"));
+        if(world12_development)competition_winner=std::make_unique<ui::CompetitionWinnerScreen>(data,season_exe);
         live_screen=std::make_unique<ui::LiveMatchdayScreen>(data,season_exe);
         reality_reporter=std::make_unique<ui::RealityReporterPanel>(data,season_exe);
         english_game = english_game || season_exe.u8(layout::LeagueSizes) == 20;
@@ -1192,7 +1194,7 @@ int main(int argc, char** argv) {
                 auto projection = ui::club_info_from_game(services.state(), team, snapshot,
                                                           season_exe, season_texts);
                 projection.view = selected_view;
-                club_screen = std::make_unique<ui::ClubInfoScreen>(data, std::move(projection));
+                club_screen = std::make_unique<ui::ClubInfoScreen>(data, std::move(projection),season_exe);
             };
             const auto show = [&] {
                 auto title = "OpenBMH - cup_club_info_" + std::to_string(team) + "_" +
@@ -1246,7 +1248,7 @@ int main(int argc, char** argv) {
                         // altering the list's owned pre-cleanup drawing flags.
                         auto projection = club_screen->projection();
                         projection.category = applied;
-                        club_screen = std::make_unique<ui::ClubInfoScreen>(data, std::move(projection));
+                        club_screen = std::make_unique<ui::ClubInfoScreen>(data, std::move(projection),season_exe);
                         show();
                         break;
                     }
@@ -1426,10 +1428,10 @@ int main(int argc, char** argv) {
             auto mode = ui::TeamStatisticsMode::combined;
             std::unique_ptr<ui::TeamStatisticsScreen> statistics;
             const auto rebuild = [&] {
-                auto projection = ui::team_statistics_from_game(services.state(), team, mode,
+                auto projection = services.team_statistics?services.team_statistics(mode):ui::team_statistics_from_game(services.state(), team, mode,
                                                                  season_exe, season_texts);
                 statistics = std::make_unique<ui::TeamStatisticsScreen>(data,
-                    std::move(projection), parent_frame);
+                    std::move(projection), parent_frame,season_exe);
             };
             const auto show = [&] {
                 auto title = "OpenBMH - cup_team_statistics_" + std::to_string(team) +
@@ -2428,7 +2430,7 @@ int main(int argc, char** argv) {
             auto screen=std::make_unique<ui::LeagueTableScreen>(data,scope.view(),season_exe);
             bool closed=false,left_down=false,right_down=false,release_consumed=false,redraw=true;
             const app::world12::ClubInformationPresenter information=[&](const app::world12::ClubInformationProvider& provider,const Image&){
-                app::ClubModalServices services;services.club_projection=provider;return present_club_information&&present_club_information(services,0)&&running;
+                app::ClubModalServices services=provider.modals?*provider.modals:app::ClubModalServices{};services.club_projection=provider;return present_club_information&&present_club_information(services,provider.runtime_team)&&running;
             };
             while(running&&!closed){
                 if(redraw){const auto child=screen->world12_state()->child;present_season(screen->render(),child==0?"OpenBMH - live_overview_table":child==1?"OpenBMH - live_overview_pairings":"OpenBMH - live_overview_strengths");redraw=false;}
@@ -2520,7 +2522,7 @@ int main(int argc, char** argv) {
                 try {
                 if(request.action==ui::OtherGamesAction::team_info){
                     if(!request.world12_team.valid()||!page.world12_teams.contains(request.value)||page.world12_teams.at(request.value)!=request.world12_team)throw FormatError("world12: competition club token changed");
-                    auto display=staged;app::world12::inspect_club_information(display,world_session->reference(),season_exe,season_texts,request.world12_team,[&](const auto& provider,const Image&){app::ClubModalServices services;services.club_projection=provider;return present_club_information(services,0)&&running;},{});return page;
+                    auto display=staged;app::world12::inspect_club_information(display,world_session->reference(),season_exe,season_texts,request.world12_team,[&](const auto& provider,const Image&){app::ClubModalServices services=provider.modals?*provider.modals:app::ClubModalServices{};services.club_projection=provider;return present_club_information(services,provider.runtime_team)&&running;},{},seat,&world_session->english_rules());return page;
                 }
                 if(request.action==ui::OtherGamesAction::previous_round||request.action==ui::OtherGamesAction::next_round){if(!page.projection.round_arrows_visible)throw FormatError("world12: no competition round arrows");round=(page.projection.round+page.projection.rounds+(request.action==ui::OtherGamesAction::next_round?1:-1))%page.projection.rounds;selection.round=round;selection.participant_offset=0;}
                 else if(request.action==ui::OtherGamesAction::select_linked_page){if(request.value<0||size_t(request.value)>=page.projection.linked_pages.size())throw FormatError("world12: no selected linked competition stage");selection.stage=request.value;selection.round=round=-1;selection.participant_offset=0;if(initial.national)entry=staged.world.national_campaigns->seasons.at(staged.season).stages.at(size_t(request.value)).rules.entry;else if(initial.indoor)entry=staged.world.indoor->rules.at(size_t(request.value)).entry;}
@@ -2669,6 +2671,8 @@ int main(int argc, char** argv) {
                 throw FormatError("world12: live overview has no Source manager context");
             };
             bmh::world12::HumanRoundHooks hooks;
+            hooks.kickoff=[&](const auto& state,const auto& ticket){MatchdayIntroView view;for(const auto& label:bmh::world12::matchday_competition_labels(state,ticket))view.competition_names.push_back(ui::utf8_to_original(label));if(view.competition_names.empty())return;sportschau_presenter.kickoff(world_session->reference(),view);if(!running)throw FormatError("world12: pre-match presentation interrupted");};
+            hooks.completed_titles=[&](const auto& before,const auto& after){for(const auto& notice:bmh::world12::newly_completed_titles(before,after,world_session->rules(),world_session->english_rules())){GameState display;const auto name=ui::utf8_to_original(after.world.clubs.at(notice.club).name);display.club_ids={0};display.club_names.assign(name.begin(),name.end());display.club_names.push_back(0);display.texts=&season_texts;CompetitionWinnerView view{notice.artwork,0,ui::utf8_to_original("Sieger: "+notice.competition)};sportschau_presenter.winner(display,view);if(!running)throw FormatError("world12: winner presentation interrupted");}};
             hooks.before_matchday=[&,observers,live,overview_viewer](auto& projection,MatchEngine& engine) {
                 auto& state=projection.state;
                 const auto flag=[&](uint32_t at){return state.memory.has(at)?state.memory.u8(at):season_exe.u8(at);};
@@ -2698,6 +2702,7 @@ int main(int argc, char** argv) {
             hooks.before_owned=[live](auto&,auto&,const bmh::world12::CareerSnapshot& snapshot){live->staged_snapshot=snapshot;};
             hooks.live_event=[open_lineup](auto& projection,auto& engine,const auto& event) {open_lineup(projection,engine,event.minute,event.team,event);};
             hooks.after_minute=[&,live,open_lineup,overview_viewer](auto& projection,MatchEngine& engine,int minute) {
+                if(ui::live_matchday_frame(minute,engine.groups,projection.state).matches.empty())return;
                 if(!running)throw FormatError("world12: live minute interrupted");
                 const auto draw=[&] {if(!live->live_skipped){const auto frame=ui::live_matchday_frame(minute,engine.groups,projection.state);if(!frame.matches.empty())present_season(live_screen->render(frame),"OpenBMH - live_matchday");}};
                 draw();
@@ -2957,8 +2962,8 @@ int main(int argc, char** argv) {
                     process_timer.pause(process_source_seconds());process_timer_frame.reset();
                 }
                 const app::world12::ClubInformationPresenter club_information=[&](const app::world12::ClubInformationProvider& provider,const Image&) {
-                    app::ClubModalServices services;services.club_projection=provider;
-                    return present_club_information(services,0)&&running;
+                    app::ClubModalServices services=provider.modals?*provider.modals:app::ClubModalServices{};services.club_projection=provider;
+                    return present_club_information(services,provider.runtime_team)&&running;
                 };
                 const auto& table_range=present_table_range;
                 std::optional<app::world12::StartupTurnHooks> turn;
@@ -2999,7 +3004,7 @@ int main(int argc, char** argv) {
                     world_process_timer.reset();process_timer_frame.reset();
                 }
                 if(world_session&&world_session->snapshot().world.economy&&world_session->snapshot().world.economy->presentation_options){const auto& options=*world_session->snapshot().world.economy->presentation_options;playback.set_original_options({music_enabled&&(options[5]&0x7f)==0,true,(options[6]&0x7f)==0});}
-                if(result.error.empty()&&(result.progress==app::world12::StartupProgress::prepared||(r.request==ui::FlowRequest::file_action&&r.file_action.file_kind==ui::SaveLoadFileKind::game&&r.file_action.action==ui::SaveLoadAction::load)))app::original_audio_command(playback,1);
+                if(result.error.empty()&&(result.progress==app::world12::StartupProgress::prepared||(r.request==ui::FlowRequest::file_action&&r.file_action.file_kind==ui::SaveLoadFileKind::game&&r.file_action.action==ui::SaveLoadAction::load))){app::original_audio_command(playback,1);if(qa_view_path){const auto stats=playback.original_stats();std::ofstream audio(launch::path_from_utf8(std::string(qa_view_path)+".audio"),std::ios::app);audio<<"career\t"<<stats.song<<'\t'<<stats.playing<<'\t'<<stats.failed<<'\n';}}
                 if(!result.error.empty())std::fprintf(stderr,"world12: %s\n",result.error.c_str());
                 dirty=true;return;
             }

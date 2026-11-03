@@ -28,7 +28,7 @@ namespace {
 AiLeagueRoundOutcome run_ai_league_matches(World& world,const GameState& base,const std::vector<Fixture>& fixtures,
     const std::vector<AiLeagueConditions>& conditions,GameRandom& game,WatcomRandom& random,bool settle,
     CareerSnapshot* human_snapshot=nullptr,HumanProjectionPolicy policy={},const HumanRoundHooks* hooks=nullptr,
-    const KnockoutStage* cup=nullptr,const LeImage* cup_source=nullptr,CupRoundOutcome* cup_out=nullptr,const EuropeanGroup* european=nullptr,const std::vector<EuropeanGroup>* european_batch=nullptr,const std::vector<size_t>* league_groups=nullptr,const RegionalPlayoffGroup* regional=nullptr,const std::vector<NationalGroup>* national=nullptr,const FriendlyGroup* friendly=nullptr,std::vector<std::optional<uint8_t>>* friendly_kickoffs=nullptr) {
+    const KnockoutStage* cup=nullptr,const LeImage* cup_source=nullptr,CupRoundOutcome* cup_out=nullptr,const EuropeanGroup* european=nullptr,const std::vector<EuropeanGroup>* european_batch=nullptr,const std::vector<size_t>* league_groups=nullptr,const RegionalPlayoffGroup* regional=nullptr,const std::vector<NationalGroup>* national=nullptr,const FriendlyGroup* friendly=nullptr,std::vector<std::optional<uint8_t>>* friendly_kickoffs=nullptr,bool observe_ai=false) {
     const bool national_mode=national||(friendly&&friendly->national);
     if(fixtures.empty() || fixtures.size()>(friendly?30u:national?12u:european?64u:cup?32u:regional?2u:league_groups?40u:10u) || conditions.size()!=fixtures.size())throw std::invalid_argument("world12: incomplete AI league match batch");
     if(national&&(!human_snapshot||national->empty()))throw FormatError("world12: national clock lacks its snapshot/group owner");
@@ -55,9 +55,24 @@ AiLeagueRoundOutcome run_ai_league_matches(World& world,const GameState& base,co
         league=home.league;participants.push_back(fixture.home);participants.push_back(fixture.away);
     }
     if(human_snapshot&&(human_snapshot->world!=world||conditions[0].date!=human_snapshot->date))throw std::invalid_argument("world12: human forecast snapshot/date does not match round owner");
-    const bool club_human_mode=human_snapshot&&((!cup&&!european&&!regional)||std::any_of(world.managers.begin(),world.managers.end(),[&](const auto& m){return std::find(participants.begin(),participants.end(),m.club)!=participants.end();}));
+    const bool club_human_mode=human_snapshot&&!observe_ai&&((!cup&&!european&&!regional)||std::any_of(world.managers.begin(),world.managers.end(),[&](const auto& m){return std::find(participants.begin(),participants.end(),m.club)!=participants.end();}));
     const auto original_economy=world.economy;
-    auto projection=national_mode?AiMatchProjection::create_for_nationals(*human_snapshot,participants,base,policy):european?AiMatchProjection::create_for_european(*human_snapshot,participants,base,policy):club_human_mode?(league_groups?AiMatchProjection::create_for_human_leagues(*human_snapshot,participants,base,policy):AiMatchProjection::create_for_humans(*human_snapshot,participants,base,policy)):AiMatchProjection::create(world,participants,base);auto& local=projection.state;
+    auto projection=[&] {
+        if(observe_ai&&!world.managers.empty()) {
+            // Spectators keep their real settings/view ownership without
+            // becoming participants in this AI-only group.
+            auto clubs=participants;
+            for(const auto& manager:world.managers)
+                if(std::find(clubs.begin(),clubs.end(),manager.club)==clubs.end())clubs.push_back(manager.club);
+            return AiMatchProjection::create_for_humans(*human_snapshot,clubs,base,policy);
+        }
+        return national_mode?AiMatchProjection::create_for_nationals(*human_snapshot,participants,base,policy):european?AiMatchProjection::create_for_european(*human_snapshot,participants,base,policy):club_human_mode?(league_groups?AiMatchProjection::create_for_human_leagues(*human_snapshot,participants,base,policy):AiMatchProjection::create_for_humans(*human_snapshot,participants,base,policy)):AiMatchProjection::create(world,participants,base);
+    }();
+    auto& local=projection.state;
+    if(observe_ai&&projection.human_managers()) {
+        const auto viewer=human_snapshot->desktop&&human_snapshot->desktop->active_seat?*human_snapshot->desktop->active_seat:human_snapshot->progress?human_snapshot->progress->last_manager:projection.global_manager(0);
+        for(size_t n=0;n<projection.human_managers();++n)if(projection.global_manager(uint8_t(n))==viewer)local.memory.set8(layout::ActiveManager,uint8_t(n));
+    }
     const bool human_mode=national_mode?projection.human_managers()!=0:club_human_mode;
     if(original_economy){if(national_mode)install_career_mailbox(projection,world);else install_career_economy(projection,world);}
     local.indoor=false;local.lineups_frozen=false;local.pools_open=false;local.date=conditions[0].date;
@@ -153,7 +168,7 @@ AiLeagueRoundOutcome run_ai_league_matches(World& world,const GameState& base,co
         groups.push_back(std::move(group));
     }
     bmh::MatchEngine engine(local,groups,staged_game,staged_random,conditions[0].referee_properties);
-    engine.month=conditions[0].month;engine.buttons=conditions[0].presentation_buttons;engine.leave_screens=!human_mode||(hooks&&hooks->decline_unpresented_events);
+    engine.month=conditions[0].month;engine.buttons=conditions[0].presentation_buttons;engine.leave_screens=(!human_mode&&!observe_ai)||(hooks&&hooks->decline_unpresented_events);
     if(hooks&&hooks->live_event)engine.live_event=[&](const bmh::LiveMatchEvent& event){hooks->live_event(projection,engine,event);};
     std::vector<size_t> pool_rows;for(size_t m=0;m<conditions.size();++m)if(conditions[m].pools_selected)pool_rows.push_back(m);
     if(pool_rows.size()>11)throw FormatError("world12: pools receipt exceeds eleven fixtures");
@@ -194,6 +209,10 @@ AiLeagueOutcome simulate_and_settle_ai_league_match(World& world,const GameState
     auto result=run_ai_league_matches(world,base,{fixture},{conditions},game,random,true);auto outcome=result.matches.front();outcome.game_draws=result.game_draws;outcome.watcom_draws=result.watcom_draws;return outcome;
 }
 AiLeagueRoundOutcome simulate_and_settle_ai_league_fixtures(World& world,const GameState& base,LeagueId league,int round,const std::vector<uint8_t>& indices,const std::vector<AiLeagueConditions>& conditions,GameRandom& game,WatcomRandom& random){return run_ai_league_matches(world,base,selected_league_fixtures(world,league,round,indices),conditions,game,random,true);}
+AiLeagueRoundOutcome simulate_observed_ai_league_fixtures(CareerSnapshot& state,const GameState& base,LeagueId league,int round,const std::vector<uint8_t>& indices,const std::vector<AiLeagueConditions>& conditions,HumanProjectionPolicy policy,GameRandom& game,WatcomRandom& random,const HumanRoundHooks& hooks){
+    const auto fixtures=selected_league_fixtures(state.world,league,round,indices);for(const auto& f:fixtures)for(const auto& m:state.world.managers)if(m.club==f.home||m.club==f.away)throw FormatError("world12: observed AI group contains an actual human");
+    const auto before=state;const auto gs=game.seed();const auto ws=random.seed();const auto gc=game.calls(),wc=random.calls();auto candidate=state;candidate.game_seed=gs;candidate.watcom_seed=ws;auto gr=game;auto wr=random;const auto outcome=run_ai_league_matches(candidate.world,base,fixtures,conditions,gr,wr,true,&candidate,policy,&hooks,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,true);candidate.game_seed=gr.seed();candidate.watcom_seed=wr.seed();candidate.validate();if(state!=before||game.seed()!=gs||random.seed()!=ws||game.calls()!=gc||random.calls()!=wc)throw FormatError("world12: observed AI owner changed");state=std::move(candidate);game=gr;random=wr;return outcome;
+}
 AiLeagueRoundOutcome simulate_and_settle_ai_league_round(World& world,const GameState& base,LeagueId league,int round,const std::vector<AiLeagueConditions>& conditions,GameRandom& game,WatcomRandom& random) {
     return run_ai_league_matches(world,base,league_fixtures(world,league,round),conditions,game,random,true);
 }

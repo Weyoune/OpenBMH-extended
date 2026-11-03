@@ -50,7 +50,7 @@ AiMatchProjection AiMatchProjection::create_core(const World& world,const std::v
         const bool domestic=league.playable;
         state.projected_match_clubs.push_back({league_class,int(league.country),domestic?3:2});
         state.club_kits.at(team)=it->second.kit;state.club_short_offsets.at(team)=it->second.short_span;
-        state.team_flags.at(team)=it->second.match_flags;state.team_morale.at(team)=it->second.morale;state.memory.set16(discipline+uint32_t(team*2),it->second.fairplay_points);
+        state.team_flags.at(team)=it->second.match_flags;state.team_morale.at(team)=uint8_t(it->second.morale|(it->second.presentation_category.value_or(0)<<6));state.memory.set16(discipline+uint32_t(team*2),it->second.fairplay_points);
         if(!record_names.contains(id))record_names[id]=append(state.club_names,it->second.name);
         state.club_ids[team]=record_names.at(id);projection.record_opponents_[record_names.at(id)]=id;
         const size_t record=team*0x4a;
@@ -168,7 +168,7 @@ AiMatchProjection AiMatchProjection::create_humans(const CareerSnapshot& snapsho
         const auto& manager=*managers[m];const auto team=result.local_club(manager.club);result.manager_seats_.push_back(manager.seat);local.manager_teams.push_back(int(team));
         const auto at=m*0xb0c;for(size_t i=0;i<manager.name.size();++i)local.manager_records[at+0xa8+i]=uint8_t(manager.name[i]);
         local.manager_records[at+0x210]=world.catalogue.league(world.clubs.at(manager.club).league).local_index;local.manager_records[at+0x221]=manager.portrait;
-        local.manager_records[at+0x290]=uint8_t(team);local.manager_records[at+0x291]=uint8_t(team>>8);local.team_morale[team]|=0x80;
+        local.manager_records[at+0x290]=uint8_t(team);local.manager_records[at+0x291]=uint8_t(team>>8);if(!world.clubs.at(manager.club).presentation_category)local.team_morale[team]|=0x80;
         install_manager_finance(local,int(m),*manager.finance);install_manager_tactics(local,int(m),*manager.tactics,result.players_);
         install_manager_match_state(local,int(m),*manager.match_state,result.manager_reference_clubs_,result.players_);
         if(manager.career)install_manager_career_state(local,uint8_t(m),*manager.career,result.players_);
@@ -203,7 +203,7 @@ AiMatchProjection AiMatchProjection::create_for_european(const CareerSnapshot& s
     for(auto id:abstract){const auto& club=snapshot.world.clubs.at(id);const auto team=size_t(runtime_dimensions.record_teams)+result.abstract_clubs_.size();
         if(team>=local.club_ids.size()||team>=local.team_flags.size()||team>=local.team_morale.size()||local.club_names.size()+club.name.size()+1>65535)throw FormatError("world12: abstract match workspace exceeded");
         result.abstract_clubs_.push_back(club);const auto name=uint16_t(local.club_names.size());local.club_names.insert(local.club_names.end(),club.name.begin(),club.name.end());local.club_names.push_back(0);local.club_ids[team]=name;result.record_opponents_[name]=id;
-        local.club_kits[team]=club.kit;local.club_short_offsets[team]=club.short_span;local.team_flags[team]=club.match_flags;local.team_morale[team]=club.morale;local.foreign_strength[team-size_t(runtime_dimensions.record_teams)]=club.rating;
+        local.club_kits[team]=club.kit;local.club_short_offsets[team]=club.short_span;local.team_flags[team]=club.match_flags;local.team_morale[team]=uint8_t(club.morale|(club.presentation_category.value_or(0)<<6));local.foreign_strength[team-size_t(runtime_dimensions.record_teams)]=club.rating;
         local.projected_match_clubs.resize(team+1);local.projected_match_clubs[team]={9,int(club.country)+5,0};
         // Source table_position returns2 immediately for clubs outside league
         // slots. This is its attendance operand, never a fabricated standing.

@@ -509,7 +509,7 @@ bool Session::apply_tables(const ui::World12TableRequest& request,
         inspect_club_information(
             candidate, resources_.reference, resources_.german,
             *resources_.texts, request.team, club_presenter,
-            ui::LeagueTableScreen(data, current, resources_.german).render());
+            ui::LeagueTableScreen(data, current, resources_.german).render(),request.identity.manager,&resources_.english);
         break;
     case ui::World12TableAction::control:
         if (selection.child != 0)

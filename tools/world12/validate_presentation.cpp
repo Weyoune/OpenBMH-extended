@@ -1,0 +1,33 @@
+// SPDX-License-Identifier: GPL-3.0-only
+#include "app/world12_session.hpp"
+#include "app/world12_save_load.hpp"
+#include "game/world12/weekly_incidents.hpp"
+#include "game/world12/presentation.hpp"
+#include "game/world12/save.hpp"
+#include "game/save.hpp"
+#include "ui/sportschau.hpp"
+#include "ui/manager.hpp"
+#include <fstream>
+#include <iostream>
+#include <algorithm>
+using namespace bmh;using namespace bmh::world12;namespace app12=bmh::app::world12;
+int main(int argc,char** argv)try{
+    if(argc!=3)throw FormatError("usage: world12_validate_presentation DATA OUTPUT");const std::filesystem::path data=argv[1],out=argv[2];std::filesystem::create_directories(out);const auto resources=app12::load_runtime_resources(data);
+    ui::SetupOptions options;options.country_selection=true;options.germany=options.england=true;options.world=false;options.league=true;options.mode=3;options.managers=2;options.difficulty=2;options.duration=5;
+    app12::Session session(resources,options,91,391);
+    for(uint8_t seat=0;seat<2;++seat){const auto country=seat?Country::england:Country::germany;const auto context=session.selection_context();const auto league=session.snapshot().world.catalogue.starting_league(country,0);ui::ManagerChoice c;c.slot=seat;c.portrait=seat;c.name=seat?"Presentation EN":"Presentation DE";c.master_club=-1;c.country=country;c.world_club=session.snapshot().world.membership[league.value].clubs[0];c.start_league=0;c.strength=1;c.roster_revision=context.revision;session.confirm_manager(c,context.revision);}
+    session.prepare_start(session.revision());session.begin_first_event(session.revision());
+    const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));
+    const auto capture=[&](const std::string& name,const Image& frame,const CareerSnapshot& state,const Palette* override_colors=nullptr){std::ofstream f(out/(name+".ppm"),std::ios::binary);f<<"P6\n320 240\n255\n";for(auto p:frame.pixels){const auto color=(override_colors?*override_colors:palette).argb[p];f.put(char(color>>16));f.put(char(color>>8));f.put(char(color));}write_savegame(out/(name+".FBM"),make_save(state));};
+    ui::MatchdayIntro intro(data);ui::CompetitionWinnerScreen winners(data,resources.german);size_t starts=0,titles=0,source_clocks=0;std::ofstream log(out/"events.tsv");
+    app12::ClockHooks clock;clock.relations=[](const auto& s){return current_weekly_club_relations(s);};clock.services.incidents.answer=[](const auto&,uint8_t,const auto&)->std::optional<bool>{return false;};clock.services.auctions.allocator=TransferAllocatorContext::zero;clock.services.auctions.select=[](const auto&,const auto&,const auto&)->std::optional<int>{return -1;};clock.services.auctions.notice=[](const auto&,const auto&,const auto&){};clock.services.loans.keep=[](const auto&,uint8_t,const auto&,const auto&)->std::optional<bool>{return false;};clock.services.contracts.renew=[](auto&,auto&,auto&,uint8_t,auto,int,const auto&)->std::optional<bool>{return false;};
+    PendingOfferHooks pending;pending.human_buyer_allocator_gate=TransferAllocatorContext::zero;pending.answer=[](const auto&,const auto&){return PendingOfferAnswer::no;};pending.select_transfer=[](const auto&,const auto&){return PendingOfferTransferChoice{PendingOfferTransferChoiceKind::decline,-1};};pending.notice=[](const auto&,const auto&){};pending.program_error=[](const auto&,uint16_t){};
+    HumanRoundHooks hooks;hooks.decline_unpresented_events=true;hooks.before_owned=[&](auto&,auto&,const auto&){++source_clocks;};hooks.kickoff=[&](const auto& s,const auto& ticket){const auto labels=matchday_competition_labels(s,ticket);if(labels.empty())return;++starts;const bool gap=std::find(labels.begin(),labels.end(),"")!=labels.end();if(starts==1||gap&&starts<20){MatchdayIntroView view;for(const auto& label:labels)view.competition_names.push_back(ui::utf8_to_original(label));capture("intro-"+std::to_string(starts),intro.render(view),s,intro.palette_override()?&*intro.palette_override():nullptr);}log<<"intro\t"<<s.date<<'\t'<<labels.size()<<'\t'<<gap<<'\n';};
+    hooks.completed_titles=[&](const auto& before,const auto& after){for(const auto& n:newly_completed_titles(before,after,resources.german,resources.english)){++titles;GameState display;auto name=ui::utf8_to_original(after.world.clubs.at(n.club).name);display.club_ids={0};display.club_names.assign(name.begin(),name.end());display.club_names.push_back(0);display.texts=resources.texts.get();CompetitionWinnerView view{n.artwork,0,ui::utf8_to_original("Sieger: "+n.competition)};capture("winner-"+std::to_string(titles),winners.render(display,view),after,winners.palette_override(n.artwork)?&*winners.palette_override(n.artwork):nullptr);write_savegame(out/("winner-"+std::to_string(titles)+"-before.FBM"),make_save(before));log<<"winner\t"<<after.date<<'\t'<<int(n.artwork)<<'\t'<<n.club.value<<'\t'<<n.competition<<'\n';}};
+    for(size_t step=0;step<1000;++step){const auto& s=session.snapshot();if(s.progress&&s.progress->phase==ProgressPhase::season_end){write_savegame(out/"season-complete.FBM",make_save(s));if(starts==0||titles<5||source_clocks==0)throw FormatError("missing actual kickoff/title clocks");std::cout<<"Actual Source season: "<<starts<<" pre-match lists, "<<titles<<" newly completed titles, "<<source_clocks<<" real clocks; country separation and Original renderer captures saved\n";return 0;}
+        if(!s.desktop||!s.desktop->active_seat||!s.desktop->initial_event)throw FormatError("missing actual desk owner");const auto seat=*s.desktop->active_seat;clock.services.auctions.active_seat=seat;clock.services.loans.active_seat=seat;ui::DeskRequest request;request.kind=ui::DeskRequestKind::advance_turn;request.manager_slot=seat;request.revision=session.revision();
+        if(s.desktop->initial_event->offer){session.resolve_pending(data,request,pending);continue;}if(s.desktop->autosave_pending){ui::SaveLoadRequest save;save.action=ui::SaveLoadAction::save;save.file_kind=ui::SaveLoadFileKind::game;save.manager_slot=seat;save.revision=session.revision();save.path=out/"Auto.FBM";save.overwrite=true;app12::publish_game_save(save.path,session.prepare_manual_save(save),true);continue;}
+        if(size_t(s.desktop->initial_event->manager_position)+1<s.desktop->initial_event->manager_order.size())session.advance_manager(request);else if(session.advance_to_next_desktop(request,data,clock,hooks))throw FormatError("unexpected finite career end");
+        if(read_save(make_save(session.snapshot()))!=session.snapshot())throw FormatError("presentation lost strict saved receipts");
+    }throw FormatError("bounded season did not finish");
+}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}

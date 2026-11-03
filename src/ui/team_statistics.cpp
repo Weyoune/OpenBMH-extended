@@ -187,9 +187,10 @@ TeamStatisticsProjection team_statistics_from_game(const GameState& game, int te
 }
 
 TeamStatisticsScreen::TeamStatisticsScreen(const std::filesystem::path& data,
-                                           TeamStatisticsProjection projection, Image club_info_backdrop)
-    : projection_(std::move(projection)), data_directory_(data), exe_(load_le(asset_path(data, "BMH.exe"))),
-      font_(load_font(asset_path(data / "F", "BMH3.FNT"))), header_font_(load_font(asset_path(data / "F", "BMH2.FNT"))), sprite_font_(data),
+                                           TeamStatisticsProjection projection, Image club_info_backdrop):TeamStatisticsScreen(data,std::move(projection),std::move(club_info_backdrop),load_le(asset_path(data,"BMH.exe"))){}
+TeamStatisticsScreen::TeamStatisticsScreen(const std::filesystem::path& data,TeamStatisticsProjection projection,Image club_info_backdrop,const LeImage& reference)
+    : projection_(std::move(projection)), data_directory_(data), exe_(reference),
+      font_(load_font(asset_path(data / "F", "BMH3.FNT"))), header_font_(load_font(asset_path(data / "F", "BMH2.FNT"))), sprite_font_(data,reference),
       texts_(load_textd(asset_path(data, "TEXTD.BLK"))), backdrop_(std::move(club_info_backdrop)),
       widgets_(load_vga(asset_path(data / "KB", "0.VGA"))),
       flags_(load_vga(asset_path(data / "KB", "24.VGA"))), faces_(load_vga(asset_path(data / "KB", "27.VGA"))),
@@ -201,11 +202,11 @@ TeamStatisticsScreen::TeamStatisticsScreen(const std::filesystem::path& data,
          projection_.league_row >= projection_.table.size)))
         throw FormatError("team statistics: invalid owned projection/backdrop");
     if (!projection_.source_badge_fallback) {
-        if (size_t(projection_.runtime_team) * 2 + 1 >= projection_.badge_heap.size())
+        if (projection_.badge_atlas.empty()&&size_t(projection_.runtime_team) * 2 + 1 >= projection_.badge_heap.size())
             throw FormatError("team statistics: Source crest selector missing from owned projection");
-        const uint16_t selector = uint16_t(projection_.badge_heap[size_t(projection_.runtime_team) * 2] |
+        const uint16_t selector = !projection_.badge_atlas.empty()?projection_.badge_cell:uint16_t(projection_.badge_heap[size_t(projection_.runtime_team) * 2] |
             uint16_t(projection_.badge_heap[size_t(projection_.runtime_team) * 2 + 1]) << 8) & 0x1ff;
-        crest_ = load_vga(asset_path(data / "W", std::to_string(selector >> 3) + ".VGA"));
+        crest_ = load_vga(projection_.badge_atlas.empty()?asset_path(data / "W", std::to_string(selector >> 3) + ".VGA"):asset_path(data,projection_.badge_atlas));
     }
 }
 
@@ -428,9 +429,9 @@ Image TeamStatisticsScreen::render() const {
     copy(out, faces_, (face_difference + 2) * 38, 0, 222, 55, 38, 38);
     if (projection_.source_badge_fallback) copy(out, widgets_, 8, 0, 271, 55, 38, 38);
     else if (crest_.width >= 38) {
-        const uint16_t selector = uint16_t(projection_.badge_heap[size_t(projection_.runtime_team) * 2] |
+        const uint16_t selector = !projection_.badge_atlas.empty()?projection_.badge_cell:uint16_t(projection_.badge_heap[size_t(projection_.runtime_team) * 2] |
             uint16_t(projection_.badge_heap[size_t(projection_.runtime_team) * 2 + 1]) << 8) & 0x1ff;
-        copy(out, crest_, (selector & 7) * 38, 0, 271, 55, 38, 38);
+        copy(out, crest_, (projection_.badge_atlas.empty()?(selector & 7):projection_.badge_cell) * 38, 0, 271, 55, 38, 38);
     }
     if (projection_.source_has_league_panel || projection_.runtime_team == kNoTeam) {
         const int league = projection_.league;

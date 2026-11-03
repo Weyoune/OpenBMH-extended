@@ -1,7 +1,7 @@
 # OpenBMH-Extended 1.0 Beta status
 
 Published Beta 1 is `1.0.0-beta.1`; the next implementation milestone is
-`1.0.0-beta.2` on `main`. A version string alone is not a published release.
+`1.0.0-beta.3` on `main`. A version string alone is not a published release.
 The old `world12` and `dual-classic-2` names identify the shared data model,
 not a different public product version. Classic remains independent.
 
@@ -16,11 +16,11 @@ not a different public product version. Classic remains independent.
 | Competitions | Separate domestic cups, shared European cups, national competitions, indoor tournaments and promotion playoffs |
 | Management | Original lineup, tactics, training, camps, bank, facilities, environment, advertising, contracts and transfers |
 | Friendlies | Actual club/national opponent picker, cost and human consent, dated booking, attendance, match and saved result |
-| Match UI | Existing Classic renderers, live overviews, settings, player cards and genuine intervention screens |
+| Match UI | Existing Classic renderers, pre-match country grouping, winner screens, live overviews, settings, player cards and genuine intervention screens |
 | Progression | Saved daily/weekly/monthly services, actual match clocks, awards, promotion and annual continuation |
 | Statistics | Actual season and persistent title/player histories; unknown older facts remain unknown |
 | Saves | Typed FBM career snapshots, both RNG streams and owned match/attendance receipts |
-| Runtime data | Self-contained finalized OBD; no original executable or launcher required |
+| Runtime data | Self-contained OBD; refreshed English squads and Original FLTD camps; no original executable or launcher required |
 | Accounting | Recorded current values plus saved current/real/future planning, Original controls and warning acknowledgement |
 | Postponement | Original Verlegen calendar; individual early/deferred home fixtures, undo, real replays and saved receipts |
 | Joining a running game | Original options/club picker; staged atomic publication, existing loans retained |

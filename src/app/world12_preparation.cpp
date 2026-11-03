@@ -51,7 +51,7 @@ void Session::open_preparation(const ui::DeskRequest& request) {
         const auto seat=projection.global_manager(uint8_t(native_manager));
         const auto& manager=*std::find_if(candidate.world.managers.begin(),candidate.world.managers.end(),[&](const auto& m){return m.seat==seat;});
         if(!manager.career||!manager.career->camp_focus)throw FormatError("world12: old career lacks saved camp focus; start a current fresh career");
-        const auto camp=ui::training_camp_from_game(local,resources_.german,native_manager,owner_.revision);
+        const auto& camp_rules=candidate.world.clubs.at(manager.club).country==Country::england?resources_.english:resources_.german;configure_training_camp_data(local,camp_rules);const auto camp=ui::training_camp_from_game(local,camp_rules,native_manager,owner_.revision);
         if(camp.focus_normalization_required&&!set_training_camp_focus(local,native_manager,camp.focus))throw FormatError("world12: camp entry normalization failed");
     }
     if(request.menu_kind==3)prepare_lineup(local,native_manager,team);
@@ -79,7 +79,7 @@ void Session::apply_preparation(const ui::PreparationRequest& request) {
             }
         } else if constexpr(std::is_same_v<R,ui::TrainingCampRequest>) {
             if(*preparation_menu_!=15)throw FormatError("world12: camp command has no current menu owner");
-            actor(local,r.manager_slot,r.runtime_club,r.revision,revision);auto scratch=revision;std::string error;
+            actor(local,r.manager_slot,r.runtime_club,r.revision,revision);const auto seat=projection.global_manager(uint8_t(r.manager_slot));const auto& manager=*std::find_if(candidate.world.managers.begin(),candidate.world.managers.end(),[&](const auto& m){return m.seat==seat;});configure_training_camp_data(local,candidate.world.clubs.at(manager.club).country==Country::england?resources_.english:resources_.german);auto scratch=revision;std::string error;
             if(!apply_training_camp_request_source(local,random,r,scratch,error))throw FormatError(error.empty()?"world12: camp command rejected":error);
             camp_changed=true;
         } else throw FormatError("world12: unsupported preparation command");
@@ -91,7 +91,7 @@ void Session::apply_preparation(const ui::PreparationRequest& request) {
 }
 void Session::close_preparation(){if(friendly_)throw FormatError("world12: friendly quote requires its owned close request");if(readonly_owner_)throw FormatError("world12: readonly window requires its owned close request");if(preparation_menu_==0||preparation_menu_==5||preparation_menu_==17)throw FormatError("world12: competition overview requires its owned close request");if(preparation_menu_==19)throw FormatError("world12: settings require their owned close request");if(preparation_menu_==22&&stadium_.opened)throw FormatError("world12: stadium requires its owned close request");if(preparation_menu_==27)throw FormatError("world12: contracts require their owned close request");if(preparation_menu_&&*preparation_menu_==63)throw FormatError("world12: mailbox requires its owned close request");if(!preparation_menu_)throw FormatError("world12: no preparation menu to close");preparation_menu_.reset();environment_owner_.reset();environment_request_=0;}
 ui::PreparationState Session::preparation_view(const std::filesystem::path& data)const {
-    auto view=ui::world12_preparation(data,state_,resources_.reference,resources_.german,options_,owner_.revision);
+    auto view=ui::world12_preparation(data,state_,resources_.reference,resources_.german,options_,owner_.revision,&resources_.english);
     if(view.bank){view.bank->last_tip=bank_tip_;view.bank->property_notice=bank_property_notice_;view.bank->credit_notice=bank_credit_notice_;}
     if(preparation_menu_==22)view.stadium=stadium_view(data);
     if(preparation_menu_==13)view.toto=toto_view(data);

@@ -20,6 +20,7 @@ namespace bmh::ui {
 class CompetitionWinnerScreen {
 public:
     explicit CompetitionWinnerScreen(const std::filesystem::path& data_directory);
+    CompetitionWinnerScreen(const std::filesystem::path&,const LeImage&);
     Image render(const GameState& state, const CompetitionWinnerView& view) const;
     const std::optional<Palette>& palette_override(uint8_t title) const;
 private:

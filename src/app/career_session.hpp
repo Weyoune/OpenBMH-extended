@@ -52,7 +52,7 @@
 #include "ui/opportunities.hpp"
 #include "ui/other_games_state.hpp"
 
-namespace bmh::ui {struct ClubPlayerDetailProjection;}
+namespace bmh::ui {struct ClubPlayerDetailProjection;struct TeamStatisticsProjection;enum class TeamStatisticsMode:uint8_t;}
 namespace bmh::app {
 
 ui::OutgoingTransferEditorState loan_return_offer_editor_projection(
@@ -83,6 +83,7 @@ struct LiveSubstitutionResult {
 struct ClubModalServices {
     // Optional owned projection for typed inspection; legacy callbacks stay unchanged.
     std::function<ui::ClubInfoProjection(ui::ClubInfoView)> club_projection;
+    std::function<ui::TeamStatisticsProjection(ui::TeamStatisticsMode)> team_statistics;
     bool transactional = true;
     std::function<GameState&()> state;
     std::function<ClubInfoEntry(int)> enter_club;

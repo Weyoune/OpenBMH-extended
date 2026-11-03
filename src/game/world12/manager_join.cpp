@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "game/world12/manager_join.hpp"
+#include "game/world12/club_presentation.hpp"
 #include "game/world12/manager_tactics.hpp"
 #include "game/world12/manager_finance.hpp"
 #include "game/world12/manager_match_state.hpp"
@@ -46,6 +47,7 @@ ManagerJoiningOutcome add_running_manager(CareerSnapshot& state,const InitialMan
     // Its complete economy is captured below after Source personal initialization.
     world.economy->managers[choice.seat].balance_plan.reset();
     initialize_joining_manager_contracts(world,choice.seat,initial,policy,random);
+    change_club_category(world,choice.club,2);
     auto& added=*std::find_if(world.managers.begin(),world.managers.end(),[&](const auto& m){return m.seat==choice.seat;});
     install_manager_career_state(initial,choice.seat,*added.career,{});install_manager_finance(initial,choice.seat,*added.finance);
     initial.memory.add_block(layout::Loans,4*0x78);for(uint32_t i=0;i<0x78;i+=4)initial.memory.set32(layout::Loans+uint32_t(choice.seat)*0x78+i,0);

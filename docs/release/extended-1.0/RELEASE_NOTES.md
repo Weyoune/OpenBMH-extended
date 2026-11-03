@@ -25,6 +25,16 @@ and match calculations. It is a separate game line from
 - New high-resolution Extended start artwork; recent Classic input, dialog,
   localization and desktop corrections are included.
 
+## Beta 3 corrections
+
+- Current English squads from the supplied FC source, with import provenance.
+- Football Limited training-camp map and country-specific booking values.
+- Player cards, team statistics and saved display/radio choices in club information.
+- Original Europe artwork, pre-match lists and competition winner screens.
+- National draws restricted to relevant human national participants; career music restored.
+- The preceding Beta 2 milestone adds match postponement, a new human manager
+  during a running career, and interactive future balance planning.
+
 ## Installation and data
 
 Extract the complete archive for your operating system. Run `OpenBMH.exe` on
@@ -50,13 +60,6 @@ and keep the different games' save directories separate.
 
 ## Beta limitations
 
-- Manual match postponement is not implemented in the shared-country career.
-  The calendar is available; the Verlegen action reports the Beta limitation.
-  Its Classic implementation remains in the independent Classic game.
-- Select all human managers when starting a game. Adding another manager to an
-  already running shared career is not implemented in this Beta.
-- The accounting screen shows recorded current values. Interactive future
-  balance planning is not part of this Beta.
 - The earlier native `obdeddi` editor and console operate on Classic-profile
   data. They do not edit or run the authoritative shared `WORLD12.JSON` career.
   The runtime download therefore contains the graphical game only.

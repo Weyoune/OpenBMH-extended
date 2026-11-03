@@ -67,7 +67,7 @@ bool Session::apply_other_games(const ui::OtherGamesRequest& request,const std::
     if(request.action==ui::OtherGamesAction::team_info){
         const auto before=state_;const auto old_generation=other_games_generation_;const auto old_selection=other_games_selection_;
         if(!resources_.texts)throw FormatError("world12: club information texts are unavailable");
-        inspect_club_information(candidate,resources_.reference,resources_.german,*resources_.texts,request.world12_team,presenter,ui::OtherGamesScreen(data,current,resources_.german).render());
+        inspect_club_information(candidate,resources_.reference,resources_.german,*resources_.texts,request.world12_team,presenter,ui::OtherGamesScreen(data,current,resources_.german).render(),identity.manager_slot,&resources_.english);
         if(state_!=before||preparation_menu_!=5||other_games_owner_!=identity||other_games_generation_!=old_generation||
            other_games_selection_!=old_selection||owner_.revision!=identity.revision)
             throw FormatError("world12: club information changed its live competition owner");

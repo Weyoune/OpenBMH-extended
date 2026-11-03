@@ -41,6 +41,7 @@ RuntimeResources load_runtime_resources(const std::filesystem::path& data) {
     const auto referees=decode_referee_catalogue(read_file(ui::asset_path(data,"REFEREES.JSON")));
     r.referee_properties=referees.properties;r.referee_names=referees.names;
     r.reference.texts=r.texts.get();
+    for(const auto& [id,club]:r.master.clubs)if(club.kind==ClubKind::national_team)r.reference.projected_nationality_names.emplace(uint8_t(club.country),ui::utf8_to_original(club.name));
     install_bank_credit_rules(r.reference,r.german);
     install_environment_rules(r.german);
     std::vector<uint16_t> de(366),en(366);for(uint32_t day=0;day<366;++day){de[day]=r.german.u16(layout::CompetitionCalendar+day*2);en[day]=r.english.u16(layout::CompetitionCalendar+day*2);}
@@ -207,6 +208,7 @@ void Session::play_prepared_matches(uint64_t revision,const HumanRoundHooks& hoo
         else if(group.friendly){const auto planned=std::find_if(ticket.friendlies.begin(),ticket.friendlies.end(),[&](const auto& plan){return plan.national==group.friendly_national;});if(planned==ticket.friendlies.end())throw FormatError("world12: prepared friendly lost its booked ticket");friendlies.push_back({*planned,std::move(conditions)});}
         else cups.push_back({*group.cup,group.source_entry,group.revision,std::move(conditions)});
     }
+    if(hooks.kickoff)hooks.kickoff(candidate,ticket);
     candidate.prepared_event.reset();
     const HumanProjectionPolicy policy{settings.mode,settings.difficulty,settings.foreign_rule,true};
     auto staged_owner=owner_;
@@ -215,6 +217,8 @@ void Session::play_prepared_matches(uint64_t revision,const HumanRoundHooks& hoo
     const auto& receipts=result.pools;
     if(candidate.world.economy&&candidate.world.economy->pools){if(!resources_.texts)throw FormatError("world12: Toto settlement needs owned Source texts");settle_scheduled_pools(candidate,event,receipts,resources_.reference,*resources_.texts);}
     if(state_!=before||owner_.revision!=revision)throw FormatError("world12: prepared match owner changed during calculation");
+    if(hooks.completed_titles)hooks.completed_titles(before,candidate);
+    if(state_!=before||owner_.revision!=revision)throw FormatError("world12: title presentation changed its source owner");
     state_=std::move(candidate);owner_=staged_owner;
 }
 

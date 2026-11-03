@@ -23,7 +23,9 @@ std::vector<AiLeagueRoundOutcome> simulate_scheduled_leagues(CareerSnapshot& sta
         for(size_t n=0;n<human_indices.size();++n)results[human_indices[n]]=std::move(batch.leagues[n]);
     }
     for(size_t i=0;i<conditions.size();++i)if(std::find(human_indices.begin(),human_indices.end(),i)==human_indices.end()){
-        const auto& input=conditions[i];results[i]=simulate_and_settle_ai_league_fixtures(state.world,rules,input.appointment.league,input.appointment.round,input.match_indices,input.matches,game,random);
+        const auto& input=conditions[i];const auto fixtures=selected_league_fixtures(state.world,input.appointment.league,input.appointment.round,input.match_indices);const bool observed=std::any_of(fixtures.begin(),fixtures.end(),[&](const auto& f){return state.world.clubs.at(f.home).presentation_category.value_or(0)>0||state.world.clubs.at(f.away).presentation_category.value_or(0)>0;});
+        if(observed&&policy&&hooks)results[i]=simulate_observed_ai_league_fixtures(state,rules,input.appointment.league,input.appointment.round,input.match_indices,input.matches,*policy,game,random,*hooks);
+        else results[i]=simulate_and_settle_ai_league_fixtures(state.world,rules,input.appointment.league,input.appointment.round,input.match_indices,input.matches,game,random);
     }
     return results;
 }

@@ -163,7 +163,7 @@ struct SportschauReplayHooks {
 };
 
 // CompetitionWinnerScreen(param1=0), called at title settlement before title-history writes.
-struct CompetitionWinnerView { uint8_t title = 0; uint16_t team = 0; };
+struct CompetitionWinnerView { uint8_t title = 0; uint16_t team = 0; std::string caption_override; };
 using CompetitionWinnerHook = std::function<void(const GameState&, const CompetitionWinnerView&)>;
 
 struct SportschauPresentationHooks {

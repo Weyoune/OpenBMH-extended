@@ -29,6 +29,7 @@ struct ClubRecord {
     LeagueId league;CrestId crest;uint8_t kit=0,rating=0,short_span=0;
     uint16_t match_flags=0,fairplay_points=0;uint8_t morale=25;bool lineup_indoor=false;
     ClubSeasonStats season_stats;
+    std::optional<uint8_t> presentation_category; // Original morale high bits, independently owned.
     std::array<RosterSlot,24> roster;
     bool operator==(const ClubRecord&)const=default;
 };

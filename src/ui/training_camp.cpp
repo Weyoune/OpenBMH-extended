@@ -74,9 +74,11 @@ TrainingCampState training_camp_from_game(const GameState& g, const LeImage& exe
     state.revision = revision;
     state.source = "engine_projection";
     for (int resort = 0; resort < 8; ++resort) {
+        state.coordinates[size_t(resort)]={exe.u8(layout::TrainingCamp_Click_RuntimeField+uint32_t(resort)),exe.u8(layout::TrainingCamp_Click_RuntimeField2+uint32_t(resort))};
         state.prices[size_t(resort)] = training_camp_price(g, manager, resort);
         state.quality[size_t(resort)] = g.training_camp_quality[size_t(resort)];
     }
+    state.explicit_coordinates=true;
     state.currency_multiplier = std::bit_cast<int32_t>(g.memory.has(::bmh::layout::CurrencyMultiplier) ?
         g.memory.u32(::bmh::layout::CurrencyMultiplier) : exe.u32(::bmh::layout::CurrencyMultiplier));
     state.currency_divisor = std::bit_cast<int32_t>(g.memory.has(::bmh::layout::CurrencyDivisor) ?
@@ -153,8 +155,8 @@ TrainingCampScreen::TrainingCampScreen(const std::filesystem::path& data, Traini
     : TrainingCampScreen(data,std::move(state),load_le(asset_path(data,"BMH.exe"))) {}
 TrainingCampScreen::TrainingCampScreen(const std::filesystem::path& data, TrainingCampState state,const LeImage& reference)
     : state_(std::move(state)), exe_(reference), texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
-      background_(load_vga(asset_path(data / "KB", "129.VGA"))), map_(load_vga(asset_path(data / "KB", "12.VGA"))),
-      resorts_one_(load_vga(asset_path(data / "KB", "8.VGA"))), resorts_two_(load_vga(asset_path(data / "KB", "9.VGA"))),
+      background_(load_vga(asset_path(data / "KB", "129.VGA"))), map_(load_vga(asset_path(data,state_.map_asset))),
+      resorts_one_(load_vga(asset_path(data,state_.resorts_one_asset))), resorts_two_(load_vga(asset_path(data,state_.resorts_two_asset))),
       widgets_(load_vga(asset_path(data / "KB", "52.VGA"))), buttons_(load_vga(asset_path(data / "KB", "0.VGA"))),
       letters_(load_vga(asset_path(data / "KB", "54.VGA"))), portraits_(load_vga(asset_path(data / "KB", "26.VGA"))),
       badge_(load_vga(state_.badge_atlas.empty()?asset_path(data / "W", std::to_string(state_.badge >> 3) + ".VGA"):asset_path(data,state_.badge_atlas))),
@@ -196,7 +198,7 @@ void TrainingCampScreen::sprite_text(Image& out, int x, int baseline, std::strin
 }
 
 void TrainingCampScreen::resort_details(Image& out, int resort) const {
-    const auto name = texts_[371 + size_t(resort)];
+    const auto name = state_.resort_names[size_t(resort)].empty()?texts_[371 + size_t(resort)]:std::string_view(state_.resort_names[size_t(resort)]);
     text(out, 198, 101, name, 0x5f, 314);
     const std::string price_line = training_camp_price_text(state_, resort);
     text(out, 268, 148, price_line, 0x5f);
@@ -306,7 +308,7 @@ TrainingCampRequest TrainingCampScreen::click(int x, int y, bool right) {
         rejection_.clear(); return *pending_;
     }
     for (int resort = 0; resort < 8; ++resort) {
-        const int hx = exe_.u8(::bmh::layout::TrainingCamp_Click_RuntimeField + uint32_t(resort)), hy = exe_.u8(::bmh::layout::TrainingCamp_Click_RuntimeField2 + uint32_t(resort));
+        const int hx=state_.explicit_coordinates?state_.coordinates[size_t(resort)][0]:exe_.u8(layout::TrainingCamp_Click_RuntimeField+uint32_t(resort)),hy=state_.explicit_coordinates?state_.coordinates[size_t(resort)][1]:exe_.u8(layout::TrainingCamp_Click_RuntimeField2+uint32_t(resort));
         if (x >= hx && x <= hx + 0x13 && y >= hy && y <= hy + 0x11) {
             selected_resort_ = resort;
             preview_resort_ = resort;
@@ -362,7 +364,7 @@ bool TrainingCampScreen::move(int x, int y) {
     if (pending_ || chosen_resort_ >= 0) return false;
     int resort_under_pointer = -1;
     for (int resort = 0; resort < 8; ++resort) {
-        const int hx = exe_.u8(::bmh::layout::TrainingCamp_Click_RuntimeField + uint32_t(resort)), hy = exe_.u8(::bmh::layout::TrainingCamp_Click_RuntimeField2 + uint32_t(resort));
+        const int hx=state_.explicit_coordinates?state_.coordinates[size_t(resort)][0]:exe_.u8(layout::TrainingCamp_Click_RuntimeField+uint32_t(resort)),hy=state_.explicit_coordinates?state_.coordinates[size_t(resort)][1]:exe_.u8(layout::TrainingCamp_Click_RuntimeField2+uint32_t(resort));
         if (x >= hx && x <= hx + 0x13 && y >= hy && y <= hy + 0x11) {
             resort_under_pointer = resort;
             break;

@@ -44,8 +44,9 @@ def create(program, data, destination, version):
     for required in ('OpenBMH.exe','vcruntime140.dll','msvcp140.dll','LICENSE'):
         if required not in files:raise ValueError('Missing runtime component: '+required)
     files['COMMUNITY.OBD']=bundle.read_bytes()
-    report=data/'IMPORT-REPORT.json'
-    if report.exists():files[report.name]=report.read_bytes()
+    for report_name in ('IMPORT-REPORT.json','ENGLISH-REFRESH.json'):
+        report=data/report_name
+        if report.exists():files[report.name]=report.read_bytes()
     source_url=f'https://github.com/Weyoune/OpenBMH-extended/releases/download/v{version}/OpenBMH-Extended-{version}-source.zip'
     files['COMMUNITY_README.txt']=('OpenBMH-Extended '+version+' Community Edition\n\n'
         'ZIP vollstaendig in einen eigenen Ordner entpacken und OpenBMH.exe starten.\n'
