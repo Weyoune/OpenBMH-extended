@@ -31,5 +31,6 @@ PlayerInitializationOutcome initialize_career_markets_and_moods(World&,
 // Completes the club-career age/familiarity and 54-player release phase.
 // Overflow follows Original transfer scoring and lineup selection with global IDs.
 PlayerInitializationOutcome initialize_career_player_pools(World&,const PlayerInitializationPlan&,
-    const GameState& reference,bool foreign_rule,GameRandom&,WatcomRandom&);
+    const GameState& reference,bool foreign_rule,GameRandom&,WatcomRandom&,
+    std::optional<Country> national_primary=std::nullopt);
 }

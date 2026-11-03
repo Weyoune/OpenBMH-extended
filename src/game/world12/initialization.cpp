@@ -164,12 +164,13 @@ PlayerInitializationOutcome initialize_career_markets_and_moods(World& world,
     world=std::move(candidate);game=staged_game;random=staged_random;return outcome;
 }
 PlayerInitializationOutcome initialize_career_player_pools(World& world,const PlayerInitializationPlan& plan,
-    const GameState& reference,bool foreign_rule,GameRandom& game,WatcomRandom& random) {
+    const GameState& reference,bool foreign_rule,GameRandom& game,WatcomRandom& random,std::optional<Country> national_primary) {
     world.validate();
     if(!world.players_initialized || !world.markets || world.free_players || !world.catalogue.scope.club_play() ||
         world.catalogue.scope!=plan.scope || !world.managers.empty() || !world.loans.empty() ||
         world.development_balance || world.trend_rotation || plan.extra_players.size()!=54)
         throw std::invalid_argument("world12: player pools require the fresh club-career market phase");
+    if(national_primary&&*national_primary!=Country::germany&&*national_primary!=Country::england)throw std::invalid_argument("world12: invalid Source national primary country");
     if(reference.formations.size()<0x160 || runtime_dimensions.big_squad_teams<1)
         throw std::invalid_argument("world12: initial transfer lineup rules missing");
     for(size_t f=0;f<4;++f)for(size_t row=0;row<11;++row)if(reference.formations[f*22+row]>=24)
@@ -217,7 +218,7 @@ PlayerInitializationOutcome initialize_career_player_pools(World& world,const Pl
     GameState released;released.players.resize(1);released.player_bonus.resize(1);
     for(auto id:plan.extra_players) {
         auto& player=candidate.players.at(id);const int nat=player.attributes.nationality()+((player.bonus&128)?32:0);
-        const bool domestic=world.catalogue.scope.domestic_enabled(Country(nat));
+        const bool domestic=national_primary?nat==int(*national_primary):world.catalogue.scope.domestic_enabled(Country(nat));
         released.players[0]=player.attributes;released.player_bonus[0]=player.bonus;
         bmh::regenerate_released_player(released,0,staged_game,staged_random);
         player.attributes=released.players[0];player.bonus=released.player_bonus[0];

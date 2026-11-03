@@ -32,6 +32,8 @@ public:
     // Actual nominated DE/EN squads and Source rating-only other nations.
     static AiMatchProjection create_for_nationals(const CareerSnapshot&,const std::vector<ClubId>&,
         const GameState& rules_template,HumanProjectionPolicy);
+    static AiMatchProjection create_for_national_desktop(const CareerSnapshot&,const std::vector<ClubId>&,
+        const GameState& rules_template,HumanProjectionPolicy);
     // Explicit non-roster references for market/free-agent/loan workspaces.
     void include_players(const World&,const std::vector<PlayerId>&);
     void include_club_references(const World&,const std::vector<ClubId>&);

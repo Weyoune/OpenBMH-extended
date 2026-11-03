@@ -6,6 +6,7 @@
 #include "game/world12/national_coach.hpp"
 #include "game/world12/match_projection.hpp"
 #include "game/matchday.hpp"
+#include "game/table.hpp"
 #include "game/week.hpp"
 #include "game/world12/codec.hpp"
 #include "game/world12/save.hpp"
@@ -56,7 +57,7 @@ void coach_account_ownership() {
     CareerSnapshot national_snapshot;national_snapshot.world=world;national_snapshot.results=SeasonResults::empty(world.catalogue);national_snapshot.date=4;national_snapshot.desktop.emplace();national_snapshot.desktop->manager_order=order;national_snapshot.desktop->matchday_number=0;for(const auto& manager:world.managers)national_snapshot.desktop->managers.push_back({manager.seat});
     auto projection=AiMatchProjection::create_for_nationals(national_snapshot,{{3000000},{3000002},{3000001}},reference,{3,6,false,true});
     check(projection.human_managers()==2&&projection.global_manager(0)==2&&projection.global_manager(1)==1&&projection.state.players.size()==40,"national projection lost saved-order coaches or synthesized players");
-    const auto de_team=projection.local_club({3000000}),en_team=projection.local_club({3000002});check(is_national_team(projection.state,int(de_team))&&is_national_team(projection.state,int(en_team))&&has_national_squad(projection.state,int(en_team))&&squad_range(projection.state,int(de_team)).first!=squad_range(projection.state,int(en_team)).first,"national rosters overlap or lost actual runtime identity");
+    const auto de_team=projection.local_club({3000000}),en_team=projection.local_club({3000002});check(table_position(projection.state,int(de_team))==2&&table_position(projection.state,int(en_team))==2,"national Source rank2 was substituted by a league rank");check(is_national_team(projection.state,int(de_team))&&is_national_team(projection.state,int(en_team))&&has_national_squad(projection.state,int(en_team))&&squad_range(projection.state,int(de_team)).first!=squad_range(projection.state,int(en_team)).first,"national rosters overlap or lost actual runtime identity");
     const auto rating_team=projection.local_club({3000001});check(is_national_team(projection.state,int(rating_team))&&!has_national_squad(projection.state,int(rating_team))&&squad_range(projection.state,int(rating_team)).count==0,"rating-only nation acquired fictional players");WatcomRandom rating_random(81);RatingContext rating_context{};rating_context.rand=&rating_random;(void)team_rating(projection.state,int(rating_team),kRatingProfiles[2],rating_context);check(rating_random.calls()==4,"national foreign-strength Source rating was bypassed");
     auto ratings=AiMatchProjection::create_for_nationals(national_snapshot,{{3000001}},reference,{3,6,false,true});check(ratings.state.players.empty()&&!has_national_squad(ratings.state,kNoTeam),"unplayed primary nation acquired a squad in a rating-only fixture");auto rating_noop=world;ratings.commit_match_state(rating_noop);check(rating_noop==world,"rating-only national commit changed real parked squads/accounts");
     auto unchanged=world;projection.commit_match_state(unchanged);check(unchanged==world,"national no-op projection changed parked managers/accounts/nominees");

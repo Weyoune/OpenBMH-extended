@@ -226,11 +226,26 @@ struct NationalCoachAccount {
     uint16_t training_quality=0;
     bool operator==(const NationalCoachAccount&)const=default;
 };
+struct NationalViewPreferences {
+    std::optional<uint16_t> table_display_word,strengths_display_word;
+    std::optional<uint8_t> pairings_display_byte,other_games_view;
+    bool operator==(const NationalViewPreferences&)const=default;
+};
+struct NationalStartupReceipt {
+    Country primary=Country::germany;
+    uint32_t initialized_players=0,origin_clubs=0;
+    uint64_t game_draws=0,watcom_draws=0;
+    std::array<ClubId,4> entry40_bidders;
+    bool operator==(const NationalStartupReceipt&)const=default;
+};
 struct NationalCoachRecord {
     ClubId team;
     std::optional<uint8_t> coach;
     bool active=false;
     NationalCoachAccount account;
+    std::optional<NationalViewPreferences> view_preferences;
+    std::optional<NationalStartupReceipt> startup;
+    std::optional<std::array<std::array<uint8_t,16>,54>> desktop_layout;
     bool operator==(const NationalCoachRecord&)const=default;
 };
 struct PoolsCoupon {

@@ -26,4 +26,5 @@ struct NationalNominationOutcome {
 NationalNominationOutcome nominate_national_squad(World&,Country,uint32_t date,
     const GameState& reference,WatcomRandom&);
 void validate_national_squads(const World&);
+ManagerTactics initial_national_tactics(const GameState&,bool coached);
 }

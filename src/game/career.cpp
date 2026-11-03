@@ -473,13 +473,17 @@ void initialize_career_manager_team_settings(GameState& g,int manager) {
     std::fill_n(g.manager_ratings.begin()+size_t(manager)*0x3c,0x3c,uint8_t(100));
 }
 
+void initialize_career_manager_formations(GameState& g,int manager) {
+    if(manager<0||manager>3||g.manager_records.size()<size_t(manager+1)*kRecord)throw std::invalid_argument("career: incomplete personal formation presets");
+    const auto rec=size_t(manager)*kRecord;g.manager_records[rec+0x218]=0x0f;g.manager_records[rec+0x219]=0x0f;
+}
 void initialize_career_manager_funds(GameState& g,int manager,int difficulty,int league) {
     if(manager<0||manager>3||difficulty<0||difficulty>9||league<0||league>2||g.manager_records.size()<size_t(manager+1)*kRecord)
         throw std::invalid_argument("career: invalid initial manager financial context");
     const auto rec=size_t(manager)*kRecord;const uint32_t money=difficulty==0?50000000u:4000000u-uint32_t(difficulty)*200000u;
     put32(g.manager_records,rec+0x314,money);put32(g.manager_records,rec+0x324,money);
     // CareerAddManager enables the four supplied outdoor and indoor presets.
-    g.manager_records[rec+0x218]=0x0f;g.manager_records[rec+0x219]=0x0f;
+    initialize_career_manager_formations(g,manager);
     put32(g.manager_records,rec+0x31c,uint32_t(400000-league*100000));put32(g.manager_records,rec+0x310,1);
 }
 

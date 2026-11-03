@@ -105,6 +105,9 @@ void validate_national_squads(const World& world) {
     }
 }
 
+ManagerTactics initial_national_tactics(const GameState& reference,bool coached){
+    if(reference.manager_records.size()<5*record_size||reference.manager_options.size()<5||reference.formations.size()<0x580)throw FormatError("world12: missing Source national preference template");auto local=reference;if(coached)initialize_career_manager_formations(local,0);ManagerTactics result;auto& b=result.backing.emplace();std::copy_n(reference.formations.begin(),0x160,b.formations.begin());std::copy_n(reference.formations.begin()+0x160,13,b.formation_tail.begin());b.enabled_formations={local.manager_records[coached?0x218:4*record_size+0x218],local.manager_records[4*record_size+0x219]};result.automatic_formation=reference.manager_options[0];std::copy_n(reference.manager_options.begin()+1,4,b.automation.begin());return result;
+}
 NationalNominationOutcome nominate_national_squad(World& world,Country country,uint32_t date,
     const GameState& reference,WatcomRandom& random) {
     const auto selected=national_nomination(world,country);
@@ -112,7 +115,7 @@ NationalNominationOutcome nominate_national_squad(World& world,Country country,u
        reference.tactics.size()<5*board_size||reference.formations.size()<0x580)
         throw FormatError("world12: national nomination needs initialized career rules");
     const auto anchor=std::find_if(world.managers.begin(),world.managers.end(),[&](const auto& m){return world.manager_country(m.seat)==country;});
-    if(anchor==world.managers.end()||!anchor->tactics||!anchor->tactics->backing)
+    if(!world.national_coaches&&(anchor==world.managers.end()||!anchor->tactics||!anchor->tactics->backing))
         throw FormatError("world12: national nomination lacks its country manager context");
     const auto team=national_team(world,country);
     const auto prior=std::find_if(world.national_squads.begin(),world.national_squads.end(),[&](const auto& s){return s.team==team;});
@@ -151,11 +154,13 @@ NationalNominationOutcome nominate_national_squad(World& world,Country country,u
         local.tactics[row*0x58+offset]=255;local.tactics[row*0x58+offset+1]=15;
     }
     const auto coach=squad.coach?std::find_if(world.managers.begin(),world.managers.end(),[&](const auto& manager){return manager.seat==*squad.coach;}):anchor;
-    if(coach==world.managers.end()||!coach->tactics||!coach->tactics->backing)throw FormatError("world12: nominated coach lacks actual tactical context");
-    const auto& backing=*coach->tactics->backing;
+    const auto defaults=initial_national_tactics(reference,squad.coach.has_value());
+    const auto& preferences=coach!=world.managers.end()&&coach->tactics?*coach->tactics:prior!=world.national_squads.end()?prior->tactics:defaults;
+    if(!preferences.backing)throw FormatError("world12: missing actual national tactical preferences");
+    const auto& backing=*preferences.backing;
     std::copy(backing.formations.begin(),backing.formations.end(),local.formations.begin());
     local.projected_formation_tails={backing.formation_tail};
-    local.manager_options[0]=coach->tactics->automatic_formation;
+    local.manager_options[0]=preferences.automatic_formation;
     std::copy(backing.automation.begin(),backing.automation.end(),local.manager_options.begin()+1);
     if(squad.coach)local.manager_records[0x218]=backing.enabled_formations[0];
     local.team_flags.at(size_t(kNoTeam))=world.clubs.at(team).match_flags;

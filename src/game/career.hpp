@@ -51,6 +51,7 @@ void initialize_career_squad_player(Player&,WatcomRandom&);
 // Verified account phase of CareerAddManager after board/stadium setup. The
 // normalized league is the Source financial tier (0..2), not a global ID.
 void initialize_career_manager_funds(GameState&,int manager,int difficulty,int normalized_league);
+void initialize_career_manager_formations(GameState&,int manager);
 void initialize_career_manager_team_settings(GameState&,int manager);
 
 // The squad list as CareerFirstSteps2 leaves it: all slots 0xfff, the database list read

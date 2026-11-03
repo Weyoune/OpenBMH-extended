@@ -265,7 +265,8 @@ void AiMatchProjection::commit_desktop_preferences(CareerSnapshot& snapshot)cons
 void AiMatchProjection::retain_live_preferences(uint8_t seat,std::optional<uint16_t> table,
     std::optional<uint16_t> strengths,std::optional<uint8_t> pairings) {
     const auto manager=std::find_if(original_managers_.begin(),original_managers_.end(),[&](const auto& m){return m.seat==seat;});
-    if(manager==original_managers_.end()||!manager->career)throw FormatError("world12: live preferences have no canonical manager owner");
+    if(manager==original_managers_.end())throw FormatError("world12: live preferences have no canonical manager owner");
+    if(!manager->career&&(!national_projection_||!original_national_coaches_||std::none_of(original_national_coaches_->begin(),original_national_coaches_->end(),[&](const auto& record){return record.coach==seat&&record.view_preferences.has_value();})))throw FormatError("world12: national view preferences are unknown");
     auto& preferences=live_preferences_[seat];
     if(table)preferences[0]=*table;if(strengths)preferences[1]=*strengths;if(pairings)preferences[2]=*pairings;
 }
@@ -413,10 +414,9 @@ void AiMatchProjection::apply_live_preferences(World& world)const {
     }
     for(const auto& [seat,preferences]:live_preferences_){
         const auto manager=std::find_if(world.managers.begin(),world.managers.end(),[&](const auto& m){return m.seat==seat;});
-        if(manager==world.managers.end()||!manager->career)throw FormatError("world12: live preference owner disappeared");
-        if(preferences[0])manager->career->table_display_word=*preferences[0];
-        if(preferences[1])manager->career->strengths_display_word=*preferences[1];
-        if(preferences[2])manager->career->pairings_display_byte=uint8_t(*preferences[2]);
+        if(manager==world.managers.end())throw FormatError("world12: live preference owner disappeared");
+        if(manager->career){if(preferences[0])manager->career->table_display_word=*preferences[0];if(preferences[1])manager->career->strengths_display_word=*preferences[1];if(preferences[2])manager->career->pairings_display_byte=uint8_t(*preferences[2]);}
+        else {if(!world.national_coaches)throw FormatError("world12: national preference context disappeared");const auto record=std::find_if(world.national_coaches->begin(),world.national_coaches->end(),[&](const auto& c){return c.coach==seat&&c.view_preferences.has_value();});if(record==world.national_coaches->end())throw FormatError("world12: national view preference owner disappeared");auto& view=*record->view_preferences;if(preferences[0])view.table_display_word=*preferences[0];if(preferences[1])view.strengths_display_word=*preferences[1];if(preferences[2])view.pairings_display_byte=uint8_t(*preferences[2]);}
     }
 }
 
