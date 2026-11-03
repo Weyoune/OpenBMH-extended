@@ -208,6 +208,20 @@ void scheduled_desk_tests(const CareerSnapshot& pending,const GameState& source)
         draw_hook=nullptr;interrupted_desktop_owner=nullptr;
         check(interrupted==state&&interrupted_owner.revision==owner.revision+1,"scheduled rollback lost external revision or published staged changes");
     }
+    {
+        auto automatic=state;auto automatic_owner=owner;
+        // Only one league plays today; standby clubs still need their pending
+        // automatic lineups after the participant preparation has completed.
+        const auto playing=*automatic.prepared_event->groups.front().league;
+        for(auto& date:automatic.calendar->schedule.leagues)if(date.day==17&&date.league!=playing)date.day=18;
+        std::erase_if(automatic.prepared_event->groups,[&](const auto& group){return group.league!=playing;});
+        for(const auto& membership:automatic.world.membership)for(auto club:membership.clubs)automatic.world.clubs.at(club).match_flags|=1;
+        const auto before_automatic=automatic;
+        session_app::begin_scheduled_desks(automatic,automatic_owner,automatic_owner,reference);
+        check(automatic.world.membership==before_automatic.world.membership&&automatic.world.players.size()==before_automatic.world.players.size()&&automatic.world.clubs.size()==before_automatic.world.clubs.size()&&automatic.date==before_automatic.date&&automatic.calendar==before_automatic.calendar&&automatic.results==before_automatic.results&&automatic.prepared_event->desk_phase==PreparedEvent::DeskPhase::desks,
+              "whole-world automatic lineups invalidated the remaining physical membership order");
+        check(read_save(make_save(automatic))==automatic,"whole-world automatic lineups lost their saved identities");
+    }
     session_app::begin_scheduled_desks(state,owner,owner,reference);
     check(state.date==previous.date&&state.calendar==previous.calendar&&state.results==previous.results&&
           state.prepared_event->groups==previous.prepared_event->groups&&state.desktop->initial_event&&

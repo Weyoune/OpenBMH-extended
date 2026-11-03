@@ -59,8 +59,12 @@ DesktopEntryOutcome begin_scheduled_desks(CareerSnapshot& state,ManagerActionOwn
         auto_lineup(p.state,home,100);auto_lineup(p.state,away,100);
         p.commit_match_state(candidate.world);
     }
-    for(const auto& membership:candidate.world.membership)for(const auto club:membership.clubs)
-        if(candidate.world.clubs.at(club).match_flags&1) {
+    // Projection commit replaces World storage. Keep its physical visit order
+    // outside that storage before the first automatic lineup is committed.
+    std::vector<ClubId> ordered_clubs;
+    for(const auto& membership:candidate.world.membership)
+        ordered_clubs.insert(ordered_clubs.end(),membership.clubs.begin(),membership.clubs.end());
+    for(const auto club:ordered_clubs)if(candidate.world.clubs.at(club).match_flags&1) {
             auto p=AiMatchProjection::create_for_humans(candidate,participants(candidate.world,{club,club}),reference,policy);
             p.state.indoor=std::any_of(candidate.prepared_event->groups.begin(),candidate.prepared_event->groups.end(),[](const auto& group){return group.indoor;});auto_lineup(p.state,int(p.local_club(club)),100);p.commit_match_state(candidate.world);
         }
