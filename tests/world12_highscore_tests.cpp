@@ -13,6 +13,12 @@ template<class F>void rejects(F f,const char* text){bool refused=false;try{f();}
 template<class Bytes>void put(Bytes& bytes,size_t at,uint32_t value,int width=4){for(int n=0;n<width;++n)bytes.at(at+size_t(n))=uint8_t(value>>(8*n));}
 }
 int main()try {
+    {
+        GameState native;native.manager_teams={kNoTeam};native.manager_records.resize(0xb0c);native.memory.add_block(layout::Placements,80);
+        const uint8_t rows[][4]={{0x80,0x81,0x82,0x83},{0x82,0x80,0x84,0x83},{0x81,0x84,0x80,0x82}};
+        std::array<std::array<uint8_t,4>,20> encoded{};for(size_t row=0;row<3;++row)for(size_t place=0;place<4;++place){encoded[row][place]=rows[row][place];native.memory.set8(layout::Placements+uint32_t(row*4+place),rows[row][place]);}
+        check(highscore_score(native,0,HighscoreContext::SeasonBoundary).history==600&&national_highscore_history(encoded,0)==600&&national_highscore_history(encoded,2)==450,"Source national podium weights/known markers/country binding changed");
+    }
     set_fixture_tables(bmh::test::authored_fixture_tables());const auto rules=bmh::test::world12::annual_reference();auto source=bmh::test::world12::completed_account_closing(rules,{true,true,false},false);
     auto& world=source.world;const auto fields=world.initial_competitions;const auto campaigns=world.european_campaigns;const auto market=world.transfer_market;world.transfer_market.reset();world.initial_competitions.reset();world.european_campaigns.reset();world.settings->planned_managers=2;
     Manager manager{0,"Second manager",world.membership[5].clubs[2],{5},0};manager.career.emplace();manager.career->season_records.emplace();manager.career->annual_records.emplace();manager.career->cup_titles.emplace();manager.career->season_services.emplace();world.managers.push_back(manager);

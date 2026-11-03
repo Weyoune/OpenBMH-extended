@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "game/world12/economy.hpp"
 #include "game/messages.hpp"
+#include "game/highscore.hpp"
 #include "game/week.hpp"
 #include "game/bank_robbery.hpp"
 #include "game/weekly.hpp"
@@ -95,7 +96,11 @@ void initialize_career_economy(CareerSnapshot& state,const GameState& reference)
     // Initial reference mail must be empty: do not import an unrelated career.
     if(reference.mailbox.size()!=kMailboxEntries*kMailboxEntry||std::any_of(reference.mailbox.begin(),reference.mailbox.end(),[](auto b){return b!=0;}))throw std::invalid_argument("world12: initial economy reference contains mailbox state");
     auto candidate=state;candidate.world.economy=e;
-    if(reference.memory.has(layout::CareerSession_FormatError_RuntimeField7+1))candidate.world.highscore_signature=reference.memory.u16(layout::CareerSession_FormatError_RuntimeField7);
+    // ConfirmManager writes the accepted options before the fresh saved word is
+    // captured. The executable template's unrelated initial1 is not that fact.
+    auto signature_source=reference;signature_source.memory.add_block(layout::CareerSession_FormatError_RuntimeField7,2);
+    const auto& settings=*candidate.world.settings;signature_source.memory.set16(layout::CareerSession_FormatError_RuntimeField7,candidate.world.catalogue.scope.club_play()?source_career_highscore_signature(settings.mode,settings.duration,settings.difficulty):0);
+    candidate.world.highscore_signature=signature_source.memory.u16(layout::CareerSession_FormatError_RuntimeField7);
     candidate.validate();state=std::move(candidate);
 }
 void install_career_pools(AiMatchProjection& projection,const World& world){if(!world.economy||!world.economy->pools)throw FormatError("world12: pools ledger is unavailable");const auto map=seats(projection);auto& g=projection.state;g.memory.add_block(layout::Coupon,100);for(size_t n=0;n<4;++n)write_coupon(g,n,world.economy->pools->managers[map[n]]);for(uint32_t n=0;n<11;++n)g.memory.set8(layout::MatchdaySetup_EvaluatePoolsCoupon_RuntimeField+n,world.economy->pools->previous_outcomes[n]);}

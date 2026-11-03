@@ -7,6 +7,7 @@
 #include "game/world12/pools.hpp"
 #include "game/messages.hpp"
 #include "game/bank_robbery.hpp"
+#include "game/highscore.hpp"
 #include "cli/json.hpp"
 #include "formats/textd.hpp"
 #include <iostream>
@@ -80,7 +81,7 @@ void advertising_groups(CareerSnapshot state,const GameState& rules) {
     install_career_economy(projection,state.world);check(projection.state.memory.u8(layout::AdGroupId)==254,"advertising group lost high byte on projection");
     projection.state.memory.set8(layout::AdGroupId,255);capture_career_economy(state.world,projection);
     check(state.world.economy->advertising_group==255&&decode_world(encode_world(state.world))==state.world,"advertising group failed capture/save roundtrip");
-    const auto encoded=encode_world(state.world);auto old=cli::parse_json(std::string(encoded.begin(),encoded.end()));old.object()->at("version")=27;
+    const auto encoded=encode_world(state.world);auto old=cli::parse_json(std::string(encoded.begin(),encoded.end()));old.object()->erase("highscore_signature");old.object()->at("version")=27;
     auto text=cli::dump_json(old);rejects([&]{decode_world(Bytes(text.begin(),text.end()));},"schema27 discarded a known advertising counter");
     old.object()->at("economy").object()->erase("advertising_group");text=cli::dump_json(old);state.world=decode_world(Bytes(text.begin(),text.end()));
     check(!state.world.economy->advertising_group,"older economy invented a bundle counter");
@@ -109,7 +110,7 @@ void pools_settlement(CareerSnapshot state,const GameState& rules) {
         const auto accepted=settled;settle_scheduled_pools(settled,event,receipts,rules,texts);check(settled==accepted,"pools settled a cleared stake twice");
         auto invalid=receipts;invalid[1]=invalid[0];rejects([&]{settle_scheduled_pools(settled,event,invalid,rules,texts);},"duplicate regulation receipt accepted");check(settled==accepted,"invalid receipt changed saved pools");
     }
-    const auto raw=encode_world(state.world);auto old=cli::parse_json(std::string(raw.begin(),raw.end()));old.object()->at("version")=29;auto text=cli::dump_json(old);
+    const auto raw=encode_world(state.world);auto old=cli::parse_json(std::string(raw.begin(),raw.end()));old.object()->erase("highscore_signature");old.object()->at("version")=29;auto text=cli::dump_json(old);
     rejects([&]{decode_world(Bytes(text.begin(),text.end()));},"schema29 discarded known coupons");old.object()->at("economy").object()->erase("pools");text=cli::dump_json(old);state.world=decode_world(Bytes(text.begin(),text.end()));
     auto projection=AiMatchProjection::create_for_humans(state,{state.world.managers[0].club,state.world.managers[1].club},rules,{1,3,false,true});install_career_economy(projection,state.world);capture_career_economy(state.world,projection);
     check(!state.world.economy->pools,"ordinary projection invented older coupons");
@@ -124,7 +125,7 @@ void depreciation(CareerSnapshot state,const GameState& rules) {
           "sparse depreciation accounts lost high words or actor identity");
     capture_career_economy(state.world,p);
     const auto encoded=encode_world(state.world);check(decode_world(encoded)==state.world,"depreciation failed current schema roundtrip");
-    auto old=cli::parse_json(std::string(encoded.begin(),encoded.end()));old.object()->at("version")=25;
+    auto old=cli::parse_json(std::string(encoded.begin(),encoded.end()));old.object()->erase("highscore_signature");old.object()->at("version")=25;
     for(auto& manager:std::get<cli::Json::Array>(old.object()->at("managers").value))if(manager.object()->at("career").object())manager.object()->at("career").object()->erase("camp_focus");
     auto text=cli::dump_json(old);rejects([&]{decode_world(Bytes(text.begin(),text.end()));},"schema25 silently discarded known depreciation");
     auto& managers=std::get<cli::Json::Array>(old.object()->at("economy").object()->at("managers").value);
@@ -142,7 +143,10 @@ int main()try {
     auto rules=reference();rules.memory.add_block(layout::Savestate_Layout_ExecutableField,1);
     rules.memory.add_block(layout::Loans,4*0x78);rules.mailbox.assign(kMailboxEntries*kMailboxEntry,0);
     auto state=fixture(rules);state.date=0;state.world.settings->difficulty=3;
-    initialize_career_economy(state,rules);state.date=40;
+    rules.memory.add_block(layout::CareerSession_FormatError_RuntimeField7,2);rules.memory.set16(layout::CareerSession_FormatError_RuntimeField7,1);
+    initialize_career_economy(state,rules);check(state.world.highscore_signature==213&&rules.memory.u16(layout::CareerSession_FormatError_RuntimeField7)==1,"fresh accepted1/5/3 options did not replace the unrelated template signature without changing the shared reference");state.date=40;
+    check(source_career_highscore_signature(3,5,2)==151&&source_career_highscore_signature(3,5,9)==599,"Source ConfirmManager option signature changed");
+    rejects([&]{source_career_highscore_signature(0,5,2);},"invalid Source signature mode accepted");
     portfolios(state,rules);
     depreciation(state,rules);
     advertising_groups(state,rules);

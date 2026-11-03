@@ -76,6 +76,15 @@ void put_name(uint8_t* p, const std::string& s) {
 }
 } // namespace
 
+uint16_t source_career_highscore_signature(int mode,int duration,int difficulty){
+    if(mode<1||mode>3||duration<0||duration>5||difficulty<0||difficulty>9)throw std::invalid_argument("highscore: invalid fresh Source option signature");
+    return uint16_t(mode+duration*4+difficulty*0x40);
+}
+int32_t national_highscore_history(std::span<const std::array<uint8_t,4>> rows,uint8_t country){
+    if(country>=62)throw std::invalid_argument("highscore: invalid scored national country");int32_t score=0;
+    for(size_t row=0;row<std::min<size_t>(20,rows.size());++row)for(size_t place=0;place<4;++place){const auto value=rows[row][place];if((value&128)&&(value&127)==country)score+=int32_t(kNationalWeights[place])*10;}return score;
+}
+
 HighscoreScore highscore_score(const GameState& g, int manager, HighscoreContext context) {
     if (manager < 0 || size_t(manager) >= g.manager_teams.size())
         throw std::invalid_argument("highscore: manager is outside active slots");
@@ -84,12 +93,9 @@ HighscoreScore highscore_score(const GameState& g, int manager, HighscoreContext
     if (team == kNoTeam) {
         // CareerSession_DispatchLineup_RuntimeField+CareerSession_InstallLeagueSizes_RuntimeField6+ClubPlayerDetail_ClubPlayerDetailFromGame_RuntimeField3 == kNoTeam in the supported Original database;
         // national honours store (team-kNoTeam)|0x80, so Germany's index is0.
-        for (uint32_t year = 0; year < 20; ++year)
-            for (uint32_t place = 0; place < 4; ++place) {
-                const uint8_t v = g.memory.u8(::bmh::layout::Placements + year * 4 + place);
-                if ((v & 0x80) && (v & 0x7f) == 0)
-                    result.history += int32_t(kNationalWeights[place]) * 10;
-            }
+        std::array<std::array<uint8_t,4>,20> podium;
+        for(uint32_t year=0;year<20;++year)for(uint32_t place=0;place<4;++place)podium[year][place]=g.memory.u8(layout::Placements+year*4+place);
+        result.history=national_highscore_history(podium);
     } else {
         if (g.season < 0) throw std::invalid_argument("highscore: negative season index");
         const int asset_manager = context==HighscoreContext::OwnedManagerAssets?manager:

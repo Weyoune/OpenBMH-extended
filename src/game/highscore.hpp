@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <span>
 
 #include "game/state.hpp"
 
@@ -37,6 +38,12 @@ struct HighscoreScore {
     int32_t titles = 0;
     int32_t total = 0;
 };
+
+// ConfirmManager's actual new-career option signature; joins preserve their
+// existing separate compatibility comparison and resumed facts are untouched.
+uint16_t source_career_highscore_signature(int mode,int duration,int difficulty);
+// Native encoded World-Cup podium rows, newest first; unmarked words are unknown.
+int32_t national_highscore_history(std::span<const std::array<uint8_t,4>>,uint8_t country=0);
 
 enum class HighscoreContext { ActiveManager, SeasonBoundary, OwnedManagerAssets };
 // Assets in HighscoreScore use global ActiveManager even when scoring another manager. At the
