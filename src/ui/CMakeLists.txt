@@ -12,6 +12,7 @@ add_library(bmhui STATIC
     preparation_flow.cpp
     world12_market_flow.cpp
     world12_friendly_flow.cpp
+    world12_friendly_screen.cpp
     world12_readonly_flow.cpp
     world12_statistics_screen.cpp
     world12_readonly_screen.cpp
