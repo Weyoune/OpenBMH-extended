@@ -41,6 +41,7 @@
 #include "ui/environment.hpp"
 #include "ui/indoor_standings.hpp"
 #include "ui/achievements.hpp"
+#include "ui/world12_readonly_screen.hpp"
 
 namespace bmh::ui {
 
@@ -55,7 +56,7 @@ struct CareerInitializationResult {
     std::vector<InitializedManager> managers;
     PreparationState preparation;
 };
-enum class FlowRequest { none, load_game, manager_confirmed, new_career, kickoff, desk_action, end_session, submenu_opened, submenu_closed, contracts_closed, submenu_action, file_action, results_closed, mailbox_action, mailbox_closed, settings_action, settings_close, settings_file_action, friendly_action, national_friendly_selected, contract_action, advertising_action, environment_action, join_options, join_manager, join_cancel, league_pairings_action, strengths_action, top_scorers_action, balance_action, other_games_action, league_family_action, opportunities_action, statistics_menu_action, statistics_rankings_action, analytics_action, statistics_page_action, reschedule_action, world12_table_action, world12_market_action };
+enum class FlowRequest { none, load_game, manager_confirmed, new_career, kickoff, desk_action, end_session, submenu_opened, submenu_closed, contracts_closed, submenu_action, file_action, results_closed, mailbox_action, mailbox_closed, settings_action, settings_close, settings_file_action, friendly_action, national_friendly_selected, contract_action, advertising_action, environment_action, join_options, join_manager, join_cancel, league_pairings_action, strengths_action, top_scorers_action, balance_action, other_games_action, league_family_action, opportunities_action, statistics_menu_action, statistics_rankings_action, analytics_action, statistics_page_action, reschedule_action, world12_table_action, world12_market_action, world12_readonly_action };
 enum class StatisticsPageActionKind : uint8_t { close, alltime, world_cup };
 struct StatisticsPageAction { DeskRequest owner{}; int page=-1; StatisticsPageActionKind kind=StatisticsPageActionKind::close; int nation=-1; bool relative=false; bool operator==(const StatisticsPageAction&) const = default; };
 struct FlowResult {
@@ -89,6 +90,7 @@ struct FlowResult {
     RescheduleAction reschedule_action{};
     World12TableRequest world12_table_action{};
     World12MarketRequest world12_market_action{};
+    World12ReadonlyRequest world12_readonly_action{};
 };
 
 class StartupFlow {
@@ -166,6 +168,15 @@ public:
     bool settings_readme_release_pending() const { return settings_readme_release_barrier_; }
     const LeagueTableScreen* world12_table_screen()const{return league_table_&&league_table_->world12_state()?league_table_.get():nullptr;}
     const World12TableRequest* pending_world12_table()const{const auto* screen=world12_table_screen();return screen&&screen->pending_world12_action()?&*screen->pending_world12_action():nullptr;}
+    struct World12ReadonlyView {std::unique_ptr<DesktopScreen> desktop;std::unique_ptr<PreparationState> preparation;std::unique_ptr<World12ReadonlyScreen> screen;bool release_barrier=false;};
+    World12ReadonlyView prepare_world12_readonly_open(World12ReadonlyState,PreparationState,const DeskRequest&)const;
+    World12ReadonlyView prepare_world12_readonly_result(World12ReadonlyState,PreparationState,const World12ReadonlyRequest&,bool closed)const;
+    void finish_world12_readonly(World12ReadonlyView)noexcept;
+    const World12ReadonlyScreen* world12_readonly_screen()const{return world12_readonly_.get();}
+    const World12ReadonlyRequest* pending_world12_readonly()const{return world12_readonly_&&world12_readonly_->pending()?&*world12_readonly_->pending():nullptr;}
+    FlowResult world12_readonly_down(int,int,bool);
+    FlowResult world12_readonly_up(int,int,bool);
+    FlowResult world12_readonly_key(std::string_view);
     void show_world12_tables(World12TableState,PreparationState,const DeskRequest&);
     struct World12TableView {std::unique_ptr<DesktopScreen> desktop;std::unique_ptr<PreparationState> preparation;std::unique_ptr<LeagueTableScreen> screen;};
     World12TableView prepare_world12_table_result(World12TableState,PreparationState,const World12TableRequest&,bool closed)const;
@@ -303,9 +314,9 @@ public:
     void show_desk_records(DeskRecordsState, const DeskRequest& owner);
     bool in_desk_records() const { return bool(desk_records_); }
     const DeskRecordsScreen* desk_records() const { return desk_records_.get(); }
-    bool desk_records_points_active() const { return desk_records_&&desk_records_->points_active(); }
-    bool advance_desk_records_point() { return desk_records_&&desk_records_->advance_point(); }
-    bool finish_desk_records_points() { return desk_records_&&desk_records_->finish_points(); }
+    bool desk_records_points_active() const { return world12_readonly_?world12_readonly_->points_active():desk_records_&&desk_records_->points_active(); }
+    bool advance_desk_records_point() { return world12_readonly_?world12_readonly_->advance_point():desk_records_&&desk_records_->advance_point(); }
+    bool finish_desk_records_points() { return world12_readonly_?world12_readonly_->finish_points():desk_records_&&desk_records_->finish_points(); }
     void show_opportunities(OpportunitiesState, PreparationState, const DeskRequest& owner);
     void show_statistics_menu(const DeskRequest& owner, int transfer_history_count = 0);
     void show_alltime_table(AllTimeTableState);
@@ -434,7 +445,7 @@ public:
     void acknowledge_contract_bonuses(ContractsState state, DeskState desk, PreparationState preparation);
     void acknowledge_contract_insurance(ContractsState state, DeskState desk, PreparationState preparation);
     void reject_contract_action(std::string reason);
-    bool in_readonly_view() const { return bool(desk_records_ || achievements_ || indoor_standings_ || other_games_ || strengths_ || top_scorers_ || opportunities_ || statistics_menu_ || statistics_rankings_ || analytics_ || minute_statistics_ || transfer_history_ || league_pairings_ || calendar_ || league_table_ || mailbox_ || settings_ || advertising_ || alltime_table_ || world_cup_statistics_ || finance_totals_ || series_records_); }
+    bool in_readonly_view() const { return bool(world12_readonly_ || desk_records_ || achievements_ || indoor_standings_ || other_games_ || strengths_ || top_scorers_ || opportunities_ || statistics_menu_ || statistics_rankings_ || analytics_ || minute_statistics_ || transfer_history_ || league_pairings_ || calendar_ || league_table_ || mailbox_ || settings_ || advertising_ || alltime_table_ || world_cup_statistics_ || finance_totals_ || series_records_); }
     void acknowledge_preparation(PreparationState state, std::string transfer_notice = {});
     void reject_preparation_action(std::string reason);
     void acknowledge_unchanged_transfer_market();
@@ -472,6 +483,8 @@ private:
     std::unique_ptr<NewCareerRequest> pending_;
     std::unique_ptr<DesktopScreen> desktop_;
     std::unique_ptr<MatchdayResultsScreen> matchday_results_;
+    std::unique_ptr<World12ReadonlyScreen> world12_readonly_;
+    bool world12_readonly_release_barrier_=false;
     std::unique_ptr<CalendarScreen> calendar_;
     std::unique_ptr<IndoorStandingsScreen> indoor_standings_;
     bool indoor_standings_release_barrier_ = false;

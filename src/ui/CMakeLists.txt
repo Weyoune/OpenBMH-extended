@@ -11,6 +11,8 @@ add_library(bmhui STATIC
     preparation.cpp
     preparation_flow.cpp
     world12_market_flow.cpp
+    world12_readonly_flow.cpp
+    world12_readonly_screen.cpp
     lineup.cpp
     training.cpp
     training_camp.cpp

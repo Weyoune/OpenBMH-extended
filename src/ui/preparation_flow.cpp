@@ -1056,6 +1056,7 @@ FlowResult StartupFlow::process_timer_expired(int pointer_x, int pointer_y) {
 }
 
 FlowResult StartupFlow::pointer_down(int x,int y,bool right) {
+    if(world12_readonly_||world12_readonly_release_barrier_)return world12_readonly_down(x,y,right);
     if(pitch_hold_release_barrier_&&!right)return {};
     if(friendly_match_)return {friendly_match_->pointer_down(x,y,right)};
     if (in_toto_calculator()) return {toto_->pointer_down(x, y, right)};
@@ -1480,6 +1481,7 @@ void StartupFlow::reject_transfer_offer(std::string reason) {
 }
 
 Image StartupFlow::render() const {
+    if(world12_readonly_)return world12_readonly_->render();
     if (indoor_standings_) return indoor_standings_->render();
     if(achievements_)return achievements_->render();
     if (settings_readme_) return settings_readme_->render();
