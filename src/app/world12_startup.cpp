@@ -210,7 +210,7 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
             auto desk=ui::world12_initial_desktop(data,staged->snapshot(),staged->reference(),staged->rules(),staged->options(),staged->revision());
             flow.acknowledge_desk(std::move(desk));session.swap(staged);return {};
         }
-        if(action.desk_action.kind==ui::DeskRequestKind::open_menu&&(action.desk_action.menu_kind==4||action.desk_action.menu_kind==8||action.desk_action.menu_kind==9||action.desk_action.menu_kind==23||action.desk_action.menu_kind==20||action.desk_action.menu_kind==25||action.desk_action.menu_kind==26)){
+        if(action.desk_action.kind==ui::DeskRequestKind::open_menu&&(action.desk_action.menu_kind==4||action.desk_action.menu_kind==8||action.desk_action.menu_kind==9||action.desk_action.menu_kind==23||action.desk_action.menu_kind==20||action.desk_action.menu_kind==25||action.desk_action.menu_kind==26||action.desk_action.menu_kind==28)){
             auto staged=std::make_unique<Session>(*session);auto page=staged->open_readonly(action.desk_action,data,flow.desktop()->render(),flow.save_directory());
             auto view=flow.prepare_world12_readonly_open(std::move(page),staged->preparation_view(data),action.desk_action);session.swap(staged);flow.finish_world12_readonly(std::move(view));return {};
         }

@@ -27,6 +27,7 @@
 #include "ui/pending_offer.hpp"
 #include "ui/incoming_transfer.hpp"
 #include "ui/world12_desktop.hpp"
+#include "ui/world12_readonly_screen.hpp"
 #include "game/world12/economy.hpp"
 #include "game/world12/desktop_projection.hpp"
 #include <fstream>
@@ -1216,6 +1217,27 @@ void actual_club_inspection(const std::filesystem::path& data,const CareerSnapsh
     own_send(own_flow.pointer_down(310,230,true));capture("club-controlled-own-after",own_flow.render(),own_session->snapshot());
     std::cout<<"Actual owned club inspection: both finals/countries, A/B Original Core frames, canonical players, roster-only writes, saves, interrupted/reentrant/retired guards and no fabricated cup-only squad passed\n";
 }
+void actual_balance_gui(const std::filesystem::path& data,const CareerSnapshot& fixture,const std::filesystem::path& output){
+    const auto resources=session_app::load_runtime_resources(data);const auto directory=std::filesystem::temp_directory_path()/("openbmh-balance-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);
+    struct Cleanup{std::filesystem::path path;~Cleanup(){std::error_code ignored;std::filesystem::remove_all(path,ignored);}} cleanup{directory};write_savegame(directory/"Fixture.FBM",make_save(fixture));
+    ui::StartupFlow flow(data,directory,ui::SetupLeagueSymbol::country_selection);std::unique_ptr<session_app::Session> session;
+    const auto require=[&](const ui::FlowResult& action){const auto result=session_app::serve_startup(flow,action,session,data,91,167);if(!result.error.empty())throw std::runtime_error("balance GUI: "+result.error);};
+    flow.click(60,215);require(flow.click(240,215));require(flow.send_key("ENTER"));const auto before=session->snapshot();
+    const auto open=[&]{const auto& items=flow.desktop()->state().items;const auto icon=std::find_if(items.begin(),items.end(),[](const auto& i){return i.kind==28&&!i.disabled;});check(icon!=items.end(),"Original modeIII balance desktop icon missing");require(flow.click(icon->x+icon->width/2,icon->y+icon->height/2));check(flow.screen_name()=="balance"&&session->preparation_open(),"balance did not open typed Original owner");};
+    const auto capture=[&](const std::string& name){if(output.empty())return;std::filesystem::create_directories(output);const auto image=flow.render();const auto palette=load_palette(ui::asset_path(data,"M3PC.COL"));std::ofstream file(output/(name+".ppm"),std::ios::binary);file<<"P6\n320 240\n255\n";for(auto pixel:image.pixels){const auto c=palette.argb[pixel];file.put(char(c>>16));file.put(char(c>>8));file.put(char(c));}write_savegame(output/(name+".FBM"),make_save(session->snapshot()));};
+    capture("desktop-before");open();const auto page=session->readonly_view();check(bool(page.balance),"typed balance has no Original state");const auto& b=*page.balance;
+    ui::BalanceScreen original(data,b,resources.german);check(original.render().pixels==flow.render().pixels,"typed balance differs from shared explicit-reference Original renderer");
+    check(b.actuals_only&&b.draft.view==BalanceView::so_far&&!b.row_available[kBalanceOtherHomeGames]&&!b.row_available[kBalanceAverageGate],"typed balance exposed assumed plan values");
+    const auto& actor=*std::find_if(before.world.managers.begin(),before.world.managers.end(),[&](const auto& m){return m.seat==page.identity.manager;});check(b.draft.rows[kBalanceLeagueHomeGames]==int(before.world.membership[before.world.clubs.at(actor.club).league.value].clubs.size())-1&&b.draft.rows[kBalanceTicketPrice]==actor.career->training_plan&&b.draft.rows[kBalanceAccount]==actor.finance->balance,"balance changed actual homecount/ticket/account");
+    auto oracle=project_manager_desktop(before,resources.reference);const auto rec=size_t(b.draft.manager)*0xb0c;for(size_t n=0;n<4;++n)oracle.state.manager_records[rec+0x310+n]=0;const auto expected=open_balance_plan(oracle.state,b.draft.manager);for(size_t row=0;row<18;++row)check(b.draft.rows[row]==expected.rows[row],"balance booked items differ from Core so_far");check(b.draft.total==expected.total&&b.draft.depreciation==expected.depreciation,"balance total differs from Core so_far");
+    capture("balance-open");for(auto point:{std::pair{190,218},std::pair{265,218},std::pair{60,44},std::pair{150,188}}){flow.pointer_down(point.first,point.second);require(flow.click(point.first,point.second));check(!flow.pending_world12_readonly()&&session->readonly_view().identity==page.identity,"balance attempted an unsupported plan edit");}
+    check(session->snapshot()==before&&read_save(make_save(session->snapshot()))==before,"balance redraw/edit attempts changed full saved career/RNG");
+    auto stale=ui::World12ReadonlyRequest{page.identity,ui::World12ReadonlyAction::close,page.selection.metric};auto forged=stale;++forged.identity.manager;rejects([&]{session->apply_readonly(forged);},"balance accepted another manager");forged=stale;forged.action=ui::World12ReadonlyAction::set_metric;rejects([&]{session->apply_readonly(forged);},"balance accepted an unsupported mutation");
+    require(flow.send_key("ESCAPE"));check(flow.screen_name()=="desktop"&&!session->preparation_open()&&session->snapshot()==before,"balance close committed a temporary plan");rejects([&]{session->apply_readonly(stale);},"closed balance owner replayed");capture("balance-closed");
+    open();check(session->readonly_view().identity.sequence!=page.identity.sequence,"balance reopened stale generation");rejects([&]{session->apply_readonly(stale);},"old balance request closed reopened owner");require(flow.process_timer_expired());check(flow.screen_name()=="desktop"&&session->snapshot()==before,"Source balance event8 changed saved state");
+    const auto restored=session_app::Session::resume(resources,read_save(make_save(session->snapshot())),168,1);check(restored.snapshot()==before,"balance lost save/resume equality");
+    std::cout<<"Actual modeIII balance Original frame/Core rows, canonical home/ticket/account, unavailable plan controls, owner/stale/reopen/event8, unchanged full FBM/RNG passed\n";
+}
 void actual_tables_gui(const std::filesystem::path& data,const CareerSnapshot& fixture,const std::filesystem::path& output){
     competition_folder_owner(data,fixture,0);
     const auto resources=session_app::load_runtime_resources(data);const auto directory=std::filesystem::temp_directory_path()/("openbmh-tables-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directory(directory);
@@ -2157,6 +2179,7 @@ int main(int argc,char** argv)try {
     if(argc==5&&std::string(argv[3])=="--market-loan"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_transfer_market_gui(argv[1],read_save(load_savegame(argv[4])),argv[2],true);return 0;}
     if(argc==5&&std::string(argv[3])=="--market-received"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_market_received_gui(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--market-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_transfer_market_gui(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
+    if(argc==5&&std::string(argv[3])=="--balance-only"){actual_balance_gui(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--family-results"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_family_result_views(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--indoor-settings-only"){const auto resources=session_app::load_runtime_resources(argv[1]);const auto fixture=read_save(load_savegame(argv[4]));actual_indoor_settings(argv[1],fixture,std::filesystem::path(argv[2])/"initial");for(int day:{109,110,230,231})actual_indoor_settings(argv[1],fixture,std::filesystem::path(argv[2])/("boundary-"+std::to_string(day)),day);return 0;}
     if(argc==5&&std::string(argv[3])=="--timer-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_process_timer(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}

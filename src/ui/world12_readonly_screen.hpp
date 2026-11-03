@@ -15,6 +15,7 @@ public:
     bool pointer_up(int,int,bool right=false);
     bool key(std::string_view);
     bool text(std::string_view);
+    bool process_timer_expired();
     bool points_active()const{return records_&&records_->points_active();}
     bool advance_point(){return records_&&records_->advance_point();}
     bool finish_points(){return records_&&records_->finish_points();}
@@ -31,6 +32,7 @@ private:
     std::unique_ptr<CalendarScreen> calendar_;
     std::unique_ptr<TopScorersScreen> top_;
     std::unique_ptr<DeskRecordsScreen> records_;
+    std::unique_ptr<BalanceScreen> balance_;
     std::optional<World12ReadonlyRequest> pending_;
     bool pending_on_down_=false;
     bool capture(bool);

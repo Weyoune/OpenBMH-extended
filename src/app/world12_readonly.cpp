@@ -13,7 +13,7 @@ std::vector<ui::World12CareerIdentity> roster(const CareerSnapshot& state){
 }
 ui::World12ReadonlyState Session::open_readonly(const ui::DeskRequest& request,const std::filesystem::path& data,const Image& underlay,const std::filesystem::path& save_directory){
     state_.validate();
-    if(preparation_menu_||readonly_owner_||request.kind!=ui::DeskRequestKind::open_menu||(request.menu_kind!=4&&request.menu_kind!=8&&request.menu_kind!=9&&request.menu_kind!=23&&request.menu_kind!=20&&request.menu_kind!=25&&request.menu_kind!=26)||request.value!=-1||request.revision!=owner_.revision||owner_.revision==UINT64_MAX||readonly_generation_>=UINT32_MAX||underlay.width!=320||underlay.height!=240)
+    if(preparation_menu_||readonly_owner_||request.kind!=ui::DeskRequestKind::open_menu||(request.menu_kind!=4&&request.menu_kind!=8&&request.menu_kind!=9&&request.menu_kind!=23&&request.menu_kind!=20&&request.menu_kind!=25&&request.menu_kind!=26&&request.menu_kind!=28)||request.value!=-1||request.revision!=owner_.revision||owner_.revision==UINT64_MAX||readonly_generation_>=UINT32_MAX||underlay.width!=320||underlay.height!=240)
         throw FormatError("world12: stale or unavailable readonly desktop owner");
     const auto desk=ui::world12_initial_desktop(data,state_,resources_.reference,resources_.german,options_,owner_.revision);
     if(ui::desk_actor(desk)!=request.manager_slot||desk.world12_career_roster!=roster(state_)||!visible_world12_menu(desk,request.item_id,request.menu_kind))
@@ -35,6 +35,7 @@ ui::World12ReadonlyState Session::readonly_view()const{
 }
 bool Session::apply_readonly(const ui::World12ReadonlyRequest& request){
     const auto current=readonly_view();if(request.identity!=current.identity||owner_.revision==UINT64_MAX||uint32_t(current.identity.sequence)==UINT32_MAX)throw FormatError("world12: stale readonly action");
+    if(current.identity.menu==28&&(request.action!=ui::World12ReadonlyAction::close||request.value!=-1||request.first_season||request.expected_flags||request.target_flags))throw FormatError("world12: current balance owns only its exact close action");
     auto selection=readonly_selection_;bool closed=false;std::optional<CareerSnapshot> changed;
     switch(request.action){
     case ui::World12ReadonlyAction::close:if(request.metric!=current.selection.metric)throw FormatError("world12: readonly close metric changed");closed=true;break;

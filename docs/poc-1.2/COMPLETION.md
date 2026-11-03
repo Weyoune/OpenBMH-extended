@@ -34,3 +34,7 @@ reject atomically. English promotion now uses the actual four visible groups,
 protects the lowest visible human and preserves the hidden internal division.
 The annual transaction still needs player renewal, cup/calendar reset, the full
 canonical title archive and final publication before any season/Beta gate closes.
+
+Menu 28 now has a [current booked balance](BALANCE.md) in the Original screen.
+Forecast/plan controls remain an explicit Beta limit pending real persistent plan
+ownership. This view closes no management, annual or Beta completion gate.

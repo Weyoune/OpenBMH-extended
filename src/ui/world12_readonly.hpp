@@ -3,6 +3,7 @@
 #include "game/world12/save.hpp"
 #include <memory>
 #include "ui/desk_state.hpp"
+#include "ui/balance_plan.hpp"
 #include "ui/desk_records.hpp"
 #include "ui/calendar_state.hpp"
 #include "ui/indoor_standings.hpp"
@@ -44,6 +45,7 @@ struct World12ReadonlyState {
     std::optional<AchievementsState> achievements;
     std::optional<CalendarState> calendar;
     std::optional<IndoorStandingsState> indoor;
+    std::optional<BalanceState> balance;
     std::vector<bmh::world12::ClubId> clubs;
     std::vector<bmh::world12::PlayerId> players;
 };

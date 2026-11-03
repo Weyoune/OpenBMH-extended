@@ -39,6 +39,9 @@ struct BalanceState {
     uint32_t currency_numerator=1, currency_denominator=1;
     TaxDialogProjection read_only_notice, close_notice;
     bool read_only_notice_enabled=true; // PresentManagerDialog BalancePlan_BalanceFromGame_RuntimeField2/CompactDialogFrame/BalancePlan_BalanceFromGame_RuntimeField visibility gate, resolved by owner.
+    bool actuals_only=false; // Typed Beta: no persistent forecast/plan owner yet.
+    std::array<bool,kBalanceRows> row_available=[] { std::array<bool,kBalanceRows> v; v.fill(true); return v; }();
+    std::string capability_notice;
     bool pending_close=false; // Core close staged once; warning precedes live publish.
     bool decorated=true, original_panel=true, gradient=true, cached_backdrop=false;
     int calculator_x=100, calculator_y=80; // BalanceFromGame persisted caller origin.
@@ -49,6 +52,7 @@ BalanceState balance_from_game(const GameState&,const BalancePlanDraft&,const Le
 class BalanceScreen {
 public:
     BalanceScreen(const std::filesystem::path&,BalanceState);
+    BalanceScreen(const std::filesystem::path&,BalanceState,const LeImage&);
     Image render() const;
     bool pointer_down(int x,int y,bool right=false);
     bool release(int x,int y);

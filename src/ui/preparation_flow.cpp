@@ -995,6 +995,9 @@ FlowResult StartupFlow::process_timer_expired(int pointer_x, int pointer_y) {
         //CheckAdvertisingRenewal event8 leaves offers;BalanceFromGame cancels unconfirmed spending first.
         //The existing modal back path protects pending contracts/bookings.
         return click(0, 0, true);
+    if(engine_attached_&&world12_readonly_&&world12_readonly_->state().identity.menu==28){
+        const bool changed=world12_readonly_->process_timer_expired();FlowResult out{changed};if(const auto* request=pending_world12_readonly()){out.request=FlowRequest::world12_readonly_action;out.world12_readonly_action=*request;}return out;
+    }
     if (engine_attached_ && balance_) {
         // No physical DOWN/UP owner: preserve calculator waits and the staged
         // close warning, then let the existing app ACK publish the draft once.

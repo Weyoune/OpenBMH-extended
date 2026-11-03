@@ -54,6 +54,28 @@ void league_pages(const GameState& ref,const LeImage& source){
     }
     std::cout<<queries<<" top-ten country/metric/scope queries and10Source fairplay tables preserve physical ties,18/20/10members, wide global IDs/state/RNG\n";
 }
+void balance_pages(const GameState& ref,const LeImage& source){
+    for(uint32_t league:{0u,5u,8u}){
+        auto state=fixture(ref,{league});auto& actor=state.world.managers[1];
+        actor.finance->balance=-123456;actor.finance->income=700;actor.finance->expenses=1800;actor.finance->bonus_paid=91;
+        actor.career->season_services.emplace();actor.career->season_services->ticket_income=999;actor.career->season_services->total_ticket_income=400;
+        actor.career->training_plan=17;actor.match_state->attendance.emplace();auto& gates=*actor.match_state->attendance;gates.league_home_count=2;gates.spectators[0]=20000;gates.spectators[1]=30000;
+        state.world.economy.emplace();auto& economy=state.world.economy->managers[3];economy.monthly.emplace();economy.depreciation=100;economy.interest_income=600;economy.overdraft_interest=1700;
+        for(size_t i=0;i<15;++i)economy.monthly->counters[i]=uint32_t(100+i);
+        state.validate();const auto before=state;const ui::World12ReadonlyIdentity id{3,28,actor.club,state.date,8,71,1ull<<32};
+        const auto page=ui::world12_readonly_state(state,id,{},ref,source,Image(320,240));check(bool(page.balance),"balance lacks Original DTO");const auto& actual=*page.balance;
+        const std::array<int32_t,18> expected={102,103,104,400,105,600,700,292,107,108,109,110,111,112,113,114,1700,1800};
+        for(size_t row=0;row<18;++row)check(actual.draft.rows[row]==expected[row],"balance booked row differs from its real canonical owner");
+        double total=-100;for(size_t row=0;row<18;++row)total+=expected[row]*(row<7?1:-1);
+        check(actual.draft.total==total&&actual.draft.depreciation==100&&actual.draft.view==BalanceView::so_far,"balance total/depreciation differs from Source so_far");
+        check(actual.draft.rows[kBalanceLeagueHomeGames]==int(state.world.membership[league].clubs.size())-1&&actual.draft.rows[kBalanceTicketPrice]==17&&actual.draft.rows[kBalanceGateSoFar]==25000&&actual.draft.rows[kBalanceAccount]==-123456,"balance lost actual20club count/ticket/attendance/account");
+        check(actual.actuals_only&&!actual.row_available[kBalanceOtherHomeGames]&&!actual.row_available[kBalanceAverageGate]&&!actual.capability_notice.empty(),"balance invented unavailable plan values");
+        check(state==before&&read_save(make_save(state))==state,"balance changed canonical career or RNG");
+        auto unknown=state;unknown.world.economy->managers[3].depreciation.reset();rejects([&]{ui::world12_readonly_state(unknown,id,{},ref,source,Image(320,240));},"balance silently supplied missing depreciation");
+        unknown=state;unknown.world.managers[1].match_state->attendance.reset();rejects([&]{ui::world12_readonly_state(unknown,id,{},ref,source,Image(320,240));},"balance silently supplied missing attendance");
+    }
+    std::cout<<"Actual balance18booking owners, DE/ENhomecounts, known attendance/ticket/account, unknown plan/depreciation and complete save/RNG preservation passed\n";
+}
 void statistics_pages(const GameState& ref,LeImage source){
     const uint8_t table_flags[]={3,1,2},selectors[]={0,1,2};source.patch(layout::TableFlags,table_flags,3);source.patch(layout::SeriesSelector,selectors,3);
     for(uint32_t index=0;index<9;++index){const auto id=uint8_t(index);source.patch(layout::StatisticsRankings_FormatError_RuntimeField+index,&id,1);}
@@ -91,8 +113,9 @@ void national_pages(LeImage source){
     const auto parent=ui::world12_statistics_state(state,owner,selection,ref,source,frame);check(!parent.menu.available[0]&&!parent.menu.available[1]&&!parent.menu.available[2]&&!parent.menu.available[3]&&!parent.menu.available[6]&&parent.menu.available[4]&&parent.menu.available[7]&&parent.menu.available[8],"national statistics exposed unavailable club panes");check(parent.menu.owner.manager_slot==3&&!world.managers[0].career&&!world.managers[0].start_league.valid(),"national statistics parent fabricated club backing or lost sparse actor");
     for(int page:{4,7,8}){selection.page=page;const auto result=ui::world12_statistics_state(state,owner,selection,ref,source,frame);check(page==4?bool(result.world_cup):page==7?bool(result.rankings):bool(result.minutes),"national statistics lost real general/nominated facts");}
     for(int page:{0,1,2,3,6}){selection.page=page;rejects([&]{ui::world12_statistics_state(state,owner,selection,ref,source,frame);},"national statistics substituted a disabled or parked club league/history");}
+    auto balance_owner=owner;balance_owner.menu=28;rejects([&]{ui::world12_readonly_state(state,balance_owner,{},ref,source,frame);},"national balance fabricated club accounts");
     ui::DeskState capabilities;capabilities.managers.resize(1);capabilities.managers[0].world_club=team;for(int kind:{0,1,2,4,5,8,9,20,23,25,26}){ui::DeskItem item;item.id=kind;item.kind=kind;capabilities.items.push_back(item);capabilities.layout_records[size_t(kind)][12]=uint8_t(kind);}world12_readonly_capabilities(state,capabilities);for(const auto& item:capabilities.items)check(item.disabled==(item.kind==0||item.kind==1||item.kind==2||item.kind==4||item.kind==9||item.kind==20||item.kind==25),"national desktop capability mask disabled real facts or exposed fake league views");owner.menu=26;check(ui::world12_readonly_state(state,owner,{},ref,source,frame).records.has_value(),"known unranked NoClub score required fabricated club accounts");owner.menu=23;auto wrong=owner;wrong.club={3000000};selection.page=-1;rejects([&]{ui::world12_statistics_state(state,wrong,selection,ref,source,frame);},"national readonly accepted another real nation's actor binding");check(state==before&&read_save(make_save(state))==state,"national general statistics mutated real squads, inactive origins, accounts, seeds or absent career");std::cout<<"NoClub sparse actor3: actual WC/title/minute/score views, missing club histories explicit, full snapshot/RNG unchanged\n";
 }
 
 }
-int main()try{set_fixture_tables(bmh::test::authored_fixture_tables());const auto ref=reference();const auto source=LeImage::from_bytes(layout::GermanDataSegmentBegin,Bytes(0x20000));league_pages(ref,source);statistics_pages(ref,source);national_pages(source);return 0;}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
+int main()try{set_fixture_tables(bmh::test::authored_fixture_tables());const auto ref=reference();const auto source=LeImage::from_bytes(layout::GermanDataSegmentBegin,Bytes(0x20000));league_pages(ref,source);balance_pages(ref,source);statistics_pages(ref,source);national_pages(source);return 0;}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}

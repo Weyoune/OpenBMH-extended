@@ -63,8 +63,10 @@ BalanceState balance_from_game(const GameState& g,const BalancePlanDraft& d,cons
  return s;
 }
 
-BalanceScreen::BalanceScreen(const std::filesystem::path& d,BalanceState s):state_(std::move(s)),data_(d),exe_(load_le(asset_path(d,"BMH.exe"))),texts_(load_textd(asset_path(d,"TEXTD.BLK"))),body_(load_font(asset_path(d/"F","BMH3.FNT"))),heading_(load_font(asset_path(d/"F","BMH2.FNT"))),calculator_art_(load_vga(asset_path(d/"KB","6.VGA"))),button_art_(load_vga(asset_path(d/"KB","0.VGA"))),panel_art_(load_vga(asset_path(d/"KB","56.VGA"))),frame_art_(load_vga(asset_path(d/"KB","129.VGA"))),sprite_(d){
+BalanceScreen::BalanceScreen(const std::filesystem::path& d,BalanceState s):BalanceScreen(d,std::move(s),load_le(asset_path(d,"BMH.exe"))){}
+BalanceScreen::BalanceScreen(const std::filesystem::path& d,BalanceState s,const LeImage& source):state_(std::move(s)),data_(d),exe_(source),texts_(load_textd(asset_path(d,"TEXTD.BLK"))),body_(load_font(asset_path(d/"F","BMH3.FNT"))),heading_(load_font(asset_path(d/"F","BMH2.FNT"))),calculator_art_(load_vga(asset_path(d/"KB","6.VGA"))),button_art_(load_vga(asset_path(d/"KB","0.VGA"))),panel_art_(load_vga(asset_path(d/"KB","56.VGA"))),frame_art_(load_vga(asset_path(d/"KB","129.VGA"))),sprite_(d,source){
  if(state_.identity.manager_slot<0||state_.identity.manager_slot>3||state_.identity.manager_slot!=state_.draft.manager||state_.underlay.width!=320||state_.underlay.height!=240||calculator_art_.width<113||calculator_art_.height<150)throw FormatError("balance: incomplete Source projection");
+ if(state_.actuals_only&&(state_.draft.view!=BalanceView::so_far||state_.pending_close||state_.capability_notice.empty()))throw FormatError("balance: actual-only view cannot own forecast/plan publication");
  state_.calculator_x=std::clamp(state_.calculator_x,0,207);state_.calculator_y=std::clamp(state_.calculator_y,0,104);
  format_state_.memory.add_block(::bmh::layout::CurrencyMultiplier,8);format_state_.memory.set32(::bmh::layout::CurrencyMultiplier,state_.currency_numerator);format_state_.memory.set32(::bmh::layout::CurrencyDivisor,state_.currency_denominator);
  close_notice_visible_=state_.pending_close;(void)render();
@@ -88,11 +90,12 @@ void BalanceScreen::draw_rows(Image& o)const{
  const bool profit=total>=0;auto result=source_money(int32_t(std::clamp<double>(std::abs(total),0,99999999)));text(profit?165:3,152,at(texts_,profit?::bmh::layout::BalancePlan_DrawRows_TextPointer8: ::bmh::layout::BalancePlan_DrawRows_TextPointer7),colors[profit?0:1]);text(profit?262:100,152,result,colors[profit?0:1]);
  text(12,162,exe_.cstring(::bmh::layout::BalancePlan_DrawRows_TextPointer),0x40);text(10,160,exe_.cstring(::bmh::layout::BalancePlan_DrawRows_TextPointer),0x5f);
  constexpr std::array<int,3> suffix_id{15,16,17};
- for(int i=0;i<6;++i){int row=18+i,y=160+i*9;auto label=at(texts_,::bmh::layout::BalancePlan_DrawRows_TextPointer4+uint32_t(i)*4);text(22,y+2,label,0x40);text(20,y,label,0x5f);const int selector=exe_.u8(::bmh::layout::BalancePlan_DrawRows_TextPointer2+uint32_t(i));auto val=format_number(GameState{},state_.draft.rows[size_t(row)],0x89)+std::string(texts_[size_t(suffix_id[std::clamp(selector,0,2)])]);text(192,y+2,val,0x40);text(190,y,val,0x5f);}
+ for(int i=0;i<6;++i){int row=18+i,y=160+i*9;auto label=at(texts_,::bmh::layout::BalancePlan_DrawRows_TextPointer4+uint32_t(i)*4);text(22,y+2,label,0x40);text(20,y,label,0x5f);const int selector=exe_.u8(::bmh::layout::BalancePlan_DrawRows_TextPointer2+uint32_t(i));auto val=state_.row_available[size_t(row)]?format_number(GameState{},state_.draft.rows[size_t(row)],0x89)+std::string(texts_[size_t(suffix_id[std::clamp(selector,0,2)])]):std::string("--");text(192,y+2,val,0x40);text(190,y,val,0x5f);}
 }
 std::string BalanceScreen::source_money(int32_t value)const{return format_number(format_state_,value,0x188);}
 BalanceRequest BalanceScreen::request(BalanceAction kind,int row,int32_t value)const{BalanceRequest r;r.identity=state_.identity;r.kind=kind;r.row=row;r.value=value;return r;}
 void BalanceScreen::draw_buttons(Image& o)const{
+ if(state_.actuals_only){sprite_.draw(o,5,221,state_.capability_notice);return;}
  auto button=[&](int x,int width,std::string_view raw,int id){const bool down=pressed_main_button_==id&&main_button_armed_;int y=214,dx=x+(down?2:0),dy=y+(down?2:0),sy=down?44:74;if(down){fill(o,x,y,width+1,2,o.at(x,y+10));fill(o,x,y,2,11,o.at(x,y+10));}else{fill(o,x+2,y+10,width+1,2,0x40);fill(o,x+width,y+2,2,10,0x40);}copy(o,button_art_,24,sy,dx,dy,31,10);int used=31;while(width-used>20){int n=std::min(8,width-used-20);copy(o,button_art_,24,sy+10,dx+used,dy,n,10);used+=n;}int tail=width-used;copy(o,button_art_,45-tail,sy+20,dx+used,dy,tail,10);auto label=original_to_utf8(raw);sprite_.draw(o,dx+width/2-sprite_.text_width(label)/2,dy+7,label,exe_.u8(::bmh::layout::Advertising_Button_RuntimeField + uint32_t(down)));};
  button(170,63,at(texts_,::bmh::layout::BalancePlan_DrawButtons_TextPointer+uint32_t(state_.draft.view)*4),0);button(245,63,at(texts_,::bmh::layout::BalancePlan_DrawButtons_TextPointer2),1);
 }
@@ -113,7 +116,7 @@ void BalanceScreen::draw_notice(Image& o)const{
 }
 Image BalanceScreen::render()const{Image out=state_.cached_backdrop?state_.underlay:(state_.decorated?frame_art_:Image(320,240));draw_panels(out);draw_rows(out);draw_buttons(out);draw_calculator(out);draw_notice(out);return out;}
 void BalanceScreen::open_calculator(int row){
- if(row<0||row>=22)return;
+ if(state_.actuals_only||row<0||row>=22)return;
  const bool editable=(row<=2)||(row>=4&&row<=17)||(row>=19&&row<=21);
  if(!editable)return;
  if(state_.draft.view==BalanceView::so_far){notice_visible_=state_.read_only_notice_enabled;notice_consumed_=false;notice_clock_started_=false;return;}
@@ -147,6 +150,7 @@ bool BalanceScreen::pointer_down(int x,int y,bool right){
   return true;
  }
  if(right){pending_=request(BalanceAction::close);return true;}
+ if(state_.actuals_only)return false;
  if(in(x,y,170,214,233,224)){pressed_main_button_=0;main_button_armed_=true;return true;}
  if(in(x,y,245,214,308,224)){pressed_main_button_=1;main_button_armed_=true;return true;}
  for(int row=0;row<22;++row){int x0=0,x1=160,y0=38,y1=0;if(row<7)y0+=row*9,y1=y0+7;else if(row<18){x0=160;x1=320;y0+= (row-7)*9;y1=y0+7;}else{x1=320;y0=154+(row-18)*9;y1=y0+7;}if(in(x,y,x0,y0,x1,y1)){open_calculator(row);return true;}}
@@ -198,7 +202,7 @@ void BalanceScreen::reject_action(std::string){const bool retry_close=pending_&&
 bool BalanceScreen::calculator_open()const{return calculator_open_;}
 bool BalanceScreen::notice_open()const{return notice_visible_||close_notice_visible_;}
 std::string BalanceScreen::state_json()const{
- std::ostringstream o;o<<"{\"manager_slot\":"<<state_.identity.manager_slot<<",\"runtime_club\":"<<state_.identity.runtime_club<<",\"revision\":"<<state_.identity.revision<<",\"scope\":"<<state_.identity.scope<<",\"sequence\":"<<state_.identity.sequence<<",\"view\":"<<int(state_.draft.view)<<",\"calculator_x\":"<<state_.calculator_x<<",\"calculator_y\":"<<state_.calculator_y<<",\"calculator_open\":"<<(calculator_open_?"true":"false")<<",\"notice_open\":"<<(notice_open()?"true":"false")<<",\"pending_close\":"<<(state_.pending_close?"true":"false")<<",\"pending\":";
+ std::ostringstream o;o<<"{\"manager_slot\":"<<state_.identity.manager_slot<<",\"runtime_club\":"<<state_.identity.runtime_club<<",\"revision\":"<<state_.identity.revision<<",\"scope\":"<<state_.identity.scope<<",\"sequence\":"<<state_.identity.sequence<<",\"actuals_only\":"<<(state_.actuals_only?"true":"false")<<",\"view\":"<<int(state_.draft.view)<<",\"calculator_x\":"<<state_.calculator_x<<",\"calculator_y\":"<<state_.calculator_y<<",\"calculator_open\":"<<(calculator_open_?"true":"false")<<",\"notice_open\":"<<(notice_open()?"true":"false")<<",\"pending_close\":"<<(state_.pending_close?"true":"false")<<",\"pending\":";
  if(!pending_)o<<"null";else{o<<"{\"kind\":"<<int(pending_->kind)<<",\"row\":"<<pending_->row<<",\"value\":"<<pending_->value<<"}";}o<<'}';return o.str();
 }
 } // namespace bmh::ui
