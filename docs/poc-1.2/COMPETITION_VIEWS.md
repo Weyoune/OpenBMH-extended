@@ -37,3 +37,10 @@ retain their actual match orientation while the display aligns them with the
 stored first-leg fixture. German and English Super-Cup finals remain separate
 owners even when both use Source entry23 and revision0. Unknown, repeated,
 stale, incomplete or wrongly oriented overlay receipts reject atomically.
+
+The generic overview builder and navigation accept an optional explicit Source
+`TextDb` after the overlay argument. Page4 uses the actual current national
+campaign and its saved stage/round selection. Its linked-stage controls and
+round arrows retain that owner; no national competition number is reinterpreted
+as a domestic LeagueId. A missing text/programme context is explicit, rather
+than a placeholder national fixture page.

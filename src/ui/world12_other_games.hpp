@@ -35,9 +35,9 @@ OtherGamesState world12_indoor_games_state(const bmh::world12::CareerSnapshot&,
     const std::optional<World12CompetitionOverlay>& overlay=std::nullopt);
 World12OtherSelection default_world12_other_selection(const bmh::world12::World&);
 OtherGamesState world12_other_games_state(const bmh::world12::CareerSnapshot&,
-    const World12OtherGamesIdentity&,World12OtherSelection,const std::vector<World12CompetitionOverlay>& overlay={});
+    const World12OtherGamesIdentity&,World12OtherSelection,const std::vector<World12CompetitionOverlay>& overlay={},const TextDb* texts=nullptr);
 // Read-only navigation. Team-info/close are returned to the typed window owner;
 // this helper never writes the world or interprets local renderer tokens as IDs.
 World12OtherSelection navigate_world12_other_games(const bmh::world12::CareerSnapshot&,
-    const World12OtherGamesIdentity&,World12OtherSelection,const OtherGamesRequest&);
+    const World12OtherGamesIdentity&,World12OtherSelection,const OtherGamesRequest&,const TextDb* texts=nullptr);
 }

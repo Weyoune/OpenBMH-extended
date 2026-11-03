@@ -189,7 +189,8 @@ OtherGamesState world12_indoor_games_state(const bmh::world12::CareerSnapshot& s
     return state;
 }
 OtherGamesState world12_other_games_state(const bmh::world12::CareerSnapshot& snapshot,
-    const World12OtherGamesIdentity& owner,World12OtherSelection selection,const std::vector<World12CompetitionOverlay>& overlays) {
+    const World12OtherGamesIdentity& owner,World12OtherSelection selection,const std::vector<World12CompetitionOverlay>& overlays,const TextDb* texts) {
+    if(selection.page==World12OtherPage::national_qualifiers){if(!texts)throw FormatError("other games: actual national programme needs its Source text context");uint8_t entry=255;if(selection.stage>=0){if(!snapshot.world.national_campaigns||!snapshot.world.national_campaigns->seasons.contains(snapshot.season)||size_t(selection.stage)>=snapshot.world.national_campaigns->seasons.at(snapshot.season).stages.size())throw FormatError("other games: stale national stage selector");entry=snapshot.world.national_campaigns->seasons.at(snapshot.season).stages[size_t(selection.stage)].rules.entry;}return world12_national_games_state(snapshot,owner,*texts,entry,selection.round,overlays);}
     if(int(selection.page)>=1&&int(selection.page)<=3)return world12_european_games_state(snapshot,owner,selection,overlays);
     const auto& world=snapshot.world;world.validate();validate_cup_programmes(world,snapshot.cups);validate_owner(world,owner);
     std::map<const KnockoutStage*,const World12CompetitionOverlay*> current_scores;
@@ -264,10 +265,10 @@ OtherGamesState world12_other_games_state(const bmh::world12::CareerSnapshot& sn
     return state;
 }
 World12OtherSelection navigate_world12_other_games(const bmh::world12::CareerSnapshot& snapshot,const World12OtherGamesIdentity& owner,
-    World12OtherSelection selection,const OtherGamesRequest& request) {
+    World12OtherSelection selection,const OtherGamesRequest& request,const TextDb* texts) {
     if(!request.world12_identity || *request.world12_identity!=owner || request.identity!=OtherGamesIdentity{} || request.world12_team.valid())
         throw FormatError("other games: stale/mixed typed navigation request");
-    const auto current=world12_other_games_state(snapshot,owner,selection);
+    const auto current=world12_other_games_state(snapshot,owner,selection,{},texts);
     if(request.action!=OtherGamesAction::select_competition&&request.action!=OtherGamesAction::select_linked_page&&request.value!=-1)
         throw FormatError("other games: unexpected typed navigation value");
     switch(request.action) {
@@ -292,6 +293,6 @@ World12OtherSelection navigate_world12_other_games(const bmh::world12::CareerSna
         selection.mode=selection.mode==OtherGamesDisplayMode::detail?OtherGamesDisplayMode::compact:OtherGamesDisplayMode::detail;break;
     default:throw FormatError("other games: action belongs to the typed window owner");
     }
-    world12_other_games_state(snapshot,owner,selection);return selection;
+    world12_other_games_state(snapshot,owner,selection,{},texts);return selection;
 }
 }
