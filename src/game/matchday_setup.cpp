@@ -989,6 +989,46 @@ MatchWeatherOutcome draw_match_weather(int region,int month,bool choose,
 bool select_live_match_source(GameState& state,int home,int away) {
     return select_live_match(state,home,away);
 }
+int prepare_kickoff_fixture(GameState& g,int home,int away,WatcomRandom& rand) {
+    int forfeit_side = -1;
+    for (int side = 0; side < 2; side++) {
+        // the original swaps home and away after each pass
+        const int t = side ? away : home, opponent = side ? home : away;
+        const int own_manager = g.manager_of(t), other_manager = g.manager_of(opponent);
+        if ((own_manager >= 0 || other_manager >= 0) && (other_manager < 0 || g.manager_option(other_manager, 3))) {
+            const int rate = rand.range(0x46, 0x50);
+            man_marking(g, own_manager, t, other_manager, opponent, 0x32, rate, rand);
+        }
+        const TeamAverage fit = team_average(g, t, 0x1f1, &rand);
+        if ((t < kLeagueClubCount || has_national_squad(g,t)) && (fit.players & 0xFF) < 8) {
+            // FinishEvent sets this fixture's local void bit and BuildSideRecords writes
+            // the awarded 0:2/2:0 score before continuing to the next fixture.
+            forfeit_side = side;
+            const int manager = g.manager_of(t);
+            if (manager >= 0) book_money(g, manager, 200000, true, true);  // BookMoney2
+            if (g.memory.has(::bmh::layout::MatchdaySetup_KickOff_RuntimeField + uint32_t(t) * 2))
+                g.memory.set8(::bmh::layout::MatchdaySetup_KickOff_RuntimeField + uint32_t(t) * 2,
+                              uint8_t(g.memory.u8(::bmh::layout::MatchdaySetup_KickOff_RuntimeField + uint32_t(t) * 2) + 1));
+        }
+    }
+    if(forfeit_side>=0){restore_forfeit_squad(g,home);restore_forfeit_squad(g,away);}
+    return forfeit_side;
+}
+void award_kickoff_forfeit(GameState& g,MatchGroup& grp,int m,int side,bool store_native_result) {
+    if(side<0||side>1||m<0||m>=grp.matches())throw std::invalid_argument("kickoff: invalid forfeit award");
+    const auto bit=1u<<m;
+    put32(grp.desc,0xb8,grp.void_mask()|bit);grp.kickoff_void_mask|=bit;
+    const int home_goals=side==0?0:2,away_goals=side==0?2:0;
+    if(grp.desc.at(0)==0){
+        const auto score=uint8_t((home_goals<<4)|away_goals);
+        if(store_native_result){
+            const auto league=le32(grp.desc,0xcc);
+            const size_t at=size_t(league)*0x17c+size_t(g.league_rounds.at(league))*10+size_t(m);
+            g.results.at(at)=score;
+        }
+        grp.results.at(size_t(m))=score;
+    }else grp.cup_results.at(size_t(m))=uint16_t((home_goals<<5)|away_goals);
+}
 void kick_off(GameState& g, std::vector<MatchGroup>& groups, const MatchdayContext& ctx, WatcomRandom& rand,
               GameRandom& game, MinuteReport& report, bool select_sportschau, uint16_t club_threshold) {
     // LiveSceneVisible = 1 - CareerSession_DispatchLiveTactic_RuntimeField3, set by the caller of DayCompetitions2 right after the
@@ -1040,46 +1080,8 @@ void kick_off(GameState& g, std::vector<MatchGroup>& groups, const MatchdayConte
             const int home = grp.fixtures.at(size_t(m) * 2), away = grp.fixtures.at(size_t(m) * 2 + 1);
             const bool live = select_live_match(g, home, away);
             if (!live && select_sportschau) consider_sportschau_fixture(g, grp, home, away, rand);
-            int forfeit_side = -1;
-            for (int side = 0; side < 2; side++) {
-                // the original swaps home and away after each pass
-                const int t = side ? away : home, opponent = side ? home : away;
-                const int own_manager = g.manager_of(t), other_manager = g.manager_of(opponent);
-                if ((own_manager >= 0 || other_manager >= 0) && (other_manager < 0 || g.manager_option(other_manager, 3))) {
-                    const int rate = rand.range(0x46, 0x50);
-                    man_marking(g, own_manager, t, other_manager, opponent, 0x32, rate, rand);
-                }
-                const TeamAverage fit = team_average(g, t, 0x1f1, &rand);
-                if ((t < kLeagueClubCount || has_national_squad(g,t)) && (fit.players & 0xFF) < 8) {
-                    // FinishEvent sets this fixture's local void bit and BuildSideRecords writes
-                    // the awarded 0:2/2:0 score before continuing to the next fixture.
-                    forfeit_side = side;
-                    const int manager = g.manager_of(t);
-                    if (manager >= 0) book_money(g, manager, 200000, true, true);  // BookMoney2
-                    if (g.memory.has(::bmh::layout::MatchdaySetup_KickOff_RuntimeField + uint32_t(t) * 2))
-                        g.memory.set8(::bmh::layout::MatchdaySetup_KickOff_RuntimeField + uint32_t(t) * 2,
-                                      uint8_t(g.memory.u8(::bmh::layout::MatchdaySetup_KickOff_RuntimeField + uint32_t(t) * 2) + 1));
-                }
-            }
-            if (forfeit_side >= 0) {
-                restore_forfeit_squad(g, home);
-                restore_forfeit_squad(g, away);
-                void_mask |= 1u << m;
-                grp.kickoff_void_mask |= 1u << m;
-                put32(grp.desc, 0xb8, void_mask);
-                const int home_goals = forfeit_side == 0 ? 0 : 2;
-                const int away_goals = forfeit_side == 0 ? 2 : 0;
-                if (grp.desc.at(0) == 0) {
-                    const size_t at = size_t(league) * 0x17C +
-                                      size_t(g.league_rounds.at(size_t(league))) * 10 + size_t(m);
-                    const uint8_t score = uint8_t((home_goals << 4) | away_goals);
-                    g.results.at(at) = score;
-                    grp.results.at(size_t(m)) = score;
-                } else {
-                    grp.cup_results.at(size_t(m)) = uint16_t((home_goals << 5) | away_goals);
-                }
-                continue;
-            }
+            const int forfeit_side=prepare_kickoff_fixture(g,home,away,rand);
+            if(forfeit_side>=0){award_kickoff_forfeit(g,grp,m,forfeit_side);void_mask|=1u<<m;continue;}
             const int bits = match_mode_bits(g, grp, ctx, report);
             int spectators;
             if (g.indoor)

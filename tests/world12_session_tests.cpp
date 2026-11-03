@@ -258,6 +258,29 @@ void scheduled_desk_tests(const CareerSnapshot& pending,const GameState& source)
           "scheduled desk completion lost cursor, RNG or resume boundary");
     const auto completed=state;rejects([&]{session_app::finish_scheduled_desks(state,owner,owner);},"scheduled desks finished twice");
     check(state==completed,"duplicate completion changed state");
+    {
+        auto short_state=completed;auto short_owner=owner;short_state.world.economy.emplace();
+        for(auto& [id,club]:short_state.world.clubs)if(club.kind==ClubKind::club){size_t fit=0;for(auto& row:club.roster)if(!row.empty()&&fit++>=7){short_state.world.players.at(row.player).attributes.w364|=2u<<16;row.flags=uint16_t(row.flags&~3u);}}
+        TextDb texts;
+        const auto receipt=session_app::book_event_attendance(short_state,short_owner,short_owner,reference,texts,{de,en});
+        check(std::all_of(receipt.spectators.begin(),receipt.spectators.end(),[](auto n){return n==0;}),"forfeited appointment drew or booked a crowd");
+        for(const auto& group:short_state.prepared_event->groups)for(const auto& match:group.matches)check(match.kickoff_disposition==2&&match.spectators==0,"both-short Source award receipt missing");
+        const auto saved=make_save(short_state);check(saved.stream[7]=='M'&&read_save(saved)==short_state,"pre-attendance kickoff receipt lost on M save/reopen");
+        auto resumed=read_save(saved);const auto booked=resumed;auto replay_owner=short_owner;
+        rejects([&]{session_app::book_event_attendance(resumed,replay_owner,replay_owner,reference,texts,{de,en});},"saved forfeit fine/marking/gate owner replayed");
+        check(resumed==booked&&replay_owner.revision==short_owner.revision,"replayed forfeit gate receipt mutated state");
+        const auto& group=booked.prepared_event->groups.front();std::vector<AiLeagueConditions> inputs;
+        for(const auto& match:group.matches){AiLeagueConditions c;c.date=booked.date;c.month=month_code(booked.date);c.temperature=match.temperature;c.rain=match.rain;c.referee=match.referee;c.spectators=*match.spectators;c.referee_properties.assign(50,0x24);c.presentation_buttons.assign(180,1);c.teams_prepared=true;c.kickoff_disposition=match.kickoff_disposition;inputs.push_back(c);}
+        GameRandom game(booked.game_seed);WatcomRandom random(booked.watcom_seed);HumanRoundHooks hooks;hooks.decline_unpresented_events=true;
+        const auto outcome=simulate_and_settle_human_league_round(resumed,reference,*group.league,group.round,inputs,{short_state.world.settings->mode,short_state.world.settings->difficulty,short_state.world.settings->foreign_rule,true},game,random,hooks);
+        for(const auto& manager:booked.world.managers)check(std::find_if(resumed.world.managers.begin(),resumed.world.managers.end(),[&](const auto& m){return m.seat==manager.seat;})->finance==manager.finance,"resumed forfeit charged its fine a second time");
+        for(const auto& match:group.matches)for(auto id:{match.fixture.home,match.fixture.away})check(resumed.world.clubs.at(id).fairplay_points==booked.world.clubs.at(id).fairplay_points,"resumed forfeit increased its discipline counter twice");
+        check(std::all_of(outcome.matches.begin(),outcome.matches.end(),[](const auto& match){return match.end_minute==0&&match.score.home==2&&match.score.away==0;}),"resumed both-short clock changed Source awards or invented minutes");
+        auto invalid=short_state;invalid.prepared_event->groups[0].matches[0].kickoff_disposition=3;rejects([&]{make_save(invalid);},"invalid kickoff receipt accepted");
+        invalid=short_state;invalid.prepared_event->groups[0].matches[0].spectators=1;rejects([&]{make_save(invalid);},"forfeit receipt accepted charged crowd");
+        std::cout<<"Saved pre-attendance short-squad owner: zero crowds, M receipt, no repeated fine/discipline, actual zero-minute awards and replay guards passed\n";
+    }
+
 }
 void first_event_tests(const CareerSnapshot& pending,const GameState& source) {
     auto reference=source;reference.club_ids.resize(445);reference.team_flags.resize(445);reference.team_morale.resize(445);reference.memory.add_block(layout::Desktops,4*0x360);
@@ -1775,7 +1798,7 @@ void actual_four_managers(const std::filesystem::path& data,const std::filesyste
             check(gate.spectators.size()==2&&weather_loaded.snapshot().prepared_event->gates_booked,
                   "actual spectator/gate calculation did not publish its receipt");
             const auto booked=weather_loaded.snapshot();const auto booked_revision=weather_loaded.revision();
-            auto gate_save=make_save(booked);check(gate_save.stream[7]=='G',"actual completed desk/gate receipt missing SG owner");
+            auto gate_save=make_save(booked);check(gate_save.stream[7]=='M',"actual completed desk/gate receipt missing Source kickoff M owner");
             auto gate_loaded=session_app::Session::resume(resources,read_save(gate_save),94,booked_revision);
             rejects([&]{gate_loaded.book_scheduled_attendance(gate_loaded.revision(),data);},"loaded gate receipt was charged twice");
             check(gate_loaded.snapshot()==booked,"duplicate actual gate request changed balances/streams");

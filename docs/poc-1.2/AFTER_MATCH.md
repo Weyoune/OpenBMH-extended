@@ -2,7 +2,7 @@
 
 `simulate_and_settle_ai_league_match` adds the existing `process_group` path to actual scoring: club records/streaks, morale and player development/card/absence handling. The scoring-only API remains available and does not silently acquire these effects.
 
-`simulate_and_settle_ai_league_round` runs a complete scheduled league round as one Original match group on a shared minute clock. Only after every fixture reaches full time is that group's post-match processing performed. It does not simulate and settle individual fixtures one after another. RNG counts belong to the whole round; per-fixture counters are not invented. Conditions share one date/month, referee table and presentation policy, while each fixture retains its supplied weather/referee/attendance.
+`simulate_and_settle_ai_league_round` runs a complete scheduled league round as one Original match group on a shared minute clock. After every eligible fixture reaches full time, the group's post-match processing runs with the Source kickoff exclusions. It does not simulate and settle individual fixtures one after another. RNG counts belong to the whole round; per-fixture counters are not invented. Conditions share one date/month, referee table and presentation policy, while each fixture retains its supplied weather/referee/attendance.
 
 ## Persistent ownership
 
@@ -16,8 +16,31 @@ Club-table bookkeeping consults explicit league classes for projected teams. It 
 
 Kick-off played-marker clearing is shared between the legacy driver and the projected scoring path. The bounded operation clears its projected participants; a future complete matchday owner still owns the global preparation barrier across all day's groups.
 
+## Short squads and resumable kickoff
+
+Regular projected matches share the Core kickoff operation used by the native
+matchday driver. It performs man marking, checks both fit squads, charges each
+human forfeiting side, increments the existing discipline high byte and restores
+both squads. If both sides are short, the Source's later side determines the
+award. The shared result writer sets the kickoff void mask and score; the minute
+clock and post-match effects skip that fixture, retaining an end minute of zero.
+
+The scheduled attendance transaction performs this operation before calculating
+or booking crowds. A forfeited fixture has zero attendance and no gate draw or
+income. A saved per-fixture `kickoff_disposition` records playable, home-forfeit
+or away-forfeit, so the subsequent match clock never repeats marking or fines.
+Development stream M appends that receipt byte after each fixture's attendance;
+255 retains an older unknown receipt. The World schema and existing discipline
+representation do not change. Old snapshots before attendance can proceed; an
+older snapshot with already-booked attendance and no kickoff receipt cannot
+safely resume the match through the Session owner and explicitly rejects.
+
 ## Checks
 
+- Synthetic home-, away- and both-short rounds compare the complete projected
+  state, fines, restoration, exclusions and exact RNG against actual Core
+  `kick_off` plus its clock and settlement. Saved attendance checks cover receipt
+  roundtrip, replay rejection and no repeated fine or discipline increment.
 - Five league contexts compare the combined scoring/settlement API against scoring followed by direct Original `process_group`, including the complete resulting world and both RNG seeds/call counts.
 - Four full-round scenarios cover nine-, ten- and five-fixture rounds, deterministic repeats, original fixture identities, post-settlement snapshots and whole-round rollback for inconsistent late input.
 - Direct Original positional club-table comparisons retain lower-division totals/streak behavior. Historical opponents outside the current match, wide IDs, unknown-offset rejection and signed development wrap are covered.
@@ -26,6 +49,6 @@ Kick-off played-marker clearing is shared between the legacy driver and the proj
 
 ## Remaining boundaries
 
-Human tactics/finance/manager statistics, optional after-match presentation/awards, generated weather/referee/attendance selection and full-day/weekly/monthly ownership remain outside this API. Short-squad forfeits still require their dedicated owner. Results colliding with the legacy unplayed sentinel explicitly reject settlement rather than silently skipping it.
+Human tactics/finance/manager statistics, optional after-match presentation/awards, generated weather/referee/attendance selection and full-day/weekly/monthly ownership remain outside this API. Results colliding with the legacy unplayed sentinel explicitly reject settlement rather than silently skipping it.
 
 The API does not advance a career date, update league round cursors/results, or provide a resumable complete GUI career. It supplies settled AI group state and outcomes for that future owner. Snapshot checks prove state preservation, not a complete played season or a 1.2 release.

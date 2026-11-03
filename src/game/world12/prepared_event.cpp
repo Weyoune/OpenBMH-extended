@@ -86,6 +86,8 @@ void validate_prepared_event(const CareerSnapshot& state) {
                 throw FormatError("world12: invalid prepared fixture/weather identity");
             if(match.spectators.has_value()!=event.gates_booked||(match.spectators&&*match.spectators>2147483647u))
                 throw FormatError("world12: incomplete or invalid booked attendance");
+            if(match.kickoff_disposition&&(!event.gates_booked||group.indoor||*match.kickoff_disposition>2||(*match.kickoff_disposition&&*match.spectators!=0)))
+                throw FormatError("world12: invalid pre-attendance kickoff receipt");
             const auto& home=state.world.clubs.at(match.fixture.home);const auto& away=state.world.clubs.at(match.fixture.away);
             const bool needs_referee=home.kind==ClubKind::club&&away.kind==ClubKind::club&&!(group.flags&0x80);
             const auto referee_country=group.indoor?Country::germany:home.country;

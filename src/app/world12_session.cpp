@@ -186,10 +186,12 @@ void Session::play_prepared_matches(uint64_t revision,const HumanRoundHooks& hoo
     std::vector<CupDayConditions> cups;std::vector<AiDayLeagueConditions> leagues;std::vector<EuropeanDayConditions> european;std::vector<IndoorDayConditions> indoor;std::optional<RegionalDayConditions> regional;std::vector<NationalDayConditions> national;
     for(const auto& group:event.groups) {
         std::vector<AiLeagueConditions> conditions;
-        for(const auto& match:group.matches){AiLeagueConditions c;c.date=candidate.date;c.month=month_code(candidate.date);
+        for(const auto& match:group.matches){
+            if(!group.indoor&&!match.kickoff_disposition)throw FormatError("world12: older booked fixture lacks its Source kickoff receipt; resume before attendance booking");
+            AiLeagueConditions c;c.date=candidate.date;c.month=month_code(candidate.date);
             c.temperature=match.temperature;c.rain=match.rain;c.referee=match.referee;c.spectators=*match.spectators;
             c.referee_properties.assign(event.referee_properties.begin(),event.referee_properties.end());
-            c.teams_prepared=true;
+            c.teams_prepared=true;c.kickoff_disposition=match.kickoff_disposition;
             c.pools_selected=candidate.world.economy&&candidate.world.economy->pools&&event.pools_matches&&std::find(event.pools_matches->begin(),event.pools_matches->end(),match.fixture)!=event.pools_matches->end();
             if(!candidate.world.economy||!candidate.world.economy->presentation_options)throw FormatError("world12: match presentation options are unknown in this old career");
             const auto& options=*candidate.world.economy->presentation_options;c.presentation_buttons.assign(options.begin(),options.end());conditions.push_back(std::move(c));}

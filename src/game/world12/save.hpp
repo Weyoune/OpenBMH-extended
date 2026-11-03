@@ -72,6 +72,9 @@ struct PreparedFixture {
     uint8_t rain=0,referee=0;
     Country referee_country=Country::germany;
     std::optional<uint32_t> spectators;
+    // Source pre-attendance kickoff receipt:0 playable,1 home forfeit,2 away.
+    // Absent in older prepared snapshots; never inferred from a zero crowd.
+    std::optional<uint8_t> kickoff_disposition;
     bool operator==(const PreparedFixture&)const=default;
 };
 struct PreparedGroup {

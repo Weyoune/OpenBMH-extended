@@ -14,6 +14,7 @@
 #include "app/world12_live_scope.hpp"
 #include "app/career_session.hpp"
 #include "game/match.hpp"
+#include "game/lineup.hpp"
 #include "game/matchday.hpp"
 #include "game/matchday_setup.hpp"
 #include "ui/lineup.hpp"
@@ -48,6 +49,45 @@ CareerSnapshot snapshot(const bmh::GameState& base) {
     snapshot.results=SeasonResults::empty(w.catalogue);snapshot.date=40;
     for(auto league:{LeagueId{4},LeagueId{9}}){snapshot.league_rounds[league.value]=2;for(int r=1;r<=2;++r)for(int m=0;m<w.catalogue.league(league).clubs/2;++m)snapshot.results.result(w.catalogue,league,r,m)={true,0,0};}
     snapshot.validate();return snapshot;
+}
+void short_squad_source_kickoff(const bmh::GameState& base) {
+    for(int unavailable_side:{0,1,2}) {
+        auto initial=snapshot(base);const LeagueId league{4};const auto fixtures=league_fixtures(initial.world,league,3);
+        // Every fixture forfeits; the first covers home, away and both-short cases.
+        for(size_t m=0;m<fixtures.size();++m)for(int side=0;side<2;++side) {
+            if(m==0&&unavailable_side!=2&&side!=unavailable_side)continue;
+            auto& club=initial.world.clubs.at(side?fixtures[m].away:fixtures[m].home);
+            size_t fit=0;for(const auto& row:club.roster)if(!row.empty()) {
+                auto& p=initial.world.players.at(row.player).attributes;
+                if(fit++>=7)p.w364|=2u<<16;
+            }
+        }
+        std::vector<ClubId> participants;for(const auto& f:fixtures){participants.push_back(f.home);participants.push_back(f.away);}
+        auto expected=initial;auto oracle=AiMatchProjection::create_for_humans(initial,participants,base,{3,6,false,true});
+        auto& local=oracle.state;local.date=initial.date;local.indoor=false;local.lineups_frozen=false;local.pools_open=false;
+        for(size_t n=0;n<participants.size();++n){const auto team=int(oracle.local_club(participants[n]));bmh::prepare_team(local,team,0,int(n));bmh::auto_lineup(local,team,local.manager_of(team)>=0?0xe4:100);if(local.manager_of(team)>=0)bmh::prepare_lineup_entry(local,team);}
+        const auto source_league=bmh::match_team_league(local,int(oracle.local_club(fixtures[0].home)));
+        local.league_rounds.assign(9,0);local.results.assign(9*0x17c,0xcc);
+        bmh::MatchGroup group;group.desc.assign(0xd0,0);group.desc[1]=2;group.desc[2]=uint8_t(fixtures.size());for(size_t b=0;b<4;++b)group.desc[0xcc+b]=uint8_t(source_league>>(8*b));
+        for(const auto& f:fixtures){group.fixtures.push_back(int(oracle.local_club(f.home)));group.fixtures.push_back(int(oracle.local_club(f.away)));}
+        std::vector<bmh::MatchGroup> groups{group};bmh::GameRandom eg(17),ag(17);bmh::WatcomRandom ew(91),aw(91);bmh::MinuteReport report;bmh::MatchdayContext context;context.month=8;
+        bmh::kick_off(local,groups,context,ew,eg,report);check(!report.unsupported,"Source short-squad kickoff failed");
+        check(groups[0].kickoff_void_mask==((1u<<fixtures.size())-1),"Source did not exclude every short fixture");
+        bmh::MatchEngine native(local,groups,eg,ew,{24});native.month=8;native.buttons.assign(180,1);native.leave_screens=true;
+        bmh::play_matchday(native,local,groups,native.buttons,eg,ew,report);bmh::process_group(local,groups[0],eg,ew,report);check(!report.unsupported,"Source short-squad clock/settlement failed");
+        oracle.commit_match_state(expected.world);expected.game_seed=eg.seed();expected.watcom_seed=ew.seed();
+        AiLeagueConditions c;c.date=initial.date;c.month=8;c.temperature=19;c.spectators=15000;c.referee_properties={24};c.presentation_buttons.assign(180,1);
+        auto actual=initial;HumanRoundHooks hooks;hooks.decline_unpresented_events=true;
+        const auto result=simulate_and_settle_human_league_round(actual,base,league,3,std::vector<AiLeagueConditions>(fixtures.size(),c),{3,6,false,true},ag,aw,hooks);
+        if(actual!=expected||ag.seed()!=eg.seed()||aw.seed()!=ew.seed()||ag.calls()!=eg.calls()||aw.calls()!=ew.calls()){
+            std::cerr<<"forfeit side="<<unavailable_side<<" G="<<ag.seed()<<"/"<<eg.seed()<<" calls="<<ag.calls()<<"/"<<eg.calls()<<" W="<<aw.seed()<<"/"<<ew.seed()<<" calls="<<aw.calls()<<"/"<<ew.calls()<<" players="<<(actual.world.players==expected.world.players)<<" clubs="<<(actual.world.clubs==expected.world.clubs)<<" managers="<<(actual.world.managers==expected.world.managers)<<" stats="<<(actual.world.player_statistics==expected.world.player_statistics)<<'\n';
+            for(size_t n=0;n<actual.world.managers.size();++n)if(actual.world.managers[n]!=expected.world.managers[n])std::cerr<<"manager="<<n<<" finance="<<(actual.world.managers[n].finance==expected.world.managers[n].finance)<<" tactics="<<(actual.world.managers[n].tactics==expected.world.managers[n].tactics)<<" match="<<(actual.world.managers[n].match_state==expected.world.managers[n].match_state)<<" career="<<(actual.world.managers[n].career==expected.world.managers[n].career)<<'\n';
+        }
+        check(actual==expected&&ag.seed()==eg.seed()&&aw.seed()==ew.seed()&&ag.calls()==eg.calls()&&aw.calls()==ew.calls(),"typed forfeit differs from actual Source kickoff/fines/restoration/settlement/RNG");
+        for(size_t m=0;m<fixtures.size();++m)check(result.matches[m].end_minute==0&&result.matches[m].score.home==(groups[0].results[m]>>4)&&result.matches[m].score.away==(groups[0].results[m]&15),"typed forfeit invented play time or a different Source award");
+        check(read_save(make_save(actual))==actual,"forfeit discipline/fines/player restoration lost on save");
+    }
+    std::cout<<"Actual Source short-squad kickoff: home/away/both, fine, discipline, restored squads, zero minutes, excluded settlement and exact GW passed\n";
 }
 void annual_donor_workspace(const bmh::GameState& base) {
     const auto source=snapshot(base);
@@ -308,7 +348,7 @@ void statistics_bridge(const bmh::GameState& base) {
 }
 }
 int main()try {
-    bmh::set_fixture_tables(bmh::test::authored_fixture_tables());const auto base=rules();shared_human_clock(base);statistics_bridge(base);annual_donor_workspace(base);live_preferences_and_scopes(base);known_economy_match_oracle(base);const auto source=snapshot(base);auto world=source.world;
+    bmh::set_fixture_tables(bmh::test::authored_fixture_tables());const auto base=rules();shared_human_clock(base);statistics_bridge(base);short_squad_source_kickoff(base);annual_donor_workspace(base);live_preferences_and_scopes(base);known_economy_match_oracle(base);const auto source=snapshot(base);auto world=source.world;
     const auto de=world.membership[4].clubs[0],en=world.membership[9].clubs[0],de_other=world.membership[4].clubs[1],en_other=world.membership[9].clubs[1];
     const std::vector<ClubId> requested{de,de_other,en,en_other};
     rejects([&]{AiMatchProjection::create(world,requested,base);},"AI-only guard allowed a human participant");

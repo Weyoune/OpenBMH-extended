@@ -114,10 +114,8 @@ AiLeagueRoundOutcome run_ai_league_matches(World& world,const GameState& base,co
             throw std::invalid_argument("world12: invalid Original formation coordinates");
         bmh::auto_lineup(local,int(team),local.manager_of(int(team))>=0?0xe4:100);
         if(local.manager_of(int(team))>=0){bmh::prepare_lineup_entry(local,int(team));const auto manager=local.manager_of(int(team));
-            for(size_t row=0;row<24;++row){const auto slot=local.squad_slots[squad_range(local,int(team)).first+row];local.tactics[size_t(manager)*0x840+row*0x58+0x10]=uint8_t(slot&0x8000?0:slot&0x4000?0x7f:0x7e);}}
-        const bool rostered=team<uint32_t(runtime_dimensions.record_teams)||has_national_squad(local,int(team));
-        const auto fit=rostered?bmh::team_average(local,int(team),0x1f1,nullptr):TeamAverage{};
-        if(rostered&&fit.players<8)throw std::invalid_argument("world12: short-squad forfeit needs the full matchday settlement owner");
+            for(size_t row=0;row<24;++row){const auto slot=local.squad_slots[squad_range(local,int(team)).first+row];if((slot&0xfff)==0xfff)break;local.tactics[size_t(manager)*0x840+row*0x58+0x10]=uint8_t(slot&0x8000?0:slot&0x4000?0x7f:0x7e);}}
+
     }
     bmh::reset_match_played_flags(local);
     auto staged_game=game;auto staged_random=random;
@@ -138,6 +136,10 @@ AiLeagueRoundOutcome run_ai_league_matches(World& world,const GameState& base,co
         for(size_t m=0;m<count;++m,++flat){const auto& c=conditions[flat];group.desc[0x10+m]=c.referee;group.desc[0x30+m]=uint8_t(c.temperature);group.desc[0x50+m]=uint8_t(c.rain);
             group.fixtures.push_back(int(projection.local_club(fixtures[flat].home)));group.fixtures.push_back(int(projection.local_club(fixtures[flat].away)));if(cup||european||regional||national)group.cup_results.push_back(0);else group.results.push_back(0);group.end_minute.push_back(0);group.spectators.push_back(c.spectators);
             bmh::MatchSetup setup;setup.home=group.fixtures[m*2];setup.away=group.fixtures[m*2+1];setup.match_index=int(m);setup.climate_effect=(flags&2)!=0;setup.month=c.month;setup.temperature=c.temperature;setup.spectators=int(c.spectators);
+            bmh::select_live_match_source(local,setup.home,setup.away);
+            if(c.kickoff_disposition&&*c.kickoff_disposition>2)throw FormatError("world12: invalid kickoff receipt");
+            const auto forfeit=c.kickoff_disposition?int(*c.kickoff_disposition)-1:bmh::prepare_kickoff_fixture(local,setup.home,setup.away,staged_random);
+            if(forfeit>=0){group.records.insert(group.records.end(),18,0);bmh::award_kickoff_forfeit(local,group,int(m),forfeit,false);group.spectators[m]=0;continue;}
             const auto sides=bmh::build_side_records(local,setup,staged_random,&staged_game);for(const auto& side:sides)group.records.insert(group.records.end(),side.b.begin(),side.b.end());}
         groups.push_back(std::move(group));
     }
@@ -158,7 +160,7 @@ AiLeagueRoundOutcome run_ai_league_matches(World& world,const GameState& base,co
         hooks&&hooks->after_minute?std::function<void(int)>([&](int minute){hooks->after_minute(projection,engine,minute);}):std::function<void(int)>{});
     if(report.unsupported)throw std::runtime_error("world12: Original AI match could not complete: "+report.reason);
     for(auto& finished:groups){
-        for(auto minute:finished.end_minute)if(minute<90||minute>((cup||european||national)?124:94))throw std::runtime_error("world12: Original match did not reach full time");
+        for(size_t m=0;m<finished.end_minute.size();++m)if(!(finished.kickoff_void_mask&(1u<<m))&&(finished.end_minute[m]<90||finished.end_minute[m]>((cup||european||national)?124:94)))throw std::runtime_error("world12: Original match did not reach full time");
         if(settle){for(auto score:finished.results)if((score&0xcc)==0xcc)throw std::invalid_argument("world12: result collides with the legacy post-match sentinel");bmh::process_group(local,finished,staged_game,staged_random,report);if(report.unsupported)throw std::runtime_error("world12: Original post-match settlement could not complete: "+report.reason);}
     }
     if(game.seed()!=initial_game_seed || game.calls()!=initial_game_calls || random.seed()!=initial_watcom_seed || random.calls()!=initial_watcom_calls)

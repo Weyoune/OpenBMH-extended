@@ -26,9 +26,9 @@ AttendanceOutcome book_event_attendance(CareerSnapshot& state,ManagerActionOwner
     const auto before=state;auto candidate=state;const auto settings=*state.world.settings;
     for(const auto& [id,club]:candidate.world.clubs)for(const auto& row:club.roster)
         if(!row.empty())candidate.world.players.at(row.player).attributes.w364&=~0x1000u;
-    GameRandom game(candidate.game_seed);WatcomRandom random(candidate.watcom_seed);AttendanceOutcome out;
-    for(const auto& group:candidate.prepared_event->groups)for(const auto& match:group.matches) {
-        if(group.indoor){out.spectators.push_back(10000);continue;}
+    GameRandom game(candidate.game_seed);WatcomRandom random(candidate.watcom_seed);AttendanceOutcome out;std::vector<std::optional<uint8_t>> dispositions;
+    for(auto& group:candidate.prepared_event->groups)for(auto& match:group.matches) {
+        if(group.indoor){out.spectators.push_back(10000);dispositions.push_back({});continue;}
         std::vector<ClubId> clubs;if(group.national){for(const auto& record:*candidate.world.national_coaches)if(record.active)clubs.push_back(record.team);}else for(const auto& manager:candidate.world.managers)clubs.push_back(manager.club);
         for(auto club:{match.fixture.home,match.fixture.away})if(std::find(clubs.begin(),clubs.end(),club)==clubs.end())clubs.push_back(club);
         auto p=group.national?AiMatchProjection::create_for_nationals(candidate,clubs,reference,{settings.mode,settings.difficulty,settings.foreign_rule,true}):group.european?AiMatchProjection::create_for_european(candidate,clubs,reference,
@@ -70,6 +70,14 @@ AttendanceOutcome book_event_attendance(CareerSnapshot& state,ManagerActionOwner
             prepare_team(local,home,match_competition_class(type),0);prepare_team(local,away,match_competition_class(type),1);
             auto_lineup(local,home,local.manager_of(home)>=0?0xe4:100);auto_lineup(local,away,local.manager_of(away)>=0?0xe4:100);
         }
+        select_live_match_source(local,home,away);
+        const auto forfeit=prepare_kickoff_fixture(local,home,away,random);
+        dispositions.push_back(uint8_t(forfeit+1));
+        if(forfeit>=0){
+            p.commit_match_state(candidate.world,!group.national);
+            if(group.national)capture_career_mailbox(candidate.world,p);else capture_career_economy(candidate.world,p);
+            out.spectators.push_back(0);continue;
+        }
         MinuteReport report;const auto bits=match_mode_bits(local,descriptor,context,report);
         if(report.unsupported)throw FormatError(report.reason);
         const auto amount=attendance(local,home,away,bits,match.temperature,match.rain,type,game,random,report);
@@ -77,7 +85,7 @@ AttendanceOutcome book_event_attendance(CareerSnapshot& state,ManagerActionOwner
         p.commit_match_state(candidate.world,!group.national);if(group.national)capture_career_mailbox(candidate.world,p);else capture_career_economy(candidate.world,p);
         out.spectators.push_back(uint32_t(amount));
     }
-    size_t index=0;for(auto& group:candidate.prepared_event->groups)for(auto& match:group.matches)match.spectators=out.spectators.at(index++);
+    size_t index=0;for(auto& group:candidate.prepared_event->groups)for(auto& match:group.matches){match.spectators=out.spectators.at(index);match.kickoff_disposition=dispositions.at(index++);}
     candidate.prepared_event->gates_booked=true;candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();candidate.validate();
     if(state!=before||owner.scope!=expected.scope||owner.revision!=expected.revision)
         throw FormatError("world12: gate-income state changed during calculation");

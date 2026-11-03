@@ -15,6 +15,7 @@ struct AiLeagueConditions {
     // Repeating prepare_team after a manager edited the lineup loses that state.
     bool teams_prepared=false;
     bool pools_selected=false;
+    std::optional<uint8_t> kickoff_disposition;
 };
 struct AiLeagueOutcome {
     Fixture fixture;

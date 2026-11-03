@@ -131,6 +131,11 @@ bool select_live_match_source(GameState&,int home,int away);
 // records for every match of every group, including the live match choice (AutoLineup) and
 // the man marking of human managers (KickOff). Human teams draw from `game` in their
 // ratings (team_rating).
+// Shared pre-attendance kickoff: marking, squad eligibility, fines and restoration.
+// Returns -1 for a played fixture, otherwise the last forfeiting side (0 home,1 away).
+int prepare_kickoff_fixture(GameState&,int home,int away,WatcomRandom&);
+// Store the Source award and exclude the fixture from minute and settlement effects.
+void award_kickoff_forfeit(GameState&,MatchGroup&,int match,int side,bool store_native_result=true);
 void kick_off(GameState& g, std::vector<MatchGroup>& groups, const MatchdayContext& ctx, WatcomRandom& rand,
               GameRandom& game, MinuteReport& report, bool select_sportschau = false,
               uint16_t club_threshold = 90);
