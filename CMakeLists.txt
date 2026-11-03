@@ -1295,6 +1295,7 @@ add_library(bmhworld12 STATIC
 target_include_directories(bmhworld12 PUBLIC src)
 target_link_libraries(bmhworld12 PUBLIC bmhcore)
 add_library(bmhworld12_app STATIC src/app/world12_european.cpp src/app/world12_event.cpp src/app/world12_attendance.cpp src/app/world12_weather.cpp src/app/world12_national.cpp src/app/world12_cups.cpp src/app/world12_manager.cpp src/app/world12_ai_day.cpp src/app/world12_initial_season.cpp src/app/world12_initial_market.cpp src/app/world12_desktop.cpp src/app/world12_first_event.cpp
+    src/app/world12_annual_transition.cpp
     src/app/world12_annual_awards.cpp
     src/app/world12_clock.cpp src/app/world12_pending.cpp)
 target_link_libraries(bmhworld12_app PUBLIC bmhworld12)
@@ -1604,3 +1605,7 @@ add_test(NAME world12_inactive_national_draw_tests COMMAND world12_inactive_nati
 add_executable(world12_statistics_flags_tests tests/world12_statistics_flags_tests.cpp)
 target_link_libraries(world12_statistics_flags_tests PRIVATE bmhworld12)
 add_test(NAME world12_statistics_flags_tests COMMAND world12_statistics_flags_tests)
+
+add_executable(world12_annual_transition_tests tests/world12_annual_transition_tests.cpp)
+target_link_libraries(world12_annual_transition_tests PRIVATE bmhworld12_app)
+add_test(NAME world12_annual_transition_tests COMMAND world12_annual_transition_tests)
