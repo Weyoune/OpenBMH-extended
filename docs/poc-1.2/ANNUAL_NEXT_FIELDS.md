@@ -32,3 +32,18 @@ real National draw carry/coach work, completed title-archive append, external
 highscore update order, calendar reset and closing/opening desks, published with
 both random streams and one scope/revision transition. Authored component tests
 are not a played calendar season or a Beta release gate.
+
+`make_annual_calendar` reads the actual German/English appointment arrays,
+clears Source runtime opening/friendly/replay cells, and aligns their verified
+source weekdays to the real first Wednesday. It never fills missing dates or
+manufactures matches. Both full league calendars remain validated.
+
+`make_annual_indoor_season` retains the actual preceding Masters (or its known
+previous holder when the season was suppressed), actual new reigning country
+titles, and the saved Source scratch lineage. It creates an undrawn owner with
+no old scores or trophies. Real scratch references outside the regular Source
+namespace remain owned club IDs; first-draw workspaces retain those references.
+The completed old campaign remains in the outer annual receipt. Calendar/Hall
+component tests advance an authored Source programme through all30passes, then
+check actual Masters/scratch carry, no-template reset, missing-owner refusal and
+codec retention. They do not claim a completed calendar season.
