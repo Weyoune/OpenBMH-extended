@@ -63,7 +63,7 @@ std::pair<ClubId,ClubId> source_stage_awards(const NationalStage& s){
     if(r.knockout()){
         if((r.teams>>r.rounds)!=1)return {};
         size_t first=0;for(int round=0;round<int(r.rounds)-1;++round)first+=size_t(r.teams)>>round;
-        MatchGroup group;group.desc.assign(0xd0,0);group.desc[1]=r.flags;group.cup_results=s.scores[0];group.cup_other_leg=s.scores[1];
+        MatchGroup group;group.desc.assign(0xd0,0);group.desc[1]=r.flags;group.cup_results=s.scores[0];if(r.flags&1)group.cup_other_leg=s.scores[1];
         const auto winner=cup_tie(group,int(first/2));require(winner!=2,"final score is unresolved");
         return {s.teams.at(first+size_t(winner)),s.teams.at(first+size_t(1-winner))};
     }
