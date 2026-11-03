@@ -153,3 +153,12 @@ save ownership, rollback and random-stream determinism remain authoritative;
 this boundary is not a claim of whole-career Original RNG parity. Independently
 owned inactive master scratch may retain real Source draws without admitting
 club matches, scores or a human club owner.
+
+Projected national bank and training views use the real account and nominated
+squad, including the secondary nation's actual bounded squad offset. Source
+layout hidden and disabled flags remain authoritative: the default national
+desktop hides these two entries. Authenticated direct child views and saved
+custom layouts can use the supported controllers without changing those flags.
+Native child requests keep their local row; the enclosing desktop request uses
+the canonical saved coach identity. Camp, stadium and Toto retain their separate
+unsupported national admission.

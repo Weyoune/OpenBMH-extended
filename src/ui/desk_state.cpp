@@ -383,11 +383,10 @@ DeskState project(const StaticMemory& memory, const Tables& t, const LeImage& ex
                 item.width = exe.u8(::bmh::layout::DeskState_FormatError_ExecutableFieldUnsigned + uint32_t(count));
                 item.height = exe.u8(::bmh::layout::DeskState_FormatError_ExecutableField2Unsigned + uint32_t(count));
             }
-            // Club-only finance, stadium, Toto and training screens require
-            // projections unavailable to a national coach.
-            if (d.national_team && (item.kind == 13 || item.kind == 14 ||
-                                    item.kind == 15 || item.kind == 16 ||
-                                    item.kind == 22)) item.disabled = true;
+            // Projected national accounts and real squads own bank/training;
+            // native layout visibility remains authoritative for their icons.
+            if(d.national_team&&(item.kind==13||item.kind==15||item.kind==22||
+                (!d.projected_national_team&&(item.kind==14||item.kind==16))))item.disabled=true;
             if (item.x < 0 || item.x > 319 || item.y > 239 || item.kind > 72)
                 throw FormatError("desk: invalid layout coordinates/type");
             d.items.push_back(item);

@@ -9,6 +9,7 @@
 
 #include "formats/savestate.hpp"
 #include "game/state.hpp"
+#include "game/national_identity.hpp"
 #include "ui/manager.hpp"
 
 namespace bmh::ui {
@@ -50,16 +51,19 @@ void validate(const TrainingState& s) {
 TrainingState project(const StaticMemory& memory, const Bytes& records, const Bytes& tactics, const Bytes& options,
                       const std::vector<int>& teams, const std::vector<uint16_t>& squads,
                       const std::vector<Player>& players, const std::vector<uint16_t>& club_offsets, const Bytes& clubs,
-                      const std::vector<uint16_t>& name_offsets, const Bytes& names, const LeImage& exe, uint64_t revision) {
+                      const std::vector<uint16_t>& name_offsets, const Bytes& names, const LeImage& exe, uint64_t revision,const GameState* game=nullptr) {
     TrainingState s; s.manager_slot = memory.u8(::bmh::layout::ActiveManager); s.mode = memory.u8(::bmh::layout::GameMode); s.revision = revision;
     const int manager_count = memory.u8(::bmh::layout::ManagerCount);
     if (manager_count < 1 || manager_count > 4 || s.manager_slot >= manager_count || teams.size() != size_t(manager_count))
         throw FormatError("training: inconsistent active manager");
     s.runtime_club = teams.at(s.manager_slot);
     const int max24 = exe.u16(::bmh::layout::TeamsWithSquads), max16 = exe.u16(::bmh::layout::CareerSession_DispatchLineup_RuntimeField);
-    if (s.runtime_club < 0 || s.runtime_club >= max16) throw FormatError("training: national/cup-only squad unsupported");
-    s.squad_capacity = s.runtime_club < max24 ? 24 : 16;
-    const size_t first = size_t(s.runtime_club < max24 ? s.runtime_club * 24 : s.runtime_club * 16 + max24 * 8);
+    const bool national=game&&!game->projected_national_teams.empty()&&is_national_team(*game,s.runtime_club);
+    if(!national&&(s.runtime_club<0||s.runtime_club>=max16))throw FormatError("training: national/cup-only squad unsupported");
+    if(national&&!has_national_squad(*game,s.runtime_club))throw FormatError("training: actual national squad is unavailable");
+    const auto actual=national?squad_range(*game,s.runtime_club):SquadRange{};
+    s.squad_capacity=national?int(actual.count):s.runtime_club<max24?24:16;
+    const size_t first=national?actual.first:size_t(s.runtime_club<max24?s.runtime_club*24:s.runtime_club*16+max24*8);
     const size_t manager = size_t(s.manager_slot) * 0xb0c, board = size_t(s.manager_slot) * 0x840;
     if (records.size() < manager + 0xb0c || tactics.size() < board + size_t(s.squad_capacity) * 0x58 ||
         options.size() < size_t(s.manager_slot + 1) * 5 || squads.size() < first + size_t(s.squad_capacity))
@@ -126,7 +130,7 @@ TrainingState training_from_save(const SaveState& save, const LeImage& exe, uint
 }
 TrainingState training_from_game(const GameState& g, const LeImage& exe, uint64_t revision) {
     auto state = project(g.memory, g.manager_records, g.tactics, g.manager_options, g.manager_teams, g.squad_slots,
-                         g.players, g.club_ids, g.club_names, g.player_name_offsets, g.player_names, exe, revision);
+                         g.players, g.club_ids, g.club_names, g.player_name_offsets, g.player_names, exe, revision,&g);
     state.source = "engine_projection"; return state;
 }
 

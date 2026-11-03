@@ -21,7 +21,7 @@ void validate_preparation_context(const PreparationState& s) {
     };
     if (!same(s.lineup) || !same(s.tactics) || (s.training &&
         (!same(*s.training) || s.training->mode != s.desktop.options.mode)) ||
-        bool(s.training) != (s.desktop.options.mode >= 2 && !national) ||
+        bool(s.training) != (s.desktop.options.mode >= 2 && (!national||s.desktop.projected_national_team)) ||
         s.lineup.automatic_formation != s.desktop.automation[0] ||
         s.tactics.assistant_attitude != s.desktop.automation[2] ||
         s.tactics.manager_name != s.desktop.manager_name ||
@@ -45,8 +45,8 @@ void validate_preparation_context(const PreparationState& s) {
             s.transfer_market->manager_name != s.desktop.manager_name ||
             s.transfer_market->club_name != s.desktop.club_name)))
         throw FormatError("preparation: inconsistent manager/club/source/revision across views");
-    if (national && (s.training || s.training_camp || s.bank || s.stadium || (s.pitch&&!s.desktop.projected_national_team)))
-        throw FormatError("preparation: national coach has no supported club-only training/finance/pitch context");
+    if(national&&(s.training_camp||s.stadium||s.toto||s.transfer_market||(!s.desktop.projected_national_team&&(s.training||s.bank||s.pitch))))
+        throw FormatError("preparation: national coach has no supported context for this club service");
     if (s.pitch && (s.pitch->manager_slot != s.desktop.manager_slot ||
         s.pitch->runtime_club != s.desktop.runtime_club || s.pitch->revision != s.desktop.revision ||
         s.pitch->source != s.desktop.source || s.pitch->mode != s.desktop.options.mode ||
@@ -72,7 +72,7 @@ PreparationState preparation_from_game(const GameState& game, const LeImage& exe
     const bool national = result.desktop.national_team;
     if (!national) {
         result.training_camp = training_camp_from_game(game, exe, result.desktop.manager_slot, revision);
-        result.bank = bank_from_game(game, exe, revision);
+
         result.stadium = stadium_from_game(game, exe, revision);
         result.stadium->source = result.desktop.source;
         result.stadium->club_name = result.desktop.club_name;
@@ -82,10 +82,11 @@ PreparationState preparation_from_game(const GameState& game, const LeImage& exe
         result.transfer_market = transfer_market_from_game(game, revision);
         result.transfer_market->source = result.desktop.source;
     }
+    if(!national||result.desktop.projected_national_team)result.bank=bank_from_game(game,exe,revision);
     result.lineup = lineup_from_game(game, exe, revision);
-    if (result.desktop.options.mode >= 2 && !national) result.training = training_from_game(game, exe, revision);
+    if (result.desktop.options.mode >= 2 && (!national||result.desktop.projected_national_team)) result.training = training_from_game(game, exe, revision);
     result.tactics = tactics_from_game(game, exe, revision);
-    if (!national) result.pitch = pitch_extras_from_game(game, exe, revision);
+    if (!national||result.desktop.projected_national_team) result.pitch = pitch_extras_from_game(game, exe, revision);
     for (const auto& player : result.lineup.players) if (player.player_id >= 0)
         result.player_cards.push_back(player_card_from_game(game, exe, player.row, revision));
     validate_preparation_context(result);

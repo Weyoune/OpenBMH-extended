@@ -5,6 +5,7 @@
 #include "game/state.hpp"
 #include "game/week.hpp"
 #include "game/schedule.hpp"
+#include "game/national_identity.hpp"
 #include <algorithm>
 #include <limits>
 namespace bmh::app {
@@ -133,7 +134,7 @@ inline bool apply_training_request_source(GameState& g,const LeImage& exe,const 
             const auto player = std::find_if(current.players.begin(), current.players.end(), [&](const auto& p) {
                 return p.row == request.index && p.player_id == request.player_id;
             });
-            const SquadRange squad = squad_range(request.runtime_club);
+            const SquadRange squad = squad_range(g,request.runtime_club);
             if (player == current.players.end() || squad.count != size_t(current.squad_capacity) ||
                 squad.first + size_t(request.index) >= g.squad_slots.size() ||
                 (g.squad_slots[squad.first + size_t(request.index)] & 0x0fff) != request.player_id) {
