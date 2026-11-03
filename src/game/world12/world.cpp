@@ -107,6 +107,7 @@ for(const auto* refs:{&manager.tactics->backing->marks,&manager.tactics->backing
     validate_national_squads(*this);
     validate_national_coaches(*this);
     validate_national_campaigns(*this);
+    validate_inactive_national_draw(*this);
 }
 std::vector<ClubId> World::selectable_clubs(Country country,LeagueId id)const {if(!catalogue.selectable(country)||catalogue.league(id).country!=country)throw std::invalid_argument("world12: unavailable manager country/league");return membership.at(id.value).clubs;}
 Country World::manager_country(uint8_t seat)const {for(const auto& manager:managers)if(manager.seat==seat)return clubs.at(manager.club).country;throw std::out_of_range("world12: manager seat is not occupied");}

@@ -5,7 +5,7 @@
 #include <set>
 #include <stdexcept>
 namespace bmh::world12 {
-InitialCompetitionFields draw_initial_shared_fields(const World& world,GameRandom& game,WatcomRandom& random) {
+InitialCompetitionFields draw_initial_shared_fields(const World& world,GameRandom& game,WatcomRandom& random,std::vector<uint16_t>* inactive_national_tokens) {
     world.validate();if(!world.catalogue.scope.club_play())throw std::invalid_argument("world12: shared club fields require club play");
     auto staged_game=game;auto staged_random=random;InitialCompetitionFields result;
     const auto nations=bmh::initial_national_four(staged_game,staged_random);
@@ -51,6 +51,6 @@ InitialCompetitionFields draw_initial_shared_fields(const World& world,GameRando
         [&](int k,int first,int count){auto& list=lists[size_t(k)];for(int i=0;i<count;++i){const auto j=staged_game.range(0,count-1);if(j<0||j>=count)throw std::invalid_argument("world12: invalid European draw index");std::swap(list.at(size_t(first+i)),list.at(size_t(first+j)));}});
     const size_t sizes[]={64,24,32};
     for(size_t k=0;k<3;++k)for(size_t i=0;i<sizes[k];++i){const auto token=lists[k].at(i);if(token&virtual_tag)throw std::invalid_argument("world12: European quota leaves a non-club entrant");result.fields[k].push_back({uint32_t(token)});}
-    game=staged_game;random=staged_random;return result;
+    if(inactive_national_tokens)inactive_national_tokens->assign(nations.begin(),nations.end());game=staged_game;random=staged_random;return result;
 }
 }

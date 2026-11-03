@@ -5,6 +5,7 @@
 #include "game/world12/indoor.hpp"
 #include "game/world12/regional_playoff.hpp"
 #include "game/world12/national_campaign.hpp"
+#include "game/world12/inactive_national_draw.hpp"
 #include "game/world12/catalogue.hpp"
 #include "formats/m3d.hpp"
 #include "game/long_career.hpp"
@@ -296,6 +297,7 @@ struct TransferMarket {
 };
 using GlobalPlayerStatistics = std::map<std::pair<ClubId,PlayerId>,PlayerClubStatistics>;
 struct World {
+    std::optional<InactiveNationalDraw> inactive_national_draw;
     std::optional<uint16_t> highscore_signature; // Fresh Source saved fact: zero known-unranked, absent oldunknown; schema41.
     std::optional<AnnualTitleArchive> annual_title_archive; // Known retained IDs and explicit unknown prior history; schema40.
     std::optional<uint32_t> annual_awards_completed; // Exactly-once season count; fresh0, unknown before schema38.

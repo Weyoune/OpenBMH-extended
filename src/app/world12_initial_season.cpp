@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "app/world12_initial_season.hpp"
 #include "game/world12/european.hpp"
+#include "game/world12/inactive_national_draw.hpp"
 #include "game/world12/match_projection.hpp"
 #include "game/world12/market_auctions.hpp"
 #include "game/season.hpp"
@@ -29,13 +30,14 @@ InitialCompetitionOutcome prepare_initial_competitions(CareerSnapshot& state,Man
         auto projected=human?AiMatchProjection::create_for_humans(candidate,{club},reference,{settings.mode,settings.difficulty,settings.foreign_rule,true}):AiMatchProjection::create(candidate.world,{club},reference);
         bmh::club_balance(projected.state,0,random);bmh::auto_lineup(projected.state,0,human?0xe4:100);projected.commit_match_state(candidate.world);
     }
-    auto fields=draw_initial_shared_fields(candidate.world,game,random);
+    std::vector<uint16_t> inactive_national;auto fields=draw_initial_shared_fields(candidate.world,game,random,&inactive_national);
     for(auto& manager:candidate.world.managers) {
         auto& history=*manager.career->season_records;history[1]=history[2]=0;
         const uint8_t rounds[]={1,3,2};
         for(size_t k=0;k<3;++k)if(std::find(fields.qualified[k].begin(),fields.qualified[k].end(),manager.club)!=fields.qualified[k].end())history[2]=uint8_t(rounds[k]+k*32);
     }
     candidate.world.initial_competitions=std::move(fields);
+    if(!candidate.world.catalogue.scope.international)initialize_inactive_national_draw(candidate.world,inactive_national,sources.german);
     candidate.world.european_campaigns=initial_european_campaigns(candidate.world,sources.german);
     if(candidate.world.catalogue.scope.germany)candidate.world.indoor=initial_indoor_season(candidate.world,sources.german,reference);
     candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();

@@ -1271,6 +1271,8 @@ add_library(bmhworld12 STATIC
     src/game/world12/indoor_match.cpp
     src/game/world12/indoor.cpp
     src/game/world12/national_campaign.cpp
+    src/game/world12/inactive_national_draw.cpp
+    src/game/world12/inactive_national_draw_codec.cpp
     src/game/world12/european_campaign.cpp
     src/game/world12/european.cpp
     src/game/world12/initialization.cpp
@@ -1592,3 +1594,6 @@ add_test(NAME world12_league_history_tests COMMAND world12_league_history_tests)
 add_executable(world12_annual_desk_tests tests/world12_annual_desk_tests.cpp)
 target_link_libraries(world12_annual_desk_tests PRIVATE bmhworld12_app)
 add_test(NAME world12_annual_desk_tests COMMAND world12_annual_desk_tests)
+add_executable(world12_inactive_national_draw_tests tests/world12_inactive_national_draw_tests.cpp)
+target_link_libraries(world12_inactive_national_draw_tests PRIVATE bmhworld12)
+add_test(NAME world12_inactive_national_draw_tests COMMAND world12_inactive_national_draw_tests)
