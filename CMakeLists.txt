@@ -1614,3 +1614,7 @@ add_test(NAME world12_annual_transition_tests COMMAND world12_annual_transition_
 add_executable(world12_session_annual_tests tests/world12_session_annual_tests.cpp)
 target_link_libraries(world12_session_annual_tests PRIVATE bmhworld12_session)
 add_test(NAME world12_session_annual_tests COMMAND world12_session_annual_tests)
+
+add_executable(world12_schema42_tests tests/world12_schema42_tests.cpp)
+target_link_libraries(world12_schema42_tests PRIVATE bmhworld12)
+add_test(NAME world12_schema42_tests COMMAND world12_schema42_tests)

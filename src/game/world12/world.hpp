@@ -222,6 +222,7 @@ struct NationalCoachAccount {
     ManagerFinance finance;
     ManagerMonthlyEconomy monthly;
     uint32_t deposit=0,interest_income=0,overdraft_interest=0;
+    std::optional<uint32_t> investment_balance,depreciation;
     std::optional<uint32_t> bank_robbery_month;
     std::array<uint8_t,13> training_preferences{};
     uint16_t training_quality=0;

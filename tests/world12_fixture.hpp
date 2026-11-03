@@ -14,6 +14,7 @@ inline void omit_recent_manager_records(bmh::cli::Json& root) {
     root.object()->erase("national_origins");
     root.object()->erase("national_campaigns");
     root.object()->erase("national_coaches");
+    root.object()->erase("inactive_club_state");
     root.object()->erase("annual_awards_completed");
     root.object()->erase("regional_playoff");
     root.object()->erase("amateur_slots");
