@@ -62,7 +62,10 @@ InitialCompetitionOutcome prepare_initial_competitions(CareerSnapshot& state,Man
         bool present=std::find(cup.seeded.begin(),cup.seeded.end(),manager.club)!=cup.seeded.end();for(const auto& f:cup.rounds.front().fixtures)present|=f.home==manager.club||f.away==manager.club;
         if(present)(*manager.career->season_records)[1]=1;
     }
-    candidate.calendar=CalendarCursor{calendar,0,0};candidate.validate();
+    candidate.calendar=CalendarCursor{calendar,0,0};
+    if(candidate.world.catalogue.scope.germany&&std::any_of(calendar.others.begin(),calendar.others.end(),regional_playoff_appointment))
+        candidate.world.regional_playoff=make_regional_playoff_season(candidate.world,sources.german,calendar,candidate.season);
+    candidate.validate();
     if(state!=before||owner.scope!=expected.scope||owner.revision!=expected.revision)throw std::invalid_argument("world12: initial competition owner changed during draw");
     InitialCompetitionOutcome outcome{notices,game.calls(),random.calls()};
     state=std::move(candidate);++owner.revision;return outcome;

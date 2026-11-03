@@ -3,6 +3,8 @@
 #include "fixture_tables.hpp"
 #include "game/world12/codec.hpp"
 #include "game/world12/regional_playoff_match.hpp"
+#include "app/world12_european.hpp"
+#include "app/world12_weather.hpp"
 #include "game/world12/economy.hpp"
 #include "game/world12/manager_finance.hpp"
 #include "game/world12/manager_tactics.hpp"
@@ -56,6 +58,13 @@ void replay(const LeImage& rules){
     json.object()->at("version")=40;json.object()->erase("regional_playoff");raw=cli::dump_json(json);check(!decode_world(Bytes(raw.begin(),raw.end())).regional_playoff,"older proto40 invented a missing playoff owner");
     std::cout<<"Source inline activation, physical ranks1/2, six dates/12scores, group fixtures/ranking/qualifier word order, exact zero RNG, replay and save/reopen passed\n";
 }
+void day_activation(const LeImage& source){
+    auto state=bmh::test::world12::before_regional_final(source);const auto before=state;const auto ticket=*prepare_day(state);auto expected=state;bmh::test::world12::authored_final_day_results(expected);activate_regional_playoff(expected,before);
+    std::vector<CompletedLeagueRound> completed;for(const auto& league:ticket.leagues){CompletedLeagueRound row{league.appointment.league,league.appointment.round,{}};for(size_t m=0;m<league.matches.size();++m)row.results.push_back(expected.results.result(expected.world.catalogue,row.league,row.round,int(m)));completed.push_back(std::move(row));}
+    ++expected.calendar->next_day;++expected.calendar->revision;++expected.date;commit_league_day(state,ticket,completed);check(state==expected&&state.world.regional_playoff->activation_day==272,"day owner failed atomic real-boundary activation");
+    auto unknown=before;unknown.world.regional_playoff.reset();const auto untouched=unknown;rejects([&]{commit_league_day(unknown,*prepare_day(unknown),completed);},"day owner manufactured unknown regional field");check(unknown==untouched,"failed activation leaked completed league scores/date");
+}
+
 GameState match_reference(){
     GameState state;state.club_ids.resize(445);state.team_flags.resize(445);state.team_morale.resize(445);state.formations.resize(0x580);state.manager_records.resize(4*0xb0c);state.manager_ratings.resize(4*60);state.tactics.resize(4*0x840);state.manager_options.resize(20);
     const uint8_t depth[]={0,5,5,5,5,10,10,10,10,17,17},lane[]={4,1,3,5,7,1,3,5,7,3,5};
@@ -64,17 +73,26 @@ GameState match_reference(){
 }
 void real_match_rounds(const LeImage& rules){
     const auto reference=match_reference();
-    for(uint8_t humans=1;humans<=4;++humans){
+    for(uint8_t humans=0;humans<=4;++humans){
         auto before=bmh::test::world12::before_regional_final(rules);auto state=before;bmh::test::world12::authored_final_day_results(state);activate_regional_playoff(state,before);++state.date;++state.calendar->next_day;
-        auto& world=state.world;world.markets.emplace();world.free_players.emplace();world.settings=CareerSettings{3,6,5,humans,false};world.economy.emplace();world.economy->presentation_options.emplace();world.economy->presentation_options->fill(1);
+        auto& world=state.world;world.markets.emplace();world.free_players.emplace();world.settings=CareerSettings{3,6,5,uint8_t(std::max(1,int(humans))),false};world.economy.emplace();world.economy->presentation_options.emplace();world.economy->presentation_options->fill(1);
         for(size_t seat=0;seat<4;++seat){auto& economy=world.economy->managers[seat];economy.monthly.emplace();economy.monthly->history_count=1;economy.monthly->counters[0]=uint32_t(1000+seat);economy.deposit=uint32_t(7000+seat);economy.depreciation=80;}
         const auto field=world.regional_playoff->entrants;uint32_t player_id=3000000;
         for(auto club:field)for(size_t row=0;row<20;++row){auto& slot=world.clubs.at(club).roster[row];if(slot.empty()){PlayerRecord player;player.id={player_id++};player.attributes.name="Reserve";world.players[player.id]=player;slot={player.id,uint16_t(row<17?2:0)};}auto& attributes=world.players.at(slot.player).attributes;attributes.w35c=60u|(75u<<7)|(85u<<14);attributes.w364=uint32_t(row==0?0:row<5?1:row<9?2:3);}
-        WatcomRandom confirmation(91);for(uint8_t n=0;n<humans;++n){const uint8_t seat=n==humans-1?3:n;world.managers.push_back({seat,"Human",field[n],world.clubs.at(field[n]).league,seat});initialize_manager_contracts(world,seat,reference,{3,false,false,false,6},confirmation);world.managers.back().career.emplace();world.managers.back().career->season_records.emplace();}
+        WatcomRandom confirmation(91);const uint8_t managers=uint8_t(std::max(1,int(humans)));for(uint8_t n=0;n<managers;++n){const uint8_t seat=n==managers-1?3:n;const auto club=humans?field[n]:world.membership[0].clubs[0];world.managers.push_back({seat,"Human",club,world.clubs.at(club).league,seat});initialize_manager_contracts(world,seat,reference,{3,false,false,false,6},confirmation);world.managers.back().career.emplace();world.managers.back().career->season_records.emplace();}
         state.game_seed=17;state.watcom_seed=91;state.validate();
         for(uint8_t round=0;round<6;++round){
             const auto day=state.world.regional_playoff->dates[round];for(const auto& a:state.calendar->schedule.leagues)if(a.day<day&&a.round>state.league_rounds[a.league.value]){state.league_rounds[a.league.value]=a.round;for(int m=0;m<state.world.catalogue.league(a.league).clubs/2;++m)state.results.result(state.world.catalogue,a.league,a.round,m)={true,0,0};}state.date=day;state.calendar->next_day=day;state.validate();
-            const auto initial=state;const auto group=*prepare_regional_playoff_group(state);AiLeagueConditions c;c.date=day;c.month=5;c.temperature=18;c.spectators=15000;c.referee_properties={24};c.presentation_buttons.assign(180,1);std::vector<AiLeagueConditions> conditions(2,c);GameRandom game(state.game_seed);WatcomRandom random(state.watcom_seed);
+            const auto initial=state;const auto group=*prepare_regional_playoff_group(state);
+            if(round==0){
+                auto prepared=initial;prepared.desktop.emplace();for(const auto& manager:prepared.world.managers){ManagerDesktop desk;desk.seat=manager.seat;prepared.desktop->managers.push_back(desk);prepared.desktop->manager_order.push_back(manager.seat);}prepared.desktop->matchday_number=500;
+                prepared.progress=CareerProgress{ProgressPhase::scheduled_event,DayEntry::plain_day,prepared.date-1,0,1994,0,prepared.world.managers.front().seat};prepared.validate();
+                bmh::app::world12::ManagerActionOwner weather_owner{61,0};const auto weather=bmh::app::world12::prepare_event_weather(prepared,weather_owner,weather_owner,std::vector<uint8_t>(50,24),{rules,rules},&reference);
+                check(weather.matches.size()==2&&prepared.prepared_event&&prepared.prepared_event->groups.size()==1&&prepared.prepared_event->groups[0].regional_playoff,"regional weather failed to own its actual two fixtures");
+                const auto saved=make_save(prepared);check(saved.stream[7]=='J'&&read_save(saved)==prepared,"regional J weather/identity owner did not survive save/reopen");
+                const auto saved_state=prepared;rejects([&]{bmh::app::world12::prepare_event_weather(prepared,weather_owner,weather_owner,std::vector<uint8_t>(50,24),{rules,rules},&reference);},"regional weather was redrawn");check(prepared==saved_state,"duplicate regional weather changed state/RNG");
+            }
+AiLeagueConditions c;c.date=day;c.month=5;c.temperature=18;c.spectators=15000;c.referee_properties={24};c.presentation_buttons.assign(180,1);std::vector<AiLeagueConditions> conditions(2,c);GameRandom game(state.game_seed);WatcomRandom random(state.watcom_seed);
             std::optional<CareerSnapshot> expected;std::vector<MatchGroup> native_groups;uint64_t game_draws=0,watcom_draws=0;HumanRoundHooks hooks;hooks.decline_unpresented_events=true;int opened=0,last=0;
             hooks.before_matchday=[&](auto& projection,auto& engine){check(engine.groups.size()==1&&engine.groups[0].desc[0]==14&&engine.groups[0].desc[1]==195&&projection.human_managers()==humans,"regional group lost Source14/options/cards or humans");auto oracle=projection;native_groups=engine.groups;auto g=engine.game;auto w=engine.rand;MatchEngine native(oracle.state,native_groups,g,w,engine.referees);native.month=engine.month;native.buttons=engine.buttons;native.leave_screens=true;MinuteReport report;play_matchday(native,oracle.state,native_groups,native.buttons,g,w,report);check(!report.unsupported,"Source regional clock failed");process_group(oracle.state,native_groups[0],g,w,report);check(!report.unsupported,"Source regional settlement failed");expected=initial;oracle.commit_match_state(expected->world);capture_career_economy(expected->world,oracle);oracle.commit_desktop_preferences(*expected);expected->game_seed=g.seed();expected->watcom_seed=w.seed();game_draws=g.calls();watcom_draws=w.calls();};
             hooks.before_owned=[&](auto&,auto&,const auto& owned){check(owned==initial,"regional live hook lost staged owner");++opened;};hooks.after_minute=[&](auto&,auto&,int minute){check(opened==1&&minute>last,"regional live matches used separate clocks");last=minute;};
@@ -82,10 +100,14 @@ void real_match_rounds(const LeImage& rules){
             check(expected&&state==*expected&&receipt.scores==native_groups[0].cup_results&&receipt.game_draws==game_draws&&receipt.watcom_draws==watcom_draws&&last>=90,"regional match differs from complete direct Source state/finance/monthly/GW");
             const auto scored=state;HumanRoundHooks abort;abort.decline_unpresented_events=true;abort.after_minute=[](auto&,auto&,int minute){if(minute==10)throw std::runtime_error("cancel regional live");};auto cancelled=initial;GameRandom cancel_g(initial.game_seed);WatcomRandom cancel_w(initial.watcom_seed);rejects([&]{simulate_and_settle_regional_playoff_group(cancelled,reference,group,rules,conditions,{3,6,false,true},cancel_g,cancel_w,abort);},"cancelled regional match committed");check(cancelled==initial&&cancel_g.calls()==0&&cancel_w.calls()==0,"cancelled regional match leaked state/RNG");
             commit_regional_playoff_results(state,{group,receipt.scores},rules,random);++state.calendar->next_day;++state.calendar->revision;++state.date;state.watcom_seed=random.seed();state.validate();state=read_save(make_save(state));(void)scored;
+            auto combined=initial;bmh::app::world12::ManagerActionOwner day_owner{71,0};const auto ticket=*prepare_day(combined);opened=last=0;
+            const auto combined_out=bmh::app::world12::play_competition_day(combined,day_owner,day_owner,ticket,reference,{rules,rules},{},{},{},{3,6,false,true},hooks,{},bmh::app::world12::RegionalDayConditions{group,conditions});
+            check(combined==state&&combined_out.regional_playoff&&combined_out.regional_playoff->scores==receipt.scores&&combined_out.game_draws==receipt.game_draws&&combined_out.watcom_draws==receipt.watcom_draws&&day_owner.revision==1,"combined day differs from actual regional scoring/calendar/RNG receipts");
+            const auto committed=combined;rejects([&]{bmh::app::world12::play_competition_day(combined,day_owner,{71,0},ticket,reference,{rules,rules},{},{},{},{3,6,false,true},hooks,{},bmh::app::world12::RegionalDayConditions{group,conditions});},"regional day replay accepted");check(combined==committed&&day_owner.revision==1,"regional replay changed committed owner/state");
         }
         check(annual_regional_qualifiers(state)[0].valid(),"completed actual match programme lacks annual qualifiers");std::cout<<int(humans)<<" humans:12real Core playoff matches, complete Source state/score/finance/monthly/GW oracle, cancel/save/reopen passed\n";
     }
 }
 
 }
-int main()try{set_fixture_tables(bmh::test::authored_fixture_tables());const auto source=bmh::test::world12::regional_rules();replay(source);real_match_rounds(source);return 0;}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
+int main()try{set_fixture_tables(bmh::test::authored_fixture_tables());const auto source=bmh::test::world12::regional_rules();replay(source);day_activation(source);real_match_rounds(source);return 0;}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}

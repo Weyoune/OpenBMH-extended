@@ -38,3 +38,16 @@ RNG against direct Original calculation. Save/reload, stale/repeated dates and
 results, cancellation and unknown older-schema ownership are covered. These are
 bounded backend checks; they do not establish a played full-calendar season,
 Native GUI progression or a three-season release gate.
+
+The scheduled-event integration uses the existing weather, manager desk, gate,
+live-match and Toto services. Its prepared group has an explicit regional kind;
+prepared save tagJ/kind4 retains the exact fixtures, round, weather, gate and desk
+receipts across reload. League results activate the campaign within their atomic
+final-day publication. Each later playoff date publishes its two actual scores,
+Source transition and calendar revision together. Duplicate weather, gate and
+result requests retain the existing owner checks. No additional daily service is
+run for an indoor ordinary-date pass. The live `before_owned` hook sees the actual
+post-gate staged owner after consuming `prepared_event`, before minute1.
+
+The regression also covers an AI-only playoff with an unrelated human manager,
+prepared weather save/reopen and both the direct match and combined day owners.

@@ -55,20 +55,21 @@ std::optional<DayTicket> prepare_day(const CareerSnapshot& state){
         if(campaign.complete)throw FormatError("world12: calendar schedules an already completed European programme");
         const auto groups=prepare_european_groups(campaign);ticket.european.insert(ticket.european.end(),groups.begin(),groups.end());
     }
+    if(std::any_of(ticket.others.begin(),ticket.others.end(),regional_playoff_appointment))ticket.regional_playoff=prepare_regional_playoff_group(state);
     return ticket;
 }
 void commit_league_day(CareerSnapshot& state,const DayTicket& ticket,const std::vector<CompletedLeagueRound>& completed){
     commit_day(state,ticket,completed,{});
 }
 DayPresentation commit_day(CareerSnapshot& state,const DayTicket& ticket,const std::vector<CompletedLeagueRound>& completed,
-    const std::vector<CupLegResult>& cup_results,const std::vector<EuropeanResults>& european_results,const LeImage* shared_rules,const std::optional<IndoorResults>& indoor_results,const GameState* indoor_reference){
+    const std::vector<CupLegResult>& cup_results,const std::vector<EuropeanResults>& european_results,const LeImage* shared_rules,const std::optional<IndoorResults>& indoor_results,const GameState* indoor_reference,const std::optional<RegionalPlayoffResults>& regional_results){
     const auto expected=prepare_day(state);if(!expected||*expected!=ticket)throw std::invalid_argument("world12: stale or changed day ticket");
     size_t required_count=0;std::vector<EuropeanCompetition> shared;
     for(const auto& appointment:ticket.others) {
         const auto required=domestic_cups_on(appointment);
         if(required)required_count+=required->size();
         else if(const auto european=european_cups_on(appointment))shared.insert(shared.end(),european->begin(),european->end());
-        else if(!german_indoor_appointment(appointment))throw std::invalid_argument("world12: shared/national transaction is required before advancing this day");
+        else if(!german_indoor_appointment(appointment)&&!regional_playoff_appointment(appointment))throw std::invalid_argument("world12: shared/national transaction is required before advancing this day");
     }
     if(required_count!=ticket.cups.size() || cup_results.size()!=ticket.cups.size())
         throw std::invalid_argument("world12: complete installed domestic cup stages and results are required");
@@ -76,6 +77,7 @@ DayPresentation commit_day(CareerSnapshot& state,const DayTicket& ticket,const s
     for(size_t i=0;i<shared.size();++i)if(european_results[i].competition!=shared[i])throw FormatError("world12: European result order/competition does not match calendar");
     const bool needs_indoor=!ticket.indoor.empty();
     if(needs_indoor!=indoor_results.has_value()||(needs_indoor&&(!shared_rules||!indoor_reference)))throw FormatError("world12: complete indoor result/reference owner is required");
+    if(ticket.regional_playoff.has_value()!=regional_results.has_value()||(regional_results&&!shared_rules))throw FormatError("world12: complete regional playoff results/source owner is required");
     if(state.date==std::numeric_limits<uint32_t>::max()||state.calendar->revision==std::numeric_limits<uint64_t>::max())throw std::overflow_error("world12: date/revision exhausted");
     if(completed.size()!=ticket.leagues.size())throw std::invalid_argument("world12: incomplete day results");
     // Validate the entire result batch before writing any table or cursor.
@@ -104,7 +106,9 @@ DayPresentation commit_day(CareerSnapshot& state,const DayTicket& ticket,const s
     for(const auto& result:european_results)commit_european_results(staged.world,result,*shared_rules,european_random,staged.season);
     staged.watcom_seed=european_random.seed();presentation.watcom_draws=european_random.calls();
     if(indoor_results){const auto outcome=commit_indoor_results(staged,*indoor_results,*indoor_reference,*shared_rules);presentation.game_draws+=outcome.game_draws;presentation.watcom_draws+=outcome.watcom_draws;}
+    if(regional_results){commit_regional_playoff_results(staged,*regional_results,*shared_rules,european_random);staged.watcom_seed=european_random.seed();presentation.watcom_draws=european_random.calls();}
     for(const auto& round:completed){for(size_t m=0;m<round.results.size();++m)staged.results.result(staged.world.catalogue,round.league,round.round,int(m))=round.results[m];staged.league_rounds[round.league.value]=round.round;}
+    if(std::any_of(staged.calendar->schedule.others.begin(),staged.calendar->schedule.others.end(),regional_playoff_appointment))activate_regional_playoff(staged,state);
     bool next_date=true;
     if(ticket.indoor_date){
         if(!staged.world.indoor->date_pass)staged.world.indoor->date_pass=IndoorDatePass{ticket.day,0,ticket.indoor_total,false};

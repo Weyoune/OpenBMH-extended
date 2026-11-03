@@ -34,7 +34,7 @@ DesktopEntryOutcome begin_scheduled_desks(CareerSnapshot& state,ManagerActionOwn
         auto p=group.european?AiMatchProjection::create_for_european(candidate,participants(candidate.world,match.fixture),reference,policy):AiMatchProjection::create_for_humans(candidate,participants(candidate.world,match.fixture),reference,policy);
         const auto home=int(p.local_club(match.fixture.home)),away=int(p.local_club(match.fixture.away));
         p.state.indoor=group.indoor;
-        const uint8_t type=group.indoor?12:group.league?0:group.european?uint8_t(*group.european)+1:group.cup==DomesticCup::league_cup?12:
+        const uint8_t type=group.regional_playoff?14:group.indoor?12:group.league?0:group.european?uint8_t(*group.european)+1:group.cup==DomesticCup::league_cup?12:
             group.cup==DomesticCup::german_supercup||group.cup==DomesticCup::english_supercup?9:1;
         prepare_team(p.state,home,match_competition_class(type),0);prepare_team(p.state,away,match_competition_class(type),1);
         auto_lineup(p.state,home,100);auto_lineup(p.state,away,100);

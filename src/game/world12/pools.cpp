@@ -21,7 +21,7 @@ void prepare_scheduled_pools(CareerSnapshot& state,const GameState& reference,Wa
                 if(std::find(clubs.begin(),clubs.end(),club)==clubs.end())clubs.push_back(club);
             auto p=AiMatchProjection::create_for_humans(candidate,clubs,reference,
                 {settings.mode,settings.difficulty,settings.foreign_rule,true});auto& local=p.state;
-            MatchGroup native;native.desc.assign(0xd0,0);local.indoor=group.indoor;native.desc[0]=group.indoor?12:group.league?0:1;native.desc[2]=1;
+            MatchGroup native;native.desc.assign(0xd0,0);local.indoor=group.indoor;native.desc[0]=group.regional_playoff?14:group.indoor?12:group.league?0:1;native.desc[2]=1;
             native.fixtures={int(p.local_club(match.fixture.home)),int(p.local_club(match.fixture.away))};
             // The validated prepared appointment has not been played. Materialize
             // its actual unplayed marker in this bounded, read-only Core workspace.

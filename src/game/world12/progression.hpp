@@ -21,6 +21,7 @@ struct DayTicket {
     std::vector<ScheduledCupLeg> cups;
     std::vector<EuropeanGroup> european;
     std::vector<IndoorGroup> indoor;
+    std::optional<RegionalPlayoffGroup> regional_playoff;
     bool indoor_date=false,indoor_ordinary_phase=false;
     uint8_t indoor_total=0,indoor_completed=0;
     bool operator==(const DayTicket&)const=default;
@@ -35,5 +36,5 @@ std::optional<DayTicket> prepare_day(const CareerSnapshot&);
 void commit_league_day(CareerSnapshot&,const DayTicket&,const std::vector<CompletedLeagueRound>&);
 struct DayPresentation {std::vector<CupDrawNotice> cup_draws;uint64_t watcom_draws=0,game_draws=0;};
 DayPresentation commit_day(CareerSnapshot&,const DayTicket&,const std::vector<CompletedLeagueRound>&,
-    const std::vector<CupLegResult>&,const std::vector<EuropeanResults>& european={},const LeImage* shared_rules=nullptr,const std::optional<IndoorResults>& indoor=std::nullopt,const GameState* indoor_reference=nullptr);
+    const std::vector<CupLegResult>&,const std::vector<EuropeanResults>& european={},const LeImage* shared_rules=nullptr,const std::optional<IndoorResults>& indoor=std::nullopt,const GameState* indoor_reference=nullptr,const std::optional<RegionalPlayoffResults>& regional=std::nullopt);
 }

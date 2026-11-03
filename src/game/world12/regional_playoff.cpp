@@ -86,7 +86,7 @@ void validate_regional_playoff_snapshot(const CareerSnapshot& state){
     if(!state.world.regional_playoff)return;const auto& campaign=*state.world.regional_playoff;require(campaign.season==state.season,"saved season owner changed");
     for(const auto& [club,value]:campaign.activation_deductions){(void)value;const auto league=state.world.clubs.at(club).league;require(league.value==2||league.value==3,"activation deduction is outside the retained regional membership");}
     if(campaign.activation_day)require(campaign.entrants==entrants(state,campaign.activation_deductions),"field differs from completed physical regional standings");
-    if(state.calendar){require(campaign.dates==dates(state.calendar->schedule),"saved campaign dates differ from calendar");size_t played=0;for(auto day:campaign.dates)if(day<state.calendar->next_day)++played;require(played==campaign.played,"calendar has skipped or repeated a playoff round");}
+    if(state.calendar){require(campaign.dates==dates(state.calendar->schedule),"saved campaign dates differ from calendar");size_t played=0;for(auto day:campaign.dates)if(day<state.calendar->next_day||(day==state.calendar->next_day&&state.world.indoor&&state.world.indoor->date_pass&&state.world.indoor->date_pass->ordinary_completed))++played;require(played==campaign.played,"calendar has skipped or repeated a playoff round");}
 }
 bool activate_regional_playoff(CareerSnapshot& staged,const CareerSnapshot& before){
     if(!staged.world.catalogue.scope.germany)return false;

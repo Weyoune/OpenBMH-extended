@@ -45,6 +45,10 @@ AttendanceOutcome book_event_attendance(CareerSnapshot& state,ManagerActionOwner
             competition=cup_entry_address(group.source_entry);type=uint8_t(*group.european)+1;const auto& campaign=(*candidate.world.european_campaigns)[size_t(uint8_t(*group.european)-1)];
             for(const auto& stage:campaign.stages){const auto at=cup_entry_address(stage.rules.entry);local.memory.add_block(at,0x28);for(uint32_t b=0;b<0x28;++b)local.memory.set8(at+b,sources.german.u8(at+b));local.memory.set8(at+0x1d,stage.played);}
         }
+        else if(group.regional_playoff){
+            if(!candidate.world.regional_playoff||regional_playoff_rules(sources.german)!=candidate.world.regional_playoff->rules)throw FormatError("world12: regional gate lacks matching Source rules");
+            competition=cup_entry_address(35);type=14;local.memory.add_block(competition,0x28);for(uint32_t b=0;b<0x28;++b)local.memory.set8(competition+b,sources.german.u8(competition+b));local.memory.set8(competition+0x1d,candidate.world.regional_playoff->played);
+        }
         else {
             const auto& source=cup_country(*group.cup)==Country::germany?sources.german:sources.english;
             competition=cup_entry_address(group.source_entry);type=uint8_t(source.u16(competition+0x18)+1);
