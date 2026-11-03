@@ -691,7 +691,7 @@ void StartupFlow::show_world12_other_games(OtherGamesState page,PreparationState
        !desktop_->pending()||*desktop_->pending()!=owner||owner.kind!=DeskRequestKind::open_menu||owner.menu_kind!=5||
        owner.revision!=desktop_->state().revision||owner.manager_slot!=desk_actor(desktop_->state())||!page.world12_identity||
        page.world12_identity->revision!=owner.revision+1||parent.desktop.revision!=owner.revision+1||parent.desktop.source!="world12"||
-       page.world12_identity->club!=desktop_->state().managers.at(size_t(owner.manager_slot)).world_club)
+       page.world12_identity->club!=desktop_->state().managers.at(size_t(desktop_->state().manager_slot)).world_club)
         throw FormatError("world12: competition overview has no matching desktop owner");
     auto before=desktop_->state();before.revision=parent.desktop.revision;
     if(desk_json(before)!=desk_json(parent.desktop))throw FormatError("world12: competition opening changed unrelated desktop state");

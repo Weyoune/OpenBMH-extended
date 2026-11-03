@@ -9,14 +9,17 @@ namespace bmh::app::world12 {
 namespace {
 bmh::world12::Manager& actor(bmh::world12::CareerSnapshot& state,uint8_t seat) {
     auto found=std::find_if(state.world.managers.begin(),state.world.managers.end(),[&](const auto& m){return m.seat==seat;});
-    if(found==state.world.managers.end()||!found->career)throw FormatError("world12: competition manager state is unavailable");return *found;
+    if(found==state.world.managers.end())throw FormatError("world12: competition manager state is unavailable");return *found;
 }
-
-
+std::optional<uint8_t>& other_preference(bmh::world12::CareerSnapshot& state,uint8_t seat){
+    auto& person=actor(state,seat);if(person.career)return person.career->other_games_view;
+    if(state.world.catalogue.scope.club_play()||!state.world.national_coaches)throw FormatError("world12: actual competition preference owner is unknown");
+    const auto coach=std::find_if(state.world.national_coaches->begin(),state.world.national_coaches->end(),[&](const auto& record){return record.active&&record.coach==seat;});if(coach==state.world.national_coaches->end())throw FormatError("world12: active national competition preference owner is missing");if(!coach->view_preferences)coach->view_preferences.emplace();return coach->view_preferences->other_games_view;
+}
 }
 ui::OtherGamesState Session::other_games_page(const bmh::world12::CareerSnapshot& state,
     const ui::World12OtherGamesIdentity& identity,ui::World12OtherSelection selection)const {
-    auto out=ui::world12_other_games_state(state,identity,selection);
+    auto out=ui::world12_other_games_state(state,identity,selection,{},resources_.texts.get());
     const auto p=bmh::world12::project_manager_desktop(state,resources_.reference);
     out.decorated_background=p.state.memory.u8(layout::PlainBackground)==0;
     out.original_panel=p.state.memory.u8(layout::SolidPanelBackground)==0;
@@ -34,9 +37,10 @@ ui::OtherGamesState Session::open_other_games(const ui::DeskRequest& request) {
     auto candidate=state_;const auto seat=*candidate.desktop->active_seat;
     // CupGroupOverview begins with detail and participant zero, even for a
     // previous save whose display byte was not yet represented by its schema.
-    actor(candidate,seat).career->other_games_view=0x80;
-    const ui::World12OtherGamesIdentity identity{seat,actor(candidate,seat).club,owner_.revision+1,owner_.scope,(other_games_generation_+1)<<32};
-    const auto selection=ui::default_world12_other_selection(candidate.world);
+    other_preference(candidate,seat)=0x80;
+    const auto local=p.state.memory.u8(layout::ActiveManager);const auto projected_team=p.global_club(uint32_t(p.state.manager_teams.at(local)));
+    const ui::World12OtherGamesIdentity identity{seat,projected_team,owner_.revision+1,owner_.scope,(other_games_generation_+1)<<32};
+    auto selection=ui::default_world12_other_selection(candidate.world);if(national_desktop_active())selection.page=ui::World12OtherPage::national_qualifiers;
     auto view=other_games_page(candidate,identity,selection);candidate.validate();
     state_=std::move(candidate);++owner_.revision;++other_games_generation_;other_games_owner_=identity;other_games_selection_=selection;preparation_menu_=5;return view;
 }
@@ -67,10 +71,10 @@ bool Session::apply_other_games(const ui::OtherGamesRequest& request,const std::
         if(state_!=before||preparation_menu_!=5||other_games_owner_!=identity||other_games_generation_!=old_generation||
            other_games_selection_!=old_selection||owner_.revision!=identity.revision)
             throw FormatError("world12: club information changed its live competition owner");
-    }else if(!close)selection=ui::navigate_world12_other_games(candidate,identity,selection,request);
+    }else if(!close)selection=ui::navigate_world12_other_games(candidate,identity,selection,request,resources_.texts.get());
     auto next=identity;++next.revision;++next.sequence;
     const auto page=other_games_page(candidate,next,selection);
-    auto& raw=*actor(candidate,identity.manager_slot).career->other_games_view;
+    auto& preference=other_preference(candidate,identity.manager_slot);if(!preference)throw FormatError("world12: competition preference was not initialized by its owned opening");auto& raw=*preference;
     // Round arrows reset only the local participant cursor. Selector cycling
     // and display toggles are the Source writes to the per-seat saved byte.
     if(!close){
