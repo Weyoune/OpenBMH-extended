@@ -319,7 +319,7 @@ add_library(bmh_7z STATIC
 target_include_directories(bmh_7z PUBLIC ${BMH_LZMA_C})
 target_compile_definitions(bmh_7z PUBLIC Z7_PPMD_SUPPORT Z7_EXTRACT_ONLY)
 
-add_library(bmhlaunch STATIC src/launch/archive.cpp src/launch/game_data.cpp src/launch/fltd.cpp)
+add_library(bmhlaunch STATIC src/launch/archive.cpp src/launch/game_data.cpp src/launch/fltd.cpp src/launch/extended_data.cpp src/cli/json.cpp)
 target_include_directories(bmhlaunch PUBLIC src)
 target_link_libraries(bmhlaunch PUBLIC bmhcore PRIVATE bmh_miniz bmh_7z)
 if(WIN32)
@@ -1118,6 +1118,9 @@ if(MSVC)
     target_compile_options(launch_unit_tests PRIVATE /utf-8)
 endif()
 add_test(NAME launch_unit_tests COMMAND launch_unit_tests)
+add_executable(extended_data_tests tests/extended_data_tests.cpp)
+target_link_libraries(extended_data_tests PRIVATE bmhlaunch bmh_miniz)
+add_test(NAME extended_data_tests COMMAND extended_data_tests)
 
 add_executable(fltd_translation_unit_tests tests/fltd_translation_unit_tests.cpp)
 target_link_libraries(fltd_translation_unit_tests PRIVATE bmhlaunch)
