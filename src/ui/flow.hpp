@@ -410,7 +410,8 @@ public:
                                 PreparationState preparation);
     void reject_reschedule();
     bool source_mouse_wait_release_pending() const {
-        return indoor_standings_release_barrier_ || reschedule_release_barrier_ || achievements_release_barrier_ || desk_records_release_barrier_;
+        return world12_readonly_release_barrier_ || world12_friendly_release_barrier_ ||
+            indoor_standings_release_barrier_ || reschedule_release_barrier_ || achievements_release_barrier_ || desk_records_release_barrier_;
     }
     const CalendarScreen* calendar() const { return calendar_.get(); }
     void show_indoor_standings(IndoorStandingsState state, const DeskRequest& owner);
