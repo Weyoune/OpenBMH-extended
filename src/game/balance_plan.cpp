@@ -162,6 +162,12 @@ uint32_t catering_per_game(const GameState& g, int m, int32_t gate) {
     return sum;
 }
 
+int played_home_games(const GameState& g,int manager){
+    const int owned=int8_t(rec8(g,manager,0x28c));
+    const auto team=g.manager_teams.at(size_t(manager));
+    if(!g.projected_match_clubs.empty()&&team>=0&&size_t(team)<g.projected_match_clubs.size())return std::max(owned,g.projected_match_clubs[size_t(team)].played_league_home_games);
+    return owned;
+}
 // The redraw of BalanceFromGame2 (with its continuation Redraw and the patch at
 // Redraw2): recomputes the items if `refresh` asks for it, then the spectator income
 // and the totals.
@@ -178,7 +184,7 @@ void redraw(const GameState& source, BalancePlanDraft& d) {
         d.days_left = 0x16d - source.season_day();
         const bool first_of_month = source.date == 0 || month_code(source.date - 1) != month;
         if (source.season_day() != 0 && month == 7 && first_of_month) d.months_left = d.days_left = 0;
-        home -= int8_t(rec8(source, m, 0x28c)) + int8_t(rec8(source, m, 0x28d)) + int8_t(rec8(source, m, 0x28e));
+        home -= played_home_games(source,m) + int8_t(rec8(source, m, 0x28d)) + int8_t(rec8(source, m, 0x28e));
         if (home < 0) home = 0;
     } else {
         d.months_left = 12;
@@ -240,7 +246,7 @@ void redraw(const GameState& source, BalancePlanDraft& d) {
     if (view == 1) {
         int32_t sold = int32_t(uint16_t(rec8(source, m, 0x2ac) | rec8(source, m, 0x2ad) << 8));
         if (r[kBalanceAverageGate] < sold) sold = r[kBalanceAverageGate];
-        int32_t games = r[kBalanceLeagueHomeGames] - int8_t(rec8(source, m, 0x28c));
+        int32_t games = r[kBalanceLeagueHomeGames] - played_home_games(source,m);
         if (games < 0) games = 0;
         season_tickets = wrap(int64_t((sold * 0x46) / 100) * r[kBalanceTicketPrice] * games);
     }

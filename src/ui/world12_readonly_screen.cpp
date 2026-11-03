@@ -6,7 +6,7 @@ World12ReadonlyScreen::World12ReadonlyScreen(const std::filesystem::path& data,W
     else if(state_.identity.menu==23&&state_.statistics)statistics_=std::make_unique<World12StatisticsScreen>(data,state_,source);
     else if(state_.identity.menu==4&&state_.achievements)achievements_=std::make_unique<AchievementsScreen>(data,*state_.achievements,source);
     else if(state_.identity.menu==9&&state_.indoor)indoor_=std::make_unique<IndoorStandingsScreen>(data,*state_.indoor,source);
-    else if(state_.identity.menu==8&&state_.calendar&&!state_.top_scorers&&!state_.records){if(state_.calendar->reschedule_manager>=0||state_.calendar->friendly_selection||!state_.calendar->reschedule_options.empty())throw FormatError("world12: readonly calendar cannot own rescheduling");DeskRequest owner;owner.kind=DeskRequestKind::open_menu;owner.menu_kind=8;owner.manager_slot=state_.identity.manager;owner.revision=state_.identity.revision;calendar_=std::make_unique<CalendarScreen>(data,*state_.calendar,std::string{},state_.decorated_background,-1,owner,source);}
+    else if((state_.identity.menu==8||state_.identity.menu==7)&&state_.calendar&&!state_.top_scorers&&!state_.records){if(state_.identity.menu==8&&(state_.calendar->reschedule_manager>=0||state_.calendar->friendly_selection||!state_.calendar->reschedule_options.empty()))throw FormatError("world12: readonly calendar cannot own rescheduling");DeskRequest owner;owner.kind=DeskRequestKind::open_menu;owner.menu_kind=state_.identity.menu;owner.manager_slot=state_.identity.manager;owner.revision=state_.identity.revision;calendar_=std::make_unique<CalendarScreen>(data,*state_.calendar,std::string{},state_.decorated_background,-1,owner,source);}
     else if(state_.identity.menu==20&&state_.top_scorers&&!state_.records)top_=std::make_unique<TopScorersScreen>(data,*state_.top_scorers,source);
     else if((state_.identity.menu==25||state_.identity.menu==26)&&state_.records&&!state_.top_scorers)records_=std::make_unique<DeskRecordsScreen>(data,*state_.records,source);
     else throw FormatError("world12: readonly view lacks its actual Original screen");
@@ -16,6 +16,7 @@ bool World12ReadonlyScreen::capture(bool changed){
     if(balance_&&balance_->pending()){if(balance_->pending()->identity!=state_.balance->identity)throw FormatError("world12: balance changed its child owner");World12ReadonlyRequest request;request.identity=state_.identity;request.action=World12ReadonlyAction::balance;request.balance_request=*balance_->pending();pending_=request;}
     else if(statistics_&&statistics_->pending())pending_=*statistics_->pending();
     else if(achievements_&&achievements_->pending())pending_=World12ReadonlyRequest{state_.identity,World12ReadonlyAction::close,state_.selection.metric};
+    else if(calendar_&&calendar_->pending_reschedule()){World12ReadonlyRequest request;request.identity=state_.identity;request.action=World12ReadonlyAction::reschedule;request.reschedule_request=*calendar_->pending_reschedule();pending_=request;}
     else if(calendar_&&calendar_->close_requested())pending_=World12ReadonlyRequest{state_.identity,World12ReadonlyAction::close,state_.selection.metric};
     else if(top_&&top_->pending()){
         const auto& request=*top_->pending();if(request.identity!=state_.top_scorers->identity)throw FormatError("world12: readonly child changed identity");

@@ -8,6 +8,7 @@
 #include <bit>
 #include <limits>
 #include <algorithm>
+#include "game/world12/replay_rules.hpp"
 #include <map>
 namespace bmh::app::world12 {
 using namespace bmh::world12;
@@ -90,8 +91,9 @@ WeatherPreparation prepare_event_weather(CareerSnapshot& state,ManagerActionOwne
     std::copy(catalogue.begin(),catalogue.end(),event.referee_properties.begin());
     std::vector<FixtureWeatherRequest> requests;
     for(const auto& league:ticket->leagues) {
-        PreparedGroup group;group.league=league.appointment.league;group.round=league.appointment.round;
-        for(auto fixture:league.matches){requests.push_back({fixture,2});group.matches.push_back({fixture});}
+        PreparedGroup group;group.league=league.appointment.league;group.round=league.appointment.round;group.replay=!league.ordinary;
+        if(group.replay){group.source_entry=replay_source_entry(sources.german);group.flags=sources.german.u8(cup_entry_address(group.source_entry)+0x14);}
+        for(auto fixture:league.matches){requests.push_back({fixture,group.flags});group.matches.push_back({fixture});}
         event.groups.push_back(std::move(group));
     }
     for(const auto& cup:ticket->cups) {

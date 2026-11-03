@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "game/world12/league_history.hpp"
 #include "game/world12/standings.hpp"
+#include "game/world12/rescheduling.hpp"
 #include "game/matchday.hpp"
 #include <algorithm>
 #include <limits>
@@ -31,15 +32,18 @@ uint8_t league_history_position(const League& league,uint8_t rank){
 void record_completed_league_history(CareerSnapshot& state,const CareerSnapshot& before,const std::vector<CompletedLeagueRound>& completed){
     require(state.season==before.season&&state.date==before.date&&state.calendar==before.calendar&&state.world.catalogue==before.world.catalogue&&state.world.membership==before.world.membership,"day/season/membership owner changed before publication");
     state.world.validate();state.results.validate(state.world.catalogue);before.world.validate();before.results.validate(before.world.catalogue);
-    auto candidate=state;std::set<LeagueId> seen;
+    auto candidate=state;std::set<std::pair<LeagueId,uint8_t>> seen;
     for(const auto& round:completed){
-        const auto& league=state.world.catalogue.league(round.league);require(seen.insert(round.league).second&&round.round==before.league_rounds.at(round.league.value)+1&&round.round==state.league_rounds.at(round.league.value)&&round.results.size()==size_t(league.clubs/2),"round is stale, repeated or incomplete");
-        for(int r=1;r<=league.rounds();++r)for(int m=0;m<league.clubs/2;++m){const auto& actual=state.results.result(state.world.catalogue,round.league,r,m);const auto& old=before.results.result(before.world.catalogue,round.league,r,m);if(r==round.round)require(!old.played&&actual==round.results[size_t(m)]&&actual.played,"real completed score receipt is missing or already consumed");else require(actual==old,"unrelated league results changed");}
+        const auto& league=state.world.catalogue.league(round.league);
+        const auto fixtures=selected_league_fixtures(state.world,round.league,round.round,round.match_indices);
+        require(seen.emplace(round.league,round.round).second&&round.results.size()==fixtures.size(),"round is repeated or incomplete");
+        require(round.ordinary?(round.round==before.league_rounds.at(round.league.value)+1&&state.league_rounds.at(round.league.value)==round.round):(state.league_rounds.at(round.league.value)>=before.league_rounds.at(round.league.value)),"ordinary/replay cursor changed incorrectly");
+        for(size_t m=0;m<round.results.size();++m){const int index=round.match_indices.empty()?int(m):round.match_indices[m];require(!before.results.result(before.world.catalogue,round.league,round.round,index).played&&state.results.result(state.world.catalogue,round.league,round.round,index)==round.results[m]&&round.results[m].played,"completed score receipt missing or repeated");}
         if(!std::any_of(candidate.world.managers.begin(),candidate.world.managers.end(),[&](const auto& manager){return candidate.world.clubs.at(manager.club).league==round.league;}))continue;
         TableQuery query;for(const auto& manager:candidate.world.managers)if(manager.match_state&&candidate.world.clubs.at(manager.club).league==round.league){const auto cut=manager.match_state->point_deduction;if((cut>>5)==3)query.point_deductions[manager.club]=cut&31;}
-        const auto table=compute_standings(candidate.world,candidate.results,round.league,round.round,query);
+        const auto table=compute_standings(candidate.world,candidate.results,round.league,visible_league_round(candidate,round.league),query);
         for(auto club:candidate.world.membership[round.league.value].clubs){
-            const auto found=std::find_if(candidate.world.managers.begin(),candidate.world.managers.end(),[&](const auto& manager){return manager.club==club;});if(found==candidate.world.managers.end()||!found->career)continue;
+            const auto found=std::find_if(candidate.world.managers.begin(),candidate.world.managers.end(),[&](const auto& manager){return manager.club==club;});if(found==candidate.world.managers.end()||!found->career||std::none_of(fixtures.begin(),fixtures.end(),[&](const auto& f){return f.home==club||f.away==club;}))continue;
             auto& manager=*found;auto& career=*manager.career;if(!career.season_records&&!career.season_services)continue;
             const auto prior=std::find_if(before.world.managers.begin(),before.world.managers.end(),[&](const auto& old){return old.seat==manager.seat;});require(prior!=before.world.managers.end()&&prior->club==club&&prior->career,"canonical manager owner changed");
             const auto& old=*prior->career;require(career.season_records.has_value()==old.season_records.has_value()&&career.season_services.has_value()==old.season_services.has_value(),"known history ownership changed");

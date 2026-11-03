@@ -24,9 +24,10 @@ The shared runtime release uses the graphical game. The earlier native editor
 and console are separate Classic-profile tools; they are not presented as an
 editor or console for the authoritative shared World model.
 
-Manual postponement of an individual league fixture and joining a running
-career need separate saved transaction models. They are explicit Beta limitations,
-not silent calls into the incompatible packed Classic state. Current accounting
-is shown from actual saved values; interactive future balance planning remains
-separate. These controls must never manufacture a calendar, manager, score or
-financial history to make a screen appear complete.
+The next milestone implements [individual postponements](RESCHEDULING.md),
+[running manager entry](RUNNING_MANAGERS.md) and [balance planning](BALANCE.md)
+through their saved canonical transaction models and the Original screens.
+Fixture moves retain the original result cell and execute the Source replay
+competition. A new manager takes over the actual existing club. Planning records
+remain separate from actual booked funds. No screen manufactures scores or
+unrecorded financial history.

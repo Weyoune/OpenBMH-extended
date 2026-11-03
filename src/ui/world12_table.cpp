@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "ui/world12_table.hpp"
+#include "game/world12/rescheduling.hpp"
 #include "formats/executable_layout.hpp"
 #include "ui/setup.hpp"
 #include "ui/manager.hpp"
@@ -23,7 +24,7 @@ uint8_t rank_color(const Catalogue& catalogue,const League& league,int rank){
 }
 }
 void normalize_world12_table_range(World12TableSelection& s,const CareerSnapshot& snapshot){
-    const auto& league=snapshot.world.catalogue.league(s.league);const int played=snapshot.league_rounds.at(s.league.value);
+    const auto& league=snapshot.world.catalogue.league(s.league);const int played=visible_league_round(snapshot,s.league);
     if(s.first_round<0||s.first_round>=league.rounds())throw FormatError("world12: invalid first table round");
     if(s.end_round>league.rounds()||s.end_round<=s.first_round||s.end_round>played)s.end_round=played;
     if(s.end_round<=s.first_round)s.end_round=s.first_round+1;
@@ -35,7 +36,7 @@ World12TableSelection initial_world12_table_selection(const CareerSnapshot& snap
     out.group=snapshot.world.clubs.at(manager->club).country==Country::germany?TableGroup::germany:TableGroup::england;
     out.word=uint16_t(word&0xff7f);out.normal_mode=normal;out.aggregation=4;
     if((word&4)==0)out.aggregation|=1;if((word&2)==0)out.aggregation|=2;
-    out.end_round=snapshot.league_rounds.at(out.league.value);normalize_world12_table_range(out,snapshot);return out;
+    out.end_round=visible_league_round(snapshot,out.league);normalize_world12_table_range(out,snapshot);return out;
 }
 void apply_world12_table_control(World12TableSelection& s,int control,const Catalogue& catalogue){
     switch(control){
@@ -62,7 +63,7 @@ World12TableState world12_table_state(const CareerSnapshot& snapshot,const World
     const auto& league=catalogue.league(selection.league);auto& table=out.table;
     table.manager_slot=owner.manager;table.league_id=int(selection.league.value);table.league_name=league.name;
     table.header_text=original_to_utf8(texts[(layout::LeagueTable_OriginalToUtf8_TextPointer2-layout::TextPointerTable)/4]);
-    table.rounds_played=snapshot.league_rounds.at(selection.league.value);table.raw_round_byte=uint8_t(table.rounds_played);
+    table.rounds_played=visible_league_round(snapshot,selection.league);table.raw_round_byte=uint8_t(table.rounds_played);
     table.display_word=selection.word;table.source_controls_projection=true;table.source_aggregation_flags=selection.aggregation;
     table.source_normal_mode=selection.normal_mode;table.points_mode=selection.normal_mode+14-int((selection.word>>3)&14);
     table.source_show_previous_rank=false; // Supplied by the owning runtime projection.

@@ -195,11 +195,11 @@ void Session::play_prepared_matches(uint64_t revision,const HumanRoundHooks& hoo
             AiLeagueConditions c;c.date=candidate.date;c.month=month_code(candidate.date);
             c.temperature=match.temperature;c.rain=match.rain;c.referee=match.referee;c.spectators=*match.spectators;
             c.referee_properties.assign(event.referee_properties.begin(),event.referee_properties.end());
-            c.teams_prepared=true;c.kickoff_disposition=match.kickoff_disposition;
+            c.teams_prepared=true;c.kickoff_disposition=match.kickoff_disposition;if(group.replay)c.replay_source=group.source_entry;
             c.pools_selected=candidate.world.economy&&candidate.world.economy->pools&&event.pools_matches&&std::find(event.pools_matches->begin(),event.pools_matches->end(),match.fixture)!=event.pools_matches->end();
             if(!candidate.world.economy||!candidate.world.economy->presentation_options)throw FormatError("world12: match presentation options are unknown in this old career");
             const auto& options=*candidate.world.economy->presentation_options;c.presentation_buttons.assign(options.begin(),options.end());conditions.push_back(std::move(c));}
-        if(group.league)leagues.push_back({{event.day,*group.league,group.round},std::move(conditions)});
+        if(group.league){const auto plan=std::find_if(ticket.leagues.begin(),ticket.leagues.end(),[&](const auto& p){return p.appointment.league==*group.league&&p.appointment.round==group.round&&p.ordinary!=group.replay;});if(plan==ticket.leagues.end())throw FormatError("world12: prepared league lost its selected date ticket");leagues.push_back({plan->appointment,std::move(conditions),plan->match_indices,plan->ordinary});}
         else if(group.indoor){const auto planned=std::find_if(ticket.indoor.begin(),ticket.indoor.end(),[&](const auto& plan){return plan.source_entry==group.source_entry&&plan.tournament==group.indoor_tournament;});if(planned==ticket.indoor.end())throw FormatError("world12: prepared indoor group lost its pass ticket");indoor.push_back({*planned,std::move(conditions)});}
         else if(group.european){const auto planned=std::find_if(ticket.european.begin(),ticket.european.end(),[&](const auto& plan){return plan.competition==*group.european&&plan.source_entry==group.source_entry;});if(planned==ticket.european.end())throw FormatError("world12: prepared European group lost its ticket");european.push_back({*planned,std::move(conditions)});}
         else if(group.regional_playoff){if(!ticket.regional_playoff)throw FormatError("world12: prepared regional group lost its ticket");regional=RegionalDayConditions{*ticket.regional_playoff,std::move(conditions)};}

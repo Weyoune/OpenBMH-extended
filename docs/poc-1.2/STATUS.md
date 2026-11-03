@@ -1,6 +1,7 @@
 # OpenBMH-Extended 1.0 Beta status
 
-The release line is `1.0.0-beta.1`; implementation continues on `main`.
+Published Beta 1 is `1.0.0-beta.1`; the next implementation milestone is
+`1.0.0-beta.2` on `main`. A version string alone is not a published release.
 The old `world12` and `dual-classic-2` names identify the shared data model,
 not a different public product version. Classic remains independent.
 
@@ -9,7 +10,7 @@ not a different public product version. Classic remains independent.
 | Area | Current behavior |
 | --- | --- |
 | World | Shared German/English career, stable wide club/player/crest IDs |
-| Human managers | One to four managers selected at game start, including mixed countries |
+| Human managers | One to four managers; running entry with stable existing clubs/results, including mixed countries |
 | Countries | Independent Germany/England/national-play controls; English Premier League fallback when England is disabled |
 | Leagues | Germany five times 18; England 20/20/20/20/10, four visible selectable divisions; Spain/France/Italy each 18 |
 | Competitions | Separate domestic cups, shared European cups, national competitions, indoor tournaments and promotion playoffs |
@@ -20,9 +21,9 @@ not a different public product version. Classic remains independent.
 | Statistics | Actual season and persistent title/player histories; unknown older facts remain unknown |
 | Saves | Typed FBM career snapshots, both RNG streams and owned match/attendance receipts |
 | Runtime data | Self-contained finalized OBD; no original executable or launcher required |
-| Accounting | Recorded current values; interactive forecast planning deferred |
-| Postponement | Calendar available; manual Verlegen remains an explicit Beta limitation |
-| Joining a running game | Deferred; select all human managers at game start |
+| Accounting | Recorded current values plus saved current/real/future planning, Original controls and warning acknowledgement |
+| Postponement | Original Verlegen calendar; individual early/deferred home fixtures, undo, real replays and saved receipts |
+| Joining a running game | Original options/club picker; staged atomic publication, existing loans retained |
 | Tools | Earlier obdeddi/console remain Classic-profile tools, separate from the shared runtime |
 
 ## Verification and limitations

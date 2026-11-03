@@ -5,6 +5,8 @@ namespace bmh::world12 {
 struct ScheduledLeagueRound {
     LeagueAppointment appointment;
     std::vector<Fixture> matches;
+    std::vector<uint8_t> match_indices;
+    bool ordinary=true;
     bool operator==(const ScheduledLeagueRound&)const=default;
 };
 struct ScheduledCupLeg {
@@ -28,7 +30,7 @@ struct DayTicket {
     uint8_t indoor_total=0,indoor_completed=0;
     bool operator==(const DayTicket&)const=default;
 };
-struct CompletedLeagueRound {LeagueId league;uint8_t round=0;std::vector<LeagueResult> results;};
+struct CompletedLeagueRound {LeagueId league;uint8_t round=0;std::vector<LeagueResult> results;std::vector<uint8_t> match_indices;bool ordinary=true;};
 // Scores come from the match layer. This coordinator never manufactures match
 // outcomes or consumes either gameplay RNG to satisfy a calendar transition.
 // Runtime admission never removes source appointments from the saved calendar.

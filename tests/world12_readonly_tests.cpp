@@ -60,6 +60,7 @@ void balance_pages(const GameState& ref,const LeImage& source){
     for(uint32_t league:{0u,5u,8u}){
         auto state=fixture(ref,{league});auto& actor=state.world.managers[1];
         actor.finance->balance=-123456;actor.finance->income=700;actor.finance->expenses=1800;actor.finance->bonus_paid=91;
+        actor.finance->baseline->account_flags=0; // Explicit Source so-far view for booked-row assertions.
         actor.career->season_services.emplace();actor.career->season_services->ticket_income=999;actor.career->season_services->total_ticket_income=400;
         actor.career->training_plan=17;actor.match_state->attendance.emplace();auto& gates=*actor.match_state->attendance;gates.league_home_count=2;gates.spectators[0]=20000;gates.spectators[1]=30000;
         state.world.economy.emplace();auto& economy=state.world.economy->managers[3];economy.monthly.emplace();economy.depreciation=100;economy.interest_income=600;economy.overdraft_interest=1700;
@@ -73,13 +74,15 @@ void balance_pages(const GameState& ref,const LeImage& source){
         check(actual.draft.rows[kBalanceLeagueHomeGames]==int(state.world.membership[league].clubs.size())-1&&actual.draft.rows[kBalanceTicketPrice]==17&&actual.draft.rows[kBalanceGateSoFar]==25000&&actual.draft.rows[kBalanceAccount]==-123456,"balance lost actual20club count/ticket/attendance/account");
         check(!actual.actuals_only&&actual.row_available[kBalanceOtherHomeGames]&&actual.row_available[kBalanceAverageGate]&&actual.capability_notice.empty(),"balance planning controls are unavailable");
         check(state==before&&read_save(make_save(state))==state,"balance changed canonical career or RNG");
+        auto old_view=state;for(auto& manager:old_view.world.managers)if(manager.seat==3)manager.finance->baseline->account_flags=1;const auto old_view_before=old_view;const auto retained=ui::world12_readonly_state(old_view,id,{},ref,source,Image(320,240));check(retained.balance->draft.view==BalanceView::real&&!old_view.world.economy->managers[3].balance_plan&&old_view==old_view_before,"first plan discarded the saved real-view preference or invented history");
         auto p=project_manager_desktop(state,ref,state.world.membership[league].clubs);auto& local=p.state;auto draft=actual.draft;
         cycle_balance_view(local,draft);check(draft.view==BalanceView::real&&draft.rows[kBalanceLeagueHomeGames]==int(state.world.membership[league].clubs.size())-1,"country-aware real balance home count differs");
         check(edit_balance_plan(local,draft,kBalanceOtherHomeGames,4)==BalanceEditStatus::changed&&edit_balance_plan(local,draft,kBalanceTicketPrice,20)==BalanceEditStatus::changed,"editable balance inputs refused");
         cycle_balance_view(local,draft);check(draft.view==BalanceView::future,"future balance view missing");
         check(edit_balance_plan(local,draft,0,123456)==BalanceEditStatus::changed,"future income adjustment refused");
         local.memory.add_block(layout::PlanTicketPrice+uint32_t(draft.manager),1);(void)close_balance_plan(local,draft);const auto stored=balance_plan_from_game(local,draft.manager);
-        auto planned=state;planned.world.economy->managers[3].balance_plan=stored;check(read_save(make_save(planned))==planned&&decode_world(encode_world(planned.world))==planned.world,"balance plan lost its save/world roundtrip");
+        auto planned=state;planned.world.economy->managers[3].balance_plan=stored;for(auto& manager:planned.world.managers)if(manager.seat==3)manager.finance->baseline->account_flags=stored.view;check(read_save(make_save(planned))==planned&&decode_world(encode_world(planned.world))==planned.world,"balance plan lost its save/world roundtrip");
+        auto conflicting=planned;for(auto& manager:conflicting.world.managers)if(manager.seat==3)manager.finance->baseline->account_flags=0;rejects([&]{conflicting.validate();},"plan admitted contradictory saved/native view owners");
         const auto reopened=ui::world12_readonly_state(planned,id,{},ref,source,Image(320,240));check(reopened.balance->draft.view==draft.view&&reopened.balance->draft.adjustments==draft.adjustments&&reopened.balance->draft.rows[kBalanceOtherHomeGames]==4&&reopened.balance->draft.rows[kBalanceTicketPrice]==20,"reopened plan lost edits or view");
         auto reset=reopened.balance->draft;reset_balance_plan(local,reset);check(reset.adjustments==std::array<int32_t,18>{},"actual-values reset retained annual adjustments");
         auto bytes=encode_world(planned.world);auto old=bmh::cli::parse_json(std::string(bytes.begin(),bytes.end()));old.object()->at("version")=42;const auto json=bmh::cli::dump_json(old);rejects([&]{decode_world(Bytes(json.begin(),json.end()));},"older schema silently lost an edited plan");

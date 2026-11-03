@@ -42,6 +42,9 @@ ManagerJoiningOutcome add_running_manager(CareerSnapshot& state,const InitialMan
     world.managers.push_back(std::move(manager));
     const bool indoor=candidate.prepared_event&&std::any_of(candidate.prepared_event->groups.begin(),candidate.prepared_event->groups.end(),[&](const auto& g){return g.indoor&&std::any_of(g.matches.begin(),g.matches.end(),[&](const auto& m){return m.fixture.home==choice.club||m.fixture.away==choice.club;});});
     const TacticalPolicy policy{settings.mode,indoor,false,settings.foreign_rule,settings.difficulty};
+    // The unoccupied seat's template plan is not the incoming manager's view.
+    // Its complete economy is captured below after Source personal initialization.
+    world.economy->managers[choice.seat].balance_plan.reset();
     initialize_joining_manager_contracts(world,choice.seat,initial,policy,random);
     auto& added=*std::find_if(world.managers.begin(),world.managers.end(),[&](const auto& m){return m.seat==choice.seat;});
     install_manager_career_state(initial,choice.seat,*added.career,{});install_manager_finance(initial,choice.seat,*added.finance);

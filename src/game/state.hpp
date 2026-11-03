@@ -52,6 +52,7 @@ struct GameState {
         int league_size=-1,relegation_places=-1,round_cursor=-1,table_rank=-2;
         std::string league_name;
         std::vector<ProjectedTablePrediction> predictions;
+        int played_league_home_games=-1; // Actual typed results, including before a human takeover.
     };
     // Runtime-only context for bounded typed-world projections. Empty retains
     // the original positional lookup; never serialized into a legacy save.

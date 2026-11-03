@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "game/world12/match_projection.hpp"
 #include "game/world12/prediction.hpp"
+#include "game/world12/progression.hpp"
 #include "game/world12/standings.hpp"
 #include "game/world12/manager_match_state.hpp"
 #include "game/world12/manager_tactics.hpp"
@@ -80,9 +81,12 @@ AiMatchProjection AiMatchProjection::create_for_human_leagues(const CareerSnapsh
     if(groups.empty()||groups.size()>4)throw FormatError("world12: human league projection needs 1-4 complete leagues");
     for(const auto& [league,clubs]:groups){
         const auto& members=snapshot.world.membership.at(league.value).clubs;
-        if(!snapshot.world.catalogue.league(league).active||clubs!=std::set<ClubId>(members.begin(),members.end())||
-            !std::any_of(snapshot.world.managers.begin(),snapshot.world.managers.end(),[&](const auto& manager){return clubs.contains(manager.club);}))
-            throw FormatError("world12: human league projection lacks a complete owned league");
+        if(!snapshot.world.catalogue.league(league).active||!std::any_of(snapshot.world.managers.begin(),snapshot.world.managers.end(),[&](const auto& manager){return clubs.contains(manager.club);}))throw FormatError("world12: human league projection lacks an active human participant");
+        if(clubs!=std::set<ClubId>(members.begin(),members.end())){
+            const auto ticket=prepare_day(snapshot);std::set<ClubId> expected;
+            if(ticket)for(const auto& scheduled:ticket->leagues)if(scheduled.appointment.league==league&&std::any_of(snapshot.world.managers.begin(),snapshot.world.managers.end(),[&](const auto& m){return std::any_of(scheduled.matches.begin(),scheduled.matches.end(),[&](const auto& f){return f.home==m.club||f.away==m.club;});}))for(const auto& f:scheduled.matches){expected.insert(f.home);expected.insert(f.away);}
+            if(expected!=clubs)throw FormatError("world12: partial human league projection lost its actual fixture ticket");
+        }
     }
     return create_humans(snapshot,requested,base,policy,80);
 }
@@ -144,10 +148,12 @@ AiMatchProjection AiMatchProjection::create_humans(const CareerSnapshot& snapsho
     }
     std::map<ClubId,uint8_t> deductions;
     for(const auto& manager:world.managers)if(manager.match_state&&manager.match_state->point_deduction>>5==3)deductions[manager.club]=manager.match_state->point_deduction&31;
-    std::map<LeagueId,std::map<ClubId,int>> ranks;
+    std::map<LeagueId,std::map<ClubId,int>> ranks,played_home;
     for(size_t team=0;team<requested.size();++team) {
         const auto& club=world.clubs.at(requested[team]);const auto& league=world.catalogue.league(club.league);auto& context=local.projected_match_clubs[team];
         context.league_size=league.clubs;context.relegation_places=league.relegation;context.round_cursor=snapshot.league_rounds[club.league.value];context.league_name=league.name;context.table_rank=-1;
+        if(!played_home.contains(club.league)){auto& counts=played_home[club.league];for(int r=1;r<=league.rounds();++r){std::vector<Fixture> fixtures;for(int m=0;m<league.clubs/2;++m)if(snapshot.results.result(world.catalogue,club.league,r,m).played){if(fixtures.empty())fixtures=league_fixtures(world,club.league,r);++counts[fixtures[size_t(m)].home];}}}
+        context.played_league_home_games=played_home.at(club.league)[club.id];
         if(context.round_cursor>0) {
             TableQuery query;query.three_points=policy.three_points;for(const auto& [id,value]:deductions)if(world.clubs.at(id).league==club.league)query.point_deductions[id]=value;
             if(!ranks.contains(club.league)){const auto rows=compute_standings(world,snapshot.results,club.league,context.round_cursor,query);for(const auto& row:rows)ranks[club.league][row.club]=int(row.rank)-1;}

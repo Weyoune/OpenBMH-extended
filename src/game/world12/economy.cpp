@@ -98,6 +98,7 @@ void initialize_career_economy(CareerSnapshot& state,const GameState& reference)
     if(reference.memory.has(layout::AdGroupId))e.advertising_group=reference.memory.u8(layout::AdGroupId);
     if(reference.memory.has(layout::Coupon)&&reference.memory.has(layout::Coupon+99)) {e.pools.emplace();for(size_t n=0;n<4;++n)e.pools->managers[n]=read_coupon(reference,n);for(uint32_t n=0;n<11;++n)e.pools->previous_outcomes[n]=reference.memory.u8(layout::MatchdaySetup_EvaluatePoolsCoupon_RuntimeField+n);}
     const std::array<uint8_t,4> identity{0,1,2,3};for(size_t n=0;n<4;++n)e.managers[n]=read_manager(reference,n,identity);
+    for(const auto& manager:state.world.managers)if(manager.finance&&manager.finance->baseline&&e.managers[manager.seat].balance_plan)e.managers[manager.seat].balance_plan->view=uint8_t(std::clamp(int(int8_t(manager.finance->baseline->account_flags)),0,2));
     // Initial reference mail must be empty: do not import an unrelated career.
     if(reference.mailbox.size()!=kMailboxEntries*kMailboxEntry||std::any_of(reference.mailbox.begin(),reference.mailbox.end(),[](auto b){return b!=0;}))throw std::invalid_argument("world12: initial economy reference contains mailbox state");
     auto candidate=state;candidate.world.economy=e;

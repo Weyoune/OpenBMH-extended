@@ -67,3 +67,18 @@ Unknown labels are rejected separately from checksum failures.
 Original Football Limited V2.20 saves use a different state block list despite sharing the signature and rolling cipher. They are not interchangeable with the V2.24 layout. Reading an English installation and importing its original saves are separate features; do not edit a version string to bypass the distinction. OpenBMH's own English careers use the session's supported save representation.
 
 Keep a backup before using a save with another engine version. Unknown bytes retained for compatibility are not safe targets for direct client manipulation.
+
+## Extended shared careers
+
+Extended uses the separate typed `O1.2` container and `OBMH12S*` snapshot
+framing; these are not original DOS save streams. Readers retain supported A–M
+snapshots. `OBMH12SN` adds individual fixture moves and saved replay-group
+identity. Completed moved results keep their original league/round/match cell.
+Old readers reject N, and marker changes cannot discard its fields.
+
+The embedded World codec is independently versioned: schema 43 adds nullable
+manager balance plans. Older absent plans stay unknown until explicitly saved
+through the planning screen. Native UI/modal ownership remains runtime-only.
+See [Extended saves](../poc-1.2/SAVE_LOAD.md),
+[rescheduling](../poc-1.2/RESCHEDULING.md) and
+[planning](../poc-1.2/BALANCE.md).

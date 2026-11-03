@@ -29,7 +29,7 @@ CareerSnapshot base(const GameState& ref,const LeImage& source){
 int main()try{
     const auto ref=reference();const auto source=rules();size_t cases=0;
     for(uint32_t target:{0u,1u,2u,3u,4u,5u,6u,7u,8u}){
-        auto state=base(ref,source);state.world.settings->planned_managers=2;
+        auto state=base(ref,source);state.world.settings->planned_managers=2;state.world.economy->managers[1].balance_plan.emplace();
         const auto club=state.world.membership[target].clubs[3];state.world.clubs.at(club).season_stats.counters[0]=4;
         const auto before=state;const auto players=state.world.players;const auto owner=state.world.managers[0];const auto members=state.world.membership;
         const auto outcome=add_running_manager(state,{1,club,{target},"Visitor",1,1},ref,source);

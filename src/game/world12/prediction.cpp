@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "game/world12/prediction.hpp"
 #include "game/world12/standings.hpp"
+#include "game/world12/rescheduling.hpp"
 #include <algorithm>
 #include <stdexcept>
 namespace bmh::world12 {
@@ -11,7 +12,7 @@ LeaguePrediction predict_league(const CareerSnapshot& state,ClubId id,int mode,c
     const auto league_id=club->second.league;const auto& league=state.world.catalogue.league(league_id);
     if(!league.active)throw std::invalid_argument("world12: disabled league prediction");
     LeaguePrediction prediction;prediction.result.ranks.fill(1);
-    const int rounds=state.league_rounds[league_id.value];if(rounds<2 || rounds>=league.rounds())return prediction;
+    const int rounds=visible_league_round(state,league_id);if(rounds<2 || rounds>=league.rounds())return prediction;
     const auto& members=state.world.membership[league_id.value].clubs;
     const auto found=std::find(members.begin(),members.end(),id);
     if(found==members.end())throw std::invalid_argument("world12: prediction club absent from its league");

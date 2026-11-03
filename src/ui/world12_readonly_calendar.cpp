@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "ui/world12_readonly.hpp"
 #include "game/world12/progression.hpp"
+#include "game/world12/rescheduling.hpp"
 #include "game/matchday_setup.hpp"
 #include "game/messages.hpp"
 #include "ui/manager.hpp"
 #include <set>
+#include <climits>
 #include <algorithm>
 namespace bmh::ui {
 using namespace bmh::world12;
@@ -20,6 +22,7 @@ CalendarState world12_calendar_state(const CareerSnapshot& state,const LeImage& 
         CalendarDayProjection day;day.date=date;day.day_counter=absolute;day.season_day=int(offset)-out.leading_days;day.current_day=absolute==state.date;day.owned_information=std::string{};if(day.current_day)out.current_day=int(offset);std::vector<std::string> labels;
         if(day.season_day>=0&&day.season_day<state.calendar->schedule.days){const auto relative=uint16_t(day.season_day);
             for(const auto& appointment:state.calendar->schedule.leagues_on(relative)){if(!visible.contains(appointment.league))continue;const auto& league=state.world.catalogue.league(appointment.league);labels.push_back(utf8_to_original(league.name));const auto bit=league.playable?league.country==Country::germany?(league.local_index<2?league.local_index:league.local_index<4?2:3):std::min<int>(league.local_index,3):4;day.competitions|=1u<<bit;}
+            if(std::any_of(state.reschedules.begin(),state.reschedules.end(),[&](const auto& m){return m.target_day==relative;})){day.competitions|=1u<<14;day.raw_entry|=0x4000;labels.push_back("Nachholspiele");}
             for(const auto& appointment:admitted_other_appointments(state,relative)){const auto bits=day_competitions(flags,appointment.source_entry);day.competitions|=bits;
                 for(int bit=5;bit<19;++bit)if(bits&(1u<<bit)){const auto address=bit<16?layout::Calendar_Information_TextPointer2+uint32_t(bit)*4:bit==16?layout::Calendar_Information_TextPointer5:layout::Calendar_Information_TextPointer6;labels.push_back(label(address));}}
         }
@@ -27,5 +30,14 @@ CalendarState world12_calendar_state(const CareerSnapshot& state,const LeImage& 
         out.days.push_back(std::move(day));
     }
     if((out.days.size()!=365&&out.days.size()!=366)||out.current_day<0)throw FormatError("world12: readonly calendar current date requires its next real season owner");return out;
+}
+CalendarState world12_reschedule_calendar_state(const CareerSnapshot& state,uint8_t seat,uint64_t revision,const LeImage& source,const TextDb& texts){
+    auto out=world12_calendar_state(state,source,texts);out.reschedule_manager=seat;
+    const auto native=[&](const FixtureReschedule& m,bool moved){const auto f=league_fixtures(state.world,m.league,m.round).at(m.match);if(f.home.value>INT_MAX||f.away.value>INT_MAX)throw FormatError("world12: calendar view identity exceeds native control width");return LeagueMatchRef{moved?m.target_day:m.source_day,int(m.round)-1,int(m.league.value),m.match,int(f.home.value),int(f.away.value)};};
+    for(const auto& m:reschedulable_fixtures(state,seat)){const auto dates=reschedule_dates(state,seat,m);RescheduleOption option;option.match=native(m,false);for(auto day:dates)option.target_days.push_back(day);out.reschedule_options.push_back(std::move(option));}
+    const auto actor=std::find_if(state.world.managers.begin(),state.world.managers.end(),[&](const auto& m){return m.seat==seat;});
+    for(const auto& m:state.reschedules){const auto f=league_fixtures(state.world,m.league,m.round).at(m.match);if(!m.played&&m.source_day>state.calendar->next_day&&m.target_day>state.calendar->next_day&&(f.home==actor->club||f.away==actor->club))out.moved_matches.push_back(native(m,true));}
+    for(auto& day:out.days){day.reschedule_target=std::any_of(out.reschedule_options.begin(),out.reschedule_options.end(),[&](const auto& o){return std::find(o.target_days.begin(),o.target_days.end(),day.season_day)!=o.target_days.end();});day.reschedule_source=std::any_of(out.reschedule_options.begin(),out.reschedule_options.end(),[&](const auto& o){return o.match.day==day.season_day&&!o.target_days.empty();});day.reschedule_undo=std::any_of(out.moved_matches.begin(),out.moved_matches.end(),[&](const auto& m){return m.day==day.season_day;});}
+    return out;
 }
 }

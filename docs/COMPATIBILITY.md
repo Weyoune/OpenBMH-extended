@@ -256,3 +256,10 @@ OpenBMH deviates from the original: an AI-club takeover preserves league members
 played matches and player ages instead of the original fresh-manager reshuffle.
 Actual Source personal contracts, funds and formations are initialized. Existing
 loans stay binding. See [running managers](poc-1.2/RUNNING_MANAGERS.md).
+
+## Extended individual fixture moves
+
+OpenBMH deviates from the original: replay collisions compare complete stable
+club identities across both countries, avoiding low-byte aliases between leagues.
+The actual original replay calculation and individual result cells are retained.
+See [rescheduling](poc-1.2/RESCHEDULING.md).

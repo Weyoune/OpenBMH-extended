@@ -6,6 +6,7 @@
 #include "ui/balance_plan.hpp"
 #include "ui/desk_records.hpp"
 #include "ui/calendar_state.hpp"
+#include "ui/calendar.hpp"
 #include "ui/indoor_standings.hpp"
 #include "ui/achievements.hpp"
 #include "ui/top_scorers_state.hpp"
@@ -29,7 +30,7 @@ struct World12ReadonlySelection {
     std::optional<bmh::world12::ManagerBalancePlan> balance_closed_plan;
     bool operator==(const World12ReadonlySelection&)const=default;
 };
-enum class World12ReadonlyAction:uint8_t {close,set_metric,toggle_scope,close_child,select_statistics_page,set_prediction,set_statistics_flags,select_title_category,select_alltime_nation,toggle_alltime_relative,balance};
+enum class World12ReadonlyAction:uint8_t {close,set_metric,toggle_scope,close_child,select_statistics_page,set_prediction,set_statistics_flags,select_title_category,select_alltime_nation,toggle_alltime_relative,balance,reschedule};
 struct World12ReadonlyRequest {
     World12ReadonlyIdentity identity;
     World12ReadonlyAction action=World12ReadonlyAction::close;
@@ -37,6 +38,7 @@ struct World12ReadonlyRequest {
     int value=-1,first_season=0;
     uint8_t expected_flags=0,target_flags=0;
     std::optional<BalanceRequest> balance_request;
+    std::optional<RescheduleAction> reschedule_request;
     bool operator==(const World12ReadonlyRequest&)const=default;
 };
 struct World12ReadonlyState {
@@ -58,6 +60,7 @@ AchievementsState world12_achievements(const bmh::world12::CareerSnapshot&,
 IndoorStandingsState world12_indoor_standings(const bmh::world12::CareerSnapshot&,
     const World12ReadonlyIdentity&,const GameState& reference,const LeImage&,const TextDb&);
 CalendarState world12_calendar_state(const bmh::world12::CareerSnapshot&,const LeImage&,const TextDb&);
+CalendarState world12_reschedule_calendar_state(const bmh::world12::CareerSnapshot&,uint8_t seat,uint64_t revision,const LeImage&,const TextDb&);
 World12ReadonlyState world12_readonly_state(const bmh::world12::CareerSnapshot&,
     const World12ReadonlyIdentity&,const World12ReadonlySelection&,const GameState& reference,
     const LeImage& source,const Image& underlay={},const HighscoreTable& highscore_rows={});

@@ -89,7 +89,7 @@ AnnualTransitionOutcome publish_annual_transition(CareerSnapshot& state,ManagerA
     else {
         MonthlyMarketPolicy listing;for(const auto& squad:candidate.world.national_squads)for(const auto& row:squad.roster)if(!row.empty())listing.national_squad.insert(row.player);
         const auto opening=stage_annual_opening_services(candidate,reference,texts,listing);candidate=opening.snapshot;out.game_draws+=opening.game_draws;out.watcom_draws+=opening.watcom_draws;
-        const auto calendar=make_annual_calendar(candidate.world.catalogue,german,english,candidate.date);candidate.calendar=CalendarCursor{calendar,0,before.calendar->revision+1};
+        const auto calendar=make_annual_calendar(candidate.world.catalogue,german,english,candidate.date);candidate.calendar=CalendarCursor{calendar,0,before.calendar->revision+1};candidate.reschedules.clear();
         if(candidate.world.catalogue.scope.germany){candidate.world.indoor=make_annual_indoor_season(candidate.world,before,german);candidate.world.regional_playoff=make_regional_playoff_season(candidate.world,german,calendar,target);}
     }
     candidate.validate();unchanged();if(score){

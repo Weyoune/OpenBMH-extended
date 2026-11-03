@@ -11,6 +11,7 @@ struct AiDayIdentity {uint64_t scope=0,revision=0;};
 struct AiDayLeagueConditions {
     bmh::world12::LeagueAppointment appointment;
     std::vector<bmh::world12::AiLeagueConditions> matches;
+    std::vector<uint8_t> match_indices;bool ordinary=true;
 };
 struct AiDayOutcome {
     std::vector<bmh::world12::AiLeagueRoundOutcome> leagues;

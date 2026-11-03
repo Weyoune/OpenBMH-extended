@@ -8,6 +8,7 @@
 #include "game/cup.hpp"
 #include "game/week.hpp"
 #include <algorithm>
+#include "game/world12/replay_rules.hpp"
 #include <limits>
 namespace bmh::app::world12 {
 using namespace bmh::world12;
@@ -42,7 +43,9 @@ AttendanceOutcome book_event_attendance(CareerSnapshot& state,ManagerActionOwner
         context.season_day=int(candidate.date-candidate.progress->season_start);
         uint32_t competition=uint32_t(match_team_league(local,home));uint8_t type=0;
         if(group.league){context.projected_matchdays=candidate.world.catalogue.league(*group.league).rounds();
-            context.projected_completed_rounds=candidate.league_rounds[group.league->value];}
+            context.projected_completed_rounds=candidate.league_rounds[group.league->value];
+            if(group.replay){type=10;competition=cup_entry_address(group.source_entry);if(group.source_entry!=replay_source_entry(sources.german)||group.flags!=sources.german.u8(competition+0x14))throw FormatError("world12: replay attendance Source programme changed");local.memory.add_block(competition,0x28);for(uint32_t b=0;b<0x28;++b)local.memory.set8(competition+b,sources.german.u8(competition+b));}
+        }
         else if(group.friendly){competition=cup_entry_address(24);type=11;const auto& source=group.friendly_national&&candidate.world.national_campaigns&&candidate.world.national_campaigns->primary_country==Country::england?sources.english:sources.german;if(group.flags!=friendly_source_flags(source))throw FormatError("world12: friendly gate Source metadata changed");local.memory.add_block(competition,0x28);for(uint32_t byte=0;byte<0x28;++byte)local.memory.set8(competition+byte,source.u8(competition+byte));}
         else if(group.national){
             const auto& campaign=candidate.world.national_campaigns->seasons.at(candidate.season);const auto& source=candidate.world.national_campaigns->primary_country==Country::england?sources.english:sources.german;

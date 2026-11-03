@@ -3,6 +3,7 @@
 #include "app/world12_visible_menu.hpp"
 #include "game/world12/desktop_projection.hpp"
 #include "game/world12/balance_planning.hpp"
+#include "game/world12/rescheduling.hpp"
 #include "ui/world12_desktop.hpp"
 #include "ui/world12_statistics.hpp"
 #include <algorithm>
@@ -15,7 +16,7 @@ std::vector<ui::World12CareerIdentity> roster(const CareerSnapshot& state){
 }
 ui::World12ReadonlyState Session::open_readonly(const ui::DeskRequest& request,const std::filesystem::path& data,const Image& underlay,const std::filesystem::path& save_directory){
     state_.validate();
-    if(preparation_menu_||readonly_owner_||request.kind!=ui::DeskRequestKind::open_menu||(request.menu_kind!=4&&request.menu_kind!=8&&request.menu_kind!=9&&request.menu_kind!=23&&request.menu_kind!=20&&request.menu_kind!=25&&request.menu_kind!=26&&request.menu_kind!=28)||request.value!=-1||request.revision!=owner_.revision||owner_.revision==UINT64_MAX||readonly_generation_>=UINT32_MAX||underlay.width!=320||underlay.height!=240)
+    if(preparation_menu_||readonly_owner_||request.kind!=ui::DeskRequestKind::open_menu||(request.menu_kind!=4&&request.menu_kind!=7&&request.menu_kind!=8&&request.menu_kind!=9&&request.menu_kind!=23&&request.menu_kind!=20&&request.menu_kind!=25&&request.menu_kind!=26&&request.menu_kind!=28)||request.value!=-1||request.revision!=owner_.revision||owner_.revision==UINT64_MAX||readonly_generation_>=UINT32_MAX||underlay.width!=320||underlay.height!=240)
         throw FormatError("world12: stale or unavailable readonly desktop owner");
     const auto desk=ui::world12_initial_desktop(data,state_,resources_.reference,resources_.german,options_,owner_.revision);
     if(ui::desk_actor(desk)!=request.manager_slot||desk.world12_career_roster!=roster(state_)||!visible_world12_menu(desk,request.item_id,request.menu_kind))
@@ -37,9 +38,21 @@ ui::World12ReadonlyState Session::readonly_view()const{
 }
 bool Session::apply_readonly(const ui::World12ReadonlyRequest& request){
     const auto current=readonly_view();if(request.identity!=current.identity||owner_.revision==UINT64_MAX||uint32_t(current.identity.sequence)==UINT32_MAX)throw FormatError("world12: stale readonly action");
-    if(current.identity.menu==28&&(request.action!=ui::World12ReadonlyAction::balance||!request.balance_request||request.value!=-1||request.first_season||request.expected_flags||request.target_flags))throw FormatError("world12: balance needs its exact Source planning command");
+    if(current.identity.menu==28&&(request.action!=ui::World12ReadonlyAction::balance||!request.balance_request||request.value!=-1||request.first_season||request.expected_flags||request.target_flags||request.reschedule_request))throw FormatError("world12: balance needs its exact Source planning command");
     auto selection=readonly_selection_;bool closed=false;std::optional<CareerSnapshot> changed;
     switch(request.action){
+    case ui::World12ReadonlyAction::reschedule:{
+        if(current.identity.menu!=7||!current.calendar||!request.reschedule_request||request.balance_request||request.value!=-1||request.first_season||request.expected_flags||request.target_flags)throw FormatError("world12: malformed fixture move action");
+        const auto& action=*request.reschedule_request;const auto& owner=action.owner;
+        ui::DeskRequest expected_owner;expected_owner.kind=ui::DeskRequestKind::open_menu;expected_owner.menu_kind=7;expected_owner.manager_slot=current.identity.manager;expected_owner.revision=current.identity.revision;
+        if(owner!=expected_owner)throw FormatError("world12: stale or altered calendar move owner");
+        changed=state_;
+        if(action.kind==ui::RescheduleActionKind::move){const auto found=std::find_if(current.calendar->reschedule_options.begin(),current.calendar->reschedule_options.end(),[&](const auto& o){return o.match==action.match&&std::find(o.target_days.begin(),o.target_days.end(),action.target_day)!=o.target_days.end();});if(found==current.calendar->reschedule_options.end())throw FormatError("world12: calendar selection changed");
+            const FixtureReschedule fixture{{uint32_t(action.match.league)},uint8_t(action.match.round+1),uint8_t(action.match.match),uint16_t(action.match.day),0,0,false};move_fixture(*changed,current.identity.manager,fixture,uint16_t(action.target_day));
+        }else if(action.kind==ui::RescheduleActionKind::undo){if(std::find(current.calendar->moved_matches.begin(),current.calendar->moved_matches.end(),action.match)==current.calendar->moved_matches.end()||action.target_day!=action.match.day)throw FormatError("world12: moved calendar selection changed");const auto found=std::find_if(changed->reschedules.begin(),changed->reschedules.end(),[&](const auto& m){return m.league.value==uint32_t(action.match.league)&&m.round==action.match.round+1&&m.match==action.match.match&&m.target_day==action.match.day;});if(found==changed->reschedules.end())throw FormatError("world12: moved fixture is missing");const auto saved=*found;undo_fixture_move(*changed,current.identity.manager,saved);
+        }else throw FormatError("world12: invalid fixture move action");
+        break;
+    }
     case ui::World12ReadonlyAction::balance:{
         if(current.identity.menu!=28||!current.balance||!request.balance_request||request.balance_request->identity!=current.balance->identity||!current.selection.balance_draft)
             throw FormatError("world12: planning action lost its exact canonical/native owner");

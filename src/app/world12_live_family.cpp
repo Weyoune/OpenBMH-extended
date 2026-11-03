@@ -3,13 +3,14 @@
 #include "game/world12/economy.hpp"
 #include "game/world12/indoor.hpp"
 #include "game/world12/fixtures.hpp"
+#include "game/world12/progression.hpp"
 #include "game/matchday.hpp"
 #include <algorithm>
 #include <set>
 namespace bmh::app::world12 {
 using namespace bmh::world12;
 LeagueId live_group_league(const World& world,const AiMatchProjection& projection,const MatchGroup& group){
-    if(group.desc.size()<0xd0||group.desc[0]!=0||group.fixtures.empty()||group.fixtures.size()%2)
+    if(group.desc.size()<0xd0||(group.desc[0]!=0&&group.desc[0]!=10)||group.fixtures.empty()||group.fixtures.size()%2)
         throw FormatError("world12: live group has no league fixture identity");
     const auto league=world.clubs.at(projection.global_club(uint32_t(group.fixtures.front()))).league;
     if(!league.valid()||!world.catalogue.league(league).active)throw FormatError("world12: live group has no active canonical league");
@@ -30,28 +31,24 @@ CareerSnapshot live_family_snapshot(const CareerSnapshot& staged,const AiMatchPr
     display.calendar.reset();display.progress.reset();display.prepared_event.reset();
     if(display.desktop){display.desktop->initial_event.reset();display.desktop->autosave_pending=false;}
     if(display.world.indoor)display.world.indoor->date_pass.reset();
-    std::set<LeagueId> seen;
+    const auto ticket=prepare_day(staged);
+    display.reschedules.clear();
     for(const auto& group:engine.groups) {
         if(group.desc.size()<0xd0)throw FormatError("world12: incomplete live group descriptor");
-        if(group.desc[0]!=0)continue;
-        const auto league=live_group_league(staged.world,projection,group);
-        const auto& rules=display.world.catalogue.league(league);
-        if(!rules.active||!seen.insert(league).second||group.fixtures.size()%2)
-            throw FormatError("world12: repeated or inactive live league");
-        const auto round=int(staged.league_rounds.at(league.value))+1;
+        if(group.desc[0]!=0&&group.desc[0]!=10)continue;
+        const auto league=live_group_league(staged.world,projection,group);const auto& rules=display.world.catalogue.league(league);
+        std::vector<Fixture> fixtures;for(int row=0;row<group.matches();++row)fixtures.push_back({projection.global_club(uint32_t(group.fixtures.at(size_t(row)*2))),projection.global_club(uint32_t(group.fixtures.at(size_t(row)*2+1)))});
+        const ScheduledLeagueRound* plan=nullptr;
+        if(ticket)for(const auto& scheduled:ticket->leagues)if(scheduled.appointment.league==league&&scheduled.ordinary==(group.desc[0]==0)&&scheduled.matches==fixtures){if(plan)throw FormatError("world12: ambiguous live league fixture ticket");plan=&scheduled;}
+        const int round=plan?plan->appointment.round:int(staged.league_rounds.at(league.value))+1;
+        if(!plan&&(group.desc[0]!=0||fixtures!=league_fixtures(staged.world,league,round)))throw FormatError("world12: live league has no actual selected fixture ticket");
         if(round>rules.rounds())throw FormatError("world12: live round exceeds its season");
-        const auto fixtures=league_fixtures(staged.world,league,round);
-        if(fixtures.size()!=size_t(group.matches()))throw FormatError("world12: live fixtures do not cover their league round");
-        for(size_t match=0;match<fixtures.size();++match){
-            const Fixture actual{projection.global_club(uint32_t(group.fixtures.at(match*2))),projection.global_club(uint32_t(group.fixtures.at(match*2+1)))};
-            int home=0,away=0;
-            if(actual!=fixtures[match]||!match_score(group,int(match),home,away)||home<0||home>15||away<0||away>15)
-                throw FormatError("world12: live score identity is unknown or changed");
-            auto& score=display.results.result(display.world.catalogue,league,round,int(match));
-            if(score.played)throw FormatError("world12: live overview would overwrite a committed round");
-            score={true,uint8_t(home),uint8_t(away)};
+        for(size_t match=0;match<fixtures.size();++match){int home=0,away=0;
+            if(!match_score(group,int(match),home,away)||home<0||home>15||away<0||away>15)throw FormatError("world12: live league score is invalid");
+            const auto index=plan&&!plan->match_indices.empty()?plan->match_indices[match]:int(match);auto& score=display.results.result(display.world.catalogue,league,round,index);
+            if(score.played)throw FormatError("world12: live overview would overwrite a committed fixture");score={true,uint8_t(home),uint8_t(away)};
         }
-        display.league_rounds.at(league.value)=uint8_t(round);
+        display.league_rounds.at(league.value)=uint8_t(std::max(int(display.league_rounds.at(league.value)),round));
     }
     display.validate();return display;
 }
@@ -62,7 +59,7 @@ LiveFamilyScope::LiveFamilyScope(const Session& source,const CareerSnapshot& sta
      groups_(engine.groups.data()),group_count_(engine.groups.size()) {
     if(nonce>=UINT64_MAX-2||child>2)throw FormatError("world12: live overview generation exhausted");
     auto display=live_family_snapshot(staged,projection,engine);
-    for(const auto& group:engine.groups)if(group.desc[0]==0)live_leagues_.push_back(live_group_league(staged.world,projection,group));
+    for(const auto& group:engine.groups)if(group.desc[0]==0||group.desc[0]==10)live_leagues_.push_back(live_group_league(staged.world,projection,group));
     const auto manager=std::find_if(display.world.managers.begin(),display.world.managers.end(),[&](const auto& m){return m.seat==seat;});
     if(manager==display.world.managers.end()||!manager->career||!display.desktop)
         throw FormatError("world12: live overview has no canonical human viewer");

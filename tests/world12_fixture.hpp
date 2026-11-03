@@ -7,8 +7,10 @@
 #include "cli/json.hpp"
 
 namespace bmh::test::world12 {
+inline void omit_balance_plans(bmh::cli::Json& root){const auto economy=root.object()->find("economy");if(economy!=root.object()->end()&&economy->second.object())for(auto& manager:std::get<bmh::cli::Json::Array>(economy->second.object()->at("managers").value))manager.object()->erase("balance_plan");}
 // Older-schema fixtures must actually omit fields their writer did not know.
 inline void omit_recent_manager_records(bmh::cli::Json& root) {
+    omit_balance_plans(root);
     root.object()->erase("highscore_signature");root.object()->erase("inactive_national_draw");
     root.object()->erase("annual_title_archive");
     root.object()->erase("national_origins");
@@ -42,7 +44,7 @@ inline void omit_recent_manager_records(bmh::world12::World& world) {
     for(auto& manager:world.managers)if(manager.match_state)manager.match_state->attendance.reset();
     for(auto& manager:world.managers)if(manager.career){manager.career->cup_titles.reset();manager.career->strengths_display_word.reset();manager.career->pairings_display_byte.reset();manager.career->table_display_word.reset();manager.career->other_games_view.reset();manager.career->camp_focus.reset();manager.career->statistics_flags.reset();manager.career->player_statistics_flags.reset();manager.career->stadium_curve_flags.reset();}
     if(world.economy)world.economy->presentation_options.reset();
-    if(world.economy)for(auto& manager:world.economy->managers)manager.depreciation.reset();
+    if(world.economy)for(auto& manager:world.economy->managers){manager.depreciation.reset();manager.balance_plan.reset();}
 }
 inline bmh::world12::World complete_world() {
     using namespace bmh::world12;

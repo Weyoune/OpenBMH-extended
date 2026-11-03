@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "app/world12_ai_day.hpp"
 #include <algorithm>
+#include "game/world12/rescheduling.hpp"
 #include <limits>
 #include <stdexcept>
 #include <type_traits>
@@ -13,8 +14,8 @@ std::vector<AiLeagueRoundOutcome> simulate_scheduled_leagues(CareerSnapshot& sta
     std::vector<AiLeagueRoundOutcome> results(conditions.size());std::vector<size_t> human_indices;
     std::vector<HumanLeagueRound> human_rounds;
     for(size_t i=0;i<conditions.size();++i){const auto& input=conditions[i];
-        const bool human=std::any_of(state.world.managers.begin(),state.world.managers.end(),[&](const auto& manager){return state.world.clubs.at(manager.club).league==input.appointment.league;});
-        if(human){if(!policy||!hooks)throw FormatError("world12: human league lacks its presenter owner");human_indices.push_back(i);human_rounds.push_back({input.appointment.league,input.appointment.round,input.matches});}
+        const bool human=std::any_of(state.world.managers.begin(),state.world.managers.end(),[&](const auto& manager){const auto fixtures=selected_league_fixtures(state.world,input.appointment.league,input.appointment.round,input.match_indices);return std::any_of(fixtures.begin(),fixtures.end(),[&](const auto& f){return f.home==manager.club||f.away==manager.club;});});
+        if(human){if(!policy||!hooks)throw FormatError("world12: human league lacks its presenter owner");human_indices.push_back(i);human_rounds.push_back({input.appointment.league,input.appointment.round,input.matches,input.match_indices,input.ordinary});}
         if(policy)validate_league_conditions(input.matches);
     }
     if(!human_rounds.empty()){
@@ -22,7 +23,7 @@ std::vector<AiLeagueRoundOutcome> simulate_scheduled_leagues(CareerSnapshot& sta
         for(size_t n=0;n<human_indices.size();++n)results[human_indices[n]]=std::move(batch.leagues[n]);
     }
     for(size_t i=0;i<conditions.size();++i)if(std::find(human_indices.begin(),human_indices.end(),i)==human_indices.end()){
-        const auto& input=conditions[i];results[i]=simulate_and_settle_ai_league_round(state.world,rules,input.appointment.league,input.appointment.round,input.matches,game,random);
+        const auto& input=conditions[i];results[i]=simulate_and_settle_ai_league_fixtures(state.world,rules,input.appointment.league,input.appointment.round,input.match_indices,input.matches,game,random);
     }
     return results;
 }
@@ -45,7 +46,7 @@ static AiDayOutcome play_league_day_impl(CareerSnapshot& state,AiDayOwner& owner
     // Unrelated managers remain valid; an AI fixture must never replace them.
     for(size_t i=0;i<ticket.leagues.size();++i) {
         const auto& plan=ticket.leagues[i];const auto& input=conditions[i];
-        if(input.appointment!=plan.appointment || input.matches.size()!=plan.matches.size())
+        if(input.appointment!=plan.appointment || input.matches.size()!=plan.matches.size()||input.match_indices!=plan.match_indices||input.ordinary!=plan.ordinary)
             throw std::invalid_argument("world12: AI day conditions belong to another round");
         for(const auto& match:input.matches)if(match.date!=state.date)
             throw std::invalid_argument("world12: AI day conditions use another career date");
@@ -58,7 +59,7 @@ static AiDayOutcome play_league_day_impl(CareerSnapshot& state,AiDayOwner& owner
     AiDayOutcome outcome;std::vector<CompletedLeagueRound> scores;
     outcome.leagues=simulate_scheduled_leagues(candidate,rules,conditions,human_policy,game,random,hooks);
     for(size_t i=0;i<ticket.leagues.size();++i){const auto& appointment=ticket.leagues[i].appointment;
-        CompletedLeagueRound completed{appointment.league,appointment.round,{}};
+        CompletedLeagueRound completed{appointment.league,appointment.round,{},ticket.leagues[i].match_indices,ticket.leagues[i].ordinary};
         for(const auto& match:outcome.leagues[i].matches)completed.results.push_back(match.score);
         scores.push_back(std::move(completed));
     }

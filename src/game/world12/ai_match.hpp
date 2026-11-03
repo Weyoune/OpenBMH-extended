@@ -16,6 +16,7 @@ struct AiLeagueConditions {
     bool teams_prepared=false;
     bool pools_selected=false;
     std::optional<uint8_t> kickoff_disposition;
+    std::optional<uint8_t> replay_source;
 };
 struct AiLeagueOutcome {
     Fixture fixture;
@@ -52,6 +53,8 @@ struct HumanRoundHooks {
 // World match mutations and both RNGs publish atomically on successful completion.
 AiLeagueOutcome simulate_ai_league_match(World&,const GameState& rules_template,
     Fixture,const AiLeagueConditions&,GameRandom&,WatcomRandom&);
+AiLeagueRoundOutcome simulate_and_settle_ai_league_fixtures(World&,const GameState&,
+    LeagueId,int round,const std::vector<uint8_t>&,const std::vector<AiLeagueConditions>&,GameRandom&,WatcomRandom&);
 // Adds the Original AI post-match records, morale and player-development path.
 // Does not settle human finances, advance calendar/results or publish a GUI turn.
 AiLeagueOutcome simulate_and_settle_ai_league_match(World&,const GameState& rules_template,
@@ -69,6 +72,7 @@ AiLeagueRoundOutcome simulate_and_settle_human_league_round(CareerSnapshot&,cons
     GameRandom&,WatcomRandom&,const HumanRoundHooks& hooks={});
 struct HumanLeagueRound {
     LeagueId league;int round=0;std::vector<AiLeagueConditions> matches;
+    std::vector<uint8_t> match_indices;bool ordinary=true;
 };
 struct HumanLeagueBatchOutcome {
     std::vector<AiLeagueRoundOutcome> leagues;

@@ -101,6 +101,7 @@ int main()try {
     check(read_save(make_save(state))==state,"monthly accounting snapshot failed");
     auto old=initial;old.world.economy->managers[3].monthly.reset();const auto before=old;rejects([&]{settle_monthly_accounts(old,rules);},"missing old monthly state was invented");check(old==before,"missing monthly state leaked changes");
     auto simple=initial;simple.world.settings->mode=1;const auto contracts=simple.world.managers;expire_monthly_sponsors(simple,rules,texts);check(simple.world.managers==contracts,"mode1 expired fixed sponsors");
+    {auto opaque=initial;opaque.world.settings->mode=1;for(auto& manager:opaque.world.managers){manager.finance->baseline->account_flags=0xa5a5a501u;opaque.world.economy->managers[manager.seat].balance_plan->view=1;}opaque.validate();const auto unchanged=opaque.world.managers;expire_monthly_sponsors(opaque,rules,texts);check(opaque.world.managers==unchanged,"budget installation normalized opaque financial view backing");}
     {
         auto month=initial;const auto owner=month.world.managers[1].club;const auto player=month.world.clubs.at(owner).roster[19].player;
         month.world.managers[1].tactics->backing->scalar_rows[19][0xc]=1;

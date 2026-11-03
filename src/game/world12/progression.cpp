@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "game/world12/progression.hpp"
 #include "game/world12/league_history.hpp"
+#include "game/world12/rescheduling.hpp"
 #include <stdexcept>
 #include <limits>
 #include <algorithm>
@@ -41,7 +42,14 @@ std::optional<DayTicket> prepare_day(const CareerSnapshot& state){
         if(ticket.indoor_ordinary_phase)std::erase_if(ticket.others,german_indoor_appointment);
         else {std::erase_if(ticket.others,[](const auto& appointment){return !german_indoor_appointment(appointment);});ticket.indoor=prepare_indoor_groups(*state.world.indoor);}
     }
-    if(!hall||ticket.indoor_ordinary_phase)for(const auto&a:cursor.schedule.leagues_on(ticket.day)){if(state.league_rounds.at(a.league.value)+1!=a.round)throw std::invalid_argument("world12: league cursor disagrees with calendar");ticket.leagues.push_back({a,league_fixtures(state.world,a.league,a.round)});}
+    if(!hall||ticket.indoor_ordinary_phase)for(const auto&a:cursor.schedule.leagues_on(ticket.day)){if(state.league_rounds.at(a.league.value)+1!=a.round)throw std::invalid_argument("world12: league cursor disagrees with calendar");ScheduledLeagueRound planned{a,{}};const auto all=league_fixtures(state.world,a.league,a.round);
+        for(size_t m=0;m<all.size();++m)if(std::none_of(state.reschedules.begin(),state.reschedules.end(),[&](const auto& move){return move.league==a.league&&move.round==a.round&&move.match==m;})){planned.matches.push_back(all[m]);planned.match_indices.push_back(uint8_t(m));}
+        if(planned.matches.size()==all.size())planned.match_indices.clear();ticket.leagues.push_back(std::move(planned));}
+    if(!hall||ticket.indoor_ordinary_phase)for(const auto& move:state.reschedules)if(!move.played&&move.target_day==ticket.day){
+        auto found=std::find_if(ticket.leagues.begin(),ticket.leagues.end(),[&](const auto& g){return !g.ordinary&&g.appointment.league==move.league&&g.appointment.round==move.round;});
+        if(found==ticket.leagues.end()){ticket.leagues.push_back({{ticket.day,move.league,move.round},{},{},false});found=std::prev(ticket.leagues.end());}
+        found->matches.push_back(league_fixtures(state.world,move.league,move.round).at(move.match));found->match_indices.push_back(move.match);
+    }
     std::set<DomesticCup> scheduled;
     for(const auto& appointment:ticket.others) if(const auto required=domestic_cups_on(appointment))
         for(auto cup:*required) {
@@ -102,8 +110,8 @@ DayPresentation commit_day(CareerSnapshot& state,const DayTicket& ticket,const s
     if(state.date==std::numeric_limits<uint32_t>::max()||state.calendar->revision==std::numeric_limits<uint64_t>::max())throw std::overflow_error("world12: date/revision exhausted");
     if(completed.size()!=ticket.leagues.size())throw std::invalid_argument("world12: incomplete day results");
     // Validate the entire result batch before writing any table or cursor.
-    for(size_t i=0;i<completed.size();++i){const auto& got=completed[i];const auto& plan=ticket.leagues[i];if(got.league!=plan.appointment.league||got.round!=plan.appointment.round||got.results.size()!=plan.matches.size())throw std::invalid_argument("world12: score batch is for another competition/round");
-        for(size_t m=0;m<got.results.size();++m){const auto&score=got.results[m];if(!score.played||score.home>15||score.away>15||state.results.result(state.world.catalogue,got.league,got.round,int(m)).played)throw std::invalid_argument("world12: missing, invalid or already committed result");}}
+    for(size_t i=0;i<completed.size();++i){const auto& got=completed[i];const auto& plan=ticket.leagues[i];if(got.league!=plan.appointment.league||got.round!=plan.appointment.round||got.results.size()!=plan.matches.size()||got.match_indices!=plan.match_indices||got.ordinary!=plan.ordinary)throw std::invalid_argument("world12: score batch is for another competition/round");
+        for(size_t m=0;m<got.results.size();++m){const auto&score=got.results[m];if(!score.played||score.home>15||score.away>15||state.results.result(state.world.catalogue,got.league,got.round,got.match_indices.empty()?int(m):got.match_indices[m]).played)throw std::invalid_argument("world12: missing, invalid or already committed result");}}
     auto staged=state;
     DayPresentation presentation;
     for(size_t i=0;i<cup_results.size();++i) {
@@ -130,7 +138,7 @@ DayPresentation commit_day(CareerSnapshot& state,const DayTicket& ticket,const s
     if(regional_results){commit_regional_playoff_results(staged,*regional_results,*shared_rules,european_random);staged.watcom_seed=european_random.seed();presentation.watcom_draws=european_random.calls();}
     if(national_results){commit_national_results(staged.world,*national_results,*national_rules,european_random);staged.watcom_seed=european_random.seed();presentation.watcom_draws=european_random.calls();}
     commit_friendly_results(staged,friendly_results);
-    for(const auto& round:completed){for(size_t m=0;m<round.results.size();++m)staged.results.result(staged.world.catalogue,round.league,round.round,int(m))=round.results[m];staged.league_rounds[round.league.value]=round.round;}
+    for(const auto& round:completed){for(size_t m=0;m<round.results.size();++m){const auto index=round.match_indices.empty()?int(m):round.match_indices[m];staged.results.result(staged.world.catalogue,round.league,round.round,index)=round.results[m];if(!round.ordinary){auto move=std::find_if(staged.reschedules.begin(),staged.reschedules.end(),[&](const auto& x){return x.league==round.league&&x.round==round.round&&x.match==index&&!x.played&&x.target_day==ticket.day;});if(move==staged.reschedules.end())throw FormatError("world12: replay result lost its saved fixture owner");move->played=true;}}if(round.ordinary)staged.league_rounds[round.league.value]=round.round;}
     record_completed_league_history(staged,state,completed);
     if(std::any_of(staged.calendar->schedule.others.begin(),staged.calendar->schedule.others.end(),regional_playoff_appointment))activate_regional_playoff(staged,state);
     bool next_date=true;

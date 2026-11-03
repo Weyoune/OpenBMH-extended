@@ -13,7 +13,7 @@ StartupFlow::World12ReadonlyView StartupFlow::prepare_world12_readonly_open(Worl
 StartupFlow::World12ReadonlyView StartupFlow::prepare_world12_readonly_result(World12ReadonlyState page,PreparationState parent,const World12ReadonlyRequest& request,bool closed)const{
     if(!world12_readonly_||!pending_world12_readonly()||*pending_world12_readonly()!=request||world12_readonly_->state().identity!=request.identity||!desktop_||!world12_reference_||(closed&&(request.action!=World12ReadonlyAction::close&&!(request.action==World12ReadonlyAction::balance&&request.balance_request&&(request.balance_request->kind==BalanceAction::close||request.balance_request->kind==BalanceAction::confirm_close)))))throw FormatError("world12: readonly result has no matching window");
     auto next=request.identity;++next.revision;++next.sequence;if(page.identity!=next||parent.desktop.revision!=next.revision||desk_actor(parent.desktop)!=next.manager||page.identity.career_roster!=parent.desktop.world12_career_roster)throw FormatError("world12: readonly result changed actor/generation/revision");
-    if(page.identity.menu==28){
+    if(page.identity.menu==28||page.identity.menu==7){
         const auto& before=desktop_->state();const auto& after=parent.desktop;
         if(after.source!=before.source||desk_actor(after)!=desk_actor(before)||after.runtime_club!=before.runtime_club||after.day_counter!=before.day_counter||after.options!=before.options||after.world12_career_roster!=before.world12_career_roster)
             throw FormatError("world12: balance result changed its actor or career context");

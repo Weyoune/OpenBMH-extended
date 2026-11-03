@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "app/world12_tables.hpp"
 #include "app/world12_session.hpp"
+#include "game/world12/rescheduling.hpp"
 #include "app/world12_visible_menu.hpp"
 #include "game/messages.hpp"
 #include "game/world12/desktop_projection.hpp"
@@ -53,7 +54,7 @@ void change_table_league(ui::World12TableSelection& selection, LeagueId league,
     selection.pairings_preferences =
         uint8_t((selection.pairings_preferences & 0xe0) | 1);
     selection.first_round = 0;
-    selection.end_round = state.league_rounds.at(league.value);
+    selection.end_round = visible_league_round(state,league);
     ui::normalize_world12_table_range(selection, state);
     selection.normal_mode =
         points_mode(resources, state.world.catalogue.league(league));
@@ -214,7 +215,7 @@ project_league_family(const CareerSnapshot& state,
             owner.league = int(league.id.value);
             owner.league_group = 0;
             owner.supported = true;
-            source.played_rounds = state.league_rounds.at(league.id.value);
+            source.played_rounds = visible_league_round(state,league.id);
             source.total_rounds = league.rounds();
             source.preferences = selection.pairings_preferences;
             const auto date = [&](int round) -> uint32_t {
@@ -282,8 +283,10 @@ project_league_family(const CareerSnapshot& state,
                         if (score.played)
                             row.raw_result =
                                 uint8_t(score.home << 4 | score.away);
+                        const auto moved=std::find_if(state.reschedules.begin(),state.reschedules.end(),[&](const auto& m){return m.league==league.id&&m.round==round+1&&m.match==i;});
+                        if(moved!=state.reschedules.end()&&!moved->played){row.raw_result=0xce;row.postponed_date=state.date-state.calendar->next_day+moved->target_day;row.postponed_day=moved->target_day;row.postponed_queue_slot=moved->slot;}
                         if (filtered) {
-                            const auto day = date(round);
+                            const auto day = moved!=state.reschedules.end()?(state.date-state.calendar->next_day+moved->target_day):date(round);
                             if (day != 0xffff)
                                 row.scheduled_date = day;
                         } else if (round >= league.rounds() / 2) {
@@ -305,8 +308,9 @@ project_league_family(const CareerSnapshot& state,
                         rows.push_back(std::move(row));
                     }
                 }
+            if(owner.postponed_active)for(const auto& move:state.reschedules)if(move.league==league.id&&!move.played){const auto f=bmh::world12::league_fixtures(state.world,move.league,move.round).at(move.match);LeaguePairingsRow row;row.home=team(f.home);row.away=team(f.away);row.source_round=int(move.round)-1;row.fixture_index=move.match;row.raw_result=0xce;row.postponed_date=state.date-state.calendar->next_day+move.target_day;row.postponed_day=move.target_day;row.postponed_queue_slot=move.slot;rows.push_back(std::move(row));}
             source.total_rows = int(rows.size());
-            source.page_offset = filtered ? owner.filter_offset : 0;
+            source.page_offset = owner.postponed_active?owner.postponed_offset:filtered ? owner.filter_offset : 0;
             if (source.page_offset < 0 || source.page_offset > int(rows.size()))
                 throw FormatError("world12: invalid pairings page offset");
             const size_t last =
@@ -331,7 +335,7 @@ project_league_family(const CareerSnapshot& state,
                                   layout::
                                       CupDraw_DrawGroupOverview_TextPointer9) +
                               std::to_string(score.away)
-                        : std::string{};
+                        : fixture.postponed_date?page.rows[row].result:std::string{};
             }
             page.identity = {int(identity.manager),
                              actor,
@@ -557,7 +561,7 @@ bool Session::apply_tables(const ui::World12TableRequest& request,
                 profile.minimum = first->value;
                 profile.default_value = std::max<uint32_t>(
                     1, std::min<uint32_t>(
-                           candidate.league_rounds.at(selection.league.value),
+                           visible_league_round(candidate,selection.league),
                            profile.maximum));
                 profile.x = first->x;
                 profile.y = first->y;
@@ -585,7 +589,7 @@ bool Session::apply_tables(const ui::World12TableRequest& request,
             resources_, candidate.world.catalogue.league(selection.league));
         selection.first_round = 0;
         selection.end_round =
-            candidate.league_rounds.at(selection.league.value);
+            visible_league_round(candidate,selection.league);
         ui::normalize_world12_table_range(selection, candidate);
         selection.age.reset();
         selection.age_basis =
@@ -652,8 +656,7 @@ bool Session::apply_tables(const ui::World12TableRequest& request,
             break;
         case LeaguePairingsAction::previous:
         case LeaguePairingsAction::next:
-            if (owner.postponed_active)
-                break;
+            if (owner.postponed_active){if(action==LeaguePairingsAction::previous)owner.postponed_offset=std::max(0,owner.postponed_offset-10);else if(owner.postponed_offset+10<current.pairings->source.total_rows)owner.postponed_offset+=10;break;}
             if (owner.filter_active) {
                 if (owner.filter_team >= 0) {
                     if (action == LeaguePairingsAction::previous)

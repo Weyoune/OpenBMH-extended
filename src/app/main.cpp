@@ -2486,11 +2486,11 @@ int main(int argc, char** argv) {
                 if(!found)throw FormatError("world12: competition view group has no saved fixture identity");return *found;
             };
             const auto& initial=plan_for(engine.groups[group_index]);
-            if(initial.league)throw FormatError("world12: league group requires its family view");
+            if(initial.league){present_world12_live_family(staged,projection,engine,seat,1);return;}
             std::vector<ui::World12CompetitionOverlay> domestic,national;
             std::map<EuropeanCompetition,std::vector<ui::World12CompetitionOverlay>> european;
             std::map<uint8_t,ui::World12CompetitionOverlay> indoor;std::optional<ui::World12CompetitionOverlay> regional,friendly;
-            for(const auto& group:engine.groups){if(group.desc.at(0)==0)continue;const auto& plan=plan_for(group);ui::World12CompetitionOverlay overlay;overlay.revision=plan.revision;overlay.source_entry=plan.source_entry;overlay.scores=group.cup_results;for(const auto& fixture:plan.matches)overlay.matches.push_back(fixture.fixture);
+            for(const auto& group:engine.groups){if(group.desc.at(0)==0||group.desc.at(0)==10)continue;const auto& plan=plan_for(group);ui::World12CompetitionOverlay overlay;overlay.revision=plan.revision;overlay.source_entry=plan.source_entry;overlay.scores=group.cup_results;for(const auto& fixture:plan.matches)overlay.matches.push_back(fixture.fixture);
                 if(plan.cup){const auto stage=std::find_if(staged.cups.begin(),staged.cups.end(),[&](const auto& value){return value.cup==plan.cup&&value.source_entry==plan.source_entry;});if(stage==staged.cups.end())throw FormatError("world12: live domestic programme disappeared");overlay.played=uint8_t((stage->rounds.size()-1)*(stage->two_legs()?2:1)+stage->next_leg()-1);domestic.push_back(overlay);}
                 else if(plan.european){const auto& campaign=staged.world.european_campaigns->at(size_t(*plan.european));const auto stage=std::find_if(campaign.stages.begin(),campaign.stages.end(),[&](const auto& value){return value.rules.entry==plan.source_entry;});if(stage==campaign.stages.end())throw FormatError("world12: live European stage disappeared");overlay.played=stage->played;european[*plan.european].push_back(overlay);}
                 else if(plan.national){const auto& campaign=staged.world.national_campaigns->seasons.at(staged.season);const auto stage=std::find_if(campaign.stages.begin(),campaign.stages.end(),[&](const auto& value){return value.rules.entry==plan.source_entry;});if(stage==campaign.stages.end())throw FormatError("world12: live national stage disappeared");overlay.played=stage->played;national.push_back(overlay);}
@@ -2689,7 +2689,7 @@ int main(int argc, char** argv) {
                 engine.original_sound=[&,owner](uint8_t id){app::original_match_audio_command(playback,owner->state,id);};
                 engine.phase_results=[&,owner,clock,live,overview_viewer](const PhaseResultRequest& request,const auto&,const auto&) {
                     if(!live->staged_snapshot)throw FormatError("world12: phase overview lacks its staged match owner");
-                    if(request.kind!=PhaseResultKind::League){present_world12_live_competition(*live->staged_snapshot,*owner,*clock,request.group_index,overview_viewer(*owner,*live->staged_snapshot));return;}
+                    if(request.kind!=PhaseResultKind::League&&request.competition_id!=9){present_world12_live_competition(*live->staged_snapshot,*owner,*clock,request.group_index,overview_viewer(*owner,*live->staged_snapshot));return;}
                     const auto league=app::world12::live_group_league(live->staged_snapshot->world,*owner,clock->groups.at(request.group_index));bool visible=false;
                     for(int group=0;group<3;++group){const auto ids=live->staged_snapshot->world.catalogue.table_leagues(bmh::world12::TableGroup(group));visible|=std::find(ids.begin(),ids.end(),league)!=ids.end();}
                     if(visible)present_world12_live_family(*live->staged_snapshot,*owner,*clock,overview_viewer(*owner,*live->staged_snapshot),0,league);
@@ -2735,14 +2735,14 @@ int main(int argc, char** argv) {
                         ((input.key.keysym.sym==SDLK_g&&season_exe.u8(layout::Main_FileScreen_RuntimeField)=='g')||
                          (input.key.keysym.sym==SDLK_t&&season_exe.u8(layout::Main_FileScreen_RuntimeField2)=='t'))) {
                         if(!live->staged_snapshot)throw FormatError("world12: manual overview lacks its staged owner");
-                        if(!engine.groups.empty()&&engine.groups.front().desc.at(0)!=0)present_world12_live_competition(*live->staged_snapshot,projection,engine,0,overview_viewer(projection,*live->staged_snapshot));
+                        if(!engine.groups.empty()&&engine.groups.front().desc.at(0)!=0&&engine.groups.front().desc.at(0)!=10)present_world12_live_competition(*live->staged_snapshot,projection,engine,0,overview_viewer(projection,*live->staged_snapshot));
                         else present_world12_live_family(*live->staged_snapshot,projection,engine,overview_viewer(projection,*live->staged_snapshot),input.key.keysym.sym==SDLK_g?0:1);draw();continue;
                     }
                     if(!start&&minute>2&&input.type==SDL_MOUSEBUTTONDOWN&&(input.button.button==SDL_BUTTON_LEFT||input.button.button==SDL_BUTTON_RIGHT)&&input.button.x>=0&&input.button.x<=63&&input.button.y>49&&input.button.y<65){
                         if(!live->staged_snapshot)throw FormatError("world12: live toolbar lacks its staged owner");
                         for(int child=0;child<3&&running;++child)if(input.button.x>=child*21&&input.button.x<=child*21+21){
                             if(child==2)present_world12_live_settings(projection,engine,minute,*live->staged_snapshot);
-                            else if(!engine.groups.empty()&&engine.groups.front().desc.at(0)!=0)present_world12_live_competition(*live->staged_snapshot,projection,engine,0,overview_viewer(projection,*live->staged_snapshot));
+                            else if(!engine.groups.empty()&&engine.groups.front().desc.at(0)!=0&&engine.groups.front().desc.at(0)!=10)present_world12_live_competition(*live->staged_snapshot,projection,engine,0,overview_viewer(projection,*live->staged_snapshot));
                             else present_world12_live_family(*live->staged_snapshot,projection,engine,overview_viewer(projection,*live->staged_snapshot),uint8_t(child));
                         }draw();continue;
                     }

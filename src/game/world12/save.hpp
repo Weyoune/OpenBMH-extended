@@ -67,6 +67,11 @@ struct CareerProgress {
     uint8_t epoch_weekday=0,last_manager=0;
     bool operator==(const CareerProgress&)const=default;
 };
+struct FixtureReschedule {
+    LeagueId league;uint8_t round=0,match=0;
+    uint16_t source_day=0,target_day=0;uint8_t slot=0;bool played=false;
+    bool operator==(const FixtureReschedule&)const=default;
+};
 struct PreparedFixture {
     Fixture fixture;
     int8_t temperature=0;
@@ -87,6 +92,7 @@ struct PreparedGroup {
     uint8_t source_entry=0,round=0,leg=0,flags=2;
     uint64_t revision=0;
     std::vector<PreparedFixture> matches;
+    bool replay=false;
     bool operator==(const PreparedGroup&)const=default;
 };
 struct PreparedEvent {
@@ -116,6 +122,7 @@ struct CareerSnapshot {
     // Typed active career snapshots will extend this record as their owning
     // progression transactions are integrated. No legacy FBM stream is guessed.
     std::optional<FriendlyPlan> friendly_plan;
+    std::vector<FixtureReschedule> reschedules;
     void validate()const;
     bool operator==(const CareerSnapshot&)const=default;
 };

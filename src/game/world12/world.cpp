@@ -29,6 +29,7 @@ void World::validate(bool complete)const {
         for(const auto& m:economy->managers)if(m.bank_robbery_month==0xffffffffu)throw std::invalid_argument("world12: invalid bank robbery month sentinel");
         for(const auto& m:economy->managers)if(m.weekly_count>52)throw std::invalid_argument("world12: invalid weekly history cursor");
         for(const auto& m:economy->messages)if((m.recipients&~0x8000000fu)||(m.read_by&~15u))throw std::invalid_argument("world12: invalid message recipients");}
+    if(economy)for(const auto& manager:managers)if(manager.finance&&manager.finance->baseline){const auto& plan=economy->managers.at(manager.seat).balance_plan;if(plan&&plan->view!=uint8_t(std::clamp(int(int8_t(manager.finance->baseline->account_flags)),0,2)))throw FormatError("world12: balance view disagrees with its financial backing");}
     if(markets && (!players_initialized || markets->first_default_name>1))throw std::invalid_argument("world12: invalid career market state");
     if(settings && (!free_players || settings->mode<1 || settings->mode>3 || settings->difficulty>9 || settings->duration>5 || settings->planned_managers<1 || settings->planned_managers>4 || managers.size()>settings->planned_managers))throw std::invalid_argument("world12: invalid career settings");
     for(const auto& manager:managers)if(manager.career) {
