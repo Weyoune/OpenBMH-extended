@@ -27,6 +27,8 @@ std::optional<UnsolicitedOffer> prepare_unsolicited_offer(CareerSnapshot&,uint8_
 // Place a regenerated, unassigned player when the appropriate free pool is
 // full. Uses the Source no-list two-pass recruitment scoring and AI lineup.
 ClubId place_unlisted_player(CareerSnapshot&,PlayerId,const GameState&,WatcomRandom&,MarketBidPolicy);
+// Actual inactive origin population; no active club/minimum/market is invented.
+ClubId place_unlisted_national_player(World&,PlayerId,const GameState&,WatcomRandom&,ClubId released_from={});
 // Actual global membership order and all eligible AI clubs participate. The
 // listing/physical bid slots, Source sorting quirks and RNG are retained.
 MarketBidOutcome add_computer_market_bid(CareerSnapshot&,uint8_t row,const GameState& reference,

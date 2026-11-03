@@ -1273,6 +1273,8 @@ add_library(bmhworld12 STATIC
     src/game/world12/indoor_match.cpp
     src/game/world12/indoor.cpp
     src/game/world12/national_campaign.cpp
+    src/game/world12/inactive_roster_projection.cpp
+    src/game/world12/national_annual_players.cpp
     src/game/world12/inactive_club_state.cpp
     src/game/world12/inactive_club_state_codec.cpp
     src/game/world12/inactive_national_draw.cpp
@@ -1635,3 +1637,7 @@ add_test(NAME world12_national_training_tests COMMAND world12_national_training_
 add_executable(world12_inactive_club_state_tests tests/world12_inactive_club_state_tests.cpp)
 target_link_libraries(world12_inactive_club_state_tests PRIVATE bmhworld12)
 add_test(NAME world12_inactive_club_state_tests COMMAND world12_inactive_club_state_tests)
+
+add_executable(world12_national_annual_players_tests tests/world12_national_annual_players_tests.cpp)
+target_link_libraries(world12_national_annual_players_tests PRIVATE bmhworld12)
+add_test(NAME world12_national_annual_players_tests COMMAND world12_national_annual_players_tests)

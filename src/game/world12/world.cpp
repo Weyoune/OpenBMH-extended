@@ -60,7 +60,10 @@ void World::validate(bool complete)const {
         for(const auto& origin:*national_origins){const auto& c=origin.club;
             if(!c.id.valid()||clubs.contains(c.id)||!origin_clubs.insert(c.id).second||c.kind!=ClubKind::club||!c.league.valid()||c.league.value>=kLeagueSlots||catalogue.league(c.league).active||catalogue.league(c.league).country!=c.country||origin.rank>=catalogue.league(c.league).clubs||!ranks[c.league].insert(origin.rank).second||c.name.empty()||c.name.size()>255||!c.crest.valid()||!crests.contains(c.crest)||c.morale>63||c.season_stats!=ClubSeasonStats{}||(origin.source_initialized&&!players_initialized))throw std::invalid_argument("world12: invalid retained national club provenance");
             bool empty=false;size_t occupied=0;for(const auto& row:c.roster){if(row.empty()){if(row.flags)throw std::invalid_argument("world12: origin empty slot flags");empty=true;continue;}if(empty||row.flags>15||!players.contains(row.player)||!rostered.insert(row.player).second)throw std::invalid_argument("world12: missing or repeated origin player");++occupied;}
-            if(occupied<11)throw std::invalid_argument("world12: national origin lacks its real compact roster");
+            // Actual Source annual retirement may leave an inactive no-club
+            // origin below eleven. It has no fixtures; do not manufacture
+            // replacements. Imported/unknown and active-club scope minima stay.
+            if(occupied<11&&(catalogue.scope.club_play()||!origin.source_initialized))throw std::invalid_argument("world12: national origin lacks its real compact roster");
         }
         for(const auto& [league,known]:ranks)if(known.size()!=catalogue.league(league).clubs)throw std::invalid_argument("world12: national source league provenance is incomplete");
     }
