@@ -71,6 +71,14 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
         auto desk=ui::world12_initial_desktop(data,staged->snapshot(),staged->reference(),staged->rules(),staged->options(),staged->revision());
         auto view=flow.prepare_world12_file_result(std::move(desk),staged->rules(),request);session.swap(staged);flow.finish_world12_desktop(std::move(view));return {};
     }
+    if(action.request==ui::FlowRequest::world12_readonly_action){
+        if(!session||!flow.pending_world12_readonly()||*flow.pending_world12_readonly()!=action.world12_readonly_action)throw FormatError("world12: readonly action has no matching view owner");
+        const auto* original=session.get();const auto before=session->snapshot();const auto revision=session->revision();auto staged=std::make_unique<Session>(*session);auto page=staged->readonly_view();
+        const bool closed=staged->apply_readonly(action.world12_readonly_action);
+        if(session.get()!=original||session->snapshot()!=before||session->revision()!=revision||!flow.pending_world12_readonly()||*flow.pending_world12_readonly()!=action.world12_readonly_action)throw FormatError("world12: readonly presenter changed outer source ownership");
+        if(closed){++page.identity.revision;++page.identity.sequence;}else page=staged->readonly_view();
+        auto view=flow.prepare_world12_readonly_result(std::move(page),staged->preparation_view(data),action.world12_readonly_action,closed);session.swap(staged);flow.finish_world12_readonly(std::move(view));return {};
+    }
     if(action.request==ui::FlowRequest::world12_market_action){
         if(!session||!flow.pending_world12_market()||*flow.pending_world12_market()!=action.world12_market_action)throw FormatError("world12: market action has no matching view");
         const auto* original=session.get();const auto before=session->snapshot();const auto revision=session->revision();auto staged=std::make_unique<Session>(*session);auto page=staged->market_view();
@@ -146,6 +154,10 @@ StartupResult serve_startup(ui::StartupFlow& flow,const ui::FlowResult& action,s
             auto staged=std::make_unique<Session>(*session);staged->apply_desktop(action.desk_action,data);
             auto desk=ui::world12_initial_desktop(data,staged->snapshot(),staged->reference(),staged->rules(),staged->options(),staged->revision());
             flow.acknowledge_desk(std::move(desk));session.swap(staged);return {};
+        }
+        if(action.desk_action.kind==ui::DeskRequestKind::open_menu&&(action.desk_action.menu_kind==4||action.desk_action.menu_kind==8||action.desk_action.menu_kind==9||action.desk_action.menu_kind==20||action.desk_action.menu_kind==25||action.desk_action.menu_kind==26)){
+            auto staged=std::make_unique<Session>(*session);auto page=staged->open_readonly(action.desk_action,data,flow.desktop()->render(),flow.save_directory());
+            auto view=flow.prepare_world12_readonly_open(std::move(page),staged->preparation_view(data),action.desk_action);session.swap(staged);flow.finish_world12_readonly(std::move(view));return {};
         }
         if(action.desk_action.kind==ui::DeskRequestKind::open_menu&&action.desk_action.menu_kind==17){
             auto staged=std::make_unique<Session>(*session);auto page=staged->open_market(action.desk_action);auto parent=staged->preparation_view(data);flow.show_world12_market(std::move(page),std::move(parent),action.desk_action);session.swap(staged);return {};
