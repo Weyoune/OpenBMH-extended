@@ -71,6 +71,11 @@ void validate_annual_title_archive(const World& world) {
     for(const auto& [season,labels]:archive.unresolved_source_labels){if(season>32767)invalid("world12: unresolved Source title season exceeds native history range");for(const auto& label:labels)if(label.size()>65535)invalid("world12: unresolved Source title label exceeds native string range");}
 }
 AnnualTitleArchive stage_annual_title_archive(const CareerSnapshot& state) {
+    if(!state.world.catalogue.scope.club_play()) {
+        state.validate();const auto before=state;if(!state.world.catalogue.scope.international||!state.progress||(state.progress->phase!=ProgressPhase::season_end&&state.progress->phase!=ProgressPhase::annual_transition)||!state.world.annual_awards_completed||uint64_t(*state.world.annual_awards_completed)!=uint64_t(state.season)+1||!state.world.national_campaigns||!state.world.national_campaigns->seasons.contains(state.season))invalid("world12: national-only archive requires its paid actual closing owner");
+        const auto& campaign=state.world.national_campaigns->seasons.at(state.season);const auto final=national_final_facts(campaign);AnnualTitleArchive result;if(state.world.annual_title_archive)result=*state.world.annual_title_archive;else{result.earlier_history_unknown=true;result.first_retained_season=state.season;}
+        if(uint64_t(result.first_retained_season)+result.seasons.size()!=state.season)invalid("world12: national archive cannot duplicate or skip a completed season");AnnualTitleRow row;row.kind=AnnualTitleKind::national;row.competition=final.competition;row.winner=final.winner;row.runner_up=final.runner_up;row.podium=final.places;row.source_category=source_category(state.world,row);result.seasons.push_back({state.season,{row}});auto world=state.world;world.annual_title_archive=result;world.validate();if(state!=before)invalid("world12: national archive source changed during final validation");return result;
+    }
     const auto facts=completed_annual_titles(state);const auto before=state;
     AnnualTitleArchive result;
     if(state.world.annual_title_archive)result=*state.world.annual_title_archive;

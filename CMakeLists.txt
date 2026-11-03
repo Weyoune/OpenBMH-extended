@@ -1274,6 +1274,7 @@ add_library(bmhworld12 STATIC
     src/game/world12/indoor.cpp
     src/game/world12/national_campaign.cpp
     src/game/world12/inactive_roster_projection.cpp
+    src/game/world12/national_annual.cpp
     src/game/world12/national_annual_players.cpp
     src/game/world12/inactive_club_state.cpp
     src/game/world12/inactive_club_state_codec.cpp
@@ -1300,6 +1301,7 @@ add_library(bmhworld12 STATIC
 target_include_directories(bmhworld12 PUBLIC src)
 target_link_libraries(bmhworld12 PUBLIC bmhcore)
 add_library(bmhworld12_app STATIC src/app/world12_european.cpp src/app/world12_event.cpp src/app/world12_attendance.cpp src/app/world12_weather.cpp src/app/world12_national.cpp src/app/world12_cups.cpp src/app/world12_manager.cpp src/app/world12_ai_day.cpp src/app/world12_initial_season.cpp src/app/world12_initial_market.cpp src/app/world12_desktop.cpp src/app/world12_first_event.cpp
+    src/app/world12_national_annual.cpp
     src/app/world12_annual_transition.cpp
     src/app/world12_annual_awards.cpp
     src/app/world12_clock.cpp src/app/world12_pending.cpp)
@@ -1641,3 +1643,7 @@ add_test(NAME world12_inactive_club_state_tests COMMAND world12_inactive_club_st
 add_executable(world12_national_annual_players_tests tests/world12_national_annual_players_tests.cpp)
 target_link_libraries(world12_national_annual_players_tests PRIVATE bmhworld12)
 add_test(NAME world12_national_annual_players_tests COMMAND world12_national_annual_players_tests)
+
+add_executable(world12_national_annual_tests tests/world12_national_annual_tests.cpp)
+target_link_libraries(world12_national_annual_tests PRIVATE bmhworld12_app)
+add_test(NAME world12_national_annual_tests COMMAND world12_national_annual_tests)

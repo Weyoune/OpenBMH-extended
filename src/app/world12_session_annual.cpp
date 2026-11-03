@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "app/world12_session.hpp"
 #include "app/world12_annual_awards.hpp"
+#include "app/world12_national_annual.hpp"
 #include "game/world12/annual_coach.hpp"
 #include "game/calendar.hpp"
 #include "ui/desktop.hpp"
@@ -27,8 +28,8 @@ void Session::finish_annual_closing(const ui::DeskRequest& request) {
 }
 AnnualTransitionOutcome Session::publish_annual_year(uint64_t revision,const std::filesystem::path& scores,const AnnualTransitionHooks& hooks) {
     if(preparation_menu_||!resources_.texts)throw FormatError("world12: annual publication has an open menu or missing Source text owner");
-    auto result=publish_annual_transition(state_,owner_,{owner_.scope,revision},resources_.reference,
-        resources_.german,resources_.english,*resources_.texts,scores,hooks);
+    auto result=state_.world.catalogue.scope.club_play()?publish_annual_transition(state_,owner_,{owner_.scope,revision},resources_.reference,
+        resources_.german,resources_.english,*resources_.texts,scores,hooks):publish_national_annual_transition(state_,owner_,{owner_.scope,revision},resources_.reference,resources_.german,resources_.english,*resources_.texts,hooks);
     options_.duration=state_.world.settings->duration;return result;
 }
 DesktopEntryOutcome Session::begin_annual_opening(uint64_t revision) {

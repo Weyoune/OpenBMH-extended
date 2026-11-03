@@ -7,6 +7,7 @@ struct OwnedHighscore {
     uint8_t manager=0;ClubId club;
     HighscoreScore score;
     HighscoreRow candidate;
+    bool national_basis=false; // Actual coach assets + World-Cup podium history; club components are inapplicable.
 };
 struct OwnedHighscoreProjection {
     uint16_t signature=0;
