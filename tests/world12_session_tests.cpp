@@ -1324,6 +1324,25 @@ void actual_family_gui(const std::filesystem::path& data,const CareerSnapshot& f
     capture("family-closed");
     std::cout<<"Actual country family: "<<visited.size()<<" leagues, Original three children, Core strengths/results, search/filter, preferences, roster and stale/reopen/timer guards passed\n";
 }
+void native_clock_fixture(const std::filesystem::path& data,const std::filesystem::path& output){
+    auto resources=session_app::load_runtime_resources(data);
+    ui::SetupOptions options;options.country_selection=true;options.germany=true;options.england=true;options.world=false;options.league=true;
+    options.managers=2;options.mode=3;options.difficulty=2;options.duration=5;
+    session_app::Session session(resources,options,91,200);
+    for(const auto country:{Country::germany,Country::england}){
+        const auto context=session.selection_context();const auto& groups=country==Country::germany?context.world->germany:context.world->england;
+        ui::ManagerChoice choice;choice.slot=int(session.snapshot().world.managers.size());choice.portrait=choice.slot;choice.name=country==Country::germany?"QA DE":"QA EN";
+        choice.master_club=-1;choice.world_club=groups[0].clubs.front().id;choice.country=country;choice.start_league=0;choice.strength=1;choice.roster_revision=context.revision;
+        session.confirm_manager(choice,context.revision);
+    }
+    session.prepare_start(session.revision());session.begin_first_event(session.revision());
+    std::filesystem::create_directories(output);write_savegame(output/"Fixture.FBM",make_save(session.snapshot()));
+    const auto desk=ui::world12_initial_desktop(data,session.snapshot(),session.reference(),session.rules(),session.options(),session.revision());
+    std::ofstream points(output/"navigation.tsv");for(const auto& item:desk.items)if(item.width>0&&item.height>0)points<<item.kind<<'\t'<<item.x+item.width/2<<'\t'<<item.y+item.height/2<<'\t'<<item.disabled<<'\n';
+    std::ofstream receipt(output/"fixture.txt");receipt<<"Actual fresh Source setup; two fictional human names, real DE/EN clubs/players; international national-tournament mode explicitly disabled for the first Native clock milestone. Club European competitions remain active.\nG="<<session.snapshot().game_seed<<" W="<<session.snapshot().watcom_seed<<" date="<<session.snapshot().date<<" active="<<int(*session.snapshot().desktop->active_seat)<<'\n';
+    std::cout<<"Fresh actual two-manager Native clock fixture saved without modified match results\n";
+}
+
 void actual_live_family_gui(const std::filesystem::path& data,const CareerSnapshot& fixture,const std::filesystem::path& output){
     const auto resources=session_app::load_runtime_resources(data);
     auto source=session_app::Session::resume(resources,fixture,157,1);const auto untouched=source.snapshot();
@@ -2042,6 +2061,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
 }
 }
 int main(int argc,char** argv)try {
+    if(argc==4&&std::string(argv[3])=="--native-clock-fixture"){native_clock_fixture(argv[1],argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--live-family-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_live_family_gui(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--market-loan"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_transfer_market_gui(argv[1],read_save(load_savegame(argv[4])),argv[2],true);return 0;}
     if(argc==5&&std::string(argv[3])=="--market-received"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_market_received_gui(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}

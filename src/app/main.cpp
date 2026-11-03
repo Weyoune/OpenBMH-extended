@@ -2,6 +2,7 @@
 #include "formats/badge_policy.hpp"
 #include "formats/executable_layout.hpp"
 #include "app/scene_timing.hpp"
+#include "app/qa_view.hpp"
 #include "app/start_screen.hpp"
 #include "formats/data_profile.hpp"
 #include "game/profile_runtime.hpp"
@@ -233,6 +234,8 @@ int main(int argc, char** argv) {
         SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 320, 240);
         if (!texture) throw FormatError(SDL_GetError());
         app::PitchPointer pitch_pointer;
+        const char* qa_view_path=std::getenv("OPENBMH_QA_VIEW");
+        app::QaViewTrace qa_view(qa_view_path?launch::path_from_utf8(qa_view_path):fs::path{});
         std::vector<uint32_t> pixels(320 * 240);
         std::unique_ptr<ui::LiveMatchdayScreen> live_screen;
         std::unique_ptr<ui::RealityReporterPanel> reality_reporter;
@@ -349,6 +352,7 @@ int main(int argc, char** argv) {
         std::optional<Image> season_backdrop;
         auto present_season = [&](const Image& image, const char* title,
                                   const Palette* palette_override = nullptr) {
+            if(title)qa_view.note(title);
             SDL_SetWindowTitle(window, window_title.c_str());
             season_backdrop = image;
             const Palette& frame_palette = palette_override ? *palette_override : palette;
@@ -821,7 +825,7 @@ int main(int argc, char** argv) {
             if (!running) return PendingOfferAnswer::unsupported;
             const bool question = view.kind == ui::TaxDialogKind::question;
             if (question) press.reset(); // PresentManagerDialog owns the caller's input now.
-            if(world12_development&&world_session){const auto& saved=world_session->snapshot();const auto seat=*saved.desktop->active_seat;const auto& manager=*std::find_if(saved.world.managers.begin(),saved.world.managers.end(),[&](const auto& m){return m.seat==seat;});const auto& crest=saved.world.crests.at(saved.world.clubs.at(manager.club).crest);view.badge_sprite=crest.cell;view.badge_atlas=crest.path;view.badge_fallback=false;}
+            if(world12_development&&world_session&&view.badge_atlas.empty()){const auto& saved=world_session->snapshot();if(!saved.desktop||!saved.desktop->active_seat)throw FormatError("world12: dialog fallback has no active canonical desk");const auto seat=*saved.desktop->active_seat;const auto& manager=*std::find_if(saved.world.managers.begin(),saved.world.managers.end(),[&](const auto& m){return m.seat==seat;});const auto& crest=saved.world.crests.at(saved.world.clubs.at(manager.club).crest);view.badge_sprite=crest.cell;view.badge_atlas=crest.path;view.badge_fallback=false;}
             ui::GameEndTaxDialog screen(data, std::move(view),
                 effective_options ? *effective_options : game_end_options(state), backdrop,season_exe);
             const bool timed = screen.source_timed_notice();
@@ -2084,7 +2088,7 @@ int main(int argc, char** argv) {
                         const std::string title = "OpenBMH - live_ball_" + std::to_string(event.minute) + "_" +
                             std::to_string(event.group) + "_" + std::to_string(event.match) + "_" +
                             std::to_string(event.displacement) + "_" + std::to_string(index);
-                        SDL_SetWindowTitle(window, window_title.c_str());
+                        qa_view.note(title);SDL_SetWindowTitle(window, window_title.c_str());
                         const auto* chance = live->live_chance_context &&
                             live->live_chance_context->minute == event.minute &&
                             live->live_chance_context->group == event.group &&
@@ -2105,7 +2109,7 @@ int main(int argc, char** argv) {
                     if (running) {
                         const int final_delay = live_frame_ms_explicit ? live_frame_ms : app::scene_frame_delay(source_delay(6));
                         if (final_delay > 0) SDL_Delay(Uint32(final_delay));
-                        SDL_SetWindowTitle(window, window_title.c_str());
+                        qa_view.note("OpenBMH - live_matchday");SDL_SetWindowTitle(window, window_title.c_str());
                         present(live_screen->render(frame));
                     }
                 };
@@ -2122,7 +2126,7 @@ int main(int argc, char** argv) {
                         std::to_string(event.minute) + "_" + std::to_string(event.group) + "_" +
                         std::to_string(event.match) + "_" + std::to_string(event.side) + "_" +
                         std::to_string(event.kind) + "_" + std::to_string(int(event.goal));
-                    SDL_SetWindowTitle(window, window_title.c_str());
+                    qa_view.note(title);SDL_SetWindowTitle(window, window_title.c_str());
                     const Image image = live_screen->render_chance(frame, chance);
                     for (size_t i = 0; i < pixels.size(); ++i) pixels[i] = palette.argb[image.pixels[i]];
                     SDL_UpdateTexture(texture, nullptr, pixels.data(), 320 * 4);
@@ -2156,7 +2160,7 @@ int main(int argc, char** argv) {
                         std::to_string(event.acting_side) + "_" + std::to_string(int(event.miss));
                     for (size_t index = 0; index < frames.size() && running; ++index) {
                         const std::string title = "OpenBMH - live_shot_" + identity + "_" + std::to_string(index);
-                        SDL_SetWindowTitle(window, window_title.c_str());
+                        qa_view.note(title);SDL_SetWindowTitle(window, window_title.c_str());
                         for (size_t i = 0; i < pixels.size(); ++i) pixels[i] = shot_colors.argb[frames[index].pixels[i]];
                         SDL_UpdateTexture(texture, nullptr, pixels.data(), 320 * 4);
                         SDL_RenderClear(renderer);
@@ -2181,7 +2185,7 @@ int main(int argc, char** argv) {
                     if (state.memory.has(::bmh::layout::Main_FormatError_RuntimeField5) && state.memory.u8(::bmh::layout::Main_FormatError_RuntimeField5) == 0) {
                         // SDLFlushEvents2 accepts a fresh left/right press, not a keyboard skip.
                         const std::string title = "OpenBMH - live_shot_wait_" + identity;
-                        SDL_SetWindowTitle(window, window_title.c_str());
+                        qa_view.note(title);SDL_SetWindowTitle(window, window_title.c_str());
                         SDL_FlushEvents(SDL_MOUSEBUTTONDOWN, SDL_MOUSEBUTTONUP);
                         SDL_Event input;
                         bool acknowledged = false;
@@ -2217,7 +2221,7 @@ int main(int argc, char** argv) {
                             std::to_string(event.group)+"_"+std::to_string(event.match)+"_"+
                             std::to_string(event.source_side)+"_"+std::to_string(event.kind)+"_"+
                             std::to_string(index)+"_"+std::to_string(images.size());
-                        SDL_SetWindowTitle(window, window_title.c_str());
+                        qa_view.note(title);SDL_SetWindowTitle(window, window_title.c_str());
                         for (size_t i=0;i<pixels.size();++i) pixels[i]=colors.argb[images[index].pixels[i]];
                         SDL_UpdateTexture(texture,nullptr,pixels.data(),320*4);
                         SDL_RenderClear(renderer);SDL_RenderCopy(renderer,texture,nullptr,nullptr);SDL_RenderPresent(renderer);
@@ -2245,7 +2249,7 @@ int main(int argc, char** argv) {
                         SDL_UpdateTexture(texture,nullptr,pixels.data(),320*4);
                         SDL_RenderClear(renderer);SDL_RenderCopy(renderer,texture,nullptr,nullptr);SDL_RenderPresent(renderer);
                     };
-                    SDL_SetWindowTitle(window, window_title.c_str());present(live_screen->render_booking(frame,booking));
+                    qa_view.note(title);SDL_SetWindowTitle(window, window_title.c_str());present(live_screen->render_booking(frame,booking));
                     if (event.kind != 2 && app::match_sound_enabled(state))
                         app::original_audio_command(playback, 17); // EventImpl/SDLPumpEvents, no injury whistle.
                     SDL_PumpEvents();SDL_Event input;
@@ -2256,7 +2260,7 @@ int main(int argc, char** argv) {
                     const int delay=live_frame_ms_explicit?live_frame_ms:app::scene_frame_delay((saved<6?saved/2:saved)*20);
                     if (delay>0) SDL_Delay(Uint32(delay));
                     // EventImpl clears the box after its pause; no Source click wait here.
-                    SDL_SetWindowTitle(window, window_title.c_str());present(live_screen->render(frame));
+                    qa_view.note(title);SDL_SetWindowTitle(window, window_title.c_str());present(live_screen->render(frame));
                 };
             observers.shootout=[&, live](const LiveShootoutEvent& event, const std::vector<MatchGroup>& groups,
                        const GameState& state) {
@@ -2268,7 +2272,7 @@ int main(int argc, char** argv) {
                         std::to_string(event.group)+"_"+std::to_string(event.match)+"_"+
                         std::to_string(event.side)+"_"+std::to_string(event.round)+"_"+
                         std::to_string(event.of)+"_"+std::to_string(event.player);
-                    SDL_SetWindowTitle(window, window_title.c_str());
+                    qa_view.note(title);SDL_SetWindowTitle(window, window_title.c_str());
                     const auto image=live_screen->render_shootout(frame,projection);
                     for (size_t i=0;i<pixels.size();++i) pixels[i]=palette.argb[image.pixels[i]];
                     SDL_UpdateTexture(texture,nullptr,pixels.data(),320*4);
@@ -2285,7 +2289,7 @@ int main(int argc, char** argv) {
                     if (!running || live->live_skipped) return false;
                     const auto frame = ui::live_matchday_frame(event.minute,groups,state);
                     const auto present = [&](const Image& image,const Palette& colors,const std::string& title) {
-                        SDL_SetWindowTitle(window, window_title.c_str());
+                        qa_view.note(title);SDL_SetWindowTitle(window, window_title.c_str());
                         for (size_t i=0;i<pixels.size();++i) pixels[i]=colors.argb[image.pixels[i]];
                         SDL_UpdateTexture(texture,nullptr,pixels.data(),320*4);
                         SDL_RenderClear(renderer);SDL_RenderCopy(renderer,texture,nullptr,nullptr);SDL_RenderPresent(renderer);
@@ -2358,6 +2362,7 @@ int main(int argc, char** argv) {
         const auto present_world12_live_family = [&](const bmh::world12::CareerSnapshot& staged,
                 bmh::world12::AiMatchProjection& projection,MatchEngine& engine,uint8_t seat,uint8_t child,
                 std::optional<bmh::world12::LeagueId> league={}) {
+            qa_view.begin_scope();
             app::world12::LiveFamilyScope scope(*world_session,staged,projection,engine,seat,world_live_nonce,child,league);
             auto screen=std::make_unique<ui::LeagueTableScreen>(data,scope.view(),season_exe);
             bool closed=false,left_down=false,right_down=false,release_consumed=false,redraw=true;
@@ -2365,7 +2370,7 @@ int main(int argc, char** argv) {
                 app::ClubModalServices services;services.club_projection=provider;return present_club_information&&present_club_information(services,0)&&running;
             };
             while(running&&!closed){
-                if(redraw){present_season(screen->render(),"OpenBMH - live_overview");redraw=false;}
+                if(redraw){const auto child=screen->world12_state()->child;present_season(screen->render(),child==0?"OpenBMH - live_overview_table":child==1?"OpenBMH - live_overview_pairings":"OpenBMH - live_overview_strengths");redraw=false;}
                 SDL_Event input;bool changed=false;
                 while(quit_confirmation.poll(&input)){
                     if(input.type==SDL_QUIT){running=false;break;}
@@ -2665,7 +2670,15 @@ int main(int argc, char** argv) {
                     return present_club_information(services,0)&&running;
                 };
                 const auto& table_range=present_table_range;
-                const auto result=app::world12::serve_startup(flow,r,world_session,data,seed,1,r.request==ui::FlowRequest::kickoff?make_pending_offer_hooks(flow.render()):PendingOfferHooks{},nullptr,advertising,construction,compensation,ui::SettingsSoundCapabilities{playback.original_ready()&&playback.available(),playback.original_ready()&&playback.available()},settings_notice,club_information,table_range,r.request==ui::FlowRequest::world12_market_action?make_ordinary_transfer_presenters(flow.render(),[&](const GameState& state,int team){const int local=state.manager_of(team);if(!world_session||local<0||size_t(local)>=world_session->snapshot().world.managers.size())throw FormatError("world12: market crest has no canonical human manager");const auto& world=world_session->snapshot().world;return world.crests.at(world.clubs.at(world.managers[size_t(local)].club).crest);}):app::world12::MarketPresenters{});
+                std::optional<app::world12::StartupTurnHooks> turn;
+                if(r.request==ui::FlowRequest::kickoff){
+                    if(!world_session||!world_session->snapshot().desktop||!world_session->snapshot().desktop->active_seat)
+                        throw FormatError("world12: native turn has no active canonical desk");
+                    process_timer.pause(process_source_seconds());process_timer_frame.reset();
+                    turn.emplace();turn->clock=make_world12_clock_hooks(flow.render(),*world_session->snapshot().desktop->active_seat);
+                    turn->matches=make_world12_match_hooks();
+                }
+                const auto result=app::world12::serve_startup(flow,r,world_session,data,seed,1,r.request==ui::FlowRequest::kickoff?make_pending_offer_hooks(flow.render()):PendingOfferHooks{},turn?&*turn:nullptr,advertising,construction,compensation,ui::SettingsSoundCapabilities{playback.original_ready()&&playback.available(),playback.original_ready()&&playback.available()},settings_notice,club_information,table_range,r.request==ui::FlowRequest::world12_market_action?make_ordinary_transfer_presenters(flow.render(),[&](const GameState& state,int team){const int local=state.manager_of(team);if(!world_session||local<0||size_t(local)>=world_session->snapshot().world.managers.size())throw FormatError("world12: market crest has no canonical human manager");const auto& world=world_session->snapshot().world;return world.crests.at(world.clubs.at(world.managers[size_t(local)].club).crest);}):app::world12::MarketPresenters{});
                 if(result.error.empty()&&(result.progress==app::world12::StartupProgress::prepared||
                    (r.request==ui::FlowRequest::file_action&&r.file_action.file_kind==ui::SaveLoadFileKind::game&&r.file_action.action==ui::SaveLoadAction::load))) {
                     world_process_timer.reset();process_timer_frame.reset();
@@ -4162,6 +4175,7 @@ int main(int argc, char** argv) {
         // at its native resolution until a complete left/right click, without loading balls.
         {
             app::StartScreen title_screen(renderer);
+            qa_view.note("start_screen");
             title_screen.present();
             bool opening_confirmed = false;
             std::optional<Uint8> opening_press;
@@ -4466,6 +4480,7 @@ int main(int argc, char** argv) {
                 const bool source_modal_redraw = toto_calculator_redraw || stadium_redraw ||
                     national_picker_redraw || friendly_picker_redraw || friendly_calendar_redraw || friendly_question_redraw;
                 if (dirty) {
+                    qa_view.note(flow.screen_name(),std::to_string(world12_development&&world_session?world_session->revision():revision));
                     const auto image = process_timer_image(flow.render());
                     for (size_t i = 0; i < pixels.size(); ++i) pixels[i] = palette.argb[image.pixels[i]];
                     if (SDL_UpdateTexture(texture, nullptr, pixels.data(), 320 * 4) != 0 && source_modal_redraw)
