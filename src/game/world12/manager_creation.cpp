@@ -29,6 +29,9 @@ ManagerCareerState manager_career_state_from_legacy(const GameState& state,uint8
     if((!previous||previous->table_display_word)&&state.memory.has(table_word+1))result.table_display_word=state.memory.u16(table_word);
     const auto other_view=layout::CareerSession_DispatchOtherGames_RuntimeField+uint32_t(seat);
     if((!previous||previous->other_games_view)&&state.memory.has(other_view))result.other_games_view=state.memory.u8(other_view);
+    const auto flags_base=layout::Flags+uint32_t(seat)*3;
+    if((!previous||previous->statistics_flags)&&state.memory.has(flags_base))result.statistics_flags=state.memory.u8(flags_base);
+    if((!previous||previous->player_statistics_flags)&&state.memory.has(flags_base+2))result.player_statistics_flags=state.memory.u8(flags_base+2);
     const auto flags=layout::Flags+uint32_t(seat)*3+1;
     if((!previous||previous->stadium_curve_flags)&&state.memory.has(flags))result.stadium_curve_flags=state.memory.u8(flags);
     if(!previous||previous->camp_focus){result.camp_focus.emplace();copy(0xc1,*result.camp_focus);}
@@ -67,6 +70,9 @@ void install_manager_career_state(GameState& state,uint8_t seat,const ManagerCar
     if(input.table_display_word){const auto at=layout::LeagueTableDisplayModes+uint32_t(seat)*2;state.memory.add_block(at,2);state.memory.set16(at,*input.table_display_word);}
     const auto other_view=layout::CareerSession_DispatchOtherGames_RuntimeField+uint32_t(seat);
     if(input.other_games_view){state.memory.add_block(other_view,1);state.memory.set8(other_view,*input.other_games_view);}
+    const auto flags_base=layout::Flags+uint32_t(seat)*3;
+    if(input.statistics_flags){state.memory.add_block(flags_base,1);state.memory.set8(flags_base,*input.statistics_flags);}
+    if(input.player_statistics_flags){state.memory.add_block(flags_base+2,1);state.memory.set8(flags_base+2,*input.player_statistics_flags);}
     const auto flags=layout::Flags+uint32_t(seat)*3+1;
     if(input.stadium_curve_flags){state.memory.add_block(flags,1);state.memory.set8(flags,*input.stadium_curve_flags);}
     const auto copy=[&](size_t offset,const auto& values){std::copy(values.begin(),values.end(),state.manager_records.begin()+at+offset);};
@@ -94,6 +100,13 @@ void install_manager_career_state(GameState& state,uint8_t seat,const ManagerCar
     }
     const size_t sponsors[]={0xae8,0xadc,0xa34};
     for(size_t i=0;i<3;++i){put32(state.manager_records,at+sponsors[i],input.sponsors[i].amount);state.manager_records.at(at+sponsors[i]+5)=input.sponsors[i].months;}
+}
+void capture_manager_statistics_flags(const GameState& state,uint8_t seat,ManagerCareerState& career,uint8_t mask){
+    if(seat>=4||!mask||(mask&~5u))throw FormatError("world12: invalid authoritative statistics preference capture");
+    auto candidate=career;const auto base=layout::Flags+uint32_t(seat)*3;
+    if(mask&1){if(!state.memory.has(base))throw FormatError("world12: missing Source statistics flags");candidate.statistics_flags=state.memory.u8(base);}
+    if(mask&4){if(!state.memory.has(base+2))throw FormatError("world12: missing Source player-statistics flags");candidate.player_statistics_flags=state.memory.u8(base+2);}
+    career=std::move(candidate);
 }
 PlayerInitializationOutcome add_initial_manager(World& world,const InitialManagerChoice& choice,CareerSettings settings,
     const InitialStrengthRanges& strengths,const GameState& reference,const LeImage& country_rules,GameRandom& game,WatcomRandom& random) {

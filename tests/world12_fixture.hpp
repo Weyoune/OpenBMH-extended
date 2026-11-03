@@ -38,7 +38,7 @@ inline void omit_recent_manager_records(bmh::world12::World& world) {
     for(auto& manager:world.managers)if(manager.career&&manager.career->season_services)manager.career->season_services->promotion_tail_flags.reset();
     world.european_campaigns.reset();world.indoor.reset();
     for(auto& manager:world.managers)if(manager.match_state)manager.match_state->attendance.reset();
-    for(auto& manager:world.managers)if(manager.career){manager.career->cup_titles.reset();manager.career->strengths_display_word.reset();manager.career->pairings_display_byte.reset();manager.career->table_display_word.reset();manager.career->other_games_view.reset();manager.career->camp_focus.reset();manager.career->stadium_curve_flags.reset();}
+    for(auto& manager:world.managers)if(manager.career){manager.career->cup_titles.reset();manager.career->strengths_display_word.reset();manager.career->pairings_display_byte.reset();manager.career->table_display_word.reset();manager.career->other_games_view.reset();manager.career->camp_focus.reset();manager.career->statistics_flags.reset();manager.career->player_statistics_flags.reset();manager.career->stadium_curve_flags.reset();}
     if(world.economy)world.economy->presentation_options.reset();
     if(world.economy)for(auto& manager:world.economy->managers)manager.depreciation.reset();
 }

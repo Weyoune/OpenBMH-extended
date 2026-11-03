@@ -10,6 +10,9 @@ struct InitialManagerChoice {
 // Verified numeric facility/environment/sponsor state; no names, pointers or packed IDs.
 ManagerCareerState manager_career_state_from_legacy(const GameState&,uint8_t seat,const std::vector<PlayerId>& players={},bool season_services=false,const ManagerCareerState* previous=nullptr);
 void install_manager_career_state(GameState&,uint8_t seat,const ManagerCareerState&,const std::vector<PlayerId>& players={});
+// Capture only bytes explicitly written by an owned Source action: mask1 for
+// statistics byte0, mask4 for player-statistics byte2; byte1 has its own owner.
+void capture_manager_statistics_flags(const GameState&,uint8_t local_manager,ManagerCareerState&,uint8_t mask);
 // Fresh-career confirmation, including identity-preserving placement, strength,
 // facilities and the existing account/contract/lineup phase. Rules are supplied
 // for the selected country; already accepted managers remain untouched.
