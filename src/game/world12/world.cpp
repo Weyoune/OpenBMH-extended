@@ -2,6 +2,7 @@
 #include "game/world12/world.hpp"
 #include "game/world12/national.hpp"
 #include "game/world12/national_coach.hpp"
+#include "game/world12/inactive_club_state.hpp"
 #include <set>
 #include <algorithm>
 #include <stdexcept>
@@ -109,6 +110,7 @@ for(const auto* refs:{&manager.tactics->backing->marks,&manager.tactics->backing
     validate_national_coaches(*this);
     validate_national_campaigns(*this);
     validate_inactive_national_draw(*this);
+    validate_inactive_club_state(*this);
 }
 std::vector<ClubId> World::selectable_clubs(Country country,LeagueId id)const {if(!catalogue.selectable(country)||catalogue.league(id).country!=country)throw std::invalid_argument("world12: unavailable manager country/league");return membership.at(id.value).clubs;}
 Country World::manager_country(uint8_t seat)const {for(const auto& manager:managers)if(manager.seat==seat)return clubs.at(manager.club).country;throw std::out_of_range("world12: manager seat is not occupied");}

@@ -31,6 +31,7 @@ inline void omit_recent_manager_records(bmh::cli::Json& root) {
         for(auto& manager:std::get<bmh::cli::Json::Array>(economy->second.object()->at("managers").value))manager.object()->erase("depreciation");
 }
 inline void omit_recent_manager_records(bmh::world12::World& world) {
+    world.inactive_club_state.reset();
     world.highscore_signature.reset();
     world.annual_title_archive.reset();
     world.annual_awards_completed.reset();world.regional_playoff.reset();
