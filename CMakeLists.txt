@@ -1242,6 +1242,7 @@ add_library(bmhworld12 STATIC
     src/game/world12/standings.cpp
     src/game/world12/season_transition.cpp
     src/game/world12/season_awards.cpp
+    src/game/world12/highscores.cpp
     src/game/world12/annual_qualification.cpp
     src/game/world12/annual_accounts.cpp
     src/game/world12/annual_moods.cpp
@@ -1558,3 +1559,7 @@ add_test(NAME world12_regional_playoff_tests COMMAND world12_regional_playoff_te
 add_executable(world12_annual_players_tests tests/world12_annual_players_tests.cpp)
 target_link_libraries(world12_annual_players_tests PRIVATE bmhworld12)
 add_test(NAME world12_annual_players_tests COMMAND world12_annual_players_tests)
+
+add_executable(world12_highscore_tests tests/world12_highscore_tests.cpp)
+target_link_libraries(world12_highscore_tests PRIVATE bmhworld12)
+add_test(NAME world12_highscore_tests COMMAND world12_highscore_tests)

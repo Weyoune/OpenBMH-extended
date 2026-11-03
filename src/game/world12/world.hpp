@@ -296,6 +296,7 @@ struct TransferMarket {
 };
 using GlobalPlayerStatistics = std::map<std::pair<ClubId,PlayerId>,PlayerClubStatistics>;
 struct World {
+    std::optional<uint16_t> highscore_signature; // Fresh Source saved fact: zero known-unranked, absent oldunknown; schema41.
     std::optional<AnnualTitleArchive> annual_title_archive; // Known retained IDs and explicit unknown prior history; schema40.
     std::optional<uint32_t> annual_awards_completed; // Exactly-once season count; fresh0, unknown before schema38.
     std::optional<std::array<std::vector<ClubId>,2>> amateur_slots; // Source physical DE/EN newcomer order; unknown before schema36.

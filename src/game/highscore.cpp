@@ -92,8 +92,8 @@ HighscoreScore highscore_score(const GameState& g, int manager, HighscoreContext
             }
     } else {
         if (g.season < 0) throw std::invalid_argument("highscore: negative season index");
-        const int asset_manager = context == HighscoreContext::SeasonBoundary
-            ? int(g.manager_teams.size()) : int(g.memory.u8(::bmh::layout::ActiveManager));
+        const int asset_manager = context==HighscoreContext::OwnedManagerAssets?manager:
+            context == HighscoreContext::SeasonBoundary?int(g.manager_teams.size()):int(g.memory.u8(::bmh::layout::ActiveManager));
         result.assets = std::min(net_assets(g, asset_manager) / 50000, 100);
         result.patience = rec8(g, manager, 0x26f);
         GameState facility_state = g; // facility_rating's public API takes mutable state.

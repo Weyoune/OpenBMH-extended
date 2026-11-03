@@ -94,7 +94,9 @@ void initialize_career_economy(CareerSnapshot& state,const GameState& reference)
     const std::array<uint8_t,4> identity{0,1,2,3};for(size_t n=0;n<4;++n)e.managers[n]=read_manager(reference,n,identity);
     // Initial reference mail must be empty: do not import an unrelated career.
     if(reference.mailbox.size()!=kMailboxEntries*kMailboxEntry||std::any_of(reference.mailbox.begin(),reference.mailbox.end(),[](auto b){return b!=0;}))throw std::invalid_argument("world12: initial economy reference contains mailbox state");
-    auto candidate=state;candidate.world.economy=e;candidate.validate();state=std::move(candidate);
+    auto candidate=state;candidate.world.economy=e;
+    if(reference.memory.has(layout::CareerSession_FormatError_RuntimeField7+1))candidate.world.highscore_signature=reference.memory.u16(layout::CareerSession_FormatError_RuntimeField7);
+    candidate.validate();state=std::move(candidate);
 }
 void install_career_economy(AiMatchProjection& projection,const World& world){
     if(!world.economy||!world.markets)throw std::invalid_argument("world12: career economy/market is missing");

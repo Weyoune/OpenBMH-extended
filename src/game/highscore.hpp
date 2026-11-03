@@ -38,7 +38,7 @@ struct HighscoreScore {
     int32_t total = 0;
 };
 
-enum class HighscoreContext { ActiveManager, SeasonBoundary };
+enum class HighscoreContext { ActiveManager, SeasonBoundary, OwnedManagerAssets };
 // Assets in HighscoreScore use global ActiveManager even when scoring another manager. At the
 // season boundary DailyInterest's preceding manager loop leaves ActiveManager=manager_count.
 // Pass that context explicitly without modifying the caller's continuation state.
