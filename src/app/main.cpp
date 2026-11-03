@@ -2840,13 +2840,17 @@ int main(int argc, char** argv) {
             return hooks;
         };
         const auto present_world12_national_draw = [&](const bmh::world12::CareerSnapshot& candidate,
-                const bmh::world12::NationalCampaign& campaign,uint8_t seat) {
+                const bmh::world12::NationalCampaign& campaign,uint8_t seat,uint64_t revision,uint64_t scope) {
+            auto viewer=bmh::world12::ClubId{};
+            for(const auto& manager:candidate.world.managers)if(candidate.world.clubs.at(manager.club).kind==bmh::world12::ClubKind::national_team){seat=manager.seat;viewer=manager.club;break;}
+            if(!viewer.valid()&&candidate.world.national_coaches)for(const auto& role:*candidate.world.national_coaches)if(role.active&&role.coach){seat=*role.coach;viewer=role.team;break;}
+            if(!viewer.valid())return true;
             auto display=candidate;display.season=campaign.season;
             const auto actor=std::find_if(display.world.managers.begin(),display.world.managers.end(),[&](const auto& value){return value.seat==seat;});
             if(actor==display.world.managers.end())throw FormatError("world12: national draw has no actual viewer");
             if(world_live_nonce==UINT64_MAX)throw FormatError("world12: annual view generation exhausted");
-            const ui::World12OtherGamesIdentity owner{seat,actor->club,world_session->revision(),world_session->scope()^(uint64_t(1)<<62),++world_live_nonce};
-            for(const auto& stage:campaign.stages)if(!stage.teams.empty()&&stage.teams.front().valid()){
+            const ui::World12OtherGamesIdentity owner{seat,viewer,revision,scope^(uint64_t(1)<<62),++world_live_nonce};
+            for(const auto& stage:campaign.stages)if(std::find(stage.teams.begin(),stage.teams.end(),viewer)!=stage.teams.end()){
                 present_world12_competition_page(ui::world12_national_games_state(display,owner,season_texts,stage.rules.entry));if(!running)return false;
             }return running;
         };
@@ -2896,7 +2900,7 @@ int main(int argc, char** argv) {
                 page.projection.phase=SeasonCupDrawPhase::overview;present_cup_projection(world_session->reference(),std::move(page.projection));return running;
             };
             hooks.national_draw_owned=[&,seat](const auto& candidate,const auto& campaign){
-                return present_world12_national_draw(candidate,campaign,seat);
+                return present_world12_national_draw(candidate,campaign,seat,world_session->revision(),world_session->scope());
             };
             hooks.highscore=[&](const bmh::world12::OwnedHighscoreProjection& score,bool final){
                 const auto options=game_end_options(world_session->reference());
@@ -2974,7 +2978,7 @@ int main(int argc, char** argv) {
                         }
                         if(staged.snapshot().world.national_campaigns){
                             const auto& campaign=staged.snapshot().world.national_campaigns->seasons.at(staged.snapshot().season);
-                            if(!present_world12_national_draw(staged.snapshot(),campaign,staged.snapshot().world.managers.front().seat))throw FormatError("world12: initial national draw interrupted");
+                            if(!present_world12_national_draw(staged.snapshot(),campaign,staged.snapshot().world.managers.front().seat,staged.revision(),staged.scope()))throw FormatError("world12: initial national draw interrupted");
                         }
                     };
                 }
@@ -2995,6 +2999,7 @@ int main(int argc, char** argv) {
                     world_process_timer.reset();process_timer_frame.reset();
                 }
                 if(world_session&&world_session->snapshot().world.economy&&world_session->snapshot().world.economy->presentation_options){const auto& options=*world_session->snapshot().world.economy->presentation_options;playback.set_original_options({music_enabled&&(options[5]&0x7f)==0,true,(options[6]&0x7f)==0});}
+                if(result.error.empty()&&(result.progress==app::world12::StartupProgress::prepared||(r.request==ui::FlowRequest::file_action&&r.file_action.file_kind==ui::SaveLoadFileKind::game&&r.file_action.action==ui::SaveLoadAction::load)))app::original_audio_command(playback,1);
                 if(!result.error.empty())std::fprintf(stderr,"world12: %s\n",result.error.c_str());
                 dirty=true;return;
             }

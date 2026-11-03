@@ -893,8 +893,9 @@ bool LeagueTableScreen::key(std::string_view value) {
 namespace bmh::ui {
 void LeagueTableScreen::draw_world12_selectors(Image& image)const{
         selector(image,205,176,3);
-        // Reuse the supplied Original Germany/England/globe setup symbols.
-        copy_region(image,country_atlas_,int(world12_->group)*51,40,264,176,51,std::min(40,int(exe_.u8(world12_->child==2?layout::Strengths_Selector_RuntimeField:layout::LeaguePairings_Selector_RuntimeField))),0xc0);
+        // Domestic country symbols; Europe keeps the Original league selector artwork.
+        if(world12_->group==bmh::world12::TableGroup::europe)selector(image,264,176,1);
+        else copy_region(image,country_atlas_,int(world12_->group)*51,40,264,176,51,std::min(40,int(exe_.u8(world12_->child==2?layout::Strengths_Selector_RuntimeField:layout::LeaguePairings_Selector_RuntimeField))),0xc0);
         const char* label=world12_->group==bmh::world12::TableGroup::germany?"Deutschland":world12_->group==bmh::world12::TableGroup::england?"England":"Europa";
         if(world12_->child!=2)text(image,264,225,label,kHeading,54);
         for(size_t row=0;row<world12_->leagues.size();++row){
