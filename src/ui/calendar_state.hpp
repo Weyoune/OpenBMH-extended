@@ -4,6 +4,8 @@
 #include <array>
 #include <cstdint>
 #include <vector>
+#include <optional>
+#include <string>
 
 #include "ui/desk_state.hpp"
 #include "game/reschedule.hpp"
@@ -23,6 +25,7 @@ struct CalendarDayProjection {
     DeskDate date;
     uint16_t raw_entry = 0;
     uint32_t competitions = 0;
+    std::optional<std::string> owned_information; // Explicit canonical schedule footer, Original font bytes.
     std::array<int, 9> league_matchdays{}; // 1-based ordinal; zero when this league does not play.
     bool current_day = false;
     bool reschedule_source = false;

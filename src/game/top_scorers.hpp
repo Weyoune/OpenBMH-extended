@@ -45,4 +45,9 @@ TopScorersProjection top_scorers_from_game(const GameState& game, int manager_sl
                                             TopScorersMetric metric,
                                             TopScorersScope scope);
 
+// Same Source insertion/ranking over an explicit physical team list. This admits
+// bounded country-aware projections without interpreting local references as
+// Native contiguous league slots. League is caller-owned display identity.
+TopScorersProjection top_scorers_from_teams(const GameState&,int manager_slot,int league,
+    const std::vector<int>& teams,TopScorersMetric,TopScorersScope);
 } // namespace bmh::game

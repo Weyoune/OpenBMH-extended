@@ -19,6 +19,7 @@
 #include "ui/settings.hpp"
 #include "ui/world12_other_games.hpp"
 #include "ui/world12_table.hpp"
+#include "ui/world12_readonly.hpp"
 #include "app/world12_market.hpp"
 #include "ui/league_table_range_dialog.hpp"
 #include "app/world12_club_information.hpp"
@@ -94,6 +95,9 @@ public:
     ui::World12MarketState open_market(const ui::DeskRequest&);
     ui::World12MarketState market_view()const;
     bool apply_market(const ui::World12MarketRequest&,const std::filesystem::path&,const MarketPresenters& presenters={},const ClubInformationPresenter& club={});
+    ui::World12ReadonlyState open_readonly(const ui::DeskRequest&,const std::filesystem::path&,const Image& underlay,const std::filesystem::path& save_directory={});
+    ui::World12ReadonlyState readonly_view()const;
+    bool apply_readonly(const ui::World12ReadonlyRequest&);
     ui::World12TableState open_tables(const ui::DeskRequest&);
     ui::World12TableState tables_view()const;
     bool apply_tables(const ui::World12TableRequest&,const std::filesystem::path& data={},const ClubInformationPresenter& club={},const TableRangePresenter& range={});
@@ -171,6 +175,12 @@ private:
     std::optional<ui::DeskRequest> settings_owner_;
     std::optional<ui::SettingsSoundCapabilities> settings_sound_;
     void validate_settings_owner(uint64_t sequence,uint64_t revision)const;
+    uint64_t readonly_generation_=0;
+    std::optional<ui::World12ReadonlyIdentity> readonly_owner_;
+    ui::World12ReadonlySelection readonly_selection_;
+    Image readonly_underlay_;
+    HighscoreTable readonly_highscore_rows_{};
+    std::shared_ptr<const bmh::world12::CareerSnapshot> readonly_source_;
     uint64_t table_generation_=0;
     std::optional<ui::World12TableIdentity> table_owner_;
     ui::World12TableSelection table_selection_;

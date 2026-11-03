@@ -46,15 +46,22 @@ DeskRecordsState fair_play_state_from_game(const GameState& g, int league, const
     const int first=league_first_team(league), count=kLeagueSizes[league];
     if(first<0||count<=0||first+count>runtime_dimensions.league_teams||g.club_ids.size()<size_t(first+count))
         throw FormatError("fair play: incomplete Source league");
+    std::vector<int> teams;for(int i=0;i<count;++i)teams.push_back(first+i);
+    auto out=fair_play_state_from_teams(g,league,teams,underlay,manager_slot);out.explicit_teams=false;return out;
+}
+DeskRecordsState fair_play_state_from_teams(const GameState& g,int league,const std::vector<int>& input,const Image& underlay,int manager_slot){
+    if(input.empty()||input.size()>20)throw FormatError("fair play: invalid bounded team list");
+    auto unique=input;std::sort(unique.begin(),unique.end());if(std::adjacent_find(unique.begin(),unique.end())!=unique.end())throw FormatError("fair play: repeated explicit team");
+    const int count=int(input.size());
     std::vector<int16_t> teams(static_cast<size_t>(count)); std::vector<uint32_t> keys(static_cast<size_t>(count));
     for(int i=0;i<count;++i) {
-        const int team=first+i; teams[size_t(i)]=int16_t(team);
+        const int team=input[size_t(i)];if(team<0||size_t(team)>=g.club_ids.size())throw FormatError("fair play: explicit team outside club table");teams[size_t(i)]=int16_t(team);
         const uint16_t cards=g.memory.u16(::bmh::layout::DeskRecords_Teams_RuntimeField+uint32_t(team)*2);
         keys[size_t(i)]=uint32_t((int16_t(cards)>>8)*4+(cards&0xff));
     }
     // FairPlayStateFromGame passes ascending=1 to the same in-place Source quicksort.
     quicksort_by_key(teams.data(),keys.data(),count,true);
-    DeskRecordsState out; out.kind=DeskRecordKind::fair_play;out.league=league;out.underlay=underlay;
+    DeskRecordsState out;out.explicit_teams=true; out.kind=DeskRecordKind::fair_play;out.league=league;out.underlay=underlay;
     out.original_panel=!g.memory.has(::bmh::layout::SolidPanelBackground)||g.memory.u8(::bmh::layout::SolidPanelBackground)==0;
     if(manager_slot>=0&&size_t(manager_slot)<g.manager_teams.size())
         out.manager_name=g.club_name(g.manager_teams[size_t(manager_slot)]);
@@ -67,14 +74,16 @@ DeskRecordsState fair_play_state_from_game(const GameState& g, int league, const
 }
 
 DeskRecordsScreen::DeskRecordsScreen(const std::filesystem::path& data, DeskRecordsState state)
-    : exe_(load_le(asset_path(data,"BMH.exe"))),texts_(load_textd(asset_path(data,"TEXTD.BLK"))),
-      font_(load_font(asset_path(data/"F","BMH3.FNT"))),sprite_font_(data),
+    : DeskRecordsScreen(data,std::move(state),load_le(asset_path(data,"BMH.exe"))) {}
+DeskRecordsScreen::DeskRecordsScreen(const std::filesystem::path& data,DeskRecordsState state,const LeImage& reference)
+    : exe_(reference),texts_(load_textd(asset_path(data,"TEXTD.BLK"))),
+      font_(load_font(asset_path(data/"F","BMH3.FNT"))),sprite_font_(data,reference),
       background_(load_vga(asset_path(data/"KB","129.VGA"))),state_(std::move(state)) {
     if(state_.underlay.width!=320||state_.underlay.height!=240) throw FormatError("desk records: missing accepted desk underlay");
     if(state_.kind==DeskRecordKind::fair_play) {
         kb56_=load_vga(asset_path(data/"KB","56.VGA"));
         const int bottom=int(state_.fair_play_rows.size())*9+38;
-        if(state_.league<0||state_.league>=9||state_.fair_play_rows.size()!=size_t(kLeagueSizes[state_.league])||
+        if(state_.league<0||(!state_.explicit_teams&&(state_.league>=9||state_.fair_play_rows.size()!=size_t(kLeagueSizes[state_.league])))||state_.fair_play_rows.empty()||state_.fair_play_rows.size()>20||
            kb56_.width<296||kb56_.height<9+(bottom-28-1))
             throw FormatError("fair play: incomplete Original view");
     } else if(state_.highscore.ranked) {

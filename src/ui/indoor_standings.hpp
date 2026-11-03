@@ -21,6 +21,7 @@ struct IndoorStandingRow {
     uint16_t points = 0;
     std::string name; // Original font bytes.
     uint8_t name_color = 0x6a, rank_color = 0x51;
+    bmh::world12::ClubId world_club; // Explicit canonical identity for typed projections.
 };
 struct IndoorStandingsState {
     DeskRequest owner{};
@@ -37,6 +38,7 @@ IndoorStandingsState indoor_standings_from_game(const GameState&, const LeImage&
 class IndoorStandingsScreen {
 public:
     IndoorStandingsScreen(const std::filesystem::path&, IndoorStandingsState);
+    IndoorStandingsScreen(const std::filesystem::path&,IndoorStandingsState,const LeImage& reference);
     Image render() const;
     const IndoorStandingsState& state() const { return state_; }
     std::string state_json() const;

@@ -55,6 +55,7 @@ struct AchievementsRequest {
 class AchievementsScreen {
 public:
     AchievementsScreen(const std::filesystem::path&, AchievementsState);
+    AchievementsScreen(const std::filesystem::path&,AchievementsState,const LeImage& reference);
     Image render() const;
     bool move(int x, int y);
     AchievementsRequest pointer_down(int x, int y, bool right = false);

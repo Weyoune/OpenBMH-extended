@@ -77,10 +77,12 @@ IndoorStandingsState indoor_standings_from_game(const GameState& g, const LeImag
 }
 
 IndoorStandingsScreen::IndoorStandingsScreen(const std::filesystem::path& data, IndoorStandingsState state)
-    : state_(std::move(state)), exe_(load_le(asset_path(data, "BMH.exe"))),
+    : IndoorStandingsScreen(data,std::move(state),load_le(asset_path(data,"BMH.exe"))) {}
+IndoorStandingsScreen::IndoorStandingsScreen(const std::filesystem::path& data,IndoorStandingsState state,const LeImage& reference)
+    : state_(std::move(state)),exe_(reference),
       texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
       background_(load_vga(asset_path(data / "KB", "129.VGA"))),
-      font_(load_font(asset_path(data / "F", "BMH3.FNT"))), sprite_(data) {
+      font_(load_font(asset_path(data / "F", "BMH3.FNT"))), sprite_(data,reference) {
     if (state_.rows.size() != (state_.tournaments ? 16 : 0))
         throw FormatError("indoor standings: incomplete Source ranking");
 }

@@ -2,6 +2,7 @@
 #include "game/top_scorers.hpp"
 
 #include <array>
+#include <algorithm>
 #include <stdexcept>
 #include <utility>
 
@@ -80,6 +81,17 @@ TopScorersProjection top_scorers_from_game(const GameState& g, int manager_slot,
         g.club_ids.size() < size_t(first_team + team_count) || g.club_names.empty())
         invalid("incomplete domestic club table");
 
+    std::vector<int> teams;for(int team=first_team;team<first_team+team_count;++team)teams.push_back(team);
+    return top_scorers_from_teams(g,manager_slot,league,teams,metric,scope);
+}
+TopScorersProjection top_scorers_from_teams(const GameState& g,int manager_slot,int league,
+    const std::vector<int>& teams,TopScorersMetric metric,TopScorersScope scope) {
+    if(teams.empty()||teams.size()>20||manager_slot<0||size_t(manager_slot)>=g.manager_teams.size()||g.manager_teams.size()>4)
+        invalid("invalid bounded team-list/manager owner");
+    if(metric!=TopScorersMetric::goals&&metric!=TopScorersMetric::assists&&metric!=TopScorersMetric::scorer)invalid("unknown metric");
+    if(scope!=TopScorersScope::league&&scope!=TopScorersScope::managers)invalid("unknown scope");
+    auto unique=teams;std::sort(unique.begin(),unique.end());if(std::adjacent_find(unique.begin(),unique.end())!=unique.end())invalid("repeated explicit team");
+    const auto manager_count=g.manager_teams.size();
     TopScorersProjection result;
     result.manager_slot = manager_slot;
     result.league = league;
@@ -89,7 +101,8 @@ TopScorersProjection top_scorers_from_game(const GameState& g, int manager_slot,
     std::array<TopScorersRow, 10> rows{};
     std::array<uint8_t, 10> scores{};
     size_t used = 0;
-    for (int team = first_team; team < first_team + team_count; ++team) {
+    for (const int team : teams) {
+        if(team<0||size_t(team)>=g.club_ids.size())invalid("explicit team reference outside club table");
         if (scope == TopScorersScope::managers && !source_manager_owns(g, team, manager_count)) continue;
         const SquadRange range = squad_range(team);
         if (range.first > g.squad_slots.size() || range.count > g.squad_slots.size() - range.first)

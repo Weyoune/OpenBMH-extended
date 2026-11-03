@@ -110,10 +110,12 @@ AchievementsState achievements_from_game(const GameState& game,const LeImage& ex
 }
 
 AchievementsScreen::AchievementsScreen(const std::filesystem::path& data,AchievementsState state)
-    :exe_(load_le(asset_path(data,"BMH.exe"))),texts_(load_textd(asset_path(data,"TEXTD.BLK"))),
+    :AchievementsScreen(data,std::move(state),load_le(asset_path(data,"BMH.exe"))) {}
+AchievementsScreen::AchievementsScreen(const std::filesystem::path& data,AchievementsState state,const LeImage& reference)
+    :exe_(reference),texts_(load_textd(asset_path(data,"TEXTD.BLK"))),
      body_(load_font(asset_path(data/"F","BMH3.FNT"))),
      header_(load_font(asset_path(data/"F","BMH2.FNT"))),
-     sprite_font_(data),background_(load_vga(asset_path(data/"KB","129.VGA"))),
+     sprite_font_(data,reference),background_(load_vga(asset_path(data/"KB","129.VGA"))),
      panel_(load_vga(asset_path(data/"KB","56.VGA"))),state_(std::move(state)) {
     if(state_.manager_slot<0||state_.manager_slot>3||state_.season_count<1||state_.season_count>50||
        state_.selected_season < -1||state_.selected_season>=state_.season_count||state_.underlay.width!=320||

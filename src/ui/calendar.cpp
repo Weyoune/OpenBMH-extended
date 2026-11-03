@@ -29,11 +29,14 @@ CalendarCell calendar_cell(const CalendarDayProjection& day) {
 CalendarScreen::CalendarScreen(const std::filesystem::path& data, CalendarState state,
                                std::string manager_name, bool decorated_background, int runtime_club,
                                DeskRequest owner)
+    : CalendarScreen(data,std::move(state),std::move(manager_name),decorated_background,runtime_club,owner,load_le(asset_path(data,"BMH.exe"))) {}
+CalendarScreen::CalendarScreen(const std::filesystem::path& data,CalendarState state,std::string manager_name,
+    bool decorated_background,int runtime_club,DeskRequest owner,const LeImage& reference)
     : state_(std::move(state)),
       background_(load_vga(asset_path(data / "KB", "129.VGA"))),
       atlas_(load_vga(asset_path(data / "KB", "55.VGA"))),
-      font_(load_font(asset_path(data / "F", "BMH3.FNT"))), sprite_font_(data),
-      exe_(load_le(asset_path(data, "BMH.exe"))), texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
+      font_(load_font(asset_path(data / "F", "BMH3.FNT"))), sprite_font_(data,reference),
+      exe_(reference), texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
       decorated_background_(decorated_background), owner_(owner) {
     if (runtime_club >= 0) {
         // TeamLeague2 returns zero for team handles above0x164 (national included).
@@ -85,6 +88,7 @@ void CalendarScreen::text(Image& out, int x, int baseline, std::string_view byte
 std::string CalendarScreen::information(const CalendarDayProjection& day) const {
     // CalendarCell's generic competition footer. Club-specific fixture/score detail
     // remains outside this read-only calendar packet.
+    if(day.owned_information)return *day.owned_information;
     std::string result;
     if ((day.raw_entry & 0x7fff) == 0) return result;
     for (int bit = 0; bit < 19; ++bit) {

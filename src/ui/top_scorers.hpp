@@ -19,6 +19,7 @@ class TopScorersScreen {
 public:
     TopScorersScreen(const std::filesystem::path& data, TopScorersState state);
 
+    TopScorersScreen(const std::filesystem::path&,TopScorersState,const LeImage& reference);
     Image render() const;
     bool pointer_down(int x, int y, bool right = false);
     bool move(int x, int y);

@@ -27,6 +27,8 @@ public:
     CalendarScreen(const std::filesystem::path& data, CalendarState state,
                    std::string manager_name = {}, bool decorated_background = true, int runtime_club = -1,
                    DeskRequest owner = {});
+    CalendarScreen(const std::filesystem::path&,CalendarState,std::string manager_name,
+                   bool decorated_background,int runtime_club,DeskRequest owner,const LeImage& reference);
     Image render() const;
     bool move(int x, int y);
     bool click(int x, int y, bool right = false);

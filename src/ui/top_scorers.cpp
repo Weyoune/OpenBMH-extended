@@ -59,17 +59,19 @@ uint32_t scope_text_address(TopScorersScope scope) {
 } // namespace
 
 TopScorersScreen::TopScorersScreen(const std::filesystem::path& data, TopScorersState state)
-    : exe_(load_le(asset_path(data, "BMH.exe"))),
+    : TopScorersScreen(data,std::move(state),load_le(asset_path(data,"BMH.exe"))) {}
+TopScorersScreen::TopScorersScreen(const std::filesystem::path& data,TopScorersState state,const LeImage& reference)
+    : exe_(reference),
       texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
       frame_(load_vga(asset_path(data / "KB", "129.VGA"))),
       podium_(load_vga(asset_path(data / "KB", "18.VGA"))),
       button_art_(load_vga(asset_path(data / "KB", "0.VGA"))),
-      font_(load_font(asset_path(data / "F", "BMH3.FNT"))), sprite_(data),
+      font_(load_font(asset_path(data / "F", "BMH3.FNT"))), sprite_(data,reference),
       state_(std::move(state)) {
     const auto& id = state_.identity;
     const auto& projection = state_.projection;
     if (id.manager_slot < 0 || id.manager_slot > 3 || id.runtime_team < 0 ||
-        id.club_identity < 0 || id.league < 0 || id.league > 8 || !id.scope ||
+        id.club_identity < 0 || id.league < 0 || (!state_.explicit_teams && id.league > 8) || !id.scope ||
         projection.manager_slot != id.manager_slot || projection.league != id.league ||
         projection.metric != top_scorers_metric_to_game(state_.metric) ||
         projection.scope != top_scorers_scope_to_game(state_.scope) ||
@@ -262,8 +264,8 @@ std::string TopScorersScreen::state_json() const {
         if (n) out << ',';
         const auto& row = state_.projection.rows[n];
         out << "{\"rank\":" << row.rank << ",\"player\":" << row.player
-            << ",\"team\":" << row.team << ",\"goals\":" << row.goals
-            << ",\"assists\":" << row.assists << ",\"score\":" << row.score << '}';
+            << ",\"team\":" << row.team << ",\"goals\":" << int(row.goals)
+            << ",\"assists\":" << int(row.assists) << ",\"score\":" << int(row.score) << '}';
     }
     out << "]}";
     return out.str();

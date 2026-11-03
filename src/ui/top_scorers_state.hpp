@@ -47,6 +47,7 @@ struct TopScorersState {
     TopScorersScope scope = TopScorersScope::league;
     game::TopScorersProjection projection;
     Image underlay; // Captured accepted desktop for Source's cached-frame path.
+    bool explicit_teams = false;
     bool decorated_background = true;
     bool gradient_text = true;
     bool cached_backdrop = false;

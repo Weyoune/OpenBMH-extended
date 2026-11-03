@@ -23,6 +23,7 @@ struct FairPlayRow { int team = -1, rank = 0, yellow = 0, red = 0, points = 0; s
 struct DeskRecordsState {
     DeskRecordKind kind = DeskRecordKind::fair_play;
     int league = -1;
+    bool explicit_teams = false;
     std::vector<FairPlayRow> fair_play_rows;
     HighscoreProjection highscore;
     Image underlay;
@@ -36,9 +37,12 @@ struct DeskRecordsState {
 // projections are read-only here; only the highscore file's Source update is
 // performed by the caller before constructing this presentation.
 DeskRecordsState fair_play_state_from_game(const GameState&, int league, const Image& underlay = {}, int manager_slot=-1);
+DeskRecordsState fair_play_state_from_teams(const GameState&,int league,
+    const std::vector<int>& teams,const Image& underlay={},int manager_slot=-1);
 class DeskRecordsScreen {
 public:
     DeskRecordsScreen(const std::filesystem::path& data, DeskRecordsState);
+    DeskRecordsScreen(const std::filesystem::path&,DeskRecordsState,const LeImage& reference);
     Image render() const;
     bool pointer_down(int x,int y,bool right=false);
     bool pointer_up(int x,int y,bool right=false);
