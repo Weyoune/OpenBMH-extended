@@ -174,7 +174,8 @@ void WorldCupStatisticsScreen::draw_flag(Image& out, uint8_t nation, int x, int 
 
 void WorldCupStatisticsScreen::draw_badge(Image& out, uint8_t nation, int x, int y) const {
     if(!projection_.badge_atlases[nation].empty()){
-        const auto badge=load_vga(asset_path(data_directory_,projection_.badge_atlases[nation]));
+        const std::filesystem::path path(projection_.badge_atlases[nation]);
+        const auto badge=load_vga(asset_path(data_directory_/path.parent_path(),path.filename().string()));
         copy(out,badge,int(projection_.badge_cells[nation])*38,0,x,y,38,38,0xc0);return;
     }
     const int team = kNoTeam + nation;
