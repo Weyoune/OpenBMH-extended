@@ -58,7 +58,7 @@ AnnualTransitionOutcome publish_annual_transition(CareerSnapshot& state,ManagerA
         GameRandom game(candidate.game_seed);WatcomRandom random(candidate.watcom_seed);
         const auto draw=candidate.world.catalogue.scope.international?prepare_national_campaign(candidate.world,german,target,game,random):advance_inactive_national_draw(candidate.world,target,game,random);
         candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();out.game_draws+=draw.game_draws;out.watcom_draws+=draw.watcom_draws;
-        if(candidate.world.catalogue.scope.international){if(!hooks.national_draw||!hooks.national_draw(candidate.world.national_campaigns->seasons.at(target)))throw FormatError("world12: annual national draw needs its real presenter");unchanged();}
+        if(candidate.world.catalogue.scope.international){const auto& campaign=candidate.world.national_campaigns->seasons.at(target);const bool accepted=hooks.national_draw_owned?hooks.national_draw_owned(candidate,campaign):hooks.national_draw&&hooks.national_draw(campaign);if(!accepted)throw FormatError("world12: annual national draw needs its real presenter");unchanged();}
     }
     const auto qualification=stage_annual_qualification(candidate);out.game_draws+=qualification.game_draws;out.watcom_draws+=qualification.watcom_draws;
     if(!hooks.qualification||!hooks.qualification(qualification))throw FormatError("world12: actual next-European entrants need their presenter");unchanged();
@@ -78,7 +78,7 @@ AnnualTransitionOutcome publish_annual_transition(CareerSnapshot& state,ManagerA
     }
     for(auto& manager:candidate.world.managers)manager.match_state->point_deduction=accounts.pending_sanctions[manager.seat];
     const auto fields=stage_annual_fields(candidate,qualification,german,english);candidate.world=fields.world;candidate.cups=fields.cups;candidate.game_seed=fields.game_seed;candidate.watcom_seed=fields.watcom_seed;out.game_draws+=fields.game_draws;out.watcom_draws+=fields.watcom_draws;
-    for(const auto& draw:fields.draws){if(!hooks.cup_draw||!hooks.cup_draw(draw))throw FormatError("world12: actual annual cup draw needs its presenter");unchanged();}
+    for(const auto& draw:fields.draws){const bool accepted=hooks.cup_draw_owned?hooks.cup_draw_owned(candidate,draw):hooks.cup_draw&&hooks.cup_draw(draw);if(!accepted)throw FormatError("world12: actual annual cup draw needs its presenter");unchanged();}
     const auto players=stage_annual_player_renewal(candidate,qualification,promotions,reference,texts);candidate.world=players.world;candidate.desktop=players.desktop;candidate.transfers=players.transfers;candidate.results=players.results;candidate.league_rounds=players.league_rounds;candidate.game_seed=players.game_seed;candidate.watcom_seed=players.watcom_seed;out.game_draws+=players.game_draws;out.watcom_draws+=players.watcom_draws;out.retired=players.released;unchanged();
     if(players.inactive_origin_refresh_required)throw FormatError("world12: actual inactive population refresh is incomplete");
     begin_annual_manager_history(candidate.world,target);candidate.season=target;candidate.world.annual_title_archive=archive;candidate.calendar.reset();candidate.progress.reset();candidate.prepared_event.reset();

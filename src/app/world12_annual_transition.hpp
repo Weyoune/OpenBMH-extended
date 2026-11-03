@@ -18,6 +18,11 @@ struct AnnualTransitionHooks {
     std::function<bool(const bmh::world12::CupDrawNotice&)> cup_draw;
     std::function<bool(const bmh::world12::NationalCampaign&)> national_draw;
     std::function<bool(const bmh::world12::OwnedHighscoreProjection&,bool final_display)> highscore;
+    // Exact unpublished owners for pure presentation validation. The closing
+    // season/date remain bound until final publication; new fields/campaigns
+    // already belong to this staged snapshot, never the live Session.
+    std::function<bool(const bmh::world12::CareerSnapshot&,const bmh::world12::CupDrawNotice&)> cup_draw_owned;
+    std::function<bool(const bmh::world12::CareerSnapshot&,const bmh::world12::NationalCampaign&)> national_draw_owned;
 };
 struct AnnualTransitionOutcome {
     bool career_complete=false;
