@@ -91,8 +91,10 @@ std::string rank_number(int value) {
 }
 
 StatisticsMenuScreen::StatisticsMenuScreen(const std::filesystem::path& data, StatisticsMenuState state)
-    : exe_(load_le(asset_path(data, "BMH.exe"))), texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
-      sprite_(data), backdrop_(load_vga(asset_path(data / "KB", "129.VGA"))),
+    : StatisticsMenuScreen(data,std::move(state),load_le(asset_path(data,"BMH.exe"))) {}
+StatisticsMenuScreen::StatisticsMenuScreen(const std::filesystem::path& data, StatisticsMenuState state,const LeImage& reference)
+    : exe_(reference), texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
+      sprite_(data,reference), backdrop_(load_vga(asset_path(data / "KB", "129.VGA"))),
       buttons_(load_vga(asset_path(data / "KB", "0.VGA"))),
       window_(load_vga(asset_path(data / "KB", "56.VGA"))),
       header_font_(load_font(asset_path(data / "F", "BMH2.FNT"))),
@@ -202,11 +204,13 @@ std::string StatisticsMenuScreen::state_json() const {
 }
 
 OpportunitiesScreen::OpportunitiesScreen(const std::filesystem::path& data, OpportunitiesState state)
-    : exe_(load_le(asset_path(data, "BMH.exe"))), texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
+    : OpportunitiesScreen(data,std::move(state),load_le(asset_path(data,"BMH.exe"))) {}
+OpportunitiesScreen::OpportunitiesScreen(const std::filesystem::path& data, OpportunitiesState state,const LeImage& reference)
+    : exe_(reference), texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
       backdrop_(load_vga(asset_path(data / "KB", "56.VGA"))),
       ladder_(load_vga(asset_path(data / "KB", "37.VGA"))), buttons_(load_vga(asset_path(data / "KB", "0.VGA"))),
       font_(load_font(asset_path(data / "F", "BMH3.FNT"))),
-      header_font_(load_font(asset_path(data / "F", "BMH2.FNT"))), sprite_(data), state_(std::move(state)) {
+      header_font_(load_font(asset_path(data / "F", "BMH2.FNT"))), sprite_(data,reference), state_(std::move(state)) {
     if (state_.identity.manager_slot < 0 || state_.identity.manager_slot > 3 || state_.identity.runtime_team < 0 ||
         state_.identity.stable_club_identity < 0 || state_.league_size < 1 ||
         state_.league_size > int(state_.ranks.size()) ||

@@ -148,8 +148,10 @@ AnalyticsState analytics_from_game(const GameState& game, const LeImage& exe, in
 }
 
 AnalyticsScreen::AnalyticsScreen(const std::filesystem::path& data, AnalyticsState state)
-    : state_(std::move(state)), exe_(load_le(asset_path(data, "BMH.exe"))),
-      buttons_(load_vga(asset_path(data / "KB", "0.VGA"))), sprite_(data),
+    : AnalyticsScreen(data,std::move(state),load_le(asset_path(data,"BMH.exe"))) {}
+AnalyticsScreen::AnalyticsScreen(const std::filesystem::path& data, AnalyticsState state,const LeImage& reference)
+    : state_(std::move(state)), exe_(reference),
+      buttons_(load_vga(asset_path(data / "KB", "0.VGA"))), sprite_(data,reference),
       texts_(load_textd(asset_path(data, "TEXTD.BLK"))) {
     if (state_.manager_slot < 0 || state_.manager_slot >= 4 || state_.underlay.width != 320 ||
         state_.underlay.height != 240 || buttons_.width < 76 || buttons_.height < 84)

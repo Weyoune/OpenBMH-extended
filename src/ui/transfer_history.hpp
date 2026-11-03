@@ -38,6 +38,7 @@ TransferHistoryProjection transfer_history_from_game(const GameState& game, int 
 
 class TransferHistoryScreen {
 public:
+    TransferHistoryScreen(const std::filesystem::path&, const GameState& formatting_state,TransferHistoryProjection, const LeImage& reference);
     TransferHistoryScreen(const std::filesystem::path& data_directory,
                           const GameState& formatting_state,
                           TransferHistoryProjection projection);

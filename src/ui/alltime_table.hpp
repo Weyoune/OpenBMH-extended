@@ -32,10 +32,13 @@ struct AllTimeTableState {
 };
 enum class AllTimeRequestKind : uint8_t { none, close, select_nation, toggle_relative };
 struct AllTimeRequest { AllTimeRequestKind kind=AllTimeRequestKind::none; DeskRequest owner{}; int nation=0; bool relative=false; };
+// Shared Original row arithmetic, tie order and 24-row limit for explicit physical teams.
+void populate_alltime_rows(AllTimeTableState&,const std::vector<int>& teams,uint32_t full_season_rounds);
 AllTimeTableState alltime_table_from_game(const GameState&, const LeImage&, DeskRequest owner,
                                            const Image& underlay, int nation=0, bool relative=false);
 class AllTimeTableScreen {
 public:
+    AllTimeTableScreen(const std::filesystem::path&, AllTimeTableState, const LeImage& reference);
  AllTimeTableScreen(const std::filesystem::path&, AllTimeTableState);
  Image render() const;
  bool pointer_down(int x,int y,bool right=false);

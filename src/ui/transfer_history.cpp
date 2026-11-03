@@ -82,7 +82,11 @@ TransferHistoryProjection transfer_history_from_game(const GameState& game, int 
 TransferHistoryScreen::TransferHistoryScreen(const std::filesystem::path& data_directory,
                                              const GameState& formatting_state,
                                              TransferHistoryProjection projection)
-    : exe_(load_le(asset_path(data_directory, "BMH.exe"))),
+    : TransferHistoryScreen(data_directory,formatting_state,std::move(projection),load_le(asset_path(data_directory,"BMH.exe"))) {}
+TransferHistoryScreen::TransferHistoryScreen(const std::filesystem::path& data_directory,
+                                             const GameState& formatting_state,
+                                             TransferHistoryProjection projection,const LeImage& reference)
+    : exe_(reference),
       texts_(load_textd(asset_path(data_directory, "TEXTD.BLK"))),
       font_(load_font(asset_path(data_directory / "F", "BMH3.FNT"))),
       formatting_state_(formatting_state), projection_(std::move(projection)) {

@@ -69,7 +69,10 @@ MinuteStatisticsProjection minute_statistics_from_game(const GameState& game, in
 
 MinuteStatisticsScreen::MinuteStatisticsScreen(const std::filesystem::path& data_directory,
                                                MinuteStatisticsProjection projection)
-    : exe_(load_le(asset_path(data_directory, "BMH.exe"))),
+    : MinuteStatisticsScreen(data_directory,std::move(projection),load_le(asset_path(data_directory,"BMH.exe"))) {}
+MinuteStatisticsScreen::MinuteStatisticsScreen(const std::filesystem::path& data_directory,
+                                               MinuteStatisticsProjection projection,const LeImage& reference)
+    : exe_(reference),
       chart_atlas_(load_vga(asset_path(data_directory / "KB", "36.VGA"))),
       font_(load_font(asset_path(data_directory / "F", "BMH3.FNT"))),
       projection_(std::move(projection)) {

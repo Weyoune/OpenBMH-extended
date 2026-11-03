@@ -117,8 +117,11 @@ StatisticsRankingState statistics_rankings_from_game(const GameState& game, cons
 
 StatisticsRankingsScreen::StatisticsRankingsScreen(const std::filesystem::path& data,
                                                    StatisticsRankingState state)
-    : state_(std::move(state)), exe_(load_le(asset_path(data, "BMH.exe"))),
-      font_(load_font(asset_path(data / "F", "BMH3.FNT"))), sprite_(data),
+    : StatisticsRankingsScreen(data,std::move(state),load_le(asset_path(data,"BMH.exe"))) {}
+StatisticsRankingsScreen::StatisticsRankingsScreen(const std::filesystem::path& data,
+                                                   StatisticsRankingState state,const LeImage& reference)
+    : state_(std::move(state)), exe_(reference),
+      font_(load_font(asset_path(data / "F", "BMH3.FNT"))), sprite_(data,reference),
       button_art_(load_vga(asset_path(data / "KB", "0.VGA"))),
       texts_(load_textd(asset_path(data, "TEXTD.BLK"))) {
     if (state_.category < 0 || state_.category >= int(kTitleCount) || state_.current_season < 0 ||

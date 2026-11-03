@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "ui/world12_readonly.hpp"
+#include "ui/world12_statistics.hpp"
 #include "game/world12/desktop_projection.hpp"
 #include "game/world12/highscores.hpp"
 #include "ui/manager.hpp"
@@ -12,8 +13,9 @@ World12ReadonlyState world12_readonly_state(const CareerSnapshot& state,
     state.validate();
     const auto actor=std::find_if(state.world.managers.begin(),state.world.managers.end(),[&](const auto& manager){return manager.seat==id.manager;});
     if(!id.scope||id.revision==UINT64_MAX||actor==state.world.managers.end()||actor->club!=id.club||id.date!=state.date||
-        !state.desktop||state.desktop->active_seat!=id.manager||(id.menu!=4&&id.menu!=8&&id.menu!=9&&id.menu!=20&&id.menu!=25&&id.menu!=26))
+        !state.desktop||state.desktop->active_seat!=id.manager||(id.menu!=4&&id.menu!=8&&id.menu!=9&&id.menu!=23&&id.menu!=20&&id.menu!=25&&id.menu!=26))
         throw FormatError("world12: readonly league page has no current canonical club actor");
+    if(id.menu==23){World12ReadonlyState out;out.identity=id;out.selection=selection;World12StatisticsSelection child;child.page=selection.statistics_page;child.prediction_mode=selection.prediction_mode;child.category=selection.title_category;child.nation=selection.alltime_nation;child.relative=selection.alltime_relative;child.first_season=selection.title_first_season;out.statistics=std::make_shared<World12StatisticsState>(world12_statistics_state(state,id,child,reference,source,underlay));return out;}
     if(id.menu==26){const auto actual=project_owned_highscores(state,reference,highscore_rows);World12ReadonlyState out;out.identity=id;out.selection=selection;DeskRecordsState page;page.kind=DeskRecordKind::highscore;page.highscore={actual.signature,actual.ranked,actual.rows};page.underlay=underlay;page.manager_name=utf8_to_original(actor->name);page.gradient_text=reference.memory.u8(layout::TextGradientDisabled)==0&&source.u8(layout::TextGradientMode)==2;page.original_panel=reference.memory.u8(layout::SolidPanelBackground)==0;page.decorated_background=reference.memory.u8(layout::PlainBackground)==0;if(state.world.economy&&state.world.economy->presentation_options){const auto& options=*state.world.economy->presentation_options;page.gradient_text=options[layout::TextGradientDisabled-layout::LeaguePresentationOptions]==0&&source.u8(layout::TextGradientMode)==2;page.original_panel=options[layout::SolidPanelBackground-layout::LeaguePresentationOptions]==0;page.decorated_background=options[layout::PlainBackground-layout::LeaguePresentationOptions]==0;}out.records=std::move(page);return out;}
     if(id.menu==4){World12ReadonlyState out;out.identity=id;out.selection=selection;out.achievements=world12_achievements(state,id,reference,source,underlay);return out;}
     if(id.menu==9){if(!reference.texts)throw FormatError("world12: indoor standings lack actual Source texts");World12ReadonlyState out;out.identity=id;out.selection=selection;out.indoor=world12_indoor_standings(state,id,reference,source,*reference.texts);return out;}

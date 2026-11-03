@@ -102,15 +102,19 @@ SeriesRecordsProjection series_records_from_game(const GameState& game, const Le
 SeriesRecordsScreen::SeriesRecordsScreen(const std::filesystem::path& data,
                                          SeriesRecordsProjection projection,
                                          Image accepted_parent_frame)
+    : SeriesRecordsScreen(data,std::move(projection),std::move(accepted_parent_frame),load_le(asset_path(data,"BMH.exe"))) {}
+SeriesRecordsScreen::SeriesRecordsScreen(const std::filesystem::path& data,
+                                         SeriesRecordsProjection projection,
+                                         Image accepted_parent_frame,const LeImage& reference)
     : projection_(std::move(projection)), backdrop_(std::move(accepted_parent_frame)),
-      exe_(load_le(asset_path(data, "BMH.exe"))),
+      exe_(reference),
       texts_(load_textd(asset_path(data, "TEXTD.BLK"))),
       font_(load_font(asset_path(data / "F", "BMH3.FNT"))) {
     if (projection_.manager_slot < 0 || projection_.manager_slot >= 4 ||
         projection_.runtime_team < 0 || projection_.runtime_team > kNoTeam ||
         (projection_.source_available &&
-         (projection_.league < 0 || projection_.league >= kLeagueCount ||
-          projection_.league_row < 0 || projection_.league_row >= kLeagueSizes[size_t(projection_.league)])) ||
+         (projection_.league < 0 || (!projection_.explicit_league_size&&projection_.league >= kLeagueCount) ||
+          projection_.league_row < 0 || projection_.league_row >= (projection_.explicit_league_size?projection_.explicit_league_size:kLeagueSizes[size_t(projection_.league)]))) ||
         backdrop_.width != 320 || backdrop_.height != 240)
         throw FormatError("series records: incomplete Original projection");
 }

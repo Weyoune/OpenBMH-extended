@@ -24,6 +24,7 @@ struct SeriesRecordsProjection {
     int runtime_team = -1;
     int league = -1;
     int league_row = -1;
+    int explicit_league_size = 0; // Typed canonical league; zero retains the Native lookup.
     int rounds = 0;
     bool source_available = true;
     bool gradient_text = true;
@@ -40,6 +41,7 @@ SeriesRecordsProjection series_records_from_game(const GameState&, const LeImage
 
 class SeriesRecordsScreen {
 public:
+    SeriesRecordsScreen(const std::filesystem::path&, SeriesRecordsProjection,Image,const LeImage&);
     SeriesRecordsScreen(const std::filesystem::path& data_directory,
                         SeriesRecordsProjection projection, Image accepted_parent_frame);
     Image render() const;

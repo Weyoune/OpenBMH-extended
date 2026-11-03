@@ -52,6 +52,7 @@ AnalyticsState analytics_from_game(const GameState&, const LeImage&, int manager
 
 class AnalyticsScreen {
 public:
+    AnalyticsScreen(const std::filesystem::path&, AnalyticsState, const LeImage& reference);
     AnalyticsScreen(const std::filesystem::path& data, AnalyticsState);
     Image render() const;
     bool click(int x, int y);

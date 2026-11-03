@@ -62,6 +62,7 @@ struct StatisticsMenuRequest {
 
 class StatisticsMenuScreen {
 public:
+    StatisticsMenuScreen(const std::filesystem::path&, StatisticsMenuState, const LeImage& reference);
     StatisticsMenuScreen(const std::filesystem::path& data, StatisticsMenuState state);
     Image render() const;
     // StatisticsMenuScreen prepares the actual implemented child pane before handing it over.
@@ -89,6 +90,7 @@ private:
 
 class OpportunitiesScreen {
 public:
+    OpportunitiesScreen(const std::filesystem::path&, OpportunitiesState, const LeImage& reference);
     OpportunitiesScreen(const std::filesystem::path& data, OpportunitiesState state);
     Image render() const;
     bool pointer_down(int x, int y, bool right = false);

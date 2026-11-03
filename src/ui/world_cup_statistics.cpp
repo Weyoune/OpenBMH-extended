@@ -151,10 +151,13 @@ WorldCupStatisticsRequest world_cup_selection_request(const WorldCupStatisticsPr
 
 WorldCupStatisticsScreen::WorldCupStatisticsScreen(const std::filesystem::path& data,
         WorldCupStatisticsProjection projection, Image underlay, bool flat_source_window)
+    : WorldCupStatisticsScreen(data,std::move(projection),std::move(underlay),flat_source_window,load_le(asset_path(data,"BMH.exe"))) {}
+WorldCupStatisticsScreen::WorldCupStatisticsScreen(const std::filesystem::path& data,
+        WorldCupStatisticsProjection projection, Image underlay, bool flat_source_window,const LeImage& reference)
     : projection_(std::move(projection)), data_directory_(data), underlay_(std::move(underlay)),
       flags_(load_vga(asset_path(data / "KB", "24.VGA"))),
       window_atlas_(load_vga(asset_path(data / "KB", "56.VGA"))),
-      exe_(load_le(asset_path(data, "BMH.exe"))),
+      exe_(reference),
       body_(load_font(asset_path(data / "F", "BMH3.FNT"))),
       flat_source_window_(flat_source_window) {
     if (underlay_.width != 320 || underlay_.height != 240 || flags_.width < 108 || flags_.height < 38)
@@ -170,6 +173,10 @@ void WorldCupStatisticsScreen::draw_flag(Image& out, uint8_t nation, int x, int 
 }
 
 void WorldCupStatisticsScreen::draw_badge(Image& out, uint8_t nation, int x, int y) const {
+    if(!projection_.badge_atlases[nation].empty()){
+        const auto badge=load_vga(asset_path(data_directory_,projection_.badge_atlases[nation]));
+        copy(out,badge,int(projection_.badge_cells[nation])*38,0,x,y,38,38,0xc0);return;
+    }
     const int team = kNoTeam + nation;
     if (size_t(team) * 2 + 1 >= projection_.badge_heap.size()) return;
     const uint16_t selector = uint16_t(projection_.badge_heap[size_t(team) * 2] |

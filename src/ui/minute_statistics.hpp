@@ -28,6 +28,7 @@ MinuteStatisticsProjection minute_statistics_from_game(const GameState& game, in
 // the Original function draws no new title, caption, or menu controls here.
 class MinuteStatisticsScreen {
 public:
+    MinuteStatisticsScreen(const std::filesystem::path&, MinuteStatisticsProjection, const LeImage& reference);
     MinuteStatisticsScreen(const std::filesystem::path& data_directory,
                            MinuteStatisticsProjection projection);
 

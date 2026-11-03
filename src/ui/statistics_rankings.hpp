@@ -54,6 +54,7 @@ StatisticsRankingState statistics_rankings_from_game(const GameState&, const LeI
 
 class StatisticsRankingsScreen {
 public:
+    StatisticsRankingsScreen(const std::filesystem::path&, StatisticsRankingState, const LeImage& reference);
     StatisticsRankingsScreen(const std::filesystem::path& data, StatisticsRankingState);
     Image render() const;
     bool pointer_down(int x, int y, bool right = false);

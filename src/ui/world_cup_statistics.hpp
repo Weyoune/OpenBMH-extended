@@ -23,6 +23,8 @@ struct WorldCupStatisticsProjection {
     std::array<WorldCupFlagCell, 62> flag_cells{};
     std::array<std::string, 62> country_names{};
     std::vector<uint8_t> badge_heap;
+    std::array<std::string,62> badge_atlases{};
+    std::array<uint8_t,62> badge_cells{};
     bool can_select_opponent = false;
 };
 
@@ -44,6 +46,7 @@ WorldCupStatisticsRequest world_cup_selection_request(const WorldCupStatisticsPr
 
 class WorldCupStatisticsScreen {
 public:
+    WorldCupStatisticsScreen(const std::filesystem::path&,WorldCupStatisticsProjection,Image,bool,const LeImage&);
     WorldCupStatisticsScreen(const std::filesystem::path& data, WorldCupStatisticsProjection,
                              Image accepted_parent_underlay, bool flat_source_window = false);
     Image render() const;
