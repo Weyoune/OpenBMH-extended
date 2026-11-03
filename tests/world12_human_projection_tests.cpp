@@ -49,6 +49,7 @@ CareerSnapshot snapshot(const bmh::GameState& base) {
 }
 void live_preferences_and_scopes(const bmh::GameState& base) {
     auto saved=snapshot(base);saved.world.markets.emplace();saved.world.free_players.emplace();saved.world.settings=CareerSettings{3,6,5,2,false};
+    for(auto& manager:saved.world.managers){manager.career.emplace();manager.career->season_records.emplace();}
     saved.desktop.emplace();ManagerDesktop de_desk;de_desk.seat=0;de_desk.display_word=0x1234;
     ManagerDesktop en_desk;en_desk.seat=3;en_desk.display_word=0x5678;
     // Storage order deliberately differs from local manager order.
@@ -77,8 +78,19 @@ void live_preferences_and_scopes(const bmh::GameState& base) {
         for(const auto& group:engine.groups)for(int match=0;match<group.matches();++match)
             bmh::select_live_match_source(projection.state,group.fixtures.at(size_t(match)*2),group.fixtures.at(size_t(match)*2+1));
     };
+    bool owned_seen=false;
+    hooks.before_owned=[&](auto& projection,auto& engine,const auto& owned){
+        check(&projection.state==&engine.state&&owned==saved&&!projection.state.live_matches.empty(),
+              "live owned hook did not receive the exact staged source after observation setup");owned_seen=true;
+    };
     hooks.after_minute=[&](auto& projection,auto& engine,int minute){
         if(checked||minute!=15)return;checked=true;
+        check(owned_seen,"live minute preceded its staged snapshot context");
+        // This manager is not in the current German match workspace. A real
+        // overview can still retain that canonical viewer's explicit UI words.
+        projection.retain_live_preferences(3,uint16_t(0x3411),uint16_t(0x91ff),uint8_t(0x21));
+        rejects([&]{projection.retain_live_preferences(2,uint16_t(0x11),{},{});},
+                "live UI accepted an absent canonical manager");
         const auto team=int(projection.local_club(de));const auto before=projection.state;
         const auto game_seed=engine.game.seed();const auto watcom_seed=engine.rand.seed();
         const auto range=bmh::squad_range(team);
@@ -119,6 +131,11 @@ void live_preferences_and_scopes(const bmh::GameState& base) {
     const auto result=simulate_and_settle_human_league_round(played,base,{4},3,inputs,{3,6,false,true},game,random,hooks);
     check(checked&&!result.matches.empty()&&played.desktop->managers==saved.desktop->managers,
           "live scope probe missed a real minute or lost another manager's display word");
+    const auto& retained=*played.world.managers[1].career;
+    check(retained.table_display_word==0x3411&&retained.strengths_display_word==0x91ff&&retained.pairings_display_byte==0x21&&
+          played.world.managers[1].finance==saved.world.managers[1].finance,
+          "nonparticipating viewer preferences were lost or changed that manager's finance");
+    check(read_save(make_save(played))==played,"closed live preferences did not survive complete save/reload");
     std::cout<<"Real human minute scope: stale/replayed actions, substitution abort, actor/RNG rollback, Source opening lock, retirement and sparse desktop preferences passed\n";
 }
 void known_economy_match_oracle(const bmh::GameState& base){

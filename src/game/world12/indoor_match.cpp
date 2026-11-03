@@ -33,6 +33,7 @@ IndoorMatchOutcome simulate_and_settle_indoor_pass(CareerSnapshot& state,const G
     MatchEngine engine(local,groups,staged_game,staged_random,referees);engine.indoor=true;engine.month=context.month;engine.buttons=conditions.front().front().presentation_buttons;engine.leave_screens=!human||hooks.decline_unpresented_events;
     if(hooks.live_event)engine.live_event=[&](const auto& event){hooks.live_event(projection,engine,event);};
     if(hooks.before_matchday)hooks.before_matchday(projection,engine);
+    if(hooks.before_owned)hooks.before_owned(projection,engine,candidate);
     play_matchday(engine,local,groups,engine.buttons,staged_game,staged_random,report,hooks.after_minute?std::function<void(int)>([&](int minute){hooks.after_minute(projection,engine,minute);}):std::function<void(int)>{});if(report.unsupported)throw FormatError(report.reason);
     IndoorMatchOutcome out;
     for(auto& group:groups){for(size_t m=0;m<group.end_minute.size();++m)if(!(group.kickoff_void_mask&(1u<<m))&&group.end_minute[m]!=40)throw FormatError("world12: indoor Source match did not reach40minutes");process_group(local,group,staged_game,staged_random,report);if(report.unsupported)throw FormatError(report.reason);CupRoundOutcome result;result.scores=group.cup_results;result.end_minutes=group.end_minute;out.groups.push_back(std::move(result));}

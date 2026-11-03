@@ -41,6 +41,9 @@ struct HumanRoundHooks {
     // Install immutable observation and synchronous input hooks before the real
     // minute clock begins. It receives the same bounded identity projection.
     std::function<void(AiMatchProjection&,bmh::MatchEngine&)> before_matchday;
+    // The actual staged owner includes gate/monthly receipts already posted
+    // before play. The outer desktop snapshot is not an equivalent live view.
+    std::function<void(AiMatchProjection&,bmh::MatchEngine&,const CareerSnapshot&)> before_owned;
 };
 // Actual Original scoring phases and AI events; no generated/test score input.
 // Conditions/formation tables come from the session owner. After-match economy,

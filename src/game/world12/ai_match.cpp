@@ -132,6 +132,7 @@ AiLeagueRoundOutcome run_ai_league_matches(World& world,const GameState& base,co
         local.pools_open=true;
     }
     if(hooks&&hooks->before_matchday)hooks->before_matchday(projection,engine);
+    if(human_snapshot&&hooks&&hooks->before_owned)hooks->before_owned(projection,engine,*human_snapshot);
     bmh::MinuteReport report;
     bmh::play_matchday(engine,local,groups,conditions[0].presentation_buttons,staged_game,staged_random,report,
         hooks&&hooks->after_minute?std::function<void(int)>([&](int minute){hooks->after_minute(projection,engine,minute);}):std::function<void(int)>{});

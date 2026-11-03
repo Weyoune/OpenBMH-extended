@@ -33,6 +33,8 @@ public:
     size_t human_managers()const{return manager_seats_.size();}
     void commit_player_attributes(World&)const;
     void commit_desktop_preferences(CareerSnapshot&)const;
+    void retain_live_preferences(uint8_t global_seat,std::optional<uint16_t> table,
+        std::optional<uint16_t> strengths,std::optional<uint8_t> pairings);
     void commit_match_state(World&,bool capture_season_services=false)const;
     void commit_transfer_state(World&,PlayerId,ClubId seller,ClubId buyer,bool moved)const;
     void commit_released_players(World&,const std::vector<std::pair<PlayerId,ClubId>>&)const;
@@ -52,6 +54,7 @@ private:
     std::vector<Manager> original_managers_;
     std::optional<CareerSettings> original_settings_;
     std::vector<uint8_t> manager_seats_;
+    std::map<uint8_t,std::array<std::optional<uint16_t>,3>> live_preferences_;
     std::vector<ClubId> manager_reference_clubs_;
     std::map<uint16_t,ClubId> record_opponents_;
     int32_t original_development_balance_=0;

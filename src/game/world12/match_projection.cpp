@@ -234,6 +234,13 @@ void AiMatchProjection::commit_desktop_preferences(CareerSnapshot& snapshot)cons
     }
     snapshot.desktop=std::move(candidate);
 }
+void AiMatchProjection::retain_live_preferences(uint8_t seat,std::optional<uint16_t> table,
+    std::optional<uint16_t> strengths,std::optional<uint8_t> pairings) {
+    const auto manager=std::find_if(original_managers_.begin(),original_managers_.end(),[&](const auto& m){return m.seat==seat;});
+    if(manager==original_managers_.end()||!manager->career)throw FormatError("world12: live preferences have no canonical manager owner");
+    auto& preferences=live_preferences_[seat];
+    if(table)preferences[0]=*table;if(strengths)preferences[1]=*strengths;if(pairings)preferences[2]=*pairings;
+}
 void AiMatchProjection::commit_player_attributes(World& world)const {
     if(!manager_seats_.empty())throw std::invalid_argument("world12: human projection requires complete match-state commit");
     PlayerStatisticsArchive expected;
@@ -362,6 +369,14 @@ void AiMatchProjection::commit_state(World& world,bool capture_season_services,c
     capture_player_statistics(candidate,movements);
     candidate.development_balance=state.development_balance;
     if(state.trend_rotation<0 || state.trend_rotation>2)throw std::invalid_argument("world12: invalid local development rotation");
-    candidate.trend_rotation=uint8_t(state.trend_rotation);candidate.validate();world=std::move(candidate);
+    candidate.trend_rotation=uint8_t(state.trend_rotation);
+    for(const auto& [seat,preferences]:live_preferences_){
+        const auto manager=std::find_if(candidate.managers.begin(),candidate.managers.end(),[&](const auto& m){return m.seat==seat;});
+        if(manager==candidate.managers.end()||!manager->career)throw FormatError("world12: live preference owner disappeared");
+        if(preferences[0])manager->career->table_display_word=*preferences[0];
+        if(preferences[1])manager->career->strengths_display_word=*preferences[1];
+        if(preferences[2])manager->career->pairings_display_byte=uint8_t(*preferences[2]);
+    }
+    candidate.validate();world=std::move(candidate);
 }
 }
