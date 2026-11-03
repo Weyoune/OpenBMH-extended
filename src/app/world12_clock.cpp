@@ -82,7 +82,18 @@ ClockStepOutcome advance_clock_step(CareerSnapshot& state,ManagerActionOwner& ow
         candidate.progress->phase=result.season_end?ProgressPhase::season_end:result.post_event_stock_pending?ProgressPhase::post_event_market:ProgressPhase::inspect_calendar;
         out.game_draws=result.game_draws;out.watcom_draws=result.watcom_draws;break;
     }
-    case ProgressPhase::post_event_market:{const auto result=update_daily_stock_market(candidate,reference);candidate.progress->phase=ProgressPhase::inspect_calendar;out.game_draws=result.game_draws;out.watcom_draws=result.watcom_draws;break;}
+    case ProgressPhase::post_event_market:{
+        // DayStepRest has already retaken the current national role. Prices and
+        // personal portfolios still belong to the canonical parked club desks.
+        std::vector<std::pair<ClubId,uint8_t>> retained;
+        if(candidate.world.catalogue.scope.club_play()&&national_roles_active(candidate.world)){
+            for(const auto& record:*candidate.world.national_coaches)if(record.active)retained.push_back({record.team,*record.coach});
+            park_national_coaches(candidate.world);
+        }
+        const auto result=update_daily_stock_market(candidate,reference);
+        for(const auto& [team,seat]:retained){for(auto& record:*candidate.world.national_coaches)if(record.team==team){record.coach=seat;record.active=true;}for(auto& squad:candidate.world.national_squads)if(squad.team==team)squad.coach=seat;}
+        candidate.progress->phase=ProgressPhase::inspect_calendar;out.game_draws=result.game_draws;out.watcom_draws=result.watcom_draws;break;
+    }
     case ProgressPhase::inspect_calendar:{
         const auto ticket=prepare_day(candidate);if(!ticket)throw FormatError("world12: season transition is required before seeking another date");
         if(!ticket->leagues.empty()||!ticket->others.empty()){clock.phase=ProgressPhase::scheduled_event;break;}

@@ -17,6 +17,9 @@
 #include "app/world12_first_event.hpp"
 #include "app/world12_attendance.hpp"
 #include "app/world12_european.hpp"
+#include "app/world12_clock.hpp"
+#include "game/world12/economy.hpp"
+#include "game/world12/manager_tactics.hpp"
 #include "game/national_settlement.hpp"
 #include <iostream>
 #include <algorithm>
@@ -49,6 +52,21 @@ void scheduled_pipeline(bool coached){
     TextDb texts;const auto gates=bmh::app::world12::book_event_attendance(state,owner,owner,base,texts,{source,source});check(gates.spectators.size()==weather.matches.size(),"national gates lost actual fixtures");check(read_save(make_save(state))==state,"national gates did not roundtrip");
     const auto event=*state.prepared_event;std::vector<bmh::app::world12::NationalDayConditions> input;for(size_t i=0;i<event.groups.size();++i){std::vector<AiLeagueConditions> conditions;for(const auto& match:event.groups[i].matches){auto c=condition(state.date);c.temperature=match.temperature;c.rain=match.rain;c.referee=match.referee;c.spectators=*match.spectators;c.teams_prepared=true;conditions.push_back(c);}input.push_back({ticket.national[i],conditions});}state.prepared_event.reset();HumanRoundHooks hooks;hooks.decline_unpresented_events=true;const auto parked=state.world.managers;const auto accounts=state.world.economy->managers;const auto receipt=bmh::app::world12::play_competition_day(state,owner,owner,ticket,base,{source,source},{},{},{},{3,6,false,true},hooks,{},std::nullopt,input);check(!receipt.national.empty()&&state.date==5&&state.calendar->next_day==5&&state.calendar->revision==1&&state.world.national_campaigns->seasons.at(0).revision==1,"actual national day receipts did not advance programme/calendar atomically");check(state.world.managers==parked&&state.world.economy->managers==accounts&&state.calendar->schedule==immutable,"national event wrote parked clubs or source calendar");if(!coached){state.world.economy->pools.emplace();const auto before_pools=state;check(event.pools_matches&&event.pools_matches->empty()&&receipt.pools.empty(),"uncoached national fixture did not retain its actual empty coupon");settle_scheduled_pools(state,event,receipt.pools,base,texts);check(state==before_pools,"zero-coach empty national coupon changed actors, wallets, players, calendar or RNG");}check(read_save(make_save(state))==state,"national result/calendar lost on regular save");
 }
+void post_event_stock_handoff(){
+    namespace app=bmh::app::world12;
+    auto base=bmh::test::world12::national_reference();for(size_t m=0;m<4;++m)base.manager_options[m*5]=1;
+    auto state=fixture(base,true);std::vector<uint8_t> seats;for(auto& manager:state.world.managers){manager.tactics.reset();seats.push_back(manager.seat);}WatcomRandom initialized(91);
+    for(auto seat:seats){initialize_manager_contracts(state.world,seat,base,{3,false,false,false,6},initialized);auto& manager=*std::find_if(state.world.managers.begin(),state.world.managers.end(),[&](const auto& row){return row.seat==seat;});manager.career->season_records.emplace();manager.career->annual_records->national_eligibility=0;}
+    SeasonCalendar calendar;for(const auto& league:state.world.catalogue.leagues)for(uint8_t round=1;round<=league.rounds();++round)calendar.leagues.push_back({uint16_t(100+round),league.id,round});state.calendar=CalendarCursor{calendar,4,0};
+    state.progress.emplace();state.progress->phase=ProgressPhase::post_event_market;state.progress->entry=DayEntry::after_event;state.progress->previous_date=3;state.progress->last_manager=0;const auto epoch=calendar_epoch();state.progress->epoch_year=epoch.year;state.progress->epoch_weekday=epoch.weekday;state.validate();
+    const auto before=state;auto expected=state;park_national_coaches(expected.world);const auto oracle=update_daily_stock_market(expected,base);expected.world.national_coaches=before.world.national_coaches;expected.world.national_squads=before.world.national_squads;expected.progress->phase=ProgressPhase::inspect_calendar;
+    app::ManagerActionOwner owner{79,4};const auto outcome=app::advance_clock_step(state,owner,owner,base,TextDb{},{});
+    check(state==expected&&outcome.game_draws==oracle.game_draws&&outcome.watcom_draws==oracle.watcom_draws&&outcome.game_draws>0&&!outcome.watcom_draws&&owner.revision==5,"post-event market changed real stock RNG, canonical portfolios or retained national roles");
+    check(state.world.national_coaches==before.world.national_coaches&&state.world.national_squads==before.world.national_squads&&state.desktop->manager_order==before.desktop->manager_order&&read_save(make_save(state))==state,"post-event market reselected coaches or lost saved national accounts/squads/order");
+    auto direct=before;rejects([&]{update_daily_stock_market(direct,base);});check(direct==before,"stock service silently bypassed the parked-club guard");
+    auto failed=before;auto absent=base;absent.formations.clear();owner={79,4};rejects([&]{app::advance_clock_step(failed,owner,owner,absent,TextDb{},{});});check(failed==before&&owner.revision==4,"failed staged stock handback leaked roles, RNG or revision");
+    std::cout<<"Mixed post-event stock: exact real kernel RNG/portfolios, same retained coaches despite changed eligibility, strict direct guard, saved resume and rollback passed\n";
+}
 void run(bool coached){
     auto base=bmh::test::world12::national_reference();base.memory.add_block(layout::Desktops,5*0x360);const auto source=bmh::test::world12::national_rules();auto state=fixture(base,coached);GameRandom game(state.game_seed);WatcomRandom random(state.watcom_seed);size_t matches=0,english=0,owned_calls=0;
     const size_t expected_matches[]={12,15,30,52},expected_dates[]={6,5,10,7};
@@ -68,4 +86,4 @@ void run(bool coached){
     check(matches==218&&owned_calls>0,"national shared programmes lost actual matches/callbacks");std::cout<<"Actual Core national programmes: "<<matches<<" matches, coached="<<coached<<", English coached clocks="<<english<<"\n";
 }
 }
-int main()try{auto fixtures=bmh::test::authored_fixture_tables();fixtures[4]={"abcd","acdb","adbc"};set_fixture_tables(fixtures);scheduled_pipeline(false);scheduled_pipeline(true);run(false);run(true);}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
+int main()try{auto fixtures=bmh::test::authored_fixture_tables();fixtures[4]={"abcd","acdb","adbc"};set_fixture_tables(fixtures);scheduled_pipeline(false);scheduled_pipeline(true);post_event_stock_handoff();run(false);run(true);}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
