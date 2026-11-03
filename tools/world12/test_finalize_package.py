@@ -16,15 +16,19 @@ class FinalizePackageTests(unittest.TestCase):
                 for name, data in {'PACKAGE.json': json.dumps({'format': 'openbmh-community-12', 'profile': 'dual-classic-2', 'requires': 'runtime:dual-classic-2', 'playable': False}).encode(), 'WORLD12.JSON': b'old', 'RULES-EN.DAT': b'authored-rules', 'KB/SETUP12.VGA': b'authored-asset', 'REFEREES.JSON': b'{}', 'REFERENCE.EXE': b'omit', 'USER.FBM': b'omit'}.items():
                     archive.writestr(name, data)
             world.write_text(json.dumps({'format': 'openbmh-world-12', 'profile': 'dual-classic-2', 'version': 42, 'managers': [], 'loans': [], 'players_initialized': False}))
+            provenance = json.dumps({'new_players': [{'id': 5000, 'fictional_fields': ['name']}]}).encode()
+            (root/'IMPORT-REPORT.json').write_bytes(provenance)
             result = finalize(source, world, output)
             self.assertFalse(result['playable'])
             with zipfile.ZipFile(output) as archive:
                 self.assertEqual(archive.read('WORLD12.JSON'), world.read_bytes())
                 self.assertEqual(archive.read('KB/SETUP12.VGA'), b'authored-asset')
+                self.assertEqual(archive.read('IMPORT-REPORT.json'), provenance)
                 self.assertNotIn('REFERENCE.EXE', archive.namelist())
                 self.assertNotIn('USER.FBM', archive.namelist())
                 metadata = json.loads(archive.read('PACKAGE.json'))
                 self.assertEqual(metadata['files']['WORLD12.JSON'], digest(world.read_bytes()))
+                self.assertEqual(metadata['files']['IMPORT-REPORT.json'], digest(provenance))
             with self.assertRaisesRegex(ValueError, 'already exists'):
                 finalize(source, world, output)
             with self.assertRaisesRegex(ValueError, 'checksum'):

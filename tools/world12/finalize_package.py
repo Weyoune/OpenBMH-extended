@@ -56,6 +56,12 @@ def finalize(source, world_path, destination, playable=False, expected_source=No
             or metadata.get('requires') != 'runtime:dual-classic-2'):
         raise ValueError('Input runtime/profile metadata differs')
     entries['WORLD12.JSON'] = world_bytes
+    report = source.parent / 'IMPORT-REPORT.json'
+    if report.is_file():
+        report_bytes = report.read_bytes()
+        if not isinstance(json.loads(report_bytes), dict):
+            raise ValueError('Import provenance must be a JSON object')
+        entries['IMPORT-REPORT.json'] = report_bytes
     for required in ('RULES-EN.DAT', 'KB/SETUP12.VGA', 'REFEREES.JSON'):
         if required not in entries:
             raise ValueError('Required runtime resource is missing: ' + required)
