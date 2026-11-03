@@ -2,6 +2,7 @@
 #include "world12_fixture.hpp"
 #include "app/world12_startup.hpp"
 #include "app/world12_tables.hpp"
+#include "app/world12_live_family.hpp"
 #include "app/world12_market.hpp"
 #include "game/world12/market_bids.hpp"
 #include "ui/pending_offer.hpp"
@@ -1323,6 +1324,82 @@ void actual_family_gui(const std::filesystem::path& data,const CareerSnapshot& f
     capture("family-closed");
     std::cout<<"Actual country family: "<<visited.size()<<" leagues, Original three children, Core strengths/results, search/filter, preferences, roster and stale/reopen/timer guards passed\n";
 }
+void actual_live_family_gui(const std::filesystem::path& data,const CareerSnapshot& fixture,const std::filesystem::path& output){
+    const auto resources=session_app::load_runtime_resources(data);
+    auto source=session_app::Session::resume(resources,fixture,157,1);const auto untouched=source.snapshot();
+    const auto seat=*fixture.desktop->active_seat;
+    const auto manager=std::find_if(fixture.world.managers.begin(),fixture.world.managers.end(),[&](const auto& m){return m.seat==seat;});
+    const auto league=fixture.world.clubs.at(manager->club).league;const auto round=int(fixture.league_rounds.at(league.value))+1;
+    check(round<=fixture.world.catalogue.league(league).rounds(),"live family fixture is at season end");
+    AiLeagueConditions conditions;conditions.month=month_code(fixture.date);conditions.temperature=19;conditions.rain=0;conditions.date=fixture.date;
+    conditions.spectators=15000;conditions.referee=1;conditions.referee_properties=resources.referee_properties;const auto& buttons=*fixture.world.economy->presentation_options;conditions.presentation_buttons.assign(buttons.begin(),buttons.end());
+    std::vector<AiLeagueConditions> inputs(league_fixtures(fixture.world,league,round).size(),conditions);
+    auto played=fixture;GameRandom game(17);WatcomRandom random(91);HumanRoundHooks hooks;std::optional<CareerSnapshot> staged;uint64_t nonce=0;bool checked=false;int pictures=0;
+    hooks.live_event=[](auto&,auto&,const auto&){}; // Explicit isolated probe: decline intervention, not production policy.
+    hooks.before_matchday=[](auto& p,auto& engine){for(const auto& group:engine.groups)for(int match=0;match<group.matches();++match)select_live_match_source(p.state,group.fixtures.at(size_t(match)*2),group.fixtures.at(size_t(match)*2+1));};
+    hooks.before_owned=[&](auto&,auto&,const auto& snapshot){staged=snapshot;};
+    const auto capture=[&](const std::string& name,const ui::World12TableState& page){
+        if(output.empty())return;std::filesystem::create_directories(output);
+        const auto frame=ui::LeagueTableScreen(data,page,resources.german).render();const auto colors=load_palette(ui::asset_path(data,"M3PC.COL"));
+        std::ofstream image(output/(name+".ppm"),std::ios::binary);image<<"P6\n320 240\n255\n";for(auto pixel:frame.pixels){const auto c=colors.argb[pixel];image.put(char(c>>16));image.put(char(c>>8));image.put(char(c));}
+        ++pictures;
+    };
+    hooks.after_minute=[&](auto& p,auto& engine,int minute){
+        if(checked||minute!=15)return;checked=true;check(staged.has_value(),"live family missed its staged owner");
+        const auto gs=engine.game.seed();const auto ws=engine.rand.seed();const auto gc=engine.game.calls(),wc=engine.rand.calls();
+        const auto slots=p.state.squad_slots;const auto tactics=p.state.tactics;
+        const auto expected=session_app::live_family_snapshot(*staged,p,engine);
+        check(!expected.calendar&&!expected.progress&&!expected.prepared_event&&expected.league_rounds.at(league.value)==round,
+              "live overlay did not distinguish current scores from saved calendar ownership");
+        check(staged->league_rounds.at(league.value)+1==expected.league_rounds.at(league.value),"live view used the outer old table");
+        {
+            session_app::LiveFamilyScope aborted(source,*staged,p,engine,seat,nonce,0,league);
+            auto old=aborted.view();check(old.identity.scope!=source.scope(),"live and desktop windows share a request namespace");
+            check(old.subtitle.find(std::to_string(round)+". ")!=std::string::npos,"live table caption advanced to the next matchday");
+            capture("live-table-minute15-before",old);
+            ui::World12TableRequest request;request.identity=old.identity;request.action=ui::World12TableAction::control;request.value=4;
+            aborted.apply(request,data);aborted.abort();rejects([&]{aborted.view();},"aborted live overview retained its view");
+            auto after=staged->world;p.commit_match_state(after);if(after.economy)capture_career_economy(after,p);check(after==expected.world,"aborted live family published UI words/gameplay");
+        }
+        session_app::LiveFamilyScope scope(source,*staged,p,engine,seat,nonce,0,league);
+        auto page=scope.view();const auto stale=ui::World12TableRequest{page.identity,ui::World12TableAction::control,{}, {},5};
+        const auto send=[&](ui::World12TableRequest request,const session_app::ClubInformationPresenter& club={},const session_app::TableRangePresenter& range={}){
+            request.identity=scope.view().identity;return scope.apply(request,data,club,range);
+        };
+        const auto request=[&](ui::World12TableAction action,int value=-1){ui::World12TableRequest r;r.action=action;r.value=value;return r;};
+        send(request(ui::World12TableAction::control,4));rejects([&]{scope.apply(stale,data);},"live family accepted stale view");
+        send(request(ui::World12TableAction::navigate,1));page=scope.view();check(page.pairings&&page.pairings->source.owner.round==round-1,"live pairings lost its current round");
+        capture("live-pairings-minute15",page);
+        send(request(ui::World12TableAction::navigate,2));capture("live-strengths-minute15",scope.view());
+        send(request(ui::World12TableAction::navigate,0));int ranges=0;
+        send(request(ui::World12TableAction::control,9),{},[&](const auto&,const auto&)->std::optional<ui::TableRangeDialogOutcome>{++ranges;ui::TableRangeDialogOutcome answer;answer.result=ui::TableRangeDialogResult::cancel;return answer;});
+        check(ranges==1,"live range cancellation did not use its actual presenter");
+        // The nested inspector is read-only to the running match, including its
+        // incidental Source flag cleanup. Only explicit family UI words return.
+        page=scope.view();ui::World12TableRequest inspect;inspect.action=ui::World12TableAction::team_info;inspect.team=page.clubs.front();int inspected=0;
+        send(inspect,[&](const auto& provider,const auto&){provider(ui::ClubInfoView::data_a);provider(ui::ClubInfoView::data_b);++inspected;return true;});
+        check(inspected==1,"live family roster did not open both Original data pages");
+        capture("live-table-minute15-after",scope.view());
+        check(send(request(ui::World12TableAction::close)),"live overview did not close");rejects([&]{scope.view();},"closed live family retained capability");
+        check(source.snapshot()==untouched&&p.state.squad_slots==slots&&p.state.tactics==tactics&&engine.game.seed()==gs&&engine.rand.seed()==ws&&engine.game.calls()==gc&&engine.rand.calls()==wc,
+              "live inspection changed the source session, lineup, clock or random streams");
+        auto after=staged->world;p.commit_match_state(after);if(after.economy)capture_career_economy(after,p);auto allowed=expected.world;
+        const auto target=std::find_if(after.managers.begin(),after.managers.end(),[&](const auto& m){return m.seat==seat;});
+        auto& permitted=*std::find_if(allowed.managers.begin(),allowed.managers.end(),[&](const auto& m){return m.seat==seat;});
+        permitted.career->table_display_word=target->career->table_display_word;permitted.career->strengths_display_word=target->career->strengths_display_word;permitted.career->pairings_display_byte=target->career->pairings_display_byte;
+        check(after==allowed,"live family retained more than its canonical UI preferences");
+    };
+    const auto settings=*fixture.world.settings;
+    const auto receipt=simulate_and_settle_human_league_round(played,resources.reference,league,round,inputs,
+        {settings.mode,settings.difficulty,settings.foreign_rule,true},game,random,hooks);
+    check(checked&&!receipt.matches.empty()&&source.snapshot()==untouched&&read_save(make_save(played))==played,"live family missed its true minute/rollback/save boundary");
+    if(!output.empty()){
+        write_savegame(output/"Fixture.FBM",make_save(fixture));write_savegame(output/"KernelAfter.FBM",make_save(played));
+        std::ofstream replay(output/"replay.json");replay<<"{\"league\":"<<league.value<<",\"round\":"<<round<<",\"game_seed\":17,\"watcom_seed\":91,\"minute\":15,\"fixed_probe_spectators\":15000,\"career_date_advanced\":false}\n";
+    }
+    std::cout<<"Actual live family: canonical Source manager, true minute15, table/pairings/strengths, range/roster, abort/stale/retirement, UI-only publication and unchanged match streams; "<<pictures<<" Original frames\n";
+}
+
 void actual_family_result_views(const std::filesystem::path& data,const CareerSnapshot& state,const std::filesystem::path& output){
     const auto resources=session_app::load_runtime_resources(data);const auto& manager=state.world.managers.front();const ui::World12TableIdentity identity{manager.seat,manager.club,77,151,1};size_t leagues=0,played=0;
     for(int group=0;group<3;++group)for(auto league:state.world.catalogue.table_leagues(TableGroup(group))){
@@ -1965,6 +2042,7 @@ void actual(const std::filesystem::path& data,const std::filesystem::path& outpu
 }
 }
 int main(int argc,char** argv)try {
+    if(argc==5&&std::string(argv[3])=="--live-family-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_live_family_gui(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--market-loan"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_transfer_market_gui(argv[1],read_save(load_savegame(argv[4])),argv[2],true);return 0;}
     if(argc==5&&std::string(argv[3])=="--market-received"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_market_received_gui(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}
     if(argc==5&&std::string(argv[3])=="--market-only"){const auto resources=session_app::load_runtime_resources(argv[1]);actual_transfer_market_gui(argv[1],read_save(load_savegame(argv[4])),argv[2]);return 0;}

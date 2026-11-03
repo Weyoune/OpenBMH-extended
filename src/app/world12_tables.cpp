@@ -218,11 +218,11 @@ project_league_family(const CareerSnapshot& state,
             source.total_rounds = league.rounds();
             source.preferences = selection.pairings_preferences;
             const auto date = [&](int round) -> uint32_t {
-                if (state.calendar)
-                    for (const auto& item : state.calendar->schedule.leagues)
+                const auto& schedule=selection.display_calendar?selection.display_calendar:state.calendar;
+                if (schedule)
+                    for (const auto& item : schedule->schedule.leagues)
                         if (item.league == league.id && item.round == round + 1)
-                            return state.date - state.calendar->next_day +
-                                   item.day;
+                            return state.date - schedule->next_day + item.day;
                 return 0xffff;
             };
             source.match_date = date(owner.round);
@@ -380,8 +380,12 @@ ui::World12TableState Session::open_tables(const ui::DeskRequest& request) {
         ui::desk_from_game(p.state, resources_.german, owner_.revision);
     if (!visible_world12_menu(desk, request.item_id, request.menu_kind))
         throw FormatError("world12: table icon is not visible/enabled");
+    return open_table_owned(*state_.desktop->active_seat,uint8_t(request.menu_kind));
+}
+ui::World12TableState Session::open_table_owned(uint8_t seat,uint8_t child) {
+    if(child>2||table_generation_>=UINT32_MAX||owner_.revision==UINT64_MAX)
+        throw FormatError("world12: invalid family window generation");
     auto candidate = state_;
-    const auto seat = *candidate.desktop->active_seat;
     auto& manager = table_actor(candidate, seat);
     // OpenBMH deviates from the original: pre-schema33 development saves did
     // not represent this display word. First entry initializes that UI-only
@@ -397,7 +401,7 @@ ui::World12TableState Session::open_tables(const ui::DeskRequest& request) {
     // OpenBMH deviates from the original: pre-schema34 snapshots have no
     // typed pairings/strengths UI preferences. Their first entry uses the
     // Original new-career defaults; no gameplay state is reconstructed.
-    selection.child = uint8_t(request.menu_kind);
+    selection.child = child;
     selection.strengths_word =
         manager.career->strengths_display_word.value_or(0x1ff);
     selection.pairings_preferences =

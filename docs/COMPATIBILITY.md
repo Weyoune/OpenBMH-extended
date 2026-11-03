@@ -243,3 +243,9 @@ calendar date. Both retain their real fixtures, scoring modes and lineups. Only
 the indoor programme repeats its Source three/two passes; ordinary results and
 daily services occur once. The pending pass/calendar ownership persists in the
 typed snapshot. See [indoor ownership](poc-1.2/INDOOR.md).
+
+OpenBMH deviates from the original: club-inspection cleanup inside a live
+read-only league overview remains in its display overlay. It cannot silently
+change the running lineup; match changes use the owned lineup/substitution
+screen. Explicitly accepted table/pairings/strengths preferences still persist
+for the canonical viewer, including a manager outside the current match batch.

@@ -8,6 +8,7 @@ describe deliberate changes; they are not a list of every known compatibility li
 - [src/app/career_session.cpp](../src/app/career_session.cpp): supports designated set-piece record initialization and validation.
 - [src/app/main.cpp](../src/app/main.cpp): display the repository-owned title at its native resolution until a complete left/right click, without loading balls.
 - [src/app/quit_confirmation.hpp](../src/app/quit_confirmation.hpp): confirms application exit with a localized native dialog, with cancellation selected by default.
+- [src/app/world12_live_family.cpp](../src/app/world12_live_family.cpp): club-inspection cleanup in a live read-only league overview stays in its display overlay.
 - [src/app/world12_settings.cpp](../src/app/world12_settings.cpp): typed EIN import also honors the indoor-date refusal, so a file cannot invalidate owned event receipts.
 - [src/app/world12_tables.cpp](../src/app/world12_tables.cpp): pre-schema33 development saves did not represent this display word.
 - [src/app/world12_tables.cpp](../src/app/world12_tables.cpp): pre-schema34 snapshots have no typed pairings/strengths UI preferences.

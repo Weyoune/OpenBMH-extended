@@ -13,6 +13,8 @@ struct World12TableSelection {
     uint16_t strengths_word=0x1ff;
     LeaguePairingsOwner pairings;
     std::optional<StrengthsAgeScratch> age;
+    // Presentation-only schedule for an unpublished in-progress match overlay.
+    std::optional<bmh::world12::CalendarCursor> display_calendar;
     StrengthsAgeBasis age_basis=StrengthsAgeBasis::entry_or_league_change_bit10;
     bool operator==(const World12TableSelection&)const=default;
 };

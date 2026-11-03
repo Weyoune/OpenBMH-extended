@@ -59,3 +59,12 @@ four-manager data probe compares seventeen human league rounds, all financial
 and mailbox fields, both final seeds and saved roundtrips while computing 306
 league matches. This does not advance unrelated calendar competitions or claim
 a played season.
+
+The owned pre-match hook also supplies the actual staged snapshot after gate
+receipts. Live league-family windows use an isolated display overlay of real
+current scores and the existing table/pairings/strengths session actions. These
+scores have no saved progression owner and never publish as matchday results.
+Only explicitly accepted UI preferences return to the match projection; an
+unfinished window discards them. Calendar dates remain a separate presentation
+context. Inspection cleanup in a live read-only overview stays in that overlay;
+lineup mutations require the authenticated live lineup scope.

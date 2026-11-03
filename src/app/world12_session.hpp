@@ -45,6 +45,7 @@ struct RuntimeResources {
 // dual-world package. Actual club/player data comes exclusively from WORLD12.
 RuntimeResources load_runtime_resources(const std::filesystem::path& directory);
 using TableRangePresenter=std::function<std::optional<ui::TableRangeDialogOutcome>(const ui::TableRangeDialogProfile&,const Image&)>;
+class LiveFamilyScope;
 class Session {
 public:
     Session(RuntimeResources,ui::SetupOptions,uint32_t seed,uint64_t scope);
@@ -132,6 +133,8 @@ public:
     const LeImage& rules()const{return resources_.german;}
     bool prepared()const{return state_.world.transfer_market.has_value();}
 private:
+    friend class LiveFamilyScope;
+    ui::World12TableState open_table_owned(uint8_t seat,uint8_t child);
     struct ResumeTag {};
     Session(RuntimeResources,bmh::world12::CareerSnapshot,uint64_t scope,uint64_t revision,ResumeTag);
     RuntimeResources resources_;ui::SetupOptions options_;
