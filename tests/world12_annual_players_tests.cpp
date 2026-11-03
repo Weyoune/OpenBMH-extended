@@ -23,7 +23,7 @@ Fixture prepared(const GameState& rules,const TextDb& texts,GameScope scope,bool
     fixture.qualification=stage_annual_qualification(closing);AnnualAccountsHooks hooks;hooks.present=[](const auto&){return true;};hooks.choose=[](const auto&)->std::optional<bool>{return false;};
     auto accounts=stage_annual_accounts(fixture.qualification,rules,texts,hooks);fixture.before=accounts.snapshot;
     // This authored calendar contains no regional-playoff appointments. The
-    // production coordinator requires the real Source4004 campaign instead.
+    // production coordinator requires the actual regional play-off campaign instead.
     for(auto country:{Country::germany,Country::england})if(fixture.before.world.catalogue.selectable(country)) {
         const AnnualDecisionContext context{{country,(*fixture.before.world.amateur_slots)[country==Country::germany?0:1]},country==Country::germany?RegionalPromotion::champions_only:RegionalPromotion::not_applicable,{}};
         const auto outcome=evaluate_annual_promotion_decisions(fixture.before,context);const auto moved=stage_annual_membership(fixture.before,outcome,texts);fixture.exchanges.push_back(outcome);
