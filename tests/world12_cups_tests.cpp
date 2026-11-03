@@ -55,6 +55,18 @@ KnockoutStage seeded_stage(const World& world,DomesticCup cup,uint8_t entry,int 
     const std::vector<ClubId> seeds(pool.begin()+teams,pool.begin()+teams+seed_count);
     return KnockoutStage::from_source(cup,source,entry,fixtures,world,seeds);
 }
+void mixed_supercup_double() {
+    auto world=fixture_world();world.catalogue.scope.international=false;world.players_initialized=true;world.markets.emplace();world.free_players.emplace();world.settings=CareerSettings{};
+    auto& fields=world.initial_competitions.emplace();auto next=world.clubs.begin();for(size_t k=0;k<3;++k){const size_t sizes[]={64,24,32};for(size_t row=0;row<sizes[k];++row)fields.fields[k].push_back((next++)->first);fields.holders[k]=fields.fields[k].front();}
+    const auto german=world.membership[0].clubs[0],english=world.membership[5].clubs[0],english_holder=world.membership[5].clubs[1];fields.champions={{Country::germany,german},{Country::england,english}};fields.domestic_holders={{Country::germany,german},{Country::england,english_holder}};
+    check(!domestic_cup_expected(world,DomesticCup::german_supercup)&&domestic_cup_expected(world,DomesticCup::english_supercup),"owned double did not suppress only its actual Super-Cup");
+    std::vector<uint16_t> de(365),en(365);for(int r=0;r<34;++r)de[size_t(30+r*8)]=15;for(int r=0;r<38;++r)en[size_t(30+r*8)]=15;de[5]=en[5]=0x2000;
+    CareerSnapshot state;state.world=world;state.results=SeasonResults::empty(world.catalogue);state.calendar=CalendarCursor{SeasonCalendar::from_sources(world.catalogue,de,en),5,7};state.date=5;state.game_seed=27;state.watcom_seed=91;state.cups={stage(world,DomesticCup::english_supercup,{5},23,1,1,0x0c)};state.validate();
+    const auto ticket=*prepare_day(state);check(ticket.others.size()==2&&ticket.cups.size()==1&&ticket.cups.front().cup==DomesticCup::english_supercup,"double removed a real calendar flag or invented a German fixture");
+    auto missing=state;missing.cups.clear();const auto missing_before=missing;rejects([&]{commit_day(missing,*prepare_day(missing),{},{});},"double exception masked the missing real English stage");check(missing==missing_before,"missing expected stage changed calendar or RNG");
+    const auto calendar=state.calendar->schedule;commit_day(state,ticket,{},{{DomesticCup::english_supercup,23,0,{uint16_t(2<<5)},{}}});
+    check(state.date==6&&state.calendar->next_day==6&&state.calendar->schedule==calendar&&state.cups.size()==1&&state.cups.front().complete()&&state.game_seed==27&&state.watcom_seed==91&&read_save(make_save(state))==state,"mixed Super-Cup double changed actual programme/calendar/RNG or lost its save");
+}
 void full_domestic_programmes(const World& world) {
     std::vector<uint16_t> de(365),en(365);
     for(int r=0;r<34;++r)de[size_t(30+r*8)]=15;
@@ -110,7 +122,7 @@ void full_domestic_programmes(const World& world) {
 }
 int main()try {
     using namespace bmh::world12;
-    const auto world=fixture_world();
+    const auto world=fixture_world();mixed_supercup_double();
     check(!domestic_cups_on({0,CalendarDomain::germany,0x4002}),"indoor tournament interpreted as League Cup");
     check(domestic_cups_on({0,CalendarDomain::england,0x4002})->at(0)==DomesticCup::league_cup,"English League Cup not routed");
     check(!domestic_cups_on({0,CalendarDomain::shared,0x4006}),"national friendly interpreted as domestic cup");

@@ -80,7 +80,12 @@ DayPresentation commit_day(CareerSnapshot& state,const DayTicket& ticket,const s
     size_t required_count=0;std::vector<EuropeanCompetition> shared;
     for(const auto& appointment:ticket.others) {
         const auto required=domestic_cups_on(appointment);
-        if(required)required_count+=required->size();
+        if(required)for(auto cup:*required) {
+            const bool installed=std::any_of(state.cups.begin(),state.cups.end(),[&](const auto& stage){return stage.cup==cup;});
+            // A reigning league/cup double deliberately owns no Super-Cup
+            // stage. Keep its real calendar flag, without demanding a match.
+            if(installed||domestic_cup_expected(state.world,cup))++required_count;
+        }
         else if(const auto european=european_cups_on(appointment))shared.insert(shared.end(),european->begin(),european->end());
         else if(!german_indoor_appointment(appointment)&&!regional_playoff_appointment(appointment)&&!national_appointment(appointment,state.season)&&!friendly_appointment(appointment))throw std::invalid_argument("world12: shared/national transaction is required before advancing this day");
     }
