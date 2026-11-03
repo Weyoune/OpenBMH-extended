@@ -4,7 +4,7 @@
 #include <set>
 namespace bmh::world12 {
 const NationalStartupReceipt& inactive_population_receipt(const World& world){
-    if(world.catalogue.scope.club_play()||!world.catalogue.scope.international||!world.national_origins||!world.national_coaches||!world.players_initialized||!world.free_players||!world.settings||world.transfer_market||world.economy||!world.loans.empty())throw FormatError("world12: actual unmanaged national population is unavailable");const NationalStartupReceipt* result=nullptr;for(const auto& actor:*world.national_coaches)if(actor.startup){if(result)throw FormatError("world12: national population receipt is ambiguous");result=&*actor.startup;}if(!result)throw FormatError("world12: national population receipt is unknown");return *result;
+    if(world.catalogue.scope.club_play()||!world.catalogue.scope.international||!world.national_origins||!world.national_coaches||!world.players_initialized||!world.free_players||!world.settings||world.transfer_market||!world.loans.empty())throw FormatError("world12: actual unmanaged national population is unavailable");const NationalStartupReceipt* result=nullptr;for(const auto& actor:*world.national_coaches)if(actor.startup){if(result)throw FormatError("world12: national population receipt is ambiguous");result=&*actor.startup;}if(!result)throw FormatError("world12: national population receipt is unknown");return *result;
 }
 std::vector<ClubId> inactive_origin_order(const World& world){
     (void)inactive_population_receipt(world);const auto catalogue=Catalogue::dual_classic();std::vector<ClubId> result;
