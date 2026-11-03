@@ -199,6 +199,9 @@ AiMatchProjection AiMatchProjection::create_for_european(const CareerSnapshot& s
         result.abstract_clubs_.push_back(club);const auto name=uint16_t(local.club_names.size());local.club_names.insert(local.club_names.end(),club.name.begin(),club.name.end());local.club_names.push_back(0);local.club_ids[team]=name;result.record_opponents_[name]=id;
         local.club_kits[team]=club.kit;local.club_short_offsets[team]=club.short_span;local.team_flags[team]=club.match_flags;local.team_morale[team]=club.morale;local.foreign_strength[team-size_t(runtime_dimensions.record_teams)]=club.rating;
         local.projected_match_clubs.resize(team+1);local.projected_match_clubs[team]={9,int(club.country)+5,0};
+        // Source table_position returns2 immediately for clubs outside league
+        // slots. This is its attendance operand, never a fabricated standing.
+        local.projected_match_clubs[team].table_rank=2;
         result.manager_reference_clubs_.resize(team+1);result.manager_reference_clubs_[team]=id;
     }
     return result;

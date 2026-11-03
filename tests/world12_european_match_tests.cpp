@@ -3,6 +3,9 @@
 #include "fixture_tables.hpp"
 #include "app/world12_european.hpp"
 #include "app/world12_weather.hpp"
+#include "app/world12_attendance.hpp"
+#include "game/matchday.hpp"
+#include "formats/textd.hpp"
 #include "game/calendar.hpp"
 #include "game/world12/pools.hpp"
 #include "game/world12/manager_tactics.hpp"
@@ -44,6 +47,15 @@ void weather_persistence(){const auto base=reference();const auto source=bmh::te
         check(coupon.world.managers[0].finance->balance==1490000&&coupon.world.economy->pools->managers[3].stake==0&&coupon.world.economy->pools->managers[3].correct==11&&coupon.world.economy->pools->managers[3].winnings==500000&&!coupon.world.economy->pools->appointment&&coupon.game_seed==before.game_seed&&coupon.watcom_seed==before.watcom_seed,"European coupon settlement lost the real sparse manager, Source quota or RNG owner");
         check(coupon.world.players==before.world.players&&read_save(make_save(coupon))==coupon,"European coupon settlement invented player state or lost its save");
         for(const auto& [id,club]:before.world.clubs)check(coupon.world.clubs.at(id).roster==club.roster,"European coupon settlement invented a rating-only roster");
+    }
+    {
+        const auto abstract=std::find_if(state.world.clubs.begin(),state.world.clubs.end(),[](const auto& row){return !row.second.league.valid();})->first;
+        auto projection=AiMatchProjection::create_for_european(state,{state.world.managers[0].club,abstract},base,{3,6,false,true});const auto team=int(projection.local_club(abstract));auto native=projection.state;native.projected_match_clubs.clear();
+        check(team>=runtime_dimensions.league_teams&&table_position(projection.state,team)==table_position(native,team)&&table_position(native,team)==2,"rating-only attendance position differs from the real Source outside-league path");
+        auto gates=state;gates.world.economy.emplace();gates.world.managers[0].career->season_services.emplace();const auto player_count=gates.world.players.size();TextDb texts;texts.strings.assign(TEXT_COUNT,"Authored attendance notice");auto gate_owner=owner;
+        const auto attendance=application::book_event_attendance(gates,gate_owner,gate_owner,base,texts,{source,source});
+        check(attendance.spectators.size()==56&&gates.prepared_event->gates_booked&&read_save(make_save(gates))==gates,"actual European gates did not retain the Source position operand or saved receipt");
+        check(gates.world.players.size()==player_count,"rating-only attendance manufactured players");for(const auto& [id,club]:state.world.clubs)if(!club.league.valid())check(gates.world.clubs.at(id).roster==club.roster,"rating-only attendance manufactured a roster");
     }
     state.prepared_event->desk_phase=PreparedEvent::DeskPhase::complete;state.prepared_event->pools_matches.emplace();file=make_save(state);check(read_save(file)==state,"European known-empty pools/complete desk phase lost on save");state.prepared_event->gates_booked=true;for(auto& group:state.prepared_event->groups)for(auto& match:group.matches)match.spectators=20000;file=make_save(state);check(read_save(file)==state,"European booked gates were lost in SH");
 }
