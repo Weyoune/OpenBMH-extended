@@ -23,6 +23,10 @@ prefix, full field shuffles and discarded UEFA scratch tail are retained. Wide
 canonical club IDs never alias the scratch tokens. Published fields contain
 exactly 64/24/32 distinct actual clubs.
 
+`completed_annual_titles` exposes the same strict final/rank facts without
+constructing or drawing any RNG. The preceding mood adapter can therefore use
+real winners without performing a throwaway qualification.
+
 Both random streams are staged in the packet, with before/after seeds and draw
 counts. Staging changes no snapshot, title history, membership, roster, date or
 random owner. Validation rejects a changed source or tampered receipt. The outer

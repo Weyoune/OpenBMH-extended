@@ -90,7 +90,7 @@ void draw_fields(const World& world,AnnualEuropeanFields& fields,GameRandom& gam
     for(auto id:fields.holders)if(!current.contains(id))invalid("world12: annual European field lost a completed title holder");
 }
 }
-UnpublishedAnnualQualification stage_annual_qualification(const CareerSnapshot& state) {
+CompletedAnnualTitles completed_annual_titles(const CareerSnapshot& state) {
     state.validate();
     if(!state.world.catalogue.scope.club_play()||!state.progress||state.progress->phase!=ProgressPhase::season_end||
        !state.world.settings||!state.world.initial_competitions||!state.world.european_campaigns||
@@ -98,8 +98,7 @@ UnpublishedAnnualQualification stage_annual_qualification(const CareerSnapshot& 
        *state.world.annual_awards_completed!=state.season+1)
         invalid("world12: annual qualification requires the paid closing boundary and actual competition owners");
     const auto before=state;
-    UnpublishedAnnualQualification out;out.source_binding=before;out.source_season=before.season;out.target_season=before.season+1;
-    out.game_seed_before=before.game_seed;out.watcom_seed_before=before.watcom_seed;
+    CompletedAnnualTitles out;
     const auto& world=before.world;
     for(const auto& league:world.catalogue.leagues)if(league.active) {
         if(before.league_rounds[league.id.value]!=league.rounds()||
@@ -120,7 +119,17 @@ UnpublishedAnnualQualification stage_annual_qualification(const CareerSnapshot& 
         const auto kind=country==Country::germany?DomesticCup::german_cup:DomesticCup::fa_cup;
         out.domestic_titles.push_back({country,out.final_rankings[world.catalogue.starting_league(country,0).value].front(),domestic_final(before,kind)});
     }
-    for(size_t k=0;k<3;++k){out.european_titles[k]=european_final((*world.european_campaigns)[k]);out.next_european.holders[k]=out.european_titles[k].winner;}
+    for(size_t k=0;k<3;++k)out.european_titles[k]=european_final((*world.european_campaigns)[k]);
+    if(state!=before)invalid("world12: annual title source changed during its read-only preview");
+    return out;
+}
+UnpublishedAnnualQualification stage_annual_qualification(const CareerSnapshot& state) {
+    const auto before=state;const auto facts=completed_annual_titles(before);
+    UnpublishedAnnualQualification out;out.source_binding=before;out.source_season=before.season;out.target_season=before.season+1;
+    out.game_seed_before=before.game_seed;out.watcom_seed_before=before.watcom_seed;
+    out.final_rankings=facts.final_rankings;out.domestic_titles=facts.domestic_titles;out.european_titles=facts.european_titles;
+    for(size_t k=0;k<3;++k)out.next_european.holders[k]=out.european_titles[k].winner;
+    const auto& world=before.world;
     GameRandom game(before.game_seed);WatcomRandom random(before.watcom_seed);
     auto& fields=out.next_european;
     const auto find=[&](ClubId id){for(size_t k=0;k<3;++k)if(std::find(fields.qualified[k].begin(),fields.qualified[k].end(),id)!=fields.qualified[k].end())return int(k)+1;return 0;};

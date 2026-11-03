@@ -14,6 +14,16 @@ struct AnnualDomesticTitle {
     AnnualCupFinal cup;
     bool operator==(const AnnualDomesticTitle&)const=default;
 };
+struct CompletedAnnualTitles {
+    std::array<std::vector<ClubId>,kLeagueSlots> final_rankings;
+    std::vector<AnnualDomesticTitle> domestic_titles;
+    std::array<AnnualCupFinal,3> european_titles;
+    bool operator==(const CompletedAnnualTitles&)const=default;
+};
+// Strict completed closing facts for the preceding Source mood phase. No draw
+// or random stream is needed merely to identify the actual title/rank owners.
+CompletedAnnualTitles completed_annual_titles(const CareerSnapshot&);
+
 // European ownership only. National fields and their random phase have a
 // separate owner; no season-zero national selection is reused here.
 struct AnnualEuropeanFields {

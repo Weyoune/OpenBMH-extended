@@ -48,6 +48,8 @@ AnnualEuropeanFields source_oracle(const CareerSnapshot& state,const Unpublished
     const int counts[]={64,24,32};for(int k=0;k<3;++k)for(int i=0;i<counts[k];++i){check(!(lists[k][i]>>63),"oracle published a Source scratch token");out.fields[k].push_back({uint32_t(lists[k][i])});}
     return out;
 }
+uint64_t fact_draws=0;
+void count_fact_draw(int){++fact_draws;}
 CareerSnapshot* external_state=nullptr;
 void disturb(int){draw_hook=nullptr;++external_state->game_seed;}
 void ownership(CareerSnapshot state,const UnpublishedAnnualQualification& packet) {
@@ -68,7 +70,11 @@ int main()try {
     for(int mask=1;mask<8;++mask) {
         const GameScope scope{bool(mask&1),bool(mask&2),bool(mask&4)};if(!scope.club_play())continue;
         auto state=bmh::test::world12::completed_qualification_closing(scope);const auto before=state;
+        fact_draws=0;draw_hook=count_fact_draw;const auto facts=completed_annual_titles(state);draw_hook=nullptr;
+        check(fact_draws==0&&state==before,"read-only closing facts consumed RNG or changed their owner");
         const auto packet=stage_annual_qualification(state);validate_annual_qualification(state,packet);
+        check(facts.final_rankings==packet.final_rankings&&facts.domestic_titles==packet.domestic_titles&&facts.european_titles==packet.european_titles,
+              "qualification and RNG-free closing facts disagree");
         check(state==before&&packet.source_binding==before,"qualification changed its canonical source");
         check(packet.target_season==1&&packet.game_draws==112&&packet.game_seed_before==state.game_seed&&packet.watcom_seed_before==state.watcom_seed,"qualification lost source/target or staged RNG ownership");
         GameRandom game(state.game_seed);WatcomRandom random(state.watcom_seed);const auto expected=source_oracle(state,packet,game,random);
@@ -78,6 +84,18 @@ int main()try {
         const auto holder=packet.european_titles[0].winner;const auto relation=annual_club_relations(packet,holder);
         check(relation.holders[1]&&relation.champion&&relation.european_cup==2&&annual_final_rank(packet,holder)==0,"completed UEFA holder/champion lost its new CL ownership or Source zero rank");
         check(read_save(make_save(state))==state,"qualification source snapshot did not roundtrip");
+        check((*state.world.managers[0].career->cup_titles)[1]>0,"authored programme did not retain actual Core human title history");
+        rejects([&]{annual_final_rank(packet,ClubId{});},"missing final rank identity was clamped");
+        const auto reserve=std::find_if(state.world.clubs.begin(),state.world.clubs.end(),[](const auto& c){return c.second.kind==ClubKind::club&&!c.second.league.valid();});
+        rejects([&]{annual_final_rank(packet,reserve->first);},"non-league final rank was invented");
+        if(mask==3) {
+            auto deducted=state;const auto league=deducted.world.clubs.at(holder).league;
+            for(auto& score:deducted.results.leagues[league.value])score={true,0,0};
+            deducted.world.managers[0].match_state->point_deduction=0x60|31;
+            const auto sanctioned=stage_annual_qualification(deducted);
+            check(annual_final_rank(sanctioned,holder)==deducted.world.catalogue.league(league).clubs-1,
+                  "actual Source human points deduction was ignored in the final ranking");
+        }
         ownership(state,packet);++scopes;
     }
     for(const GameScope scope: {GameScope{true,true,false},GameScope{true,false,false},GameScope{false,true,false}}) {
