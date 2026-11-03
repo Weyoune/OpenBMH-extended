@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "ui/world12_readonly.hpp"
 #include "ui/world12_statistics.hpp"
+#include "ui/world12_view_actor.hpp"
 #include "game/world12/desktop_projection.hpp"
 #include "game/world12/highscores.hpp"
 #include "ui/manager.hpp"
@@ -12,7 +13,7 @@ World12ReadonlyState world12_readonly_state(const CareerSnapshot& state,
     const GameState& reference,const LeImage& source,const Image& underlay,const HighscoreTable& highscore_rows){
     state.validate();
     const auto actor=std::find_if(state.world.managers.begin(),state.world.managers.end(),[&](const auto& manager){return manager.seat==id.manager;});
-    if(!id.scope||id.revision==UINT64_MAX||actor==state.world.managers.end()||actor->club!=id.club||id.date!=state.date||
+    if(!id.scope||id.revision==UINT64_MAX||actor==state.world.managers.end()||!world12_view_actor(state,id.manager,id.club)||id.date!=state.date||
         !state.desktop||state.desktop->active_seat!=id.manager||(id.menu!=4&&id.menu!=8&&id.menu!=9&&id.menu!=23&&id.menu!=20&&id.menu!=25&&id.menu!=26))
         throw FormatError("world12: readonly league page has no current canonical club actor");
     if(id.menu==23){World12ReadonlyState out;out.identity=id;out.selection=selection;World12StatisticsSelection child;child.page=selection.statistics_page;child.prediction_mode=selection.prediction_mode;child.category=selection.title_category;child.nation=selection.alltime_nation;child.relative=selection.alltime_relative;child.first_season=selection.title_first_season;out.statistics=std::make_shared<World12StatisticsState>(world12_statistics_state(state,id,child,reference,source,underlay));return out;}
@@ -20,6 +21,7 @@ World12ReadonlyState world12_readonly_state(const CareerSnapshot& state,
     if(id.menu==4){World12ReadonlyState out;out.identity=id;out.selection=selection;out.achievements=world12_achievements(state,id,reference,source,underlay);return out;}
     if(id.menu==9){if(!reference.texts)throw FormatError("world12: indoor standings lack actual Source texts");World12ReadonlyState out;out.identity=id;out.selection=selection;out.indoor=world12_indoor_standings(state,id,reference,source,*reference.texts);return out;}
     if(id.menu==8){if(!reference.texts)throw FormatError("world12: readonly calendar lacks actual Source text context");World12ReadonlyState out;out.identity=id;out.selection=selection;out.calendar=world12_calendar_state(state,source,*reference.texts);out.decorated_background=reference.memory.u8(layout::PlainBackground)==0;if(state.world.economy&&state.world.economy->presentation_options)out.decorated_background=(*state.world.economy->presentation_options)[layout::PlainBackground-layout::LeaguePresentationOptions]==0;return out;}
+    if(state.world.clubs.at(id.club).kind!=ClubKind::club||!state.world.clubs.at(id.club).league.valid())throw FormatError("world12: scorer/fairplay page requires an actual club league; national campaign facts have their own overview");
     const auto league=state.world.clubs.at(id.club).league;const auto& definition=state.world.catalogue.league(league);
     if(!definition.active||!definition.playable)throw FormatError("world12: readonly league requires its actual playable country owner");
     const auto& members=state.world.membership.at(league.value).clubs;

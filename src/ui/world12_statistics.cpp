@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "ui/world12_statistics.hpp"
+#include "ui/world12_view_actor.hpp"
 #include "game/world12/desktop_projection.hpp"
 #include "game/world12/prediction.hpp"
 #include "game/world12/standings.hpp"
@@ -47,7 +48,7 @@ World12StatisticsState world12_statistics_state(const CareerSnapshot& snapshot,c
     World12StatisticsSelection selection,const GameState& reference,const LeImage& source,const Image& frame){
     snapshot.validate();const auto& world=snapshot.world;
     const auto actor=std::find_if(world.managers.begin(),world.managers.end(),[&](const auto& manager){return manager.seat==owner.manager;});
-    if(owner.menu!=23||actor==world.managers.end()||actor->club!=owner.club||owner.date!=snapshot.date||!snapshot.desktop||snapshot.desktop->active_seat!=owner.manager||selection.page< -1||selection.page>8||frame.width!=320||frame.height!=240)
+    if(owner.menu!=23||actor==world.managers.end()||!world12_view_actor(snapshot,owner.manager,owner.club)||owner.date!=snapshot.date||!snapshot.desktop||snapshot.desktop->active_seat!=owner.manager||selection.page< -1||selection.page>8||frame.width!=320||frame.height!=240)
         throw FormatError("world12: statistics page lacks its canonical active desktop owner");
     World12StatisticsState out;out.selection=selection;out.menu.owner={};out.menu.owner.kind=DeskRequestKind::open_menu;out.menu.owner.menu_kind=23;out.menu.owner.manager_slot=owner.manager;out.menu.owner.revision=owner.revision;out.menu.underlay=frame;
     out.menu.transfer_history_count=snapshot.transfers?int(snapshot.transfers->history[owner.manager].size()):0;
@@ -55,37 +56,6 @@ World12StatisticsState world12_statistics_state(const CareerSnapshot& snapshot,c
     if(world.economy&&world.economy->presentation_options)out.menu.gradient_text=(*world.economy->presentation_options)[layout::TextGradientDisabled-layout::LeaguePresentationOptions]==0&&source.u8(layout::TextGradientMode)==2;
     if(selection.page<0)return out;
     if(selection.page==7){out.rankings=rankings(snapshot,owner,selection,source,frame);return out;}
-    if(selection.page==1){
-        if(!snapshot.transfers)throw FormatError("world12: transfer history is unknown in this saved career");
-        TransferHistoryProjection page;page.manager_slot=owner.manager;
-        for(const auto& row:snapshot.transfers->history[owner.manager]){const auto player=world.players.find(row.player);if(player==world.players.end())throw FormatError("world12: transfer history lost its actual global player identity");
-            ui::TransferHistoryRow record;record.source_date_counter=uint16_t((row.source_word>>2)&0xffff);record.source_kind=uint8_t(row.source_word&3);record.source_fee=(row.source_word>>19)*10000u;record.saved_player_name=utf8_to_original(player->second.attributes.name);record.special_counterparty=!row.other.valid();if(row.other.valid())record.counterparty_club_name=utf8_to_original(world.clubs.at(row.other).name);page.rows.push_back(std::move(record));}
-        out.transfers=std::move(page);
-    }
-    const auto league=world.clubs.at(owner.club).league;const auto& definition=world.catalogue.league(league);
-    if(!definition.active||!definition.playable)throw FormatError("world12: statistics require the actual club league");
-    const auto& members=world.membership[league.value].clubs;
-    auto projection=project_manager_desktop(snapshot,reference,members);auto& game=projection.state;
-    uint8_t local=0;while(local<projection.human_managers()&&projection.global_manager(local)!=owner.manager)++local;
-    if(local>=projection.human_managers())throw FormatError("world12: statistics lost its canonical manager mapping");
-    if(selection.page==1){out.formatting=std::move(game);return out;}
-    if(selection.page==0){
-        if(selection.prediction_mode!=1&&selection.prediction_mode!=2&&selection.prediction_mode!=4&&selection.prediction_mode!=8)throw FormatError("world12: unsupported Source opportunity mode");
-        std::map<ClubId,uint8_t> deductions;for(const auto& manager:world.managers)if(manager.match_state&&world.clubs.at(manager.club).league==league&&manager.match_state->point_deduction>>5==3)deductions[manager.club]=manager.match_state->point_deduction&31;const auto prediction=predict_league(snapshot,owner.club,selection.prediction_mode,deductions);
-        OpportunitiesState page;page.identity={int(owner.manager),int(projection.local_club(owner.club)),int(game.club_ids.at(projection.local_club(owner.club))),snapshot.date,owner.revision,owner.scope,owner.sequence};page.mode=selection.prediction_mode;page.league_size=definition.clubs;page.ranks=prediction.result.ranks;page.underlay=frame;page.gradient_text=out.menu.gradient_text;
-        page.current_rank=prediction.result.best_rank;
-        out.opportunities=std::move(page);return out;
-    }
-    if(selection.page==2){
-        if(!actor->career||!actor->career->season_services||!actor->match_state||!actor->match_state->attendance||!world.economy||!world.economy->managers[owner.manager].monthly)
-            throw FormatError("world12: analytics require actual season/attendance/monthly histories");
-        auto page=analytics_from_game(game,source,local,frame);page.manager_slot=owner.manager;page.owner=out.menu.owner;page.series[0].absolute_max=definition.clubs;out.analytics=std::move(page);return out;
-    }
-    if(selection.page==5){
-        if(!actor->finance||!world.economy||!world.markets||!world.economy->managers[owner.manager].monthly)throw FormatError("world12: financial totals require the actual account, markets and monthly owner");
-        auto page=finance_totals_from_game(game,local);page.manager_slot=owner.manager;out.finance=std::move(page);return out;
-    }
-    if(selection.page==8){if(!actor->match_state)throw FormatError("world12: minute statistics are unknown");auto page=minute_statistics_from_game(game,local);page.manager_slot=owner.manager;out.minutes=std::move(page);return out;}
     if(selection.page==4){
         if(!world.national_campaigns)throw FormatError("world12: World-Cup statistics require the actual saved national history owner");
         std::array<ClubId,62> nations;for(const auto& [id,club]:world.clubs)if(club.kind==ClubKind::national_team){const size_t country=size_t(club.country);if(country>=nations.size()||nations[country].valid())throw FormatError("world12: ambiguous actual national identity");nations[country]=id;}
@@ -99,6 +69,41 @@ World12StatisticsState world12_statistics_state(const CareerSnapshot& snapshot,c
         for(size_t c=0;c<62;++c){const auto& crest=world.crests.at(world.clubs.at(nations[c]).crest);page.badge_atlases[c]=crest.path;page.badge_cells[c]=crest.cell;out.clubs.push_back(nations[c]);}
         out.world_cup=std::move(page);return out;
     }
+    const bool club_actor=world.clubs.at(owner.club).kind==ClubKind::club&&world.clubs.at(owner.club).league.valid();
+    if(!club_actor&&(selection.page==0||selection.page==1||selection.page==2||selection.page==3||selection.page==6))throw FormatError("world12: this statistic requires actual owned club league/history facts; a national role cannot substitute a parked club");
+    if(selection.page==1){
+        if(!snapshot.transfers)throw FormatError("world12: transfer history is unknown in this saved career");
+        TransferHistoryProjection page;page.manager_slot=owner.manager;
+        for(const auto& row:snapshot.transfers->history[owner.manager]){const auto player=world.players.find(row.player);if(player==world.players.end())throw FormatError("world12: transfer history lost its actual global player identity");
+            ui::TransferHistoryRow record;record.source_date_counter=uint16_t((row.source_word>>2)&0xffff);record.source_kind=uint8_t(row.source_word&3);record.source_fee=(row.source_word>>19)*10000u;record.saved_player_name=utf8_to_original(player->second.attributes.name);record.special_counterparty=!row.other.valid();if(row.other.valid())record.counterparty_club_name=utf8_to_original(world.clubs.at(row.other).name);page.rows.push_back(std::move(record));}
+        out.transfers=std::move(page);
+    }
+    const auto league=world.clubs.at(owner.club).league;
+    const auto* definition=club_actor?&world.catalogue.league(league):nullptr;
+    if(definition&&(!definition->active||!definition->playable))throw FormatError("world12: statistics require the actual club league");
+    const std::vector<ClubId> members=club_actor?world.membership[league.value].clubs:std::vector<ClubId>{};
+    auto projection=project_manager_desktop(snapshot,reference,members);auto& game=projection.state;
+    uint8_t local=0;while(local<projection.human_managers()&&projection.global_manager(local)!=owner.manager)++local;
+    if(local>=projection.human_managers())throw FormatError("world12: statistics lost its canonical manager mapping");
+    if(selection.page==1){out.formatting=std::move(game);return out;}
+    if(selection.page==0){
+        if(selection.prediction_mode!=1&&selection.prediction_mode!=2&&selection.prediction_mode!=4&&selection.prediction_mode!=8)throw FormatError("world12: unsupported Source opportunity mode");
+        std::map<ClubId,uint8_t> deductions;for(const auto& manager:world.managers)if(manager.match_state&&world.clubs.at(manager.club).league==league&&manager.match_state->point_deduction>>5==3)deductions[manager.club]=manager.match_state->point_deduction&31;const auto prediction=predict_league(snapshot,owner.club,selection.prediction_mode,deductions);
+        OpportunitiesState page;page.identity={int(owner.manager),int(projection.local_club(owner.club)),int(game.club_ids.at(projection.local_club(owner.club))),snapshot.date,owner.revision,owner.scope,owner.sequence};page.mode=selection.prediction_mode;page.league_size=definition->clubs;page.ranks=prediction.result.ranks;page.underlay=frame;page.gradient_text=out.menu.gradient_text;
+        page.current_rank=prediction.result.best_rank;
+        out.opportunities=std::move(page);return out;
+    }
+    if(selection.page==2){
+        if(!actor->career||!actor->career->season_services||!actor->match_state||!actor->match_state->attendance||!world.economy||!world.economy->managers[owner.manager].monthly)
+            throw FormatError("world12: analytics require actual season/attendance/monthly histories");
+        auto page=analytics_from_game(game,source,local,frame);page.manager_slot=owner.manager;page.owner=out.menu.owner;page.series[0].absolute_max=definition->clubs;out.analytics=std::move(page);return out;
+    }
+    if(selection.page==5){
+        if(club_actor){if(!actor->finance||!world.economy||!world.markets||!world.economy->managers[owner.manager].monthly)throw FormatError("world12: financial totals require the actual account, markets and monthly owner");}
+        else {const auto coach=std::find_if(world.national_coaches->begin(),world.national_coaches->end(),[&](const auto& record){return record.active&&record.coach==owner.manager&&record.team==owner.club;});if(coach==world.national_coaches->end()||!coach->account.investment_balance||!coach->account.depreciation)throw FormatError("world12: national financial totals require their actual captured coach account");}
+        auto page=finance_totals_from_game(game,local);page.manager_slot=owner.manager;out.finance=std::move(page);return out;
+    }
+    if(selection.page==8){if(club_actor&&!actor->match_state)throw FormatError("world12: minute statistics are unknown");auto page=minute_statistics_from_game(game,local);page.manager_slot=owner.manager;out.minutes=std::move(page);return out;}
     if(selection.page==3){
         static constexpr Country countries[]={Country::germany,Country::spain,Country::england,Country::france,Country::italy};
         if(selection.nation<0||selection.nation>=5)throw FormatError("world12: invalid all-time country selector");
@@ -115,10 +120,10 @@ World12StatisticsState world12_statistics_state(const CareerSnapshot& snapshot,c
     }
     if(selection.page==6){
         if(!actor->match_state)throw FormatError("world12: manager streak records are unknown");
-        const auto& club=world.clubs.at(owner.club);SeriesRecordsProjection page;page.manager_slot=owner.manager;page.runtime_team=int(projection.local_club(owner.club));page.league=int(league.value);page.explicit_league_size=definition.clubs;page.league_row=int(std::find(members.begin(),members.end(),owner.club)-members.begin());page.rounds=snapshot.league_rounds[league.value];page.club_name=utf8_to_original(club.name);page.gradient_text=out.menu.gradient_text;
+        const auto& club=world.clubs.at(owner.club);SeriesRecordsProjection page;page.manager_slot=owner.manager;page.runtime_team=int(projection.local_club(owner.club));page.league=int(league.value);page.explicit_league_size=definition->clubs;page.league_row=int(std::find(members.begin(),members.end(),owner.club)-members.begin());page.rounds=snapshot.league_rounds[league.value];page.club_name=utf8_to_original(club.name);page.gradient_text=out.menu.gradient_text;
         std::copy_n(club.season_stats.counters.begin(),21,page.current_streaks.begin());page.manager_best_streaks=actor->match_state->best_streaks;
         for(size_t col=0;col<3;++col){page.source_flags[col]=source.u8(layout::TableFlags+uint32_t(col));page.series_indices[col]=source.u8(layout::SeriesSelector+uint32_t(col));if(page.series_indices[col]>=3)throw FormatError("world12: invalid Source series selector");TableQuery query;query.venue=(page.source_flags[col]&3)==1?TableVenue::home:(page.source_flags[col]&3)==2?TableVenue::away:TableVenue::all;query.three_points=false;
-            auto& table=page.tables[col];table.size=definition.clubs;for(const auto& row:compute_standings(world,snapshot.results,league,page.rounds,query)){const auto index=size_t(std::find(members.begin(),members.end(),row.club)-members.begin());table.wins[index]=row.wins;table.defeats[index]=row.defeats;table.goals_for[index]=row.goals_for;table.goals_against[index]=row.goals_against;table.points[index]=int8_t(row.points);table.rank_word[index]=uint16_t(row.games|((row.previous_rank-1)<<6)|((row.rank-1)<<11));table.form[index]=row.form;}
+            auto& table=page.tables[col];table.size=definition->clubs;for(const auto& row:compute_standings(world,snapshot.results,league,page.rounds,query)){const auto index=size_t(std::find(members.begin(),members.end(),row.club)-members.begin());table.wins[index]=row.wins;table.defeats[index]=row.defeats;table.goals_for[index]=row.goals_for;table.goals_against[index]=row.goals_against;table.points[index]=int8_t(row.points);table.rank_word[index]=uint16_t(row.games|((row.previous_rank-1)<<6)|((row.rank-1)<<11));table.form[index]=row.form;}
         }
         for(size_t i=0;i<8;++i){auto& record=page.records[i];record.score_byte=club.season_stats.counters[21+i];record.saved_date=club.season_stats.dates[i];if(record.score_byte){if(!club.season_stats.opponents[i].valid())throw FormatError("world12: nonempty record has no actual canonical opponent");record.opponent_name=utf8_to_original(world.clubs.at(club.season_stats.opponents[i]).name);}}
         out.series=std::move(page);return out;

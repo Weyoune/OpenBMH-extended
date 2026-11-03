@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "world12_fixture.hpp"
+#include "world12_national_fixture.hpp"
+#include "game/world12/national_coach.hpp"
+#include "game/world12/national_setup.hpp"
+#include "game/world12/national.hpp"
 #include "fixture_tables.hpp"
 #include "game/lineup.hpp"
 #include "game/world12/manager_tactics.hpp"
@@ -79,5 +83,15 @@ void statistics_pages(const GameState& ref,LeImage source){
     std::cout<<"statistics forecast/history/ten alltime variants/three Source series tables/titles/minutes preserve canonical identities and complete state; missing histories reject\n";
 }
 
+void national_pages(LeImage source){
+    auto original=bmh::test::world12::national_world();original.managers.clear();original.players_initialized=false;original.settings.reset();original.markets.reset();original.free_players.reset();for(uint8_t c=0;c<62;++c)if(c!=0&&c!=2){ClubRecord nation;nation.id={3000000u+c};nation.country=Country(c);nation.kind=ClubKind::national_team;nation.name="Nation "+std::to_string(c);nation.crest=original.clubs.begin()->second.crest;original.clubs[nation.id]=nation;}
+    CareerSnapshot state;state.world=select_world_scope(original,{false,false,true});auto& world=state.world;world.players_initialized=true;world.markets.emplace();world.free_players.emplace();for(auto& origin:*world.national_origins)origin.source_initialized=true;world.settings=CareerSettings{3,6,5,1,false};const ClubId team{3000002};auto ref=bmh::test::world12::national_reference();for(auto address:{layout::PlainBackground,layout::SolidPanelBackground,layout::TextGradientDisabled})ref.memory.add_block(address,1);ref.memory.add_block(layout::Desktops,5*0x360);initialize_national_coaches(world,ref);auto& coach=*std::find_if(world.national_coaches->begin(),world.national_coaches->end(),[&](const auto& record){return record.team==team;});coach.view_preferences=initial_national_view_preferences(ref,3);coach.startup=NationalStartupReceipt{Country::england,uint32_t(world.players.size()),uint32_t(world.national_origins->size())};world.managers={{3,"Sparse national",team,{},3}};activate_national_coaches(world,{3});WatcomRandom random(91);for(auto country:{Country::germany,Country::england})nominate_national_squad(world,country,0,ref,random);world.national_campaigns.emplace();world.annual_title_archive.emplace();world.highscore_signature=0;state.results=SeasonResults::empty(world.catalogue);state.desktop.emplace();state.desktop->manager_order={3};state.desktop->matchday_number=71;state.desktop->active_seat=3;state.desktop->managers={{3}};state.watcom_seed=random.seed();state.validate();const auto before=state;const Image frame(320,240);ui::World12ReadonlyIdentity owner{3,23,team,0,8,71,1ull<<32};
+    const uint8_t banks[]={14,14,17,17};source.patch(layout::WorldCupStatistics_FormatError_RuntimeField,banks,4);ui::World12StatisticsSelection selection;
+    const auto parent=ui::world12_statistics_state(state,owner,selection,ref,source,frame);check(parent.menu.owner.manager_slot==3&&!world.managers[0].career&&!world.managers[0].start_league.valid(),"national statistics parent fabricated club backing or lost sparse actor");
+    for(int page:{4,7,8}){selection.page=page;const auto result=ui::world12_statistics_state(state,owner,selection,ref,source,frame);check(page==4?bool(result.world_cup):page==7?bool(result.rankings):bool(result.minutes),"national statistics lost real general/nominated facts");}
+    for(int page:{0,1,2,3,6}){selection.page=page;rejects([&]{ui::world12_statistics_state(state,owner,selection,ref,source,frame);},"national statistics substituted a disabled or parked club league/history");}
+    owner.menu=26;check(ui::world12_readonly_state(state,owner,{},ref,source,frame).records.has_value(),"known unranked NoClub score required fabricated club accounts");owner.menu=23;auto wrong=owner;wrong.club={3000000};selection.page=-1;rejects([&]{ui::world12_statistics_state(state,wrong,selection,ref,source,frame);},"national readonly accepted another real nation's actor binding");check(state==before&&read_save(make_save(state))==state,"national general statistics mutated real squads, inactive origins, accounts, seeds or absent career");std::cout<<"NoClub sparse actor3: actual WC/title/minute/score views, missing club histories explicit, full snapshot/RNG unchanged\n";
 }
-int main()try{set_fixture_tables(bmh::test::authored_fixture_tables());const auto ref=reference();const auto source=LeImage::from_bytes(layout::GermanDataSegmentBegin,Bytes(0x20000));league_pages(ref,source);statistics_pages(ref,source);return 0;}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
+
+}
+int main()try{set_fixture_tables(bmh::test::authored_fixture_tables());const auto ref=reference();const auto source=LeImage::from_bytes(layout::GermanDataSegmentBegin,Bytes(0x20000));league_pages(ref,source);statistics_pages(ref,source);national_pages(source);return 0;}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
