@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "game/national_identity.hpp"
 #include "formats/executable_layout.hpp"
 #include "game/reality_match.hpp"
 
@@ -70,7 +71,7 @@ bool settle_reality_match_scene(MatchEngine& engine,RealityMatchScene& owner,Min
        event.side<0||event.side>1||event.team!=owner.teams[size_t(event.side)]||
        event.opponent!=owner.teams[size_t(1-event.side)])
         throw FormatError("Reality match: deferred request belongs to another fixture");
-    const auto range=squad_range(event.team);
+    const auto range=squad_range(engine.state,event.team);
     if(request.offender_slot<int(range.first)||request.offender_slot>=int(range.first+range.count)||
        (engine.state.squad_slots.at(size_t(request.offender_slot))&0xfff)!=event.player)
         throw FormatError("Reality match: deferred offender slot changed");

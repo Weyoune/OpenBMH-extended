@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "game/national_identity.hpp"
 #include "formats/executable_layout.hpp"
 #include "game/week.hpp"
 #include "game/calendar.hpp"
@@ -126,7 +127,7 @@ int weekday_code(uint32_t date) {
 void familiarity_decay(GameState& g, GameRandom& game, WatcomRandom& rand) {
     for (size_t k = 0; k < g.manager_teams.size(); k++) {
         const int team = g.manager_teams[k];
-        const SquadRange range = squad_range(team);
+        const SquadRange range = squad_range(g,team);
         for (size_t s = range.first; s < range.first + range.count; s++) {
             const int player = g.squad_slots.at(s) & 0x0FFF;
             if (player == 0xFFF) continue;
@@ -137,11 +138,11 @@ void familiarity_decay(GameState& g, GameRandom& game, WatcomRandom& rand) {
             if (p.condition() < p.technique()) rate = uint8_t(r + 6);
             if (unsigned(rand.range(12, 16)) < ((p.w364 >> 21) & 0x1F)) rate = uint8_t(rate + 2);
             int16_t cap = int16_t(8 - int16_t(rd16w(g.manager_records, k * 0xB0C + 0x8b0)) / 0x113);
-            if (team == kNoTeam) cap = 8;
+            if (is_national_team(g,team)) cap = 8;
             if (cap < int16_t(rate)) rate = uint8_t(cap);
             // the player pool of a manager without a club: a low value is drawn afresh
             // (game generator)
-            if (team == kNoTeam && used < 0x1e) used = uint8_t(game.range(0x18, 0x30));
+            if (is_national_team(g,team) && used < 0x1e) used = uint8_t(game.range(0x18, 0x30));
             used = uint8_t(used - used / rate);
         }
     }
@@ -155,7 +156,7 @@ void train_squad(GameState& g, int manager, GameRandom& game, WatcomRandom& rand
             table[pos][a] = uint8_t(kIntensityValue[int8_t(g.manager_records.at(rec + 0xc5 + pos))] +
                                     kIntensityValue[int8_t(g.manager_records.at(rec + 0xc9 + a))]);
     const int team = int16_t(rd16w(g.manager_records, rec + 0x290));
-    const SquadRange range = squad_range(team);
+    const SquadRange range = squad_range(g,team);
     // Two countries may share a division class while being on different rounds.
     // A bounded workspace's team number is not a league/calendar identity.
     const int round = g.projected_match_clubs.empty()
@@ -281,7 +282,7 @@ void auto_training(GameState& g, int manager) {
         order[i] = int16_t(i);
         key[i] = 0x32;
     }
-    const SquadRange range = squad_range(team);
+    const SquadRange range = squad_range(g,team);
     for (size_t s = range.first; s < range.first + range.count; s++) {
         const uint16_t v = g.squad_slots.at(s);
         if (v == kEmptySlot) continue;

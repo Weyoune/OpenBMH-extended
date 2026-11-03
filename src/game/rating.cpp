@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "game/national_identity.hpp"
 #include "game/rating.hpp"
 
 #include <array>
@@ -121,7 +122,7 @@ int human_correction(GameState& g, RatingContext& ctx, int manager, int rank, in
 }  // namespace
 
 int team_rating(GameState& g, int team, const RatingProfile& profile, RatingContext& ctx, int* keeper) {
-    if (team >= runtime_dimensions.record_teams && team != kNoTeam) {
+    if (team >= runtime_dimensions.record_teams && !has_national_squad(g,team)) {
         // Clubs without squad: per group a random value around the level of the club
         // (ForeignClubStrength bits 5-7 -> RatingRuntimeField2), +2 if the group's strength bit is set
         // (bit 3, 3, 2, 1 for goal, defence, midfield, attack: RatingRuntimeField3) and a style
@@ -143,7 +144,7 @@ int team_rating(GameState& g, int team, const RatingProfile& profile, RatingCont
     // Human managers: the predicted final rank (Void5 in mode 1 before the tenth
     // round of the manager's league, mode 2 after it) for the expected bonus. Mode 1 may
     // post the season goal messages.
-    const int manager = team == kNoTeam ? -1 : g.manager_of(team);  // local_5a
+    const int manager = is_national_team(g,team) ? -1 : g.manager_of(team);  // local_5a
     int rank = 0;                                                     // local_5e
     if (manager >= 0) {
         const size_t rec = size_t(manager) * 0xB0C;
@@ -174,7 +175,7 @@ int team_rating(GameState& g, int team, const RatingProfile& profile, RatingCont
     int8_t missing = 11;        // local_18: 11 - line-up size
     if (keeper) *keeper = 0xFFF;
 
-    SquadRange range = squad_range(team);
+    SquadRange range = squad_range(g,team);
     for (size_t s = range.first; s < range.first + range.count; s++) {
         uint16_t slot = g.squad_slots.at(s);
         int player = slot & 0x0FFF;

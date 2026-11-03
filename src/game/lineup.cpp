@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "game/national_identity.hpp"
 #include "formats/executable_layout.hpp"
 #include "game/lineup.hpp"
 #include "formats/le.hpp"
@@ -43,7 +44,7 @@ uint8_t formation_byte(const GameState& g, size_t index,int manager=-1) {
 }
 
 bool pitch_context_valid(const GameState& g, int manager, int team) {
-    if (manager < 0 || manager > 3 || team < 0 || team >= runtime_dimensions.league_teams || g.lineups_frozen ||
+    if (manager < 0 || manager > 3 || team < 0 || (team >= runtime_dimensions.league_teams && (g.projected_national_teams.empty() || !has_national_squad(g,team))) || g.lineups_frozen ||
         !g.memory.has(::bmh::layout::ActiveManager) || !g.memory.has(::bmh::layout::GameMode) ||
         g.memory.u8(::bmh::layout::ActiveManager) != manager || g.memory.u8(::bmh::layout::GameMode) < 1 || g.memory.u8(::bmh::layout::GameMode) > 3 ||
         size_t(manager) >= g.manager_teams.size() || g.manager_teams[size_t(manager)] != team ||
@@ -59,7 +60,7 @@ bool pitch_context_valid(const GameState& g, int manager, int team) {
     const uint16_t record_team = uint16_t(g.manager_records[record + 0x290] |
         uint16_t(g.manager_records[record + 0x291]) << 8);
     if (record_team != uint16_t(team)) return false;
-    const SquadRange range = squad_range(team);
+    const SquadRange range = squad_range(g,team);
     if ((range.count != 16 && range.count != 24) || range.first + range.count > g.squad_slots.size())
         return false;
     bool empty_seen = false;
@@ -98,7 +99,7 @@ bool pitch_context_valid(const GameState& g, int manager, int team) {
 
 bool optimized_pitch_valid(const GameState& g, int manager, int team) {
     if (!pitch_context_valid(g, manager, team)) return false;
-    const SquadRange range = squad_range(team);
+    const SquadRange range = squad_range(g,team);
     const size_t board = size_t(manager) * kManagerBoardSize;
     std::array<bool, 0x1000> seen{};
     for (size_t row = 0; row < 11; ++row) {
@@ -142,7 +143,7 @@ bool run_pitch_optimizer(GameState& staged, int manager, int team, int formation
 
 void prepare_lineup_entry(GameState& g, int team) {
     const int manager = g.manager_of(team);
-    const SquadRange range = squad_range(team);
+    const SquadRange range = squad_range(g,team);
     if (manager < 0 || team < 0 || range.count < 11 || range.first + range.count > g.squad_slots.size())
         throw std::invalid_argument("prepare_lineup_entry: unsupported manager squad");
     const size_t badge = size_t(team) * 2;
@@ -203,7 +204,7 @@ bool move_pitch_player_source(GameState& g, int manager_slot, int runtime_club,
         new_depth < 0 || new_depth > 19 || new_lane < 0 || new_lane > 8 ||
         (old_depth == new_depth && old_lane == new_lane))
         return false;
-    const SquadRange range = squad_range(runtime_club);
+    const SquadRange range = squad_range(g,runtime_club);
     const size_t record = range.first + size_t(row);
     const size_t board = size_t(manager_slot) * kManagerBoardSize;
     const size_t row_at = board + size_t(row) * kBoardRowSize;
@@ -306,7 +307,7 @@ bool save_pitch_formation_source(GameState& g, int manager_slot, int runtime_clu
         table + formation_positions.size() > g.formations.size())
         return false;
     for (size_t row = 0; row < 11; ++row) {
-        const uint16_t slot = g.squad_slots[squad_range(runtime_club).first + row];
+        const uint16_t slot = g.squad_slots[squad_range(g,runtime_club).first + row];
         const int depth = int8_t(g.tactics[board + row * kBoardRowSize + 0x41]);
         const int lane = int8_t(g.tactics[board + row * kBoardRowSize + 0x42]);
         if ((slot & 0xc000) != 0x8000 || depth < 0 || depth > 19 || lane < 0 || lane > 8 ||
@@ -332,7 +333,7 @@ void install_lineup_rules(const LeImage& exe) {
 }
 
 static void auto_lineup_impl(GameState& g, int team, int mode, int manager) {
-    if (team >= runtime_dimensions.league_teams && team != kNoTeam) return;  // teams without squads
+    if (team >= runtime_dimensions.league_teams && !has_national_squad(g,team)) return;  // teams without squads
     if (g.lineups_frozen) return;  // LineupRuntimeField (the season change)
     const bool improve_from_reserves = (mode & 0x80) != 0;
     mode &= 0x7F;
@@ -376,7 +377,7 @@ static void auto_lineup_impl(GameState& g, int team, int mode, int manager) {
                 if (g.level >= 6) detail = (style >> 2) & 3;
             } else {
                 if (mode == 0x65 || mode < 100) return;
-                const SquadRange range = squad_range(team);
+                const SquadRange range = squad_range(g,team);
                 const size_t board_base = size_t(manager) * 0x840;
                 if (range.count < 11 || range.first + range.count > g.squad_slots.size() ||
                     g.tactics.size() < board_base + 0x840 || g.player_cards.size() != g.players.size())
@@ -462,7 +463,7 @@ static void auto_lineup_impl(GameState& g, int team, int mode, int manager) {
     auto board = [&](int slot) -> uint8_t* { return &g.tactics.at(size_t(manager) * 0x840 + size_t(slot) * 0x58); };
 
     g.team_flags.at(team) &= 0xFFFE;
-    SquadRange range = squad_range(team);
+    SquadRange range = squad_range(g,team);
     if (manager >= 0)
         for (size_t s = 0; s < range.count; s++) board(int(s))[0x3f] = 0xFF;
     int count = int(range.count);
@@ -688,7 +689,7 @@ void quicksort_by_key(int16_t* items, uint32_t* keys, int count, bool ascending)
 }
 
 bool substitute(GameState& g, int team, int off, int mode, WatcomRandom& rand) {
-    if (!(team < runtime_dimensions.league_teams || team == kNoTeam)) return false;
+    if (!(team < runtime_dimensions.league_teams || has_national_squad(g,team))) return false;
     const int manager = g.manager_of(team);
     int used = g.team_flags.at(team) >> 5 & 7;  // substitutions so far
     if (mode == 10) {
@@ -697,7 +698,7 @@ bool substitute(GameState& g, int team, int off, int mode, WatcomRandom& rand) {
         if (used >= kMaxSubstitutions - 1) return false;
     }
 
-    SquadRange range = squad_range(team);
+    SquadRange range = squad_range(g,team);
     int first = int(range.first);
     int last_bench = team > 0x59 ? 16 : 17;
 
@@ -805,7 +806,7 @@ bool substitute(GameState& g, int team, int off, int mode, WatcomRandom& rand) {
 }
 
 bool manual_substitution(GameState& g, int team, int field_slot, int bench_slot) {
-    const SquadRange range = squad_range(team);
+    const SquadRange range = squad_range(g,team);
     if (field_slot < 0 || field_slot >= 11 || bench_slot < 11 || size_t(bench_slot) >= range.count) return false;
     const size_t off = range.first + size_t(field_slot), on = range.first + size_t(bench_slot);
     const uint16_t out = g.squad_slots.at(off), in = g.squad_slots.at(on);
@@ -857,7 +858,7 @@ bool normalize_pitch_set_piece_source(GameState& g, int manager_slot, int runtim
     const auto member = [&](uint16_t stored) {
         if (!stored || stored > 0x0fff) return false;
         const int id = int(stored) - 1;
-        const auto range = squad_range(runtime_club);
+        const auto range = squad_range(g,runtime_club);
         for (size_t i = 0; i < range.count; ++i)
             if ((g.squad_slots[range.first + i] & 0x0fff) == id) return true;
         return false;
@@ -874,7 +875,7 @@ bool set_pitch_set_piece_taker_source(GameState& g, int manager_slot, int runtim
                                       uint16_t expected_old_value) {
     if (!pitch_context_valid(g, manager_slot, runtime_club) || selector < 2 || selector > 4 ||
         row < 0) return false;
-    const auto range = squad_range(runtime_club);
+    const auto range = squad_range(g,runtime_club);
     const size_t at = range.first + size_t(row), rec = size_t(manager_slot) * kManagerRecordSize;
     if (size_t(row) >= range.count || at >= range.first + range.count || g.squad_slots[at] != slot || (slot & 0xc000) == 0 ||
         (slot & 0x0fff) != player_id || player_id < 0 || size_t(player_id) >= g.players.size() ||
@@ -911,7 +912,7 @@ bool swap_pitch_roster_rows_source(GameState& g,int manager,int team,int first_r
     if(manager<0 || manager>3 || size_t(manager)>=g.manager_teams.size() || g.manager_teams[size_t(manager)]!=team ||
         team<0 || size_t(team)>=g.club_ids.size() || g.lineups_frozen || first_row<0 || second_row<0 || first_row==second_row ||
         g.tactics.size()<size_t(manager+1)*0x840 || g.manager_options.size()<size_t(manager+1)*5 || g.player_cards.size()!=g.players.size())return false;
-    const auto range=squad_range(team);
+    const auto range=squad_range(g,team);
     if((range.count!=16 && range.count!=24) || size_t(first_row)>=range.count || size_t(second_row)>=range.count ||
         range.first+range.count>g.squad_slots.size())return false;
     const size_t first=range.first+size_t(first_row),second=range.first+size_t(second_row);
@@ -948,7 +949,7 @@ bool set_player_order_source(GameState& g, int manager_slot, int runtime_club, i
     if (manager_slot < 0 || size_t(manager_slot) >= g.manager_teams.size() || g.manager_teams[size_t(manager_slot)] != runtime_club ||
         aspect < 0 || aspect > 3 || row < 0 || row >= 24)
         return false;
-    const SquadRange range = squad_range(runtime_club);
+    const SquadRange range = squad_range(g,runtime_club);
     if (size_t(row) >= range.count || range.first + size_t(row) >= g.squad_slots.size()) return false;
     const uint16_t slot = g.squad_slots[range.first + size_t(row)];
     // only a starter on the pitch can be selected in the ORDER view

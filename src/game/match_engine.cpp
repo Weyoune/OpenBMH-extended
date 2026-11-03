@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "game/national_identity.hpp"
 #include "formats/executable_layout.hpp"
 #include "game/match_engine.hpp"
 
@@ -78,8 +79,8 @@ MinuteReport MatchEngine::minute(int minute, int last_minute, int stoppage) {
 // Human teams use the places on their tactics board, also for the player's value.
 int MatchEngine::pick_player(int team, int mode, int exclude, MinuteReport& report, int preset) {
     mode &= 0x7F;  // 0x80 = reuse the squad of the previous call, same team here
-    if (team >= runtime_dimensions.league_teams && team != kNoTeam) return 0xFFF;  // clubs without squad: nobody, no draws
-    SquadRange range = squad_range(team);
+    if (team >= runtime_dimensions.league_teams && !has_national_squad(state,team)) return 0xFFF;  // clubs without squad: nobody, no draws
+    SquadRange range = squad_range(state,team);
     if (range.count == 0) return 0xFFF;
     RatingContext ctx{state.chance_rain, state.chance_temperature};
     for (int tries = 0; tries < 199; tries++) {
@@ -320,7 +321,7 @@ int MatchEngine::designated_slot(int team, int offset, int exclude) const {
     int id = u16(offset);
     if (id == 0 || id > 0xFFF) return -1;
     id--;
-    SquadRange range = squad_range(team);
+    SquadRange range = squad_range(state,team);
     for (int s = 0; s < 11 && range.count != 0; s++) {
         uint16_t entry = state.squad_slots.at(range.first + s);
         if (!(entry & kSlotInLineup)) continue;
@@ -447,7 +448,7 @@ int injure_player(GameState& g, int slot, int type, bool match, int manager, Wat
         // layout field: a player insured on the tactics board (slot byte 0x43, bits 6-7 the
         // cover) earns base pay * (50 + 50 * cover) / 100 per week while out (SquadRange2);
         // the manager is told so ("Ihre Versicherung zahlt Ihnen ...", MatchEngineRuntimeField10 " ")
-        const SquadRange range = squad_range(g.manager_teams.at(size_t(manager)));
+        const SquadRange range = squad_range(g,g.manager_teams.at(size_t(manager)));
         const size_t board = size_t(manager) * 0x840 + (size_t(slot) - range.first) * 0x58;
         const uint8_t cover = g.tactics.at(board + 0x43);
         if (cover != 0 && duration != 0) {
@@ -500,7 +501,7 @@ ForcedMatchEvent MatchEngine::forced_event(MatchGroup& g, int m, int s, int minu
                                            int absolute_slot, MinuteReport& report) {
     if (s < 0 || s > 1 || m < 0 || m >= g.matches())
         throw FormatError("Reality event needs a valid fixture and side");
-    const auto range = squad_range(g.fixtures.at(m * 2 + s));
+    const auto range = squad_range(state,g.fixtures.at(m * 2 + s));
     if (absolute_slot < int(range.first) || absolute_slot >= int(range.first + range.count))
         throw FormatError("Reality offender is outside the selected team's squad");
     return event_impl(g, m, s, minute, absolute_slot, report);
@@ -523,11 +524,11 @@ ForcedMatchEvent MatchEngine::event_impl(MatchGroup& g, int m, int s, int minute
     // national team (0x165, squad nominated on the national team days) only while manager
     // slot 0 holds it (CupDraw_FormatError_RuntimeField2 == 0x165: a Bundestrainer's match).
     if (!(team < runtime_dimensions.big_squad_teams || rand.range(0, 1) == 0)) return result;
-    if (!(team < runtime_dimensions.league_teams || team == kNoTeam)) return result;
-    if (team == kNoTeam && (state.manager_teams.empty() || state.manager_teams[0] != kNoTeam)) return result;
+    if (!(team < runtime_dimensions.league_teams || has_national_squad(state,team))) return result;
+    if (is_national_team(state,team) && (state.projected_national_teams.empty() ? (state.manager_teams.empty() || state.manager_teams[0] != kNoTeam) : state.manager_of(team)<0)) return result;
     const int manager = state.manager_of(team);  // FindManagerForClub, local_6c
     const bool human = manager >= 0;
-    SquadRange range = squad_range(team);        // SquadRange4
+    SquadRange range = squad_range(state,team);        // SquadRange4
 
     int kind = 0;       // local_70: 0 yellow, 1 red, 2 injury
     int card_delta = 0;  // added to the team's card counters
@@ -944,10 +945,10 @@ void MatchEngine::side(MatchGroup& g, int m, int& s, int minute, int& own_att, i
     }
 
     // Goalkeeper of the opponent: the player in squad slot 0 if the formation puts it in goal.
-    if (!reality_played && (opp_team < runtime_dimensions.record_teams || opp_team == kNoTeam)) {
+    if (!reality_played && (opp_team < runtime_dimensions.record_teams || has_national_squad(state,opp_team))) {
         int x = 0, y = 0;
         state.formation_position(opp_team, 0, x, y);
-        if (x == 0 && y == 4) keeper = state.squad_slots.at(squad_range(opp_team).first) & 0x0FFF;
+        if (x == 0 && y == 4) keeper = state.squad_slots.at(squad_range(state,opp_team).first) & 0x0FFF;
     }
 
     if (kind == 0 && !attempt) {
@@ -979,7 +980,7 @@ void MatchEngine::side(MatchGroup& g, int m, int& s, int minute, int& own_att, i
         deflected = game.range(0, 5) == 0;
     }
     if (kind == 0) {
-        if (team >= runtime_dimensions.record_teams && team != kNoTeam) {
+        if (team >= runtime_dimensions.record_teams && !has_national_squad(state,team)) {
             // clubs without squad: the attack rating (TeamRating, profile 3), drawn
             RatingContext drawn;
             drawn.rand = &rand;
@@ -989,7 +990,7 @@ void MatchEngine::side(MatchGroup& g, int m, int& s, int minute, int& own_att, i
         }
     }
     if (keeper == 0xFFF) {
-        if (opp_team >= runtime_dimensions.record_teams && opp_team != kNoTeam) {
+        if (opp_team >= runtime_dimensions.record_teams && !has_national_squad(state,opp_team)) {
             // clubs without squad: the goalkeeping rating (profile 0), drawn
             RatingContext drawn;
             drawn.rand = &rand;
@@ -1196,7 +1197,7 @@ void MatchEngine::penalty_shootout(MatchGroup& g, int m, MinuteReport& report) {
             const int side = order[k];
             const int team = pair[side];
             int player = 0xFFF;
-            if (team < runtime_dimensions.league_teams || team == kNoTeam) {
+            if (team < runtime_dimensions.league_teams || has_national_squad(state,team)) {
                 // a player who has not taken a penalty yet (after 100 tries the list restarts)
                 int tries = 0;
                 bool fresh;

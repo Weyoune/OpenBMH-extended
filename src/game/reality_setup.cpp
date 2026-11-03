@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "game/national_identity.hpp"
 #include "formats/executable_layout.hpp"
 #include "game/reality_setup.hpp"
 
@@ -11,7 +12,7 @@ int manager(const GameState& state, int team) {
     const int found = state.manager_of(team);
     if (found >= 0) return found;
     // FindManagerForClub's separate national-manager record is not in manager_teams.
-    if (!state.manager_teams.empty() && state.manager_teams[0] == kNoTeam &&
+    if (state.projected_national_teams.empty() && !state.manager_teams.empty() && state.manager_teams[0] == kNoTeam &&
         state.manager_records.size() >= 4*0xb0c+0x292 &&
         le16(state.manager_records,4*0xb0c+0x290) == team) return 4;
     return -1;
@@ -46,7 +47,7 @@ void validate(const GameState& state, const std::array<int,2>& teams, int side, 
     for (int s = 0; s < 2; ++s) {
         const int team = teams[size_t(s)];
         if (team < 0) throw FormatError("Reality setup: invalid team");
-        const auto range = squad_range(team);
+        const auto range = squad_range(state,team);
         if (range.first+range.count > state.squad_slots.size() || range.count < 11)
             throw FormatError("Reality setup: truncated squad");
         const int m = manager(state,team);
@@ -111,7 +112,7 @@ void initialize_reality(GameState& state, const std::array<int,2>& teams, int at
     setup.grid.reset_occupancy(); // SizeT2 clears only the two occupancy planes.
     for (int pass = 0; pass < 2; ++pass) {
         const int side = pass ^ attacking_side, team = teams[size_t(side)], m = manager(state,team);
-        const auto range = squad_range(team);
+        const auto range = squad_range(state,team);
         std::array<std::pair<int,int>,5> candidates{};size_t candidates_count = 0, formation_cursor = 0;
         for (int row = 0; row < 11; ++row) {
             const int figure = side*11+row;auto& info = setup.players[size_t(figure)];

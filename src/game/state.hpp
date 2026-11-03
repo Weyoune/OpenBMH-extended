@@ -56,6 +56,11 @@ struct GameState {
     // Runtime-only context for bounded typed-world projections. Empty retains
     // the original positional lookup; never serialized into a legacy save.
     std::vector<ProjectedMatchClub> projected_match_clubs;
+    struct ProjectedNationalTeam {
+        int team=0;
+        std::optional<size_t> squad_first; // Actual nominated squad, or rating only.
+    };
+    std::vector<ProjectedNationalTeam> projected_national_teams;
     std::vector<std::array<uint8_t,13>> projected_formation_tails;
     std::optional<std::array<uint8_t,0x160>> projected_ai_formations;
     std::optional<bool> projected_foreign_rule; // Session rule for a bounded workspace; not saved.

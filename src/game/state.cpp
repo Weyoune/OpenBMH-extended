@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "game/national_identity.hpp"
 #include "formats/executable_layout.hpp"
 #include "game/state.hpp"
 #include "game/bank_robbery.hpp"
@@ -184,7 +185,7 @@ SquadRange squad_range(int team) {
 }
 
 TeamAverage team_average(const GameState& g, int team, uint16_t flags, WatcomRandom* rand) {
-    if (team >= kTeamsWithSquads && team != kNoTeam) {
+    if (team >= kTeamsWithSquads && !has_national_squad(g,team)) {
         // TeamRating(team, profile 2 at layout field): a random value around the club's level
         if (!rand) throw std::invalid_argument("team_average: a team without squad needs the Watcom generator");
         RatingContext ctx;
@@ -199,7 +200,7 @@ TeamAverage team_average(const GameState& g, int team, uint16_t flags, WatcomRan
     int sum_condition = 0, sum_technique = 0, sum_form = 0, sum_morale = 0;
     int counted = 0;  // "local_14" in the original, a byte
 
-    SquadRange range = squad_range(team);
+    SquadRange range = squad_range(g,team);
     for (size_t s = range.first; s < range.first + range.count; s++) {
         uint16_t slot = g.squad_slots.at(s);
         if (slot == kEmptySlot) continue;

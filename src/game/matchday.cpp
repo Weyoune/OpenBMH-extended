@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "game/national_identity.hpp"
 #include "formats/executable_layout.hpp"
 #include "game/environment.hpp"
 #include "game/match.hpp"
@@ -232,7 +233,7 @@ uint32_t pay_bonus(GameState& g, int manager, int board_slot, int index, bool pa
 }
 
 void player_statistic(GameState& g, int type, int player, int manager, int slot, int kind, int minute) {
-    int cls = (type == 0xb && manager >= 0 && !g.manager_teams.empty() && g.manager_teams[0] == kNoTeam)
+    int cls = (type == 0xb && manager >= 0 && (g.projected_national_teams.empty()?(!g.manager_teams.empty() && g.manager_teams[0] == kNoTeam):is_national_team(g,g.manager_teams.at(size_t(manager)))))
                   ? 3
                   : int8_t(competition_class(type));
     if (cls < 0 || cls >= 4) return;
@@ -413,10 +414,10 @@ void develop_players(GameState& g, const MatchGroup& grp, int m, GameRandom& gam
     const int type = grp.desc.at(0);
     for (int side = 0; side < 2; side++) {
         const int team = grp.fixtures.at(m * 2 + side);
-        if (!(team < runtime_dimensions.record_teams || team == kNoTeam)) continue;
-        const uint8_t cls = (type == 0xb && team == kNoTeam) ? 3 : uint8_t(competition_class(type));
+        if (!(team < runtime_dimensions.record_teams || has_national_squad(g,team))) continue;
+        const uint8_t cls = (type == 0xb && is_national_team(g,team)) ? 3 : uint8_t(competition_class(type));
         const int manager = g.manager_of(team);
-        const SquadRange range = squad_range(team);
+        const SquadRange range = squad_range(g,team);
 
         // 1 in 11: the team gets the next trend of the rotation (none/down, neutral, up);
         // the rotation is steered by the balance of all attribute changes so far.

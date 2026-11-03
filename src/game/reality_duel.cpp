@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "game/national_identity.hpp"
 #include "game/reality_duel.hpp"
 
 #include <algorithm>
@@ -8,7 +9,7 @@ namespace bmh {
 namespace {
 int source_manager(const GameState& state,int team) {
     const int m=state.manager_of(team);if (m>=0) return m;
-    if (!state.manager_teams.empty() && state.manager_teams[0]==kNoTeam &&
+    if (state.projected_national_teams.empty() && !state.manager_teams.empty() && state.manager_teams[0]==kNoTeam &&
         state.manager_records.size()>=4*0xb0c+0x292 && le16(state.manager_records,4*0xb0c+0x290)==team) return 4;
     return -1;
 }
@@ -26,7 +27,7 @@ RealityFoulResult reality_foul(const GameState& state,const RealitySetup& scene,
     const auto& p=state.players[size_t(player)];
     int chance=std::clamp((int((p.w35c>>14)&127)-int((p.w35c>>7)&127))*4+100,0,200);
     // Literal RealityFoul indexes by player ID minus squad start, not roster row.
-    const int board_row=std::clamp(player-int(squad_range(team).first),0,24);
+    const int board_row=std::clamp(player-int(squad_range(state,team).first),0,24);
     if (manager>=0) {
         const size_t at=size_t(manager)*0x840+size_t(board_row)*0x58+5;
         if (at>=state.tactics.size()) throw FormatError("Reality foul: Source board row outside supplied memory");

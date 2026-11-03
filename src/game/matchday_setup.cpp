@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "game/national_identity.hpp"
 #include "formats/executable_layout.hpp"
 #include "game/matchday_setup.hpp"
 #include "game/trace.hpp"
@@ -82,7 +83,7 @@ int league_of(int team) {
 
 // RestoreForfeitSquad, called once per side after FinishEvent detects a forfeited fixture.
 void restore_forfeit_squad(GameState& g, int team) {
-    const SquadRange range = squad_range(team);
+    const SquadRange range = squad_range(g,team);
     for (size_t slot_index = range.first; slot_index < range.first + range.count; slot_index++) {
         const uint16_t slot = g.squad_slots.at(slot_index);
         const size_t player = slot & 0x0fff;
@@ -179,7 +180,7 @@ void match_weather(MatchGroup& grp, int m, const MatchdayContext& ctx, GameRando
 void prepare_team(GameState& g, int team, int cls, int index) {
     uint16_t& flags = g.team_flags.at(size_t(team));
     flags = uint16_t((flags & 0xFF0F) | ((index % 2) << 4));
-    const SquadRange range = squad_range(team);
+    const SquadRange range = squad_range(g,team);
     for (size_t s = range.first; s < range.first + range.count; s++) {
         uint16_t& slot = g.squad_slots.at(s);
         slot &= 0xCFFF;
@@ -661,7 +662,7 @@ int attendance(GameState& g, int home, int away, int bits, int temperature, int 
 
     int32_t n;  // ESI: the attendance
     int price;  // local_38: ticket price
-    if ((home_manager < 0 || home != kNoTeam) && !(bits & 0x80)) {
+    if ((home_manager < 0 || !is_national_team(g,home)) && !(bits & 0x80)) {
         const int lh = league[0], la = league[1];
         n = table_u32(::bmh::layout::MatchdaySetup_Attendance_ExecutableField2, lh);
         int prestige = 0x32, performance = 0x226;  // local_24, local_2c
@@ -791,7 +792,7 @@ int attendance(GameState& g, int home, int away, int bits, int temperature, int 
         report.fail("attendance: invalid competition bits");
         kind = 2;
     }
-    if (home_manager >= 0 && r16(0x290) != kNoTeam) {
+    if (home_manager >= 0 && !is_national_team(g,r16(0x290))) {
         book_money(g, home_manager, -income, true);
         w32(0x868, r32(0x868) + income);
         const int32_t catering = catering_income(g, home_manager, n, rand);  // BookMoney
@@ -843,7 +844,7 @@ int attendance(GameState& g, int home, int away, int bits, int temperature, int 
         // the match in its attendance statistics (no catering, no records)
         const size_t away_rec = size_t(away_manager) * 0xB0C;
         auto& m = g.manager_records;
-        if ((m.at(away_rec + 0x290) | m.at(away_rec + 0x291) << 8) != kNoTeam) {
+        if (!is_national_team(g,(m.at(away_rec + 0x290) | m.at(away_rec + 0x291) << 8))) {
             book_money(g, away_manager, -income, true);
             wr32(m, away_rec + 0x868, rd32(m, away_rec + 0x868) + uint32_t(income));
             m.at(away_rec + 0x28c + size_t(kind))++;
@@ -898,7 +899,7 @@ void man_marking(GameState& g, int own_manager, int own, int other_manager, int 
         rate = uint8_t((int16_t(g.manager_records.at(rec) | g.manager_records.at(rec + 1) << 8) >> 4) + 0x28);
     }
     bool marking[24] = {};  // local_70: own slots already marking
-    const SquadRange own_range = squad_range(own), other_range = squad_range(other);
+    const SquadRange own_range = squad_range(g,own), other_range = squad_range(g,other);
     int16_t targets[24];
     uint32_t target_key[24];
     int n = 0;  // local_38
@@ -1000,7 +1001,7 @@ void kick_off(GameState& g, std::vector<MatchGroup>& groups, const MatchdayConte
     reset_match_played_flags(g);
     // tactics board byte 0x10: 0 starts, 0x7f on the bench, 0x7e not in the squad
     for (size_t k = 0; k < g.manager_teams.size(); k++) {
-        const SquadRange range = squad_range(g.manager_teams[k]);
+        const SquadRange range = squad_range(g,g.manager_teams[k]);
         for (size_t s = range.first; s < range.first + range.count; s++) {
             const uint16_t slot = g.squad_slots.at(s);
             if ((slot & 0x0FFF) == 0x0FFF) break;
@@ -1049,7 +1050,7 @@ void kick_off(GameState& g, std::vector<MatchGroup>& groups, const MatchdayConte
                     man_marking(g, own_manager, t, other_manager, opponent, 0x32, rate, rand);
                 }
                 const TeamAverage fit = team_average(g, t, 0x1f1, &rand);
-                if ((t < kLeagueClubCount || t == kNoTeam) && (fit.players & 0xFF) < 8) {
+                if ((t < kLeagueClubCount || has_national_squad(g,t)) && (fit.players & 0xFF) < 8) {
                     // FinishEvent sets this fixture's local void bit and BuildSideRecords writes
                     // the awarded 0:2/2:0 score before continuing to the next fixture.
                     forfeit_side = side;

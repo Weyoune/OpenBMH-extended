@@ -67,3 +67,11 @@ only initialization uses the existing complete Source player-generation plan;
 a scoped club initialization does not generate the inactive provenance players
 or consume additional random draws. The per-origin `source_initialized` receipt
 distinguishes these cases. Older worlds keep missing provenance unknown.
+
+`game/national_identity.hpp` provides state-aware national identity, actual-squad
+availability and squad ranges for bounded match/training workspaces. Empty
+runtime mappings retain the legacy NoTeam lookup. Explicit entries can identify
+rating-only nations (including the primary nation) without assigning them a
+player squad. Real DE/EN nominated squads use independent offsets; Core ratings,
+lineups, match events, settlement, Reality slots and familiarity/training use
+these offsets. These runtime fields are never serialized to legacy saves.

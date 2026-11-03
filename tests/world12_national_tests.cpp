@@ -10,6 +10,9 @@
 #include "game/national.hpp"
 #include "game/career.hpp"
 #include "game/match_engine.hpp"
+#include "game/national_identity.hpp"
+#include "game/rating.hpp"
+#include "game/lineup.hpp"
 #include "cli/json.hpp"
 #include <algorithm>
 #include <iostream>
@@ -60,6 +63,20 @@ World fixture() {
         t.backing->enabled_formations={15,15};t.automatic_formation=1;m.tactics=t;w.managers.push_back(m);
     }
     w.validate();return w;
+}
+void runtime_national_identity() {
+    auto native=rules();const auto native_first=squad_range(kNoTeam).first;check(is_national_team(native,kNoTeam)&&has_national_squad(native,kNoTeam)&&!is_national_team(native,kNoTeam+2),"empty national map changed legacy sentinel semantics");
+    auto world=fixture();world.managers.erase(world.managers.begin()+1);world.settings->planned_managers=1;WatcomRandom nomination(93);nominate_national_squad(world,Country::germany,4,native,nomination);
+    const auto& squad=world.national_squads.front();native.squad_slots.assign(size_t(runtime_dimensions.total_slots),0xfff);native.manager_teams.clear();
+    size_t n=0;for(const auto& row:squad.roster){if(row.empty())continue;const auto& player=world.players.at(row.player);native.players.push_back(player.attributes);native.player_bonus.push_back(player.bonus);native.player_cards.push_back(player.cards);native.squad_slots[size_t(native_first)+n]=uint16_t(n|((row.flags&1)?0x8000:0)|((row.flags&2)?0x4000:0));++n;}
+    auto mapped=native;const int team=kNoTeam+2;const auto first=mapped.squad_slots.size();mapped.squad_slots.resize(first+24,0xfff);std::copy_n(native.squad_slots.begin()+native_first,24,mapped.squad_slots.begin()+first);std::fill_n(mapped.squad_slots.begin()+native_first,24,0xfff);
+    mapped.projected_national_teams={{kNoTeam,std::nullopt},{team,first},{kNoTeam+1,std::nullopt}};
+    check(is_national_team(mapped,team)&&has_national_squad(mapped,team)&&squad_range(mapped,team).first==first&&!has_national_squad(mapped,kNoTeam)&&squad_range(mapped,kNoTeam).count==0,"explicit national roster/rating identities alias");
+    const auto expected=team_average(native,kNoTeam,0x1ff),actual=team_average(mapped,team,0x1ff);check(expected.value==actual.value&&expected.players==actual.players,"actual national team average changed by runtime identity");
+    WatcomRandom nr(121),mr(121);RatingContext nc{},mc{};nc.rand=&nr;mc.rand=&mr;
+    check(team_rating(native,kNoTeam,kRatingProfiles[2],nc)==team_rating(mapped,team,kRatingProfiles[2],mc)&&nr.calls()==mr.calls()&&nr.seed()==mr.seed(),"mapped real squad was replaced by rating-only random strength");
+    mapped.foreign_strength.resize(size_t(team-runtime_dimensions.record_teams)+2);WatcomRandom abstract_random(121);RatingContext ac{};ac.rand=&abstract_random;(void)team_rating(mapped,kNoTeam,kRatingProfiles[2],ac);check(abstract_random.calls()==4,"abstract primary nation used an empty invented squad");
+    auto_lineup(native,kNoTeam,100);auto_lineup(mapped,team,100);check(std::equal(native.squad_slots.begin()+native_first,native.squad_slots.begin()+native_first+24,mapped.squad_slots.begin()+first),"actual national auto-lineup changed by runtime identity");
 }
 void retained_origin_nomination() {
     auto master=fixture();master.players_initialized=false;master.markets.reset();master.free_players.reset();master.settings.reset();master.managers.clear();master.validate();
@@ -234,6 +251,6 @@ void scheduled_owner() {
 }
 }
 int main()try {
-    set_fixture_tables(bmh::test::authored_fixture_tables());nomination_rules();retained_origin_nomination();persistence_and_ownership();original_nomination_equivalence();scheduled_owner();
+    set_fixture_tables(bmh::test::authored_fixture_tables());nomination_rules();runtime_national_identity();retained_origin_nomination();persistence_and_ownership();original_nomination_equivalence();scheduled_owner();
     std::cout<<"Global national selection, quotas, availability, country/coach ownership, native boards, atomic RNG and saved squads passed\n";
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}
