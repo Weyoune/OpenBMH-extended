@@ -12,7 +12,7 @@ fields.
 
 ## Required decisions
 
-The annual owner supplies one licence-decision record for every league, including
+The annual owner supplies one licence-decision record for every Source promotion league, including
 an explicitly evaluated empty record where no licence was withdrawn. Financial
 licence evaluation, its messages and random draws remain that owner's duties.
 Decisions reference the occupants at that group's execution boundary: earlier
@@ -26,9 +26,17 @@ play-offs, Original exchanges only two clubs at the second-division boundary,
 even though its departure list contains four. Parallel Regionalligen retain
 separate bottom-two quotas and together receive four clubs from the Oberliga.
 
-England uses its five catalogue tiers, including the scheduled ten-club fifth
-division, with four exchanges at each boundary. The AI-only Premier League in a
-Germany-only career has no annual English ladder.
+England uses the four visible Source groups, with four exchanges per group.
+The fourth group refills directly from the ordered named amateur pool and
+protects a human fourth-division manager. The hidden ten-club internal division
+retains its complete membership, roster and separate simulation role; it does
+not enter this promotion ladder. The AI-only Premier League in a Germany-only
+career has no annual English ladder.
+
+The FLTD last-group code can reuse an uninitialized stack newcomer after a coin
+flip. OpenBMH applies the common Diamond 3.7 defined named-pool rejection
+sampling instead, following the single-engine policy. It does not infer an old
+stack value, choose an arbitrary replacement or consume a placeholder draw.
 
 The owner also supplies the complete, ordered newcomer draw from actual named
 non-league clubs of that country. No newcomer is synthesized. A human manager at
@@ -108,13 +116,12 @@ transaction must own those prerequisites before publishing the staged World,
 new seeds and saved next-season calendar together. Repeated synthetic stage tests
 verify physical pool persistence and lineage; they are not played seasons.
 
-Player-facing English management exposes four divisions while the catalogue
-retains its fifth internal group. Annual planning still follows that internal
-catalogue; it does not decide the unresolved Source four-division human boundary
-by silently exposing a fifth division. Membership staging rejects a manager
-newly entering a hidden division until the full annual player-ladder owner
-settles that policy. Existing/synthetic hidden-division managers remain valid
-for read-only world/save inspection. No internal membership or roster is dropped.
+Player-facing English management and annual exchanges both use four visible
+Source divisions. A relegated fourth-division human remains in that league;
+the paired real newcomer draw is still consumed. All internal fifth-division
+membership, rosters, statistics and full final standings remain available and
+unchanged by promotion. Existing/synthetic hidden-division managers remain valid
+for read-only world/save inspection.
 
 ## Closing awards and schema38 annual facts
 

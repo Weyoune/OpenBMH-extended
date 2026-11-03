@@ -17,6 +17,17 @@ struct Slot {
 bool named(const std::string& name) {
     return std::any_of(name.begin(),name.end(),[](char c){return (c>='A'&&c<='Z')||(c>='a'&&c<='z');});
 }
+// FLTD's fifth internal table is not a promotion group. Source Void runs
+// four visible groups and refills the fourth from the ordered amateur pool.
+// The hidden division keeps its independent simulation membership and roster.
+std::vector<LadderGroup> source_annual_ladder(const Catalogue& catalogue,Country country) {
+    auto ladder=catalogue.rules(country).ladder;
+    if(country==Country::england) {
+        if(ladder.size()!=5)invalid("world12: invalid English internal ladder");
+        ladder.resize(4);
+    }
+    return ladder;
+}
 struct DecisionResolvers {
     std::function<std::vector<ClubId>(LeagueId,const std::vector<Slot>&,
         const std::array<LeagueMembers,kLeagueSlots>&)> licences;
@@ -28,7 +39,7 @@ static AnnualPromotionPlan build_annual_plan(const World& world,const SeasonResu
     const DecisionResolvers* resolvers=nullptr) {
     world.validate();results.validate(world.catalogue);
     if(!world.catalogue.selectable(decisions.country))invalid("world12: annual country ladder is disabled");
-    const auto& ladder=world.catalogue.rules(decisions.country).ladder;
+    const auto ladder=source_annual_ladder(world.catalogue,decisions.country);
     AnnualPromotionPlan plan;plan.decisions=decisions;plan.source_results=results;plan.source_rounds=rounds;
     plan.before=plan.after=world.membership;
     std::map<LeagueId,std::vector<Slot>> ranked;
@@ -36,8 +47,10 @@ static AnnualPromotionPlan build_annual_plan(const World& world,const SeasonResu
     std::set<LeagueId> country_leagues;
     std::set<ClubId> managers;
     for(const auto& manager:world.managers)managers.insert(manager.club);
-    for(const auto& group:ladder)for(auto id:group.leagues) {
-        const auto& league=world.catalogue.league(id);country_leagues.insert(id);
+    for(const auto& group:ladder)for(auto id:group.leagues)country_leagues.insert(id);
+    const auto table_group=decisions.country==Country::germany?TableGroup::germany:TableGroup::england;
+    for(auto id:world.catalogue.simulation_leagues(table_group)) {
+        const auto& league=world.catalogue.league(id);
         if(!league.active||rounds[id.value]!=league.rounds())
             invalid("world12: annual promotion requires complete country round cursors");
         for(const auto& score:results.leagues[id.value])if(!score.played)
@@ -229,7 +242,7 @@ AnnualPromotionOutcome evaluate_annual_promotion_decisions(const CareerSnapshot&
     for(const auto& manager:state.world.managers)accounts.emplace(manager.seat,annual_licence_account(state,manager.seat));
     AnnualPromotionDecisions decisions;decisions.country=context.amateurs.country;
     decisions.regional=context.regional;decisions.regional_winners=context.regional_winners;
-    for(const auto& group:state.world.catalogue.rules(decisions.country).ladder)
+    for(const auto& group:source_annual_ladder(state.world.catalogue,decisions.country))
         for(auto league:group.leagues)decisions.licences.push_back({league,{}});
     DecisionResolvers resolvers;
     resolvers.licences=[&](LeagueId id,const std::vector<Slot>& ranked,
@@ -316,7 +329,7 @@ AnnualMembershipStage stage_annual_membership(const CareerSnapshot& state,
             message(all,Bytes(text.begin(),text.end()));
         }
     };
-    const auto& ladder=world.catalogue.rules(outcome.plan.decisions.country).ladder;
+    const auto ladder=source_annual_ladder(world.catalogue,outcome.plan.decisions.country);
     for(size_t group_index=0;group_index<outcome.plan.groups.size();++group_index) {
         for(const auto& notice:outcome.licence_notices)
             if(std::find(ladder[group_index].leagues.begin(),ladder[group_index].leagues.end(),notice.league)!=ladder[group_index].leagues.end())post_licence(notice);
@@ -356,7 +369,7 @@ AnnualMembershipStage stage_annual_membership(const CareerSnapshot& state,
         const auto visible=world.catalogue.player_leagues(club.country);
         if(club.league!=state.world.clubs.at(manager.club).league&&
            std::find(visible.begin(),visible.end(),club.league)==visible.end())
-            invalid("world12: annual human destination requires the unresolved player-ladder boundary owner");
+            invalid("world12: annual human destination is outside the Source player ladder");
     }
     if(state!=before)invalid("world12: annual membership owner changed during staging");
     return stage;

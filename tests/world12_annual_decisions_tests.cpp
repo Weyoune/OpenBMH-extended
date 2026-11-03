@@ -189,8 +189,17 @@ void annual_models() {
     auto hidden=state_fixture();const auto english=evaluate_annual_promotion_decisions(hidden,context(hidden,Country::england));
     hidden.world.managers.push_back(manager(english.plan.standings[8].back().club,{8}));const auto hidden_before=hidden;
     const auto hidden_decision=evaluate_annual_promotion_decisions(hidden,context(hidden,Country::england));
-    rejects([&]{stage_annual_membership(hidden,hidden_decision,text);},"human silently entered hidden fifth division");
-    check(hidden==hidden_before,"unresolved player-ladder boundary published a partial stage");
+    check(hidden_decision.plan.decisions.newcomers.size()==4&&hidden_decision.watcom_seed_after==english.watcom_seed_after&&
+        hidden_decision.watcom_draws==english.watcom_draws&&
+        std::count_if(hidden_decision.plan.groups.back().exchanges.begin(),hidden_decision.plan.groups.back().exchanges.end(),[](const auto& row){return row.protected_manager;})==1,
+        "protected fourth-division manager skipped an actual paired newcomer draw");
+    const auto protected_stage=stage_annual_membership(hidden,hidden_decision,text);
+    check(protected_stage.world.clubs.at(hidden.world.managers[0].club).league==LeagueId{8}&&hidden==hidden_before,
+        "Source lowest-visible human protection moved a manager or mutated the owner");
+    check(hidden_decision.plan.groups.size()==4&&hidden_decision.plan.decisions.licences.size()==4&&
+        protected_stage.world.membership[9]==hidden.world.membership[9],"English hidden division entered the Source promotion ladder");
+    for(auto id:hidden.world.membership[9].clubs)check(protected_stage.world.clubs.at(id)==hidden.world.clubs.at(id),
+        "English hidden roster/statistics lineage changed during visible promotion");
     auto legacy=state_fixture();legacy.world.managers.push_back(manager(legacy.world.membership[9].clubs[0],{9}));legacy.validate();
     check(read_save(make_save(legacy))==legacy,"readonly old hidden-division manager was globally rejected");
     auto unknown=promoted;unknown.world.managers[0].career->season_services->promotion_tail_flags.reset();const auto unsupported=evaluate_annual_promotion_decisions(unknown,context(unknown,Country::germany));

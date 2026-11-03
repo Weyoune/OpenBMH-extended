@@ -44,7 +44,7 @@ World fixture(){
 AnnualPromotionDecisions decisions(const World& w,Country country){
     AnnualPromotionDecisions d;d.country=country;d.regional=country==Country::germany?RegionalPromotion::champions_only:RegionalPromotion::not_applicable;
     const auto& rules=w.catalogue.rules(country);
-    for(const auto& group:rules.ladder)for(auto l:group.leagues)d.licences.push_back({l,{}});
+    for(const auto& group:rules.ladder)for(auto l:group.leagues)if(country!=Country::england||w.catalogue.league(l).local_index<4)d.licences.push_back({l,{}});
     for(const auto& [id,c]:w.clubs)if(c.country==country&&!c.league.valid()&&d.newcomers.size()<rules.ladder.back().relegation)d.newcomers.push_back(id);
     return d;
 }
@@ -60,13 +60,13 @@ int main()try{
     auto de=decisions(w,Country::germany),en=decisions(w,Country::england);
     auto germany=plan_annual_promotions(w,results,rounds,de);
     auto england=plan_annual_promotions(w,results,rounds,en);
-    check(germany.groups.size()==4&&england.groups.size()==5,"country ladder groups collapsed");
+    check(germany.groups.size()==4&&england.groups.size()==4,"country ladder groups collapsed");
     check(germany.groups[0].count==3&&germany.groups[1].count==2&&germany.groups[2].count==4&&germany.groups[3].count==3,"German no-playoff Source quotas changed");
-    for(const auto& g:england.groups)check(g.count==4,"English fifth-tier exchange missing");
+    for(const auto& g:england.groups)check(g.count==4,"English four visible-group quota changed");
     check(germany.requires_amateur_roster_renewal&&england.requires_amateur_roster_renewal,"amateur roster obligation hidden");
     for(size_t l=0;l<kLeagueSlots;++l) {
         if(l>=5)check(germany.after[l]==w.membership[l],"German plan changes another country");
-        if(l<5||l>9)check(england.after[l]==w.membership[l],"English plan changes another country");
+        if(l<5||l>=9)check(england.after[l]==w.membership[l],"English plan changed hidden or foreign membership");
         check(germany.after[l].clubs.size()==w.membership[l].clubs.size()&&england.after[l].clubs.size()==w.membership[l].clubs.size(),"league capacity changed");
     }
     // Independent Original table oracle: use packed synthetic result bytes,
