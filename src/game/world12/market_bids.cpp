@@ -24,7 +24,7 @@ std::vector<Candidate> candidates(const CareerSnapshot& state,const GameState& r
         for(auto league_id:state.world.catalogue.simulation_leagues(table)) {
             const auto& league=state.world.catalogue.league(league_id);
             std::map<ClubId,int> ranks;
-            if(state.league_rounds[league_id.value]>10) {
+            if(state.league_rounds[league_id.value]>10&&!policy.completed_ranks) {
                 TableQuery query;query.three_points=policy.three_points;
                 for(const auto& m:state.world.managers)if(m.match_state&&m.match_state->point_deduction>>5==3&&state.world.clubs.at(m.club).league==league_id)
                     query.point_deductions[m.club]=m.match_state->point_deduction&31;
@@ -36,7 +36,7 @@ std::vector<Candidate> candidates(const CareerSnapshot& state,const GameState& r
                 const auto& club=state.world.clubs.at(id);Candidate candidate;candidate.id=id;candidate.ordinal=index;
                 candidate.domestic=league.playable;candidate.country=int(club.country);candidate.flags=club.match_flags;
                 candidate.league=league.playable?league.local_index:club.country==Country::spain?5:club.country==Country::england?6:club.country==Country::france?7:8;
-                candidate.round=state.league_rounds[league_id.value];if(candidate.round>10)candidate.rank=ranks.at(id);
+                candidate.round=state.league_rounds[league_id.value];if(candidate.round>10)candidate.rank=policy.completed_ranks?policy.completed_ranks->at(id):ranks.at(id);
                 for(const auto& slot:club.roster)candidate.players+=!slot.empty();
                 candidate.players+=int(std::count_if(state.world.loans.begin(),state.world.loans.end(),[&](const auto& loan){return loan.owner==id;}));candidate.players&=255;
                 result.push_back(candidate);ai.push_back(id);
@@ -187,6 +187,7 @@ ClubId place_unlisted_player(CareerSnapshot& state,PlayerId player,const GameSta
     ClubId chosen;uint8_t foreign_skip=0;
     for(int pass=0;pass<2&&!chosen.valid();++pass){std::vector<int16_t> order;std::vector<uint32_t> keys;
         for(size_t n=0;n<clubs.size();++n){const auto& club=clubs[n];
+            if(club.id==policy.released_from)continue;
             if(pass==0&&nationality<5&&nationality!=club.country&&foreign_skip++%10==0)continue;
             if(club.players>(club.domestic?21:15))continue;
             int16_t average=0;for(auto value:club.averages)average=int16_t(average+value);average=int16_t(average>>2);

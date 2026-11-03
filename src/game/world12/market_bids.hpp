@@ -3,7 +3,14 @@
 #include "game/world12/save.hpp"
 #include "game/state.hpp"
 namespace bmh::world12 {
-struct MarketBidPolicy {bool three_points=true;};
+struct MarketBidPolicy {
+    bool three_points=true;
+    // Annual release overflow runs after league swaps/shuffle while Source
+    // still retains old per-club position history. Never substitute rankings
+    // recomputed under the new fixture order.
+    const std::map<ClubId,uint8_t>* completed_ranks=nullptr;
+    ClubId released_from; // Source slot_team(slot), excluded before no-list scoring.
+};
 struct MarketBidOutcome {
     uint64_t game_draws=0,watcom_draws=0;
     size_t added=0;

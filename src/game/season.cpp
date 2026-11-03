@@ -1253,7 +1253,7 @@ bool renew_season_player_slots(GameState& g,int first,int end,GameRandom& game,W
     return !report.unsupported;
 }
 
-void season_players(GameState& g, GameRandom& game, WatcomRandom& rand, MinuteReport& report) {
+void reset_annual_presentation(GameState& g) {
     StaticMemory& mem = g.memory;
     auto fill8 = [&](uint32_t at, uint32_t n, uint8_t v) {
         for (uint32_t i = 0; i < n; i++)
@@ -1271,11 +1271,16 @@ void season_players(GameState& g, GameRandom& game, WatcomRandom& rand, MinuteRe
         for (size_t i = 0; i < 10; i++) rec8(g, int(m), 0x8b6 + i) = 0xff;
     end_competition(mem, 0xd);  // EndCompetition
     fill8(::bmh::layout::Season_SeasonPlayers_ExecutableField, 1, 0);
+}
+
+void season_players(GameState& g, GameRandom& game, WatcomRandom& rand, MinuteReport& report) {
+    StaticMemory& mem=g.memory;
+    reset_annual_presentation(g);
     for(size_t m=0;m<g.manager_teams.size()&&!report.unsupported;++m){reset_manager_season(g,int(m),rand,report);if(report.unsupported)return;}
     if(g.date>0&&!renew_season_player_slots(g,0,runtime_dimensions.national_slots_first,game,rand,report,{}))return;
     if(report.unsupported)return;
     for (size_t l = 0; l < g.league_rounds.size() && l < 9; l++) g.league_rounds[l] = 0;
-    fill8(::bmh::layout::DeskRecords_Teams_RuntimeField, uint32_t(g.counts.league_teams * 2), 0);
+    for(uint32_t i=0;i<uint32_t(g.counts.league_teams*2);++i)if(mem.has(layout::DeskRecords_Teams_RuntimeField+i))mem.set8(layout::DeskRecords_Teams_RuntimeField+i,0);
     for (size_t i = 0; i < size_t(runtime_dimensions.league_teams) * 0x1a && i < g.position_history.size(); i++) g.position_history[i] = 0;
     std::fill(g.results.begin(), g.results.end(), uint8_t(0xcc));
 }

@@ -51,7 +51,7 @@ MonthlyRosterOutcome settle_monthly_roster(CareerSnapshot& state,uint8_t seat,co
     destination.overflow=[&](GameState& current,int slot,GameRandom&,WatcomRandom& wr,MinuteReport&){
         synchronize();const auto player=p.global_player(current.squad_slots.at(size_t(slot))&0xfff);auto& roster=working.world.clubs.at(p.global_club(uint32_t(slot/24))).roster;
         const auto found=std::find_if(roster.begin(),roster.end(),[&](const auto& row){return row.player==player;});if(found==roster.end())throw FormatError("world12: release overflow lost source owner");std::move(found+1,roster.end(),found);roster.back()={};
-        const auto target=place_unlisted_player(working,player,reference,wr,{true});changed_ai.insert(target);
+        const auto target=place_unlisted_player(working,player,reference,wr,{true,nullptr,p.global_club(uint32_t(slot/24))});changed_ai.insert(target);
         // The destination lineup can update card state of a referenced player.
         for(size_t local=0;local<current.players.size();++local){const auto id=p.global_player(uint32_t(local));const auto& person=working.world.players.at(id);current.players[local]=person.attributes;current.player_bonus[local]=person.bonus;current.player_cards[local]=person.cards;}
     };
