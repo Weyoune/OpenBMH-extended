@@ -29,6 +29,9 @@ public:
     // random ratings; no players are synthesized for them.
     static AiMatchProjection create_for_european(const CareerSnapshot&,const std::vector<ClubId>&,
         const GameState& rules_template,HumanProjectionPolicy);
+    // Actual nominated DE/EN squads and Source rating-only other nations.
+    static AiMatchProjection create_for_nationals(const CareerSnapshot&,const std::vector<ClubId>&,
+        const GameState& rules_template,HumanProjectionPolicy);
     // Explicit non-roster references for market/free-agent/loan workspaces.
     void include_players(const World&,const std::vector<PlayerId>&);
     void include_club_references(const World&,const std::vector<ClubId>&);
@@ -52,6 +55,13 @@ private:
     static AiMatchProjection create_humans(const CareerSnapshot&,const std::vector<ClubId>&,
         const GameState&,HumanProjectionPolicy,size_t maximum_clubs);
     std::vector<ClubRecord> abstract_clubs_;
+    bool national_projection_=false;
+    std::map<uint32_t,ClubRecord> national_clubs_;
+    std::vector<ClubId> national_participants_;
+    std::vector<NationalSquad> original_national_squads_;
+    std::optional<std::vector<NationalCoachRecord>> original_national_coaches_;
+    void commit_national_state(World&)const;
+    void apply_live_preferences(World&)const;
     struct TransferMove {PlayerId player;ClubId seller,buyer;};
     void commit_state(World&,bool,const std::vector<TransferMove>&)const;
     void install_player_statistics(const World&,bool reset);

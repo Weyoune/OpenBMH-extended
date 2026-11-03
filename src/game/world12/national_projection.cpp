@@ -1,0 +1,69 @@
+// SPDX-License-Identifier: GPL-3.0-only
+#include "game/world12/match_projection.hpp"
+#include "game/world12/save.hpp"
+#include "game/world12/national_coach.hpp"
+#include "game/world12/manager_tactics.hpp"
+#include "game/world12/manager_match_state.hpp"
+#include "game/national_identity.hpp"
+#include "game/match.hpp"
+#include <algorithm>
+#include <set>
+namespace bmh::world12 {
+namespace {
+constexpr size_t record_size=0xb0c,board_size=0x840;
+uint16_t native_flags(uint16_t v){return uint16_t(((v&1)?0x8000:0)|((v&2)?0x4000:0)|((v&4)?0x2000:0)|((v&8)?0x1000:0));}
+uint16_t typed_flags(uint16_t v){return uint16_t(((v&0x8000)?1:0)|((v&0x4000)?2:0)|((v&0x2000)?4:0)|((v&0x1000)?8:0));}
+}
+AiMatchProjection AiMatchProjection::create_for_nationals(const CareerSnapshot& snapshot,const std::vector<ClubId>& requested,const GameState& base,HumanProjectionPolicy policy){
+    snapshot.validate();const auto& w=snapshot.world;
+    if(!w.catalogue.scope.international||!w.settings||requested.empty()||requested.size()>62||base.formations.size()<0x160||policy.mode!=w.settings->mode||policy.difficulty!=w.settings->difficulty)
+        throw FormatError("world12: national projection lacks its actual career/rules");
+    auto p=create_core(w,{},base,true);p.national_projection_=true;p.original_national_squads_=w.national_squads;p.original_national_coaches_=w.national_coaches;auto& g=p.state;
+    g.projected_national_teams.clear();g.projected_match_clubs.clear();g.projected_foreign_rule=false;g.indoor=false;g.lineups_frozen=false;g.date=snapshot.date;g.season=int(snapshot.season);
+    if(snapshot.calendar)g.season_start=snapshot.date-snapshot.calendar->next_day;
+    const auto primary=w.national_campaigns?w.national_campaigns->primary_country:!w.catalogue.scope.club_play()&&w.managers.size()==1?w.manager_country(w.managers.front().seat):Country::germany;
+    const auto source_country=[&](Country c){auto n=uint8_t(c);return primary==Country::england?(n==0?uint8_t(2):n==2?uint8_t(0):n):n;};
+    const auto size=size_t(kNoTeam)+62;g.club_ids.resize(size);g.club_kits.resize(size);g.club_short_offsets.resize(size);g.team_flags.resize(size);g.team_morale.resize(size,25);g.club_table.assign(size*0x4a,0);g.club_heap_78.assign(size*2,0);g.projected_match_clubs.resize(size);g.foreign_strength.resize(size-size_t(runtime_dimensions.record_teams));p.manager_reference_clubs_.resize(size);
+    std::set<uint8_t> countries;
+    for(const auto& [id,club]:w.clubs)if(club.kind==ClubKind::national_team){
+        if(!countries.insert(uint8_t(club.country)).second)throw FormatError("world12: repeated national country");const auto team=uint32_t(kNoTeam)+source_country(club.country);p.national_clubs_[team]=club;p.manager_reference_clubs_[team]=id;
+        if(g.club_names.size()+club.name.size()+1>65535)throw FormatError("world12: national name pool exceeded");const auto name=uint16_t(g.club_names.size());g.club_names.insert(g.club_names.end(),club.name.begin(),club.name.end());g.club_names.push_back(0);g.club_ids[team]=name;p.record_opponents_[name]=id;g.club_kits[team]=club.kit;g.club_short_offsets[team]=club.short_span;g.team_flags[team]=club.match_flags;g.team_morale[team]=club.morale;g.foreign_strength[team-uint32_t(runtime_dimensions.record_teams)]=club.rating;
+        g.projected_match_clubs[team]={0,bmh::team_region(int(team)),0};g.projected_match_clubs[team].round_cursor=0;g.projected_national_teams.push_back({int(team),std::nullopt});
+    }
+    std::set<ClubId> participants;
+    for(auto id:requested){const auto& club=w.clubs.at(id);if(club.kind!=ClubKind::national_team||!participants.insert(id).second)throw FormatError("world12: invalid/repeated national participant");p.national_participants_.push_back(id);
+        const auto squad=std::find_if(w.national_squads.begin(),w.national_squads.end(),[&](const auto& value){return value.team==id;});if(squad==w.national_squads.end())continue;
+        const auto team=p.local_club(id);const auto first=team==uint32_t(kNoTeam)?squad_range(kNoTeam).first:g.squad_slots.size();if(first+24>g.squad_slots.size())g.squad_slots.resize(first+24,0xfff);
+        auto runtime=std::find_if(g.projected_national_teams.begin(),g.projected_national_teams.end(),[&](const auto& entry){return entry.team==int(team);});runtime->squad_first=first;
+        std::vector<PlayerId> players;for(const auto& row:squad->roster)if(!row.empty())players.push_back(row.player);p.include_players(w,players);
+        for(size_t row=0;row<24;++row)if(!squad->roster[row].empty())g.squad_slots[first+row]=uint16_t(p.local_player(squad->roster[row].player)|native_flags(squad->roster[row].flags));
+    }
+    std::vector<const NationalCoachRecord*> coaches;
+    if(w.national_coaches){for(const auto& record:*w.national_coaches)if(record.active&&participants.contains(record.team)){
+        if(!snapshot.desktop)throw FormatError("world12: active national coach lacks saved desktop order");coaches.push_back(&record);}
+        if(snapshot.desktop)std::sort(coaches.begin(),coaches.end(),[&](auto a,auto b){const auto& order=snapshot.desktop->manager_order;return std::find(order.begin(),order.end(),*a->coach)<std::find(order.begin(),order.end(),*b->coach);});
+    }else for(const auto& squad:w.national_squads)if(participants.contains(squad.team)&&squad.coach)throw FormatError("world12: national coach financial history is unknown");
+    g.manager_records.assign(coaches.size()*record_size,0);g.manager_options.assign(coaches.size()*5,0);g.manager_ratings.assign(coaches.size()*60,0);g.manager_results.assign(coaches.size()*size_t(runtime_dimensions.record_teams)*10,255);g.tactics.assign(coaches.size()*board_size,0);g.projected_formation_tails.resize(coaches.size());g.manager_teams.clear();
+    g.projected_ai_formations.emplace();std::copy_n(base.formations.begin(),0x160,g.projected_ai_formations->begin());g.formations.resize(std::max(size_t(0x580),coaches.size()*0x160+13));
+    const auto put=[&](uint32_t at,uint8_t value){g.memory.add_block(at,1);g.memory.set8(at,value);};put(layout::ActiveManager,0);put(layout::ManagerCount,uint8_t(coaches.size()));put(layout::OriginalManagerCount,uint8_t(coaches.size()));put(layout::CoachActive,coaches.empty()?0:1);put(layout::GameMode,uint8_t(policy.mode));put(layout::Difficulty,uint8_t(policy.difficulty));
+    for(size_t m=0;m<coaches.size();++m){const auto& record=*coaches[m];const auto person=std::find_if(w.managers.begin(),w.managers.end(),[&](const auto& manager){return manager.seat==*record.coach;});const auto squad=std::find_if(w.national_squads.begin(),w.national_squads.end(),[&](const auto& value){return value.team==record.team;});if(person==w.managers.end()||squad==w.national_squads.end()||squad->coach!=record.coach)throw FormatError("world12: active coach lacks an actual nominated squad");
+        std::vector<PlayerId> refs;for(const auto* ids:{&squad->tactics.backing->marks,&squad->tactics.backing->marked_by})for(auto id:*ids)if(id.valid())refs.push_back(id);for(auto id:squad->match_state.takers)if(id.valid())refs.push_back(id);p.include_players(w,refs);
+        const auto team=p.local_club(record.team);p.manager_seats_.push_back(*record.coach);g.manager_teams.push_back(int(team));const auto at=m*record_size;std::copy(person->name.begin(),person->name.end(),g.manager_records.begin()+ptrdiff_t(at+0xa8));g.manager_records[at+0x221]=person->portrait;g.manager_records[at+0x290]=uint8_t(team);g.manager_records[at+0x291]=uint8_t(team>>8);g.team_morale[team]|=0x80;
+        install_national_coach_account(g,int(m),record.account);install_manager_tactics(g,int(m),squad->tactics,p.players_);install_manager_match_state(g,int(m),squad->match_state,p.manager_reference_clubs_,p.players_);
+        const auto desk=std::find_if(snapshot.desktop->managers.begin(),snapshot.desktop->managers.end(),[&](const auto& value){return value.seat==*record.coach;});if(desk==snapshot.desktop->managers.end())throw FormatError("world12: national coach desktop is unavailable");const auto display=layout::CareerSession_AnyOf_ExecutableField+uint32_t(m*2);g.memory.add_block(display,2);g.memory.set16(display,desk->display_word);
+    }
+    g.player_statistics.clear();p.statistics_bindings_.clear();for(const auto& [identity,counters]:w.player_statistics){const auto player=std::find(p.players_.begin(),p.players_.end(),identity.second);if(player==p.players_.end()||!participants.contains(identity.first))continue;const auto key=p.local_club(identity.first)<<12|uint32_t(player-p.players_.begin());g.player_statistics[key]=counters;p.statistics_bindings_[key]=identity;}
+    g.counts.players=uint32_t(g.players.size());return p;
+}
+void AiMatchProjection::commit_national_state(World& w)const {
+    if(w.managers!=original_managers_||w.settings!=original_settings_||w.national_squads!=original_national_squads_||w.national_coaches!=original_national_coaches_||w.player_statistics!=original_player_statistics_||w.development_balance!=original_development_balance_||w.trend_rotation!=original_trend_rotation_)throw FormatError("world12: national projection owner changed");
+    if(state.players.size()!=players_.size()||state.player_bonus.size()!=players_.size()||state.player_cards.size()!=players_.size()||state.manager_teams.size()!=manager_seats_.size())throw FormatError("world12: national workspace resized");
+    for(size_t n=0;n<players_.size();++n)if(w.players.at(players_[n])!=originals_[n])throw FormatError("world12: nominated player changed externally");for(const auto& [team,club]:national_clubs_)if(w.clubs.at(club.id)!=club)throw FormatError("world12: national identity changed externally");
+    auto candidate=w;for(size_t n=0;n<players_.size();++n){auto& target=candidate.players.at(players_[n]);target.attributes=state.players[n];target.bonus=state.player_bonus[n];target.cards=state.player_cards[n];}
+    for(auto id:national_participants_){const auto team=local_club(id);auto& club=candidate.clubs.at(id);club.match_flags=state.team_flags.at(team);club.morale=state.team_morale.at(team)&63;club.lineup_indoor=false;auto squad=std::find_if(candidate.national_squads.begin(),candidate.national_squads.end(),[&](const auto& value){return value.team==id;});if(squad==candidate.national_squads.end())continue;const auto range=squad_range(state,int(team));if(range.count!=24||range.first+24>state.squad_slots.size())throw FormatError("world12: actual national squad mapping disappeared");std::set<PlayerId> before,after;for(const auto& row:squad->roster)if(!row.empty())before.insert(row.player);for(size_t row=0;row<24;++row){const auto raw=state.squad_slots[range.first+row];if((raw&0xfff)==0xfff){if(raw!=0xfff)throw FormatError("world12: national flags on an empty slot");squad->roster[row]={};}else {const auto player=global_player(raw&0xfff);after.insert(player);squad->roster[row]={player,typed_flags(raw)};}}if(before!=after)throw FormatError("world12: national match changed nomination membership");}
+    for(size_t m=0;m<manager_seats_.size();++m){const auto record=std::find_if(candidate.national_coaches->begin(),candidate.national_coaches->end(),[&](const auto& value){return value.active&&value.coach==manager_seats_[m];});if(record==candidate.national_coaches->end()||state.manager_teams[m]!=int(local_club(record->team)))throw FormatError("world12: national coach identity changed in projection");record->account=national_coach_account_from_legacy(state,int(m));auto squad=std::find_if(candidate.national_squads.begin(),candidate.national_squads.end(),[&](const auto& value){return value.team==record->team;});squad->tactics=manager_full_tactics_from_legacy(state,int(m),players_);squad->match_state=manager_match_state_from_legacy(state,int(m),manager_reference_clubs_,players_,&squad->match_state);}
+    for(const auto& [key,identity]:statistics_bindings_)if(!state.player_statistics.contains(key))throw FormatError("world12: national statistics disappeared");
+    for(const auto& [key,counters]:state.player_statistics){const auto team=key>>12,player=key&0xfff;if(!national_clubs_.contains(team)||player>=players_.size())throw FormatError("world12: invalid national statistics identity");const auto identity=std::pair{global_club(team),global_player(player)};const auto previous=original_player_statistics_.find(identity);if(previous==original_player_statistics_.end()){const auto squad=std::find_if(original_national_squads_.begin(),original_national_squads_.end(),[&](const auto& value){return value.team==identity.first;});if(state.manager_of(int(team))<0||squad==original_national_squads_.end()||std::none_of(squad->roster.begin(),squad->roster.end(),[&](const auto& row){return row.player==identity.second;}))throw FormatError("world12: unowned national statistics addition");}else {const auto& old=previous->second;if(counters.total<old.total||counters.goals<old.goals||counters.assists<old.assists||!std::equal(counters.appearances.begin(),counters.appearances.end(),old.appearances.begin(),[](auto a,auto b){return a>=b;}))throw FormatError("world12: national statistics decreased");}candidate.player_statistics[identity]=counters;}
+    candidate.development_balance=state.development_balance;if(state.trend_rotation<0||state.trend_rotation>2)throw FormatError("world12: invalid national development stream");candidate.trend_rotation=uint8_t(state.trend_rotation);apply_live_preferences(candidate);candidate.validate();w=std::move(candidate);
+}
+}

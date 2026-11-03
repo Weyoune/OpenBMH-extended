@@ -86,3 +86,14 @@ the saved manager order and appoints its first eligible nonzero Source21c manage
 per country, with the Original automatic single-manager case retained. The
 backend national-only capability is limited to one manager and reports actual
 DE/EN choices only with complete real roster provenance and positional quotas.
+
+`AiMatchProjection::create_for_nationals` maps actual national identities and
+only the requested real nominated squads into a bounded Core workspace. Other
+nations retain their supplied rating byte and have no synthesized players.
+Active coaches follow the saved desktop order and use their national account,
+board and match history; club manager records remain parked. Complete commit
+validates the original players, national rosters/accounts and manager owner,
+retains roster membership, publishes national player statistics and preserves
+explicit live display choices. National class3 leaves league fairplay guest
+memory untouched. The standalone projection is not calendar/turn admission or a
+completed tournament runner.

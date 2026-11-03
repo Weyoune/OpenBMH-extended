@@ -1256,6 +1256,7 @@ add_library(bmhworld12 STATIC
     src/game/world12/save.cpp
     src/game/world12/desktop_projection.cpp
     src/game/world12/match_projection.cpp
+    src/game/world12/national_projection.cpp
     src/game/world12/ai_match.cpp
     src/game/world12/manager_match_state.cpp
     src/game/world12/manager_finance.cpp
