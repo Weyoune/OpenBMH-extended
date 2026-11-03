@@ -4,6 +4,7 @@
 #include "app/world12_european.hpp"
 #include "app/world12_weather.hpp"
 #include "game/calendar.hpp"
+#include "game/world12/pools.hpp"
 #include "game/world12/manager_tactics.hpp"
 #include <algorithm>
 #include <iostream>
@@ -32,6 +33,18 @@ void full_programme(){const auto base=reference();const auto source=bmh::test::w
 void weather_persistence(){const auto base=reference();const auto source=bmh::test::world12::country_rules(false);auto state=fixture(base,true);for(auto& appointment:state.calendar->schedule.others)++appointment.day;state.calendar->next_day=1;state.date=1;state.desktop.emplace();ManagerDesktop desk;desk.seat=3;state.desktop->managers={desk};state.desktop->manager_order={3};state.desktop->matchday_number=77;const auto epoch=calendar_epoch();state.progress=CareerProgress{ProgressPhase::scheduled_event,DayEntry::plain_day,0,0,uint16_t(epoch.year),uint8_t(epoch.weekday),3};state.validate();const auto before=state;application::ManagerActionOwner owner{77,1};
     const auto weather=application::prepare_event_weather(state,owner,owner,std::vector<uint8_t>(50,0x24),{source,source});check(weather.matches.size()==56&&state.prepared_event&&state.prepared_event->groups.size()==3&&owner.revision==2&&state.date==before.date&&state.calendar==before.calendar,"European weather lost its distinct Source groups/date owner");
     auto file=make_save(state);check(file.stream[7]=='H'&&read_save(file)==state,"unstarted European weather did not roundtrip in SH");auto bad=state;bad.prepared_event->groups.back().european=EuropeanCompetition::uefa_cup;rejects([&]{make_save(bad);});auto truncated=file;truncated.stream.pop_back();rejects([&]{read_save(truncated);});
+    {
+        auto coupon=state;coupon.prepared_event->desk_phase=PreparedEvent::DeskPhase::desks;InitialDeskEvent event;event.matchday_number=77;event.manager_order={3};coupon.desktop->initial_event=event;
+        WatcomRandom random(coupon.watcom_seed);prepare_scheduled_pools(coupon,base,random);
+        check(coupon.world==state.world&&coupon.prepared_event->pools_matches&&coupon.prepared_event->pools_matches->size()==11&&random.calls()>0,"European coupon did not select eleven actual Source fixtures without changing World");
+        check(std::any_of(coupon.prepared_event->pools_matches->begin(),coupon.prepared_event->pools_matches->end(),[&](const auto& f){return !coupon.world.clubs.at(f.home).league.valid()||!coupon.world.clubs.at(f.away).league.valid();}),"European coupon omitted every rating-only club");
+        check(read_save(make_save(coupon))==coupon,"European rating-only coupon lost its global references on save");
+        auto receipt=*coupon.prepared_event;receipt.desk_phase=PreparedEvent::DeskPhase::complete;coupon.prepared_event.reset();coupon.desktop->initial_event.reset();coupon.world.economy.emplace();auto& ledger=coupon.world.economy->pools.emplace();ledger.appointment=std::make_pair(coupon.season,coupon.date);ledger.managers[3].stake=10000;coupon.world.managers[0].finance->balance=1000000;
+        const auto before=coupon;std::vector<PoolsMatchOutcome> outcomes;for(const auto& f:*receipt.pools_matches)outcomes.push_back({f,0});TextDb texts;settle_scheduled_pools(coupon,receipt,outcomes,base,texts);
+        check(coupon.world.managers[0].finance->balance==1490000&&coupon.world.economy->pools->managers[3].stake==0&&coupon.world.economy->pools->managers[3].correct==11&&coupon.world.economy->pools->managers[3].winnings==500000&&!coupon.world.economy->pools->appointment&&coupon.game_seed==before.game_seed&&coupon.watcom_seed==before.watcom_seed,"European coupon settlement lost the real sparse manager, Source quota or RNG owner");
+        check(coupon.world.players==before.world.players&&read_save(make_save(coupon))==coupon,"European coupon settlement invented player state or lost its save");
+        for(const auto& [id,club]:before.world.clubs)check(coupon.world.clubs.at(id).roster==club.roster,"European coupon settlement invented a rating-only roster");
+    }
     state.prepared_event->desk_phase=PreparedEvent::DeskPhase::complete;state.prepared_event->pools_matches.emplace();file=make_save(state);check(read_save(file)==state,"European known-empty pools/complete desk phase lost on save");state.prepared_event->gates_booked=true;for(auto& group:state.prepared_event->groups)for(auto& match:group.matches)match.spectators=20000;file=make_save(state);check(read_save(file)==state,"European booked gates were lost in SH");
 }
 
