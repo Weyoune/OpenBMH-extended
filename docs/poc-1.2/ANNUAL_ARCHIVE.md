@@ -15,7 +15,9 @@ preserves Source's unknown runner rather than selecting another nation. A World
 Cup retains all four actual podium identities. Known suppressed indoor seasons
 produce no invented Masters title; an already completed Masters remains retained
 even if its display option is later switched off. Missing competition ownership
-is an error.
+is an error. The Source disables a country's Super-Cup after a league/main-cup
+double. Its absence is accepted only from the owned reigning-title pair; no
+self-fixture, replacement opponent or trophy is fabricated.
 The helper returns an unpublished archive; only the final atomic annual owner
 may install it while advancing the season. Snapshot validation rejects a row
 for an unadvanced season, gaps, duplicates and a prefix detached from its

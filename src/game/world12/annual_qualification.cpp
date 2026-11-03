@@ -115,7 +115,11 @@ CompletedAnnualTitles completed_annual_titles(const CareerSnapshot& state) {
     for(auto country:{Country::germany,Country::england})if(world.catalogue.selectable(country)) {
         // Every configured domestic owner must have completed, including fixed
         // Super-Cups and the English League Cup; only the main cup qualifies CW.
-        for(auto kind:world.catalogue.rules(country).cups)(void)domestic_final(before,kind);
+        for(auto kind:world.catalogue.rules(country).cups) {
+            if(domestic_cup_expected(world,kind))(void)domestic_final(before,kind);
+            else if(std::any_of(before.cups.begin(),before.cups.end(),[&](const auto& stage){return stage.cup==kind;}))
+                invalid("world12: inactive double's Super-Cup carries an unexpected played owner");
+        }
         const auto kind=country==Country::germany?DomesticCup::german_cup:DomesticCup::fa_cup;
         out.domestic_titles.push_back({country,out.final_rankings[world.catalogue.starting_league(country,0).value].front(),domestic_final(before,kind)});
     }

@@ -52,6 +52,12 @@ int main()try {
     auto data=cli::dump_json(json);rejects([&]{decode_world(Bytes(data.begin(),data.end()));},"schema39 silently accepted known40 archive");
     json.object()->erase("annual_title_archive");data=cli::dump_json(json);rejects([&]{decode_world(Bytes(data.begin(),data.end()));},"schema39 silently accepted known40 history origin");
     auto& managers=std::get<cli::Json::Array>(json.object()->at("managers").value);managers[0].object()->at("career").object()->erase("first_recorded_season");data=cli::dump_json(json);const auto old=decode_world(Bytes(data.begin(),data.end()));check(!old.annual_title_archive&&!old.managers[0].career->first_recorded_season,"older schema invented retained IDs or Source history origin");
+    auto doubled=source;auto& fields=*doubled.world.initial_competitions;
+    fields.champions.front().second=fields.domestic_holders.front().second;
+    std::erase_if(doubled.cups,[](const auto& stage){return stage.cup==DomesticCup::english_supercup;});
+    const auto without_super=stage_annual_title_archive(doubled);
+    check(std::none_of(without_super.seasons[0].titles.begin(),without_super.seasons[0].titles.end(),[](const auto& row){return row.kind==AnnualTitleKind::domestic&&row.competition==uint8_t(DomesticCup::english_supercup);}),
+        "archive invented a Super-Cup award in an owned double's inactive season");
     const auto german=bmh::test::world12::completed_account_closing(rules,{true,false,false},false);rejects([&]{stage_annual_title_archive(german);},"missing real indoor Masters replaced with a fabricated title");
     std::cout<<"Annual schema40 archive: actual standings/cup finals, stable IDs, unknown prior history/Source label bytes, published prefix, origin word and strict migration passed (not a season publication)\n";return 0;
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}

@@ -52,6 +52,22 @@ uint64_t fact_draws=0;
 void count_fact_draw(int){++fact_draws;}
 CareerSnapshot* external_state=nullptr;
 void disturb(int){draw_hook=nullptr;++external_state->game_seed;}
+void inactive_supercups(CareerSnapshot source) {
+    const auto ordinary=stage_annual_qualification(source);
+    for(auto country:{Country::germany,Country::england})if(source.world.catalogue.selectable(country)) {
+        const auto cup=country==Country::germany?DomesticCup::german_supercup:DomesticCup::english_supercup;
+        auto& fields=*source.world.initial_competitions;
+        const auto champion=std::find_if(fields.champions.begin(),fields.champions.end(),[&](const auto& row){return row.first==country;});
+        const auto holder=std::find_if(fields.domestic_holders.begin(),fields.domestic_holders.end(),[&](const auto& row){return row.first==country;});
+        champion->second=holder->second;
+        rejects([&]{completed_annual_titles(source);},"owned inactive double's Super-Cup accepted unexpected played results");
+        std::erase_if(source.cups,[&](const auto& stage){return stage.cup==cup;});
+        check(!domestic_cup_expected(source.world,cup),"Source double manufactured a self-fixture or replacement opponent");
+        const auto packet=stage_annual_qualification(source);
+        check(packet.next_european==ordinary.next_european&&packet.game_seed_after==ordinary.game_seed_after&&packet.watcom_seed_after==ordinary.watcom_seed_after,
+            "known inactive Super-Cup changed actual qualification or Source draws");
+    }
+}
 void ownership(CareerSnapshot state,const UnpublishedAnnualQualification& packet) {
     const auto before=state;auto changed=packet;changed.next_european.fields[0][0]=changed.next_european.fields[1][0];
     rejects([&]{validate_annual_qualification(state,changed);},"tampered next field accepted");check(state==before,"tampered packet changed its source");
@@ -96,7 +112,7 @@ int main()try {
             check(annual_final_rank(sanctioned,holder)==deducted.world.catalogue.league(league).clubs-1,
                   "actual Source human points deduction was ignored in the final ranking");
         }
-        ownership(state,packet);++scopes;
+        inactive_supercups(state);ownership(state,packet);++scopes;
     }
     for(const GameScope scope: {GameScope{true,true,false},GameScope{true,false,false},GameScope{false,true,false}}) {
         const auto state=bmh::test::world12::completed_qualification_closing(scope,true);const auto before=state;

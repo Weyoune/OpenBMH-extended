@@ -14,6 +14,17 @@ Country cup_country(DomesticCup cup) {
     }
     throw std::invalid_argument("world12: unknown domestic cup");
 }
+bool domestic_cup_expected(const World& world,DomesticCup cup) {
+    const auto country=cup_country(cup);
+    if(!world.catalogue.selectable(country))throw FormatError("world12: domestic cup belongs to a disabled country");
+    if(cup!=DomesticCup::german_supercup&&cup!=DomesticCup::english_supercup)return true;
+    if(!world.initial_competitions)throw FormatError("world12: Super-Cup status has no owned reigning titles");
+    const auto& fields=*world.initial_competitions;
+    const auto champion=std::find_if(fields.champions.begin(),fields.champions.end(),[&](const auto& row){return row.first==country;});
+    const auto holder=std::find_if(fields.domestic_holders.begin(),fields.domestic_holders.end(),[&](const auto& row){return row.first==country;});
+    if(champion==fields.champions.end()||holder==fields.domestic_holders.end())throw FormatError("world12: Super-Cup reigning-title ownership is unknown");
+    return champion->second!=holder->second;
+}
 bool show_domestic_draw(const World& world,DomesticCup cup) {
     const auto country=cup_country(cup);
     for(const auto& manager:world.managers) {

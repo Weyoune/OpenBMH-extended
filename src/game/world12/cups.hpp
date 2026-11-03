@@ -9,6 +9,9 @@ Country cup_country(DomesticCup);
 // Presentation only: a domestic draw belongs to the whole country ladder,
 // even if its human manager's club has already been knocked out.
 bool show_domestic_draw(const World&,DomesticCup);
+// Source omits the Super-Cup when that season's reigning champion and main
+// cup holder are identical. Other domestic programmes remain expected.
+bool domestic_cup_expected(const World&,DomesticCup);
 struct CupDrawNotice {
     DomesticCup cup=DomesticCup::german_cup;
     uint8_t source_entry=0,round=0;

@@ -84,6 +84,7 @@ AnnualTitleArchive stage_annual_title_archive(const CareerSnapshot& state) {
         AnnualTitleRow row;row.kind=AnnualTitleKind::league;row.country=league.country;row.league=league.id;row.winner=ranks[0];row.runner_up=ranks[1];append(row);
     }
     for(auto country:{Country::germany,Country::england})if(state.world.catalogue.selectable(country))for(auto cup:state.world.catalogue.rules(country).cups) {
+        if(!domestic_cup_expected(state.world,cup))continue;
         const auto final=domestic_final(state,cup);AnnualTitleRow row;row.kind=AnnualTitleKind::domestic;row.country=country;row.competition=uint8_t(cup);row.winner=final.winner;row.runner_up=final.runner_up;append(row);
     }
     for(size_t k=0;k<3;++k){AnnualTitleRow row;row.kind=AnnualTitleKind::european;row.competition=uint8_t(k+1);row.winner=facts.european_titles[k].winner;row.runner_up=facts.european_titles[k].runner_up;append(row);}
