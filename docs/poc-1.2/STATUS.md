@@ -1,7 +1,7 @@
 # OpenBMH-Extended 1.0 Beta status
 
-Published Beta 1 is `1.0.0-beta.1`; the next implementation milestone is
-`1.0.0-beta.3` on `main`. A version string alone is not a published release.
+The current milestone is `1.0.0-beta.4`: the shared world on the code base of
+OpenBMH Classic 1.0.13. A version string alone is not a published release.
 The old `world12` and `dual-classic-2` names identify the shared data model,
 not a different public product version. Classic remains independent.
 
@@ -33,12 +33,23 @@ macOS ARM64 and Linux x64. Tests requiring original private content are
 explicitly skipped there. Every release includes a revision-bound QA report and
 checksums; a development build alone is not a release verification.
 
-Private validation covers actual supplied runtime data, native desktop input,
-match interventions, friendly booking and play, strict save/load continuation,
-random streams and multi-year national careers. The Windows compiler's
-allocation-free typed publication checks also run on the supplied Windows server.
-The private screenshot/save evidence is not included in public source archives.
-Final mixed-club season checks and package checks are recorded with the release.
+What Beta 4 was checked with:
+
+- `world12_soak` plays whole shared careers without a window. Careers with one, two
+  and four managers ran three seasons without a stop, with a German and with an
+  English first manager, with and without the national coach role; single seasons
+  ran with only Germany and with only England. Every season change was saved and
+  loaded back unchanged. The managers of these runs decline every offer, renew no
+  contract and book nothing: the runs prove the course of the seasons, not the
+  management screens.
+- With Classic data the build reaches the same state at every desk as Classic 1.0.13
+  in nine reference careers of 110 turns.
+- The window program was driven by script from the title to the sixth kick-off of a
+  shared career. The remaining screens of the table above were taken over from the
+  earlier Betas and were not checked again for Beta 4; the open issues list what
+  players reported there.
+
+These runs need the data package and are not part of the public CI.
 
 See [release notes](../release/extended-1.0/RELEASE_NOTES.md) for installation,
 save compatibility and Beta limitations. See [the implementation contract](IMPLEMENTATION.md)

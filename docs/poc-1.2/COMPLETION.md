@@ -1,5 +1,8 @@
 # Extended 1.0 Beta completion gates
 
+> Historical record of the development before Beta 1. The "work still required" column
+> describes that time and is not the current state; see [STATUS.md](STATUS.md).
+
 The active objective is a playable, verified Extended 1.0 Beta. Work is on Extended `main`; Classic and archived 1.1 Beta releases remain independent. Existing Original rules and Classic rendering are reused. Germany/England scope and the Premier-League fallback remain as specified in `GAME_SCOPE.md`.
 
 | Gate | Current evidence | Work still required |
