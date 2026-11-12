@@ -101,7 +101,7 @@ int main(int argc, char** argv) {
         options.country_selection = true;
         options.germany = germany;
         options.england = england;
-        options.world = false;
+        options.world = scope_name.find('w') != std::string::npos;   // "w": international competitions and the national coach role
         options.league = true;
         options.managers = managers;
         session_app::Session session(resources, options, seed, 71);
