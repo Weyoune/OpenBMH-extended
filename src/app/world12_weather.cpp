@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include <string>
 #include "app/world12_weather.hpp"
 #include "cli/json.hpp"
 #include "game/world12/prepared_event.hpp"
@@ -84,7 +85,8 @@ WeatherPreparation prepare_event_weather(CareerSnapshot& state,ManagerActionOwne
     if(national){if(!indoor_reference)throw FormatError("world12: national appointment needs its actual Source reference");if(!candidate.world.national_coaches)throw FormatError("world12: national coach account history is unknown");activate_national_coaches(candidate.world,candidate.desktop->manager_order);WatcomRandom nominees(candidate.watcom_seed);for(auto country:{Country::germany,Country::england}){const auto squad=std::find_if(candidate.world.national_squads.begin(),candidate.world.national_squads.end(),[&](const auto& s){return candidate.world.clubs.at(s.team).country==country;});if(squad==candidate.world.national_squads.end())nominate_national_squad(candidate.world,country,candidate.date,*indoor_reference,nominees);}candidate.watcom_seed=nominees.seed();nomination_draws=nominees.calls();}
     else if(candidate.world.catalogue.scope.club_play()&&national_roles_active(candidate.world))park_national_coaches(candidate.world);
     const auto ticket=prepare_day(candidate);
-    if(!ticket||ticket->leagues.empty()&&ticket->cups.empty()&&ticket->european.empty()&&ticket->indoor.empty()&&!ticket->regional_playoff&&ticket->national.empty()&&ticket->friendlies.empty())throw FormatError("world12: event weather has no scheduled matches");
+    if(!ticket||ticket->leagues.empty()&&ticket->cups.empty()&&ticket->european.empty()&&ticket->indoor.empty()&&!ticket->regional_playoff&&ticket->national.empty()&&ticket->friendlies.empty()){std::string entries;if(ticket)for(const auto& other:ticket->others)entries+=" "+std::to_string(int(other.domain))+":"+std::to_string(other.source_entry);
+        throw FormatError("world12: event weather has no scheduled matches (calendar day "+std::to_string(candidate.calendar->next_day)+", season "+std::to_string(candidate.season)+", entries domain:source"+entries+")");}
     for(const auto& appointment:ticket->others)if(!domestic_cups_on(appointment)&&!european_cups_on(appointment)&&!german_indoor_appointment(appointment)&&!regional_playoff_appointment(appointment)&&!national_appointment(appointment,candidate.season)&&!friendly_appointment(appointment))throw FormatError("world12: weather for this shared/national appointment needs its competition owner");
     PreparedEvent event;
     event.day=ticket->day;event.calendar_revision=ticket->revision;

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "app/world12_empty_friendly.hpp"
 #include "app/world12_session.hpp"
 #include "ui/desktop.hpp"
 #include <algorithm>
@@ -63,7 +64,7 @@ bool Session::advance_to_next_desktop(const ui::DeskRequest& request,const std::
         if(staged.state_.friendly_plan&&ticket->leagues.empty()&&ticket->cups.empty()&&
            ticket->european.empty()&&ticket->national.empty()&&ticket->friendlies.empty()&&
            ticket->indoor.empty()&&!ticket->regional_playoff&&!ticket->others.empty()&&
-           std::all_of(ticket->others.begin(),ticket->others.end(),friendly_appointment)) {
+           std::all_of(ticket->others.begin(),ticket->others.end(),matchless_appointment)) {
             staged.consume_empty_friendly_day(staged.revision());continue;
         }
         if(ticket->leagues.empty()&&ticket->cups.empty()&&ticket->others.size()==1&&

@@ -1733,3 +1733,10 @@ add_test(NAME search_profile_tests COMMAND search_profile_tests)
 
 
 
+
+# Soak run of the shared German/English world: whole careers without a window (tools/world12/soak.cpp).
+add_executable(world12_soak tools/world12/soak.cpp)
+target_link_libraries(world12_soak PRIVATE bmhworld12_session bmhlaunch)
+if(MSVC)
+    target_compile_options(world12_soak PRIVATE /utf-8)
+endif()
