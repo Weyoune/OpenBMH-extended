@@ -157,7 +157,7 @@ bool in_pseudo_squad(const GameState& g, int slot) {
 void list_club_player(GameState& g, int first, int last, WatcomRandom& rand, MinuteReport& report) {
     const auto selected=select_market_club_player(first,last,kBigSquadClubs,kLeagueClubs,g.list_toggle,rand,
         [&](int team){return g.manager_of(team)>=0;},
-        [&](int team){MarketClubShape result;const auto range=squad_range(team);result.players=int16_t(squad_count(g,team,3));result.capacity=int(range.count);result.flags=g.team_flags.at(size_t(team));
+        [&](int team){MarketClubShape result;const auto range=squad_range(team);result.players=int16_t(squad_count(g,team,3));result.occupied=int16_t(squad_count(g,team,2));result.capacity=int(range.count);result.flags=g.team_flags.at(size_t(team));
             for(int row=0;row<result.players;++row){const auto id=g.squad_slots.at(range.first+size_t(row))&0xfff;if(id!=0xfff)++result.positions[g.players.at(id).w364&3];}return result;},
         [&](int team,int row){const auto slot=int(squad_range(team).first)+row;const auto id=g.squad_slots.at(size_t(slot))&0xfff;return MarketPlayerChoice{int(g.players.at(id).w364&3),bought_entry(g,id)!=0||list_index(g,slot)!=0,in_pseudo_squad(g,slot)};});
     if(!selected){report.fail("transfer list: no club to take a player from (internal error 0x28)");return;}

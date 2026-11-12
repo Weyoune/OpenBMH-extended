@@ -19,7 +19,9 @@ inline std::array<uint8_t,4> allocate_market_entries(std::array<uint8_t,5> count
     int8_t total=0;for(auto v:add)total=int8_t(total+v);if(total<4)add[1]=uint8_t(add[1]+random.range(2,4));
     if(!add[3]&&add[1]&&random.range(0,10)==5){++add[3];--add[1];}return add;
 }
-struct MarketClubShape {int players=0,capacity=0;std::array<int8_t,4> positions{};uint16_t flags=0;};
+// players: the squad including players away on loan (the count the selection keys use); occupied: the players
+// in the squad slots, among whom the row is drawn (-1: the same number).
+struct MarketClubShape {int players=0,capacity=0;std::array<int8_t,4> positions{};uint16_t flags=0;int occupied=-1;};
 struct MarketPlayerChoice {int position=0;bool taken=false,national=false;};
 struct MarketClubPlayer {int club=-1,row=-1;};
 // Original alternating scan, score arithmetic/quicksort, 35 tries and final
@@ -37,7 +39,7 @@ std::optional<MarketClubPlayer> select_market_club_player(int first,int last,int
             if(add){const int a=random.range(0,5),b=random.range(0,5);keys.push_back(uint32_t((key+a-b)*4+int8_t(line)));teams.push_back(int16_t(team));}
         }
         if(!teams.empty()){quicksort_by_key(teams.data(),keys.data(),int(teams.size()));MarketClubPlayer selected;
-            for(size_t i=0;i<teams.size();++i){const int team=teams[i],count=describe(team).players,line=int(keys[i]&3);int tries=0;bool again;
+            for(size_t i=0;i<teams.size();++i){const int team=teams[i];const auto picked=describe(team);const int count=picked.occupied>=0?picked.occupied:picked.players,line=int(keys[i]&3);int tries=0;bool again;
                 do{selected={team,random.range(0,count-1)};const auto p=player(team,selected.row);++tries;again=p.position!=line||p.national||p.taken;}while(tries<35&&again);
                 if(tries<35)return selected;
             }

@@ -100,7 +100,7 @@ int match_team_league(const GameState& state,int team) {
     return league;
 }
 int match_foreign_player_limit(const GameState& state,int team) {
-    if(state.projected_match_clubs.empty())return 3-int(team_region(team)!=0);
+    if(state.projected_match_clubs.empty())return 3-int((team_region(team)&0xff)!=0);  // (the country is the low byte, as in the line-up of the original)
     const int limit=state.projected_match_clubs.at(size_t(team)).foreign_player_limit;
     if(limit<0 || limit>11)throw std::invalid_argument("match: invalid projected foreign-player limit");
     return limit;
