@@ -57,21 +57,23 @@ UnpublishedAnnualAccounts stage_annual_accounts(const UnpublishedAnnualQualifica
         MinuteReport report;
         settle_manager_annual_accounts(local,seat,game,random,report,tax_hooks,tax,annual_club_relations(binding,manager.club));
         if(report.unsupported)throw FormatError(report.reason);
-        PlayerId recruited;
+        // The academy of the Diamond 3.7 programme tries two rounds: none, one or two players join.
+        std::vector<std::pair<PlayerId,ClubId>> recruits;
         for(size_t row=0;row<24;++row){const auto raw=local.squad_slots.at(own*24+row)&0xfff;if(raw==0xfff)continue;
             const auto player=projection.global_player(raw);
             if(std::none_of(roster.begin(),roster.end(),[&](const auto& slot){return slot.player==player;})){
-                if(recruited.valid())throw FormatError("world12: annual academy produced multiple unowned players");recruited=player;
+                if(recruits.size()==2)throw FormatError("world12: annual academy produced more than two unowned players");
+                ClubId donor;
+                for(const auto& [id,club]:candidate.world.clubs)if(std::any_of(club.roster.begin(),club.roster.end(),[&](const auto& slot){return slot.player==player;})){
+                    if(donor.valid())throw FormatError("world12: annual academy donor is ambiguous");donor=id;
+                }
+                if(!donor.valid()||donor==manager.club)throw FormatError("world12: annual academy lacks an actual donor");
+                recruits.push_back({player,donor});
             }
         }
-        if(recruited.valid()) {
-            ClubId donor;
-            for(const auto& [id,club]:candidate.world.clubs)if(std::any_of(club.roster.begin(),club.roster.end(),[&](const auto& slot){return slot.player==recruited;})){
-                if(donor.valid())throw FormatError("world12: annual academy donor is ambiguous");donor=id;
-            }
-            if(!donor.valid()||donor==manager.club)throw FormatError("world12: annual academy lacks an actual donor");
-            projection.commit_transfer_state(candidate.world,recruited,donor,manager.club,true);
-            result.academy.push_back({manager.seat,recruited,donor,manager.club});
+        if(!recruits.empty()) {
+            projection.commit_recruits(candidate.world,recruits,manager.club);
+            for(const auto& [player,donor]:recruits)result.academy.push_back({manager.seat,player,donor,manager.club});
         } else projection.commit_match_state(candidate.world,true);
         capture_career_economy(candidate.world,projection);
         result.pending_sanctions[manager.seat]=local.memory.u8(layout::Season_SeasonAccounts_RuntimeField+seat);

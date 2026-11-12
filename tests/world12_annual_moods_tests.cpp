@@ -27,7 +27,7 @@ int main()try {
         check(qualification.game_seed_before==stage.snapshot.game_seed&&qualification.watcom_seed_before==stage.snapshot.watcom_seed&&qualification.final_rankings==facts.final_rankings,"qualification bypassed mood seeds or altered completed rankings");
         AnnualAccountsHooks hooks;hooks.present=[](const auto&){return true;};hooks.choose=[](const auto&)->std::optional<bool>{return false;};
         const auto accounts=stage_annual_accounts(qualification,rules,text,hooks);validate_annual_accounts(accounts,rules,text);
-        check(accounts.academy.size()==1,"Source pre-qualification mood order skipped later actual academy recruitment");
+        check(accounts.academy.size()<=2,"Source pre-qualification mood order broke the later academy recruitment");
         auto unknown=source;unknown.world.amateur_slots.reset();rejects([&]{stage_annual_moods(unknown,rules);},"annual moods sorted unknown old amateur history into fake physical order");
         auto altered=stage;std::swap(altered.physical_order[0],altered.physical_order[1]);rejects([&]{validate_annual_moods(altered,rules);},"altered annual physical order accepted");
         changed=&source;draw_hook=disturb;rejects([&]{stage_annual_moods(source,rules);},"late Source mood owner change overwritten");draw_hook=nullptr;

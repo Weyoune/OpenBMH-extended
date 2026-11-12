@@ -60,6 +60,8 @@ CareerSnapshot prepared(GameState& rules) {
     size_t at=0;const size_t sizes[]={64,24,32};for(size_t k=0;k<3;++k){for(size_t n=0;n<sizes[k];++n)fields.fields[k].push_back(clubs.at(at++));fields.holders[k]=fields.fields[k][0];}
     for(uint32_t n=0;n<4;++n){ClubRecord nation;nation.id={0xe0000000u+n};nation.name="Nation "+std::to_string(n);nation.kind=ClubKind::national_team;nation.crest=state.world.clubs.begin()->second.crest;state.world.clubs[nation.id]=nation;fields.national_field.push_back(nation.id);}
     initialize_career_economy(state,rules);
+    // (The scenario was authored for the former start capital; the re-offer needs the same headroom under the Diamond 3.7 base.)
+    for(auto& manager:state.world.managers)if(manager.finance)manager.finance->balance+=1000000;
     for(size_t f=0;f<6;++f){const size_t at=f*0x1c;const uint32_t price=1000000;
         for(size_t b=0;b<4;++b)state.world.markets->funds[at+b]=uint8_t(price>>(b*8));
         for(size_t m=0;m<4;++m)state.world.markets->funds[at+0x14+m*2]=2;
@@ -93,7 +95,7 @@ int main()try {
                 editor=edit_transfer_offer_editor_source(g,editor,{TransferOfferEditorField::salary,g.memory.u32(at+0x30),true},gr,wr);
                 HumanBuyerSaleHooks sale;sale.allocator_gate=HumanBuyerSaleAllocatorGate::zero;sale.direct_mode=HumanBuyerSaleDirectMode::ordinary_ai_purchase;sale.notice=[](const GameState&,const HumanBuyerSaleNotice&){};
                 MinuteReport report;const auto result=submit_transfer_offer_editor_source(g,editor,wr,sale,report);check(!report.unsupported,report.reason.c_str());
-                check(result.action.status==TransferActionStatus::accepted||result.action.status==TransferActionStatus::pending,"real re-offer rejected");++submissions;return 1;
+                if(!(result.action.status==TransferActionStatus::accepted||result.action.status==TransferActionStatus::pending))throw std::runtime_error("real re-offer rejected: status "+std::to_string(int(result.action.status))+" fee "+std::to_string(g.memory.u32(at+0x2c))+" salary "+std::to_string(g.memory.u32(at+0x30)));++submissions;return 1;
             };
             return_monthly_loans(submitted,rules,texts,wanted);check(submissions==1,"return did not submit shared editor");check(read_save(make_save(submitted))==submitted,"submitted return snapshot failed");
             auto stopped=before;wanted.keep=[](const GameState&,uint8_t,const std::string&,const AiMatchProjection&)->std::optional<bool>{return {};};rejects([&]{return_monthly_loans(stopped,rules,texts,wanted);},"cancelled return question committed");check(stopped==before,"cancelled return lost original contract");

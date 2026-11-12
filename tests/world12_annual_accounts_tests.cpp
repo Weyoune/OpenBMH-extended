@@ -17,14 +17,25 @@ template<class F>void rejects(F f,const char* text){bool refused=false;try{f();}
 int main()try {
     set_fixture_tables(bmh::test::authored_fixture_tables());const auto rules=bmh::test::world12::annual_reference();const auto text=bmh::test::world12::annual_texts();
     for(const auto scope:{GameScope{true,false,false},GameScope{false,true,false},GameScope{true,true,false}})for(bool academy:{false,true}) {
-        const auto source=bmh::test::world12::completed_account_closing(rules,scope,academy);const auto qualification=stage_annual_qualification(source);const auto before=qualification;
+        auto source=bmh::test::world12::completed_account_closing(rules,scope,academy);
+        if(academy){   // two rounds of 1 in 4: take the first game seed with a recruit
+            bool found=false;
+            for(uint32_t probe=0;probe<400&&!found;++probe){
+                auto trial=source;trial.game_seed+=probe;
+                AnnualAccountsHooks quiet;quiet.present=[](const AnnualTaxEvent&){return true;};quiet.choose=[](const AnnualTaxEvent&)->std::optional<bool>{return false;};
+                found=!stage_annual_accounts(stage_annual_qualification(trial),rules,text,quiet).academy.empty();
+                if(found)source=trial;
+            }
+            check(found,"no game seed lets the academy recruit");
+        }
+        const auto qualification=stage_annual_qualification(source);const auto before=qualification;
         AnnualAccountsHooks hooks;size_t presented=0,chosen=0;
         hooks.present=[&](const AnnualTaxEvent& e){++presented;check(e.manager==3&&e.club==source.world.managers[0].club&&e.source.manager_slot==3&&e.source.team==-1,"annual tax presenter lost canonical sparse owner");return true;};
         hooks.choose=[&](const AnnualTaxEvent&)->std::optional<bool>{++chosen;return false;};
         const auto result=stage_annual_accounts(qualification,rules,text,hooks);
         check(qualification==before&&result.snapshot.date==source.date&&result.snapshot.season==source.season&&result.snapshot.calendar==source.calendar&&result.snapshot.results==source.results&&result.snapshot.league_rounds==source.league_rounds,"unpublished accounts changed owner/date/calendar/standings");
         check(presented==1&&chosen==1&&result.tax_events.size()==1&&result.tax_decisions.size()==1&&result.game_draws>=1&&result.watcom_draws>=1,"actual tax and annual draws were skipped");
-        check(result.academy.size()==size_t(academy),"annual academy used a fake recruit or skipped actual Source search");
+        check(academy?(result.academy.size()>=1&&result.academy.size()<=2):result.academy.empty(),"annual academy recruited without an active academy or more than its two rounds allow");
         if(academy){const auto& recruit=result.academy.front();check(recruit.player.valid()&&recruit.donor!=recruit.recipient&&recruit.manager==3&&recruit.recipient==source.world.managers[0].club,"academy lost real donor/player identity");
             const auto& donor=result.snapshot.world.clubs.at(recruit.donor).roster;const auto& recipient=result.snapshot.world.clubs.at(recruit.recipient).roster;
             check(std::none_of(donor.begin(),donor.end(),[&](const auto& r){return r.player==recruit.player;})&&std::count_if(recipient.begin(),recipient.end(),[&](const auto& r){return r.player==recruit.player;})==1&&result.snapshot.world.players.size()==source.world.players.size(),"academy invented, duplicated or failed to move actual donor");}

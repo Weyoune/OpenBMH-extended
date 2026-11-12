@@ -303,6 +303,15 @@ void AiMatchProjection::commit_transfer_state(World& world,PlayerId player,ClubI
     if(seller.valid())local_club(seller);local_club(buyer);local_player(player);
     commit_state(world,false,moved?std::vector<TransferMove>{{player,seller,buyer}}:std::vector<TransferMove>{});
 }
+void AiMatchProjection::commit_recruits(World& world,const std::vector<std::pair<PlayerId,ClubId>>& recruits,ClubId buyer)const {
+    std::vector<TransferMove> moves;std::set<PlayerId> seen;local_club(buyer);
+    for(const auto& [player,seller]:recruits){
+        if(seller==buyer||!player.valid()||!seller.valid())throw std::invalid_argument("world12: invalid recruit movement");
+        local_player(player);local_club(seller);if(!seen.insert(player).second)throw std::invalid_argument("world12: player recruited twice");
+        moves.push_back({player,seller,buyer});
+    }
+    commit_state(world,false,moves);
+}
 void AiMatchProjection::commit_released_players(World& world,const std::vector<std::pair<PlayerId,ClubId>>& released)const{
     std::vector<TransferMove> moves;std::set<PlayerId> seen;
     for(const auto& [player,seller]:released){local_player(player);local_club(seller);if(!seen.insert(player).second)throw std::invalid_argument("world12: player released twice");moves.push_back({player,seller,{}});}

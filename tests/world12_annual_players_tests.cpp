@@ -13,7 +13,7 @@ struct Fixture {CareerSnapshot before;UnpublishedAnnualQualification qualificati
 Fixture prepared(const GameState& rules,const TextDb& texts,GameScope scope,bool release,bool loan=false,bool full_pools=false) {
     auto closing=bmh::test::world12::completed_account_closing(rules,scope,false);Fixture fixture;
     const auto league=scope.germany?LeagueId{4}:LeagueId{8};fixture.old_club=closing.world.membership[league.value].clubs[5];fixture.injured=closing.world.clubs.at(fixture.old_club).roster[0].player;
-    if(release)closing.world.players.at(fixture.injured).attributes.w35c|=31u<<27;
+    if(release){auto& out=closing.world.players.at(fixture.injured).attributes;out.w35c|=31u<<27;out.w364|=31u<<16;}  // duration and injury type 0x1f
     if(release||loan){
         closing.world.loans.push_back({fixture.injured,closing.world.managers[0].club,fixture.old_club,3,uint16_t(5)});
         LoanContract contract;contract.player=fixture.injured;contract.manager=3;contract.source_slot=2;contract.board[6]=19;contract.board[15]=77;closing.transfers->loans.push_back(contract);

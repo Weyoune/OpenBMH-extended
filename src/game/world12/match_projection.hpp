@@ -53,6 +53,8 @@ public:
     void retain_live_settings(const std::array<uint8_t,180>&);
     void commit_match_state(World&,bool capture_season_services=false)const;
     void commit_transfer_state(World&,PlayerId,ClubId seller,ClubId buyer,bool moved)const;
+    // Several players joining one buyer in a single engine step (academy recruits: player and donor club).
+    void commit_recruits(World&,const std::vector<std::pair<PlayerId,ClubId>>& recruits,ClubId buyer)const;
     void commit_released_players(World&,const std::vector<std::pair<PlayerId,ClubId>>&)const;
 private:
     static AiMatchProjection create_core(const World&,const std::vector<ClubId>&,const GameState&,bool allow_empty,size_t maximum_clubs=64);

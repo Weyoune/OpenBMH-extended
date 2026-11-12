@@ -20,7 +20,7 @@ inline CareerSnapshot completed_account_closing(const GameState& rules,GameScope
     auto s=bmh::test::world12::completed_qualification_closing(scope);auto& w=s.world;uint32_t next=0xd1000000;
     for(auto& [id,club]:w.clubs)if(club.league.valid())for(size_t row=0;row<20;++row){
         if(club.roster[row].empty()){PlayerRecord player;player.id={next++};player.attributes.name="Reserve";w.players[player.id]=player;club.roster[row]={player.id,uint16_t(row<17?2:0)};}
-        auto& player=w.players.at(club.roster[row].player).attributes;player.w364=uint32_t(row==0||row==11?0:row<5?1:row<9?2:3);player.w35c=60u|(75u<<7)|(85u<<14);
+        auto& player=w.players.at(club.roster[row].player).attributes;player.w364=uint32_t(row==0||row==11?0:row<5?1:row<9?2:3)|uint32_t(4+row%8)<<21;player.w35c=60u|(75u<<7)|(85u<<14);  // position; ages 20..27 (the academy of Diamond 3.7 recycles an older player)
     }
     const auto initial_fields=w.initial_competitions;const auto completed_campaigns=w.european_campaigns;w.initial_competitions.reset();w.european_campaigns.reset();
     auto& manager=w.managers[0];manager.finance.reset();manager.tactics.reset();WatcomRandom random(51);
