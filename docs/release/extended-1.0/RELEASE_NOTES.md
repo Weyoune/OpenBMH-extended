@@ -25,6 +25,56 @@ and match calculations. It is a separate game line from
 - New high-resolution Extended start artwork; recent Classic input, dialog,
   localization and desktop corrections are included.
 
+## Beta 4: on the code base of Classic 1.0.13
+
+Beta 4 merges everything OpenBMH Classic gained between 1.0.2 and 1.0.13 and adds the
+first whole-career checks of the shared world.
+
+From Classic:
+
+- The rules follow the Diamond 3.7 programme: match events and injuries, start capital,
+  licence limit, weekly processing, facility values, income per visitor, season tickets,
+  the youth academy (two rounds a season, an older player of a computer club is replaced)
+  and the season end. The credit annuity is exact.
+- Transfer market: the search dialog behind Suchen and Vorschlag, the review of offers
+  for an own listing, the question whether a listed player leaves the list, asking fees
+  as in the original.
+- The stadium keeps the limits of the edition (Diamond 3.7: 96,000 places).
+- Settings: every unlocked switch can be changed. National coach desk, calendar,
+  training bars, set piece editor and pointer corrections; buttons look pressed while held.
+- `-debug` writes a log and a save after every match day into the save directory.
+- The built-in numbers of the original programs and `openbmh.dat` (Classic data without
+  the original executable).
+
+Corrections of the shared world:
+
+- A career no longer stops on the day of the national Super-Cups when the champion also
+  won the cup in both countries.
+- With several managers, a point deduction of one manager no longer stops the indoor
+  tournament of a manager in another league.
+- A second academy recruit in one season is accepted.
+- The monthly transfer list draws a club player among the players in the squad, not
+  among squad plus players away on loan.
+- The bundled data package keeps its own runtime when no original executable is present.
+
+How it was checked:
+
+- A new program, `world12_soak`, plays whole careers of the shared world without a window.
+  Careers with one, two and four managers over three seasons, with a German and with an
+  English first manager, with and without the international competitions, and single
+  seasons with only Germany or only England ran to the end; every season change was
+  saved and loaded back unchanged. In these runs the managers decline every offer and
+  renew no contract, and matches are played without presentation: they prove the course
+  of the seasons, not every screen.
+- With Classic data the program gives the same state at every desk as Classic 1.0.13 in
+  nine reference careers of 110 turns.
+- The window program was played by script from the title to the sixth kick-off of a
+  shared career.
+
+Known limits of the Beta: the window program is still one source file (Classic has split
+it); the pressed picture of OK in the transfer confirmation is missing; saved games of
+Beta 3 were not tested with Beta 4.
+
 ## Beta 3 corrections
 
 - Current English squads from the supplied FC source, with import provenance.

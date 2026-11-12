@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
+import os
 import sys
 import tempfile
 from pathlib import Path
 import unittest
 from build_runnable_tests import targets_for_tests
+
+# Extended also ships the data editor, a Windows program that no test starts.
+EDITOR = ['obdeddi'] if os.name == 'nt' else []
 
 
 class BuildDiscoveryTests(unittest.TestCase):
@@ -23,7 +27,7 @@ class BuildDiscoveryTests(unittest.TestCase):
                    f'add_test([=[python]=] "{Path(sys.executable).as_posix()}" "check.py")\n')
         targets, count = targets_for_tests(self.build)
         self.assertEqual(count, 3)
-        self.assertEqual(targets, ['openbmh_cli', 'openbmh_play', 'openbmh_test_skip', 'unit_suite'])
+        self.assertEqual(targets, EDITOR + ['openbmh_cli', 'openbmh_play', 'openbmh_test_skip', 'unit_suite'])
 
     def test_nested_test_and_product_output_name(self):
         self.write(f'add_test([=[version]=] "{self.build.as_posix()}/OpenBMH.exe" "--version")\n')
@@ -33,7 +37,7 @@ class BuildDiscoveryTests(unittest.TestCase):
             f'add_test([=[ui]=] "{nested.as_posix()}/ui_suite")\n', encoding='utf-8')
         targets, count = targets_for_tests(self.build)
         self.assertEqual(count, 2)
-        self.assertEqual(targets, ['openbmh_cli', 'openbmh_play', 'ui_suite'])
+        self.assertEqual(targets, EDITOR + ['openbmh_cli', 'openbmh_play', 'ui_suite'])
 
     def test_unknown_external_binary_is_not_silently_dropped(self):
         outside = self.build.parent / 'unknown-suite'

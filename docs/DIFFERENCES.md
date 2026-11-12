@@ -5,7 +5,7 @@ Generated from source comment markers by `tools/public_release/collect_differenc
 See [Compatibility decisions](COMPATIBILITY.md) for the overall policy. These entries
 describe deliberate changes; they are not a list of every known compatibility limit.
 
-- [src/app/career_session.cpp](../src/app/career_session.cpp): supports designated set-piece record initialization and validation.
+- [src/app/career_session_match.cpp](../src/app/career_session_match.cpp): supports designated set-piece record initialization and validation.
 - [src/app/main.cpp](../src/app/main.cpp): display the repository-owned title at its native resolution until a complete left/right click, without loading balls.
 - [src/app/quit_confirmation.hpp](../src/app/quit_confirmation.hpp): confirms application exit with a localized native dialog, with cancellation selected by default.
 - [src/app/world12_live_family.cpp](../src/app/world12_live_family.cpp): club-inspection cleanup in a live read-only league overview stays in its display overlay.
@@ -25,12 +25,9 @@ describe deliberate changes; they are not a list of every known compatibility li
 - [src/game/match_engine.cpp](../src/game/match_engine.cpp): supports designated set-piece takers, the enhanced injury tables, and the extended suspension fields.
 - [src/game/month.cpp](../src/game/month.cpp): keep the price product in 64 bits until division, retaining per-unit truncation and recipient policy.
 - [src/game/national.cpp](../src/game/national.cpp): a new arrival must not inherit the previous occupant's retirement/refusal/month-processing flags.
-- [src/game/season.cpp](../src/game/season.cpp): retains the enhanced academy player-generation strength bands with monthly youth budgets.
 - [src/game/season.cpp](../src/game/season.cpp): age/retire each player once, even when a temporary offer row references his club slot or regeneration moves him to a later free-agent slot.
 - [src/game/season.cpp](../src/game/season.cpp): includes transfer-market players in retirement so the five-bit age cannot wrap to 16.
 - [src/game/season.cpp](../src/game/season.cpp): initializes the empty EM qualifier seeds with national teams, preventing club zero from entering the EM.
-- [src/game/season.hpp](../src/game/season.hpp): retains the enhanced academy player-generation strength bands with monthly youth budgets.
-- [src/game/stadium_blocks.cpp](../src/game/stadium_blocks.cpp): allow 144,000 standard places and size-aware construction times while retaining edition-owned unit prices.
 - [src/game/state.hpp](../src/game/state.hpp): retains designated set-piece selections in the supported manager-record extension.
 - [src/game/week.cpp](../src/game/week.cpp): widen products before annual-rate division so valid native account amounts do not overflow intermediate sums.
 - [src/game/week.cpp](../src/game/week.cpp): an unknown history receives a grace month; later losses occur at most once per source month.
@@ -42,9 +39,12 @@ describe deliberate changes; they are not a list of every known compatibility li
 - [src/game/world12/league_history.cpp](../src/game/world12/league_history.cpp): FLTD's inherited literal18 collapse aliases its fourth20-club tier with the third.
 - [src/game/world12/progression.cpp](../src/game/world12/progression.cpp): shared English outdoor fixtures precede Hall passes on a coincident date, with no repeated daily service.
 - [src/ui/bank.cpp](../src/ui/bank.cpp): read-only totals use wide arithmetic; individual saved account, price, holding and paid fields are unchanged.
+- [src/ui/desk_state.cpp](../src/ui/desk_state.cpp): the desk shows the opponent's badge whenever the data has one.
+- [src/ui/league_pairings.cpp](../src/ui/league_pairings.cpp): the computer tip is ignored silently once a visible result is known, instead of raising an engine error.
 - [src/ui/league_table.hpp](../src/ui/league_table.hpp): uses three points for a win in the supported rule profile.
 - [src/ui/pitch.cpp](../src/ui/pitch.cpp): supports owner-bound designated set-piece selection in the extended manager record.
 - [src/ui/save_load.cpp](../src/ui/save_load.cpp): focuses the host save filename on entry and selects an existing name for replacement.
 - [src/ui/save_load.cpp](../src/ui/save_load.cpp): omits DOS drive and delete buttons in the directory-confined save/load view.
 - [src/ui/save_load.cpp](../src/ui/save_load.cpp): the host file picker uses the shared dialog's system identity without a live manager portrait projection.
 - [src/ui/save_load.cpp](../src/ui/save_load.cpp): permits cancelling host file dialogs with the right mouse button.
+- [src/ui/settings.cpp](../src/ui/settings.cpp): the settings page names the product and its build version instead of the original's version text.

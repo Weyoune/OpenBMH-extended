@@ -5,7 +5,7 @@ if(APPLE)
     # Enable native languages before dependencies/subdirectories inherit rules.
     enable_language(OBJC OBJCXX)
 endif()
-set(OPENBMH_PRERELEASE "beta.3" CACHE STRING "Prerelease identifier; empty for final release")
+set(OPENBMH_PRERELEASE "beta.4" CACHE STRING "Prerelease identifier; empty for final release")
 set(OPENBMH_PRODUCT_VERSION "${PROJECT_VERSION}")
 if(OPENBMH_PRERELEASE)
     string(APPEND OPENBMH_PRODUCT_VERSION "-${OPENBMH_PRERELEASE}")
