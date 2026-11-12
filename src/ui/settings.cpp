@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Implementation of SettingsScreen, SettingsReadmeScreen and settings_from_game() (settings.hpp): row/column
+// layout from the executable, toggle and arrow handling, availability rules, and the readme text viewer.
+// Raw bytes are preserved; availability bits and the value 2 are not treated as booleans.
 #include "formats/executable_layout.hpp"
 #include "ui/settings.hpp"
 
@@ -11,6 +14,7 @@
 #include "game/messages.hpp"
 #include "ui/manager.hpp"
 #include "ui/setup.hpp"
+#include "game/state.hpp"
 
 namespace bmh::ui {
 namespace {
@@ -49,6 +53,11 @@ std::string number(int value) {
     return s;
 }
 }
+
+namespace {
+std::string& product_version() { static std::string version; return version; }
+}
+void set_settings_product_version(std::string version) { product_version() = std::move(version); }
 
 std::array<uint8_t, 180> project_settings_availability(
     const std::array<uint8_t, 180>& raw_cells, const SettingsAvailabilityInputs& in,
@@ -212,7 +221,13 @@ Image SettingsScreen::render() const {
     }
     sprite_font_.draw(out, SpriteFont::centered_title_x(sprite_font_.text_width(state_.title)), 13, state_.title);
     sprite_font_.draw(out, 5, 235, state_.footer);
-    text(out, 2, 41, utf8_to_original(state_.version), 0x5f, 58);
+    // OpenBMH deviates from the original: the settings page names the product and its build version instead of the original's version text.
+    if (product_version().empty()) {
+        text(out, 2, 41, utf8_to_original(state_.version), 0x5f, 58);
+    } else {
+        text(out, 2, 41, "OpenBMH", 0x5f, 58);
+        text(out, 2, 49, utf8_to_original(product_version()), 0x5f, 58);
+    }
     for (int col = 0; col < 9; ++col) {
         const auto label = std::to_string(col + 1);
         // DrawnFirstBy uses x directly when right=-1 and shadow=0x40.

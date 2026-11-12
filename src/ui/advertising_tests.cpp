@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Tests for the advertising projection, rendering and request handling (ui/advertising.hpp).
 #include "formats/executable_layout.hpp"
 #include "ui/advertising.hpp"
 #include "ui/source_notice_test_helpers.hpp"
@@ -18,14 +19,13 @@
 #include "game/state.hpp"
 #include "ui/manager.hpp"
 #include "ui/setup.hpp"
+#include "testing/check.hpp"
 
 using namespace bmh;
 using namespace bmh::ui;
 
 namespace {
-void check(bool ok, const char* message) {
-    if (!ok) throw std::runtime_error(message);
-}
+using bmh::test_support::check;
 void rejected(const std::function<void()>& action) {
     try { action(); } catch (const FormatError&) { return; }
     throw std::runtime_error("expected invalid advertising projection rejection");

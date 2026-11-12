@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Start-up setup screen: season duration, difficulty, number of managers, game mode and league/world options,
+// with buttons to start a new game or load one. State: SetupOptions in the original representation (duration 5 =
+// unlimited, difficulty 0..9 shown as 1..10). It mutates only its own options; a click can return a
+// SetupRequest (new or load) for the caller to act on. Implemented in setup.cpp.
 #pragma once
 
 #include <array>
@@ -42,9 +46,14 @@ public:
     SetupScreen(const std::filesystem::path& data, SetupOptions current,SetupLeagueSymbol symbol=SetupLeagueSymbol::source);
     const SetupOptions& options() const { return options_; }
     SetupResult click(int x, int y, bool right_button = false);
+    // Mouse DOWN on a minus or plus button: drawn pressed until the release (click()). True when the picture changed.
+    bool press(int x, int y);
     Image render() const;
 
 private:
+    int button_at(int x, int y) const;
+    SetupResult handle_click(int x, int y, bool right);
+    int pressed_button_ = -1;   // minus/plus button held down by the mouse
     SetupOptions options_;
     Image background_, atlas_;
     std::array<std::array<Image,2>,4> country_controls_;

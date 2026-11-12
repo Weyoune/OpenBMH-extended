@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// "Other games" desk view: rows of the results and fixtures of a competition round (group or
+// knockout), linked pages and club metadata for display. A read-only projection of GameState
+// and the loaded texts; the parameter named game is the GameState, not a random generator.
+// Draws no random numbers. Interface in other_games.hpp.
 #include "formats/executable_layout.hpp"
 #include "game/other_games.hpp"
 
@@ -149,7 +153,7 @@ OtherGamesRow make_row(const GameState& game, int home, int away, uint16_t resul
 OtherGamesClubMetadata source_metadata(const GameState& game, int team) {
     OtherGamesClubMetadata out;
     bool manager_owned = game.manager_of(team) >= 0;
-    constexpr size_t kNationalOriginalClub = 4 * 0xb0c + 0x290;
+    constexpr size_t kNationalOriginalClub = 4 * kManagerRecordSize + 0x290;
     if (!manager_owned && !game.manager_teams.empty() && game.manager_teams[0] == kNoTeam &&
         game.manager_records.size() >= kNationalOriginalClub + 2) {
         const int original_club = int(uint16_t(game.manager_records[kNationalOriginalClub] |

@@ -125,7 +125,7 @@ void project_drawer_rows(DeskState& d, const LeImage& exe, const Bytes& managers
 }
 
 void project_table_position(DeskState& desk, const GameState& game) {
-    // SourceDrawerTeam permits league clubs and CupDraw_FormatError_RuntimeField2 (the Source 0x165
+    // SourceDrawerTeam permits league clubs and ManagerRecord0Club (the Source 0x165
     // national-team slot) through its rank/strength path.
     const int position = table_position(game, desk.runtime_club);
     if (position >= 0) desk.table_position = position;
@@ -240,6 +240,7 @@ DeskState project(const StaticMemory& memory, const Tables& t, const LeImage& ex
         d.managers.at(0).club_identity_key = coach->club_identity_key;
     }
     if (d.runtime_club < 0 || d.runtime_club >= int(t.name_offsets.size())) throw FormatError("desk: invalid runtime club");
+    d.runtime_club_identity = int(t.name_offsets.at(size_t(d.runtime_club)));
     if (d.national_team && !d.projected_national_team && ((!d.options.world && !d.national_coach_takeover) ||
                             d.manager_slot != 0 || d.options.managers != 1))
         throw FormatError("desk: national team requires one manager and world-mode or source takeover evidence");
@@ -312,7 +313,7 @@ DeskState project(const StaticMemory& memory, const Tables& t, const LeImage& ex
     uint8_t remaining = 18;
     for (size_t kind = 6; kind < 13; ++kind) remaining = uint8_t(remaining - t.managers.at(base + 0xc5 + kind));
     d.warnings[3] = remaining < 4;
-    const int max24 = exe.u16(::bmh::layout::TeamsWithSquads), league_teams = exe.u16(::bmh::layout::CareerSession_DispatchLineup_RuntimeField);
+    const int max24 = exe.u16(::bmh::layout::TeamsWithSquads), league_teams = exe.u16(::bmh::layout::LeagueClubCount);
     if (!d.national_team && d.runtime_club >= league_teams) throw FormatError("desk: cup-only squad projection not supported");
     const auto actual=d.projected_national_team?squad_range(*game,d.runtime_club):SquadRange{};
     const size_t first = d.projected_national_team?actual.first:d.national_team ? runtime_dimensions.national_slots_first : size_t(d.runtime_club < max24 ? d.runtime_club * 24 : d.runtime_club * 16 + max24 * 8);
@@ -610,7 +611,7 @@ DeskState desk_from_game(const GameState& g, const LeImage& exe, uint64_t revisi
                 } else if (type == 0 && league >= 0 &&
                            league < int(g.league_rounds.size())) {
                     const int round = int(g.league_rounds[size_t(league)]);
-                    const size_t result_at = size_t(league) * 0x17c +
+                    const size_t result_at = size_t(league) * kLeagueResultsStride +
                                              size_t(round) * 10 + match;
                     if (round >= 0 && result_at < g.results.size()) {
                         has_result = true;
@@ -643,7 +644,10 @@ DeskState desk_from_game(const GameState& g, const LeImage& exe, uint64_t revisi
             *d.next_opponent < int(g.club_ids.size())) {
             const int opponent = *d.next_opponent;
             d.next_opponent_name = g.club_name(opponent);
-            const bool fallback = original_badge_fallback(opponent,&exe);
+            // OpenBMH deviates from the original: the desk shows the opponent's badge whenever the data has one.
+            // The original draws a computer icon for the clubs between its two gate values (the foreign league
+            // clubs); only the cup-only teams and the empty selector keep the icon.
+            const bool fallback = (opponent & 0xfff) == 0xfff || (opponent >= world_layout().first_foreign_cup() && opponent < 357);
             d.next_opponent_badge_fallback = fallback;
             if (!fallback) {
                 const size_t badge_at = size_t(opponent) * 2;
@@ -714,7 +718,7 @@ DeskState desk_from_game(const GameState& g, const LeImage& exe, uint64_t revisi
 DeskState load_reference_desk(const std::filesystem::path& path, const LeImage& exe) {
     auto fbm = load_savegame(path);
     require_native_savegame(fbm, exe.expanded_profile());
-    DbCounts counts{exe.u32(::bmh::layout::CareerSession_DataDirectory_RuntimeField), exe.u32(::bmh::layout::CareerSession_DataDirectory_RuntimeField3), exe.u32(::bmh::layout::CareerSession_DataDirectory_RuntimeField2), exe.u32(::bmh::layout::CareerSession_DataDirectory_RuntimeField4), uint32_t(exe.u16(layout::CareerSession_DispatchLineup_RuntimeField)), 30};
+    DbCounts counts{exe.u32(::bmh::layout::CareerSession_DataDirectory_RuntimeField), exe.u32(::bmh::layout::CareerSession_DataDirectory_RuntimeField3), exe.u32(::bmh::layout::CareerSession_DataDirectory_RuntimeField2), exe.u32(::bmh::layout::CareerSession_DataDirectory_RuntimeField4), uint32_t(exe.u16(layout::LeagueClubCount)), 30};
     SaveState save(fbm.stream, counts);
     auto d = desk_from_save(save, exe);
     validate_desk_state(d);

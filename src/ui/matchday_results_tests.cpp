@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Tests for the matchday results projection and screen (ui/matchday_results.hpp, ui/matchday_results_screen.hpp).
 #include "formats/executable_layout.hpp"
 #include "ui/matchday_results_screen.hpp"
 
@@ -17,12 +18,13 @@
 #include "game/schedule.hpp"
 #include "game/match_engine.hpp"
 #include "game/turn_driver.hpp"
+#include "testing/check.hpp"
 
 using namespace bmh;
 using namespace bmh::ui;
 
 namespace {
-void check(bool ok, const char* why) { if (!ok) throw std::runtime_error(why); }
+using bmh::test_support::check;
 void rejected(const std::function<void()>& action) {
     try { action(); } catch (const FormatError&) { return; }
     throw std::runtime_error("expected rejected results input");
@@ -45,7 +47,7 @@ std::string title_oracle(const GameState& game, const LeImage& exe, int league) 
     for (int previous = 0; previous < league; ++previous)
         if (exe.u8(::bmh::layout::Manager_FormatError_RuntimeField + uint32_t(previous) * 2) < 'B') ++slot;
     std::string title = game.texts->strings.at(slot);
-    if (const auto suffix = exe.u8(::bmh::layout::CareerSession_InstallLeagueSizes_RuntimeField3 + uint32_t(league) * 2)) {
+    if (const auto suffix = exe.u8(::bmh::layout::LeagueNameSuffixes + uint32_t(league) * 2)) {
         std::string tail = game.texts->strings.at((::bmh::layout::Manager_FormatError_TextPointer2 - ::bmh::layout::TextPointerTable) / 4);
         tail.back() = char(suffix);
         title += tail;

@@ -2,6 +2,7 @@
 #include "game/state.hpp"
 #include "formats/executable_layout.hpp"
 #include "ui/league_pairings.hpp"
+#include "ui/button_frame.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -11,6 +12,7 @@
 #include "game/season.hpp"
 #include "ui/desk_state.hpp"
 #include "ui/manager.hpp"
+#include "ui/draw.hpp"
 
 namespace bmh::ui {
 namespace {
@@ -35,13 +37,10 @@ void copy(Image& out,const Image& src,int sx,int sy,int x,int y,int w,int h,int 
         throw FormatError("pairings: Original atlas bounds (source "+std::to_string(src.width)+"x"+
             std::to_string(src.height)+", crop "+std::to_string(sx)+","+std::to_string(sy)+" "+
             std::to_string(w)+"x"+std::to_string(h)+", destination "+std::to_string(x)+","+std::to_string(y)+")");
-    for(int yy=0;yy<h;++yy)for(int xx=0;xx<w;++xx) {
-        const uint8_t v=src.pixels[size_t(sy+yy)*size_t(src.width)+size_t(sx+xx)];if(v!=transparent)out.at(x+xx,y+yy)=v;
-    }
+    draw::copy_unclipped(out, src, sx, sy, x, y, w, h, transparent);
 }
 void fill(Image& out,int x,int y,int w,int h,uint8_t color) {
-    for(int yy=std::max(0,y);yy<std::min(out.height,y+h);++yy)
-        for(int xx=std::max(0,x);xx<std::min(out.width,x+w);++xx)out.at(xx,yy)=color;
+    draw::fill(out, x, y, w, h, color);
 }
 }
 
@@ -257,15 +256,8 @@ Image LeaguePairingsScreen::render() const {
         if(typed_&&n==4)continue;
         const int x=1+(n/4)*74,y=176+(n%4)*13;
         const bool selected=pressed_button_==n||(state_.source.preferences&(1u<<n));
-        int dx=x,dy=y;
-        if(selected) {
-            const uint8_t background=out.at(x,y+10);fill(out,x,y,71,2,background);fill(out,x,y,2,11,background);
-            dx+=2;dy+=2;
-        } else {fill(out,x+2,y+10,70,2,0x40);fill(out,x+70,y+2,2,10,0x40);}
-        const int sy=selected?44:74;copy(out,widgets_,24,sy,dx,dy,31,10);
-        int used=31;while(70-used>20) {const int amount=std::min(8,70-used-20);
-            copy(out,widgets_,24,sy+10,dx+used,dy,amount,10);used+=amount;}
-        const int left=70-used;copy(out,widgets_,45-left,sy+20,dx+used,dy,left,10);
+        const int shift=draw_wide_button_frame(out,widgets_,x,y,70,selected);   // button_frame.hpp
+        const int dx=x+shift,dy=y+shift;
         const auto label=original_to_utf8(state_.buttons[size_t(n)]);
         sprite_.draw(out,dx+35-sprite_.text_width(label)/2,dy+7,label,exe_.u8(::bmh::layout::Advertising_Button_RuntimeField + uint32_t(selected)));
     }
@@ -380,6 +372,9 @@ bool LeaguePairingsScreen::release(int x,int y) {
             return true;
         }
         if(button==5)return true; // Source ellipsis has no action.
+        // OpenBMH deviates from the original: the computer tip is ignored silently once a visible result is known, instead of raising an engine error.
+        if(button==4&&std::any_of(state_.source.rows.begin(),state_.source.rows.end(),
+               [](const auto& row){return row.raw_result!=0xcc;}))return true;
         post({button==0?LeaguePairingsAction::reset:button==1?LeaguePairingsAction::search:
             button==2?LeaguePairingsAction::filter_by_club:button==3?LeaguePairingsAction::postponed_list:
             button==4?LeaguePairingsAction::computer_tip:LeaguePairingsAction::unsupported,button});return true;

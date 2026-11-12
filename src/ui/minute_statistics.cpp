@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Implements minute_statistics_from_game() and MinuteStatisticsScreen declared in minute_statistics.hpp:
+// copies the four stored series for a manager and draws the chart atlas and text over the supplied
+// underlay. handle_source_event() sets the closed flag; no game state is written.
 #include "formats/executable_layout.hpp"
 #include "ui/minute_statistics.hpp"
 
@@ -10,10 +13,11 @@
 #include "game/messages.hpp"
 #include "ui/manager.hpp"
 #include "ui/setup.hpp"
+#include "ui/draw.hpp"
 
 namespace bmh::ui {
 namespace {
-constexpr size_t kManagerStride = 0xb0c;
+constexpr size_t kManagerStride = kManagerRecordSize;
 constexpr size_t kSeriesOffset = 0x1ae;
 constexpr size_t kSeriesBytes = 18;
 constexpr size_t kSeriesCount = 4;
@@ -25,11 +29,7 @@ void copy_transparent(Image& target, const Image& source, int sx, int sy,
         sx + width > source.width || sy + height > source.height ||
         dx + width > target.width || dy + height > target.height)
         throw FormatError("minute statistics: Original KB36 crop outside image");
-    for (int y = 0; y < height; ++y)
-        for (int x = 0; x < width; ++x) {
-            const uint8_t pixel = source.pixels[size_t(sy + y) * size_t(source.width) + size_t(sx + x)];
-            if (pixel != transparent) target.at(dx + x, dy + y) = pixel;
-        }
+    draw::copy_unclipped(target, source, sx, sy, dx, dy, width, height, transparent);
 }
 
 // SourceBarColor / SourceBarColor2 scan each current 18-byte series. Their

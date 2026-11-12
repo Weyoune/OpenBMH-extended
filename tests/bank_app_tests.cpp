@@ -186,6 +186,14 @@ void test_toto_source_calculator(const std::filesystem::path& data) {
     check(cancelled_result && cancelled_result->result == TableRangeDialogResult::cancel,
           "Toto calculator cancel has no accepted payment value");
 
+    LeagueTableRangeDialog by_mouse(data, backdrop, TotoStakeDialogProfile{TableRangeTextMode::flat});
+    (void)by_mouse.render(); (void)by_mouse.after_present();
+    check(by_mouse.pointer_down(10, 10, true), "the right button is consumed by the calculator");
+    check(by_mouse.render().pixels == backdrop.pixels, "the right button restores the owned backdrop");
+    const auto by_mouse_result = by_mouse.after_present();
+    check(by_mouse_result && by_mouse_result->result == TableRangeDialogResult::cancel,
+          "the right button closes the calculator as a cancel");
+
     TableRangeDialogProfile table_profile;
     table_profile.text_mode = TableRangeTextMode::flat;
     LeagueTableRangeDialog table(data, backdrop, table_profile);
@@ -1979,7 +1987,7 @@ int main(int argc, char** argv) {
             observe_last_week(sparse_bidder, buy_entry, false, true);
 
             GameState coach_bidder = human_bidder;
-            coach_bidder.memory.set16(::bmh::layout::CupDraw_FormatError_RuntimeField3, uint16_t(coach_bidder.manager_teams.at(0)));
+            coach_bidder.memory.set16(::bmh::layout::ManagerRecord4Club, uint16_t(coach_bidder.manager_teams.at(0)));
             coach_bidder.manager_teams = {0x165};
             observe_last_week(coach_bidder, buy_entry, false, true);
 
@@ -3730,7 +3738,7 @@ int main(int argc, char** argv) {
             const int round = rebound.memory.u8(::bmh::layout::Postponed + uint32_t(postponed_slot) * 6 + 2);
             const int match = rebound.memory.u8(::bmh::layout::Postponed + uint32_t(postponed_slot) * 6 + 4);
             const size_t result_at = size_t(league) * 0x17c + size_t(round) * 10 + size_t(match);
-            const auto scheduled = generate_fixtures(kLeagueSizes[league], round + 1,
+            const auto scheduled = generate_fixtures(league_system().sizes[league], round + 1,
                 league_matchdays(league) / 2, league_first_team(league));
             const std::vector<int> expected_replay{
                 scheduled.at(size_t(match)).home, scheduled.at(size_t(match)).away};

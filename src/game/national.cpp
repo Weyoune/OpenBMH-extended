@@ -1,4 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// National team: nomination of players, swapping the national coach record into the spare
+// manager slot on international days, adding players to a squad and creating board entries.
+// Reads and writes GameState (manager records, tactics boards, squad_slots, static bytes).
+// Draws from WatcomRandom when creating board entries and values. Interface in national.hpp;
+// called from turn.cpp.
 #include "formats/executable_layout.hpp"
 #include "game/national.hpp"
 #include "game/national_selection.hpp"
@@ -15,9 +20,9 @@ namespace bmh {
 
 namespace {
 
-constexpr size_t kManagerRecord = 0xb0c;
-constexpr size_t kBoard = 0x840;          // one manager's tactics board (24 x 0x58)
-constexpr size_t kBoardSlot = 0x58;
+constexpr size_t kManagerRecord = kManagerRecordSize;
+constexpr size_t kBoard = kTacticsBoardSize;          // one manager's tactics board (24 x 0x58)
+constexpr size_t kBoardSlot = kTacticsBoardSlotSize;
 constexpr uint32_t kDesktops = ::bmh::layout::Desktops;   // desktop layouts, 0x360 per manager slot
 constexpr size_t kDesktop = 0x360;
 const int& kPoolSlots = runtime_dimensions.pool_first;      // CareerRuntimeField: the clubs' squads end here
@@ -199,7 +204,7 @@ void national_coach_take_over(GameState& g, int active_manager, uint16_t source_
         set_manager_count(g, 1);
         swap_manager_slots(g, 4, 0);                               // SwapManagerSlots(4, 0)
         uint8_t* coach = &g.manager_records.at(0);
-        coach[0x290] = uint8_t(kNoTeam & 0xff), coach[0x291] = uint8_t(kNoTeam >> 8);  // CupDraw_FormatError_RuntimeField2 = 0x165
+        coach[0x290] = uint8_t(kNoTeam & 0xff), coach[0x291] = uint8_t(kNoTeam >> 8);  // ManagerRecord0Club = 0x165
         coach[0x218] = g.manager_records.at(4 * kManagerRecord + 0x218);       // NationalRuntimeField2 = NationalRuntimeField3
         g.manager_teams.at(0) = kNoTeam;
         auto_lineup(g, kNoTeam, 0xe4);                             // Int2(0x165, 0xe4)

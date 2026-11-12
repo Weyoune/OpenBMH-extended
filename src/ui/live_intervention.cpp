@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Implements the live intervention helpers and dialog declared in live_intervention.hpp: building and
+// validating substitution, formation, position and tactic proposals against the copied context, serialising
+// a proposal to JSON, and rendering the lineup, formation and tactics pages. Proposals are descriptive only.
 #include "ui/live_intervention.hpp"
+#include "ui/draw.hpp"
 
 #include "formats/binary.hpp"
 
@@ -154,9 +158,7 @@ std::string live_intervention_proposal_json(const LiveInterventionProposal& p) {
 
 namespace {
 void fill(Image& image, int x, int y, int w, int h, uint8_t color) {
-    for (int py = std::max(0, y); py < std::min(image.height, y + h); ++py)
-        for (int px = std::max(0, x); px < std::min(image.width, x + w); ++px)
-            image.at(px, py) = color;
+    draw::fill(image, x, y, w, h, color);
 }
 
 struct Glyph { char ch; std::array<uint8_t, 7> rows; };

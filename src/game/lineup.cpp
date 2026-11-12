@@ -23,9 +23,8 @@ constexpr int8_t kTypeBySlot[24] = {2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 0, 1, 2, 2,
 constexpr int16_t kUnavailable = -32000;  // 0x8300
 constexpr int kMismatchWeight = 0x40;      // local_54 for computer teams
 
-constexpr size_t kManagerRecordSize = 0xB0C;
-constexpr size_t kManagerBoardSize = 0x840;
-constexpr size_t kBoardRowSize = 0x58;
+constexpr size_t kManagerBoardSize = kTacticsBoardSize;
+constexpr size_t kBoardRowSize = kTacticsBoardSlotSize;
 constexpr size_t kFormationManagerSize = 0x160;
 constexpr size_t kNativeFormationBlockSize = 0x580;
 

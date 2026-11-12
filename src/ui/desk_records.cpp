@@ -10,6 +10,7 @@
 #include "game/messages.hpp"
 #include "game/schedule.hpp"
 #include "ui/manager.hpp"
+#include "ui/draw.hpp"
 #include "formats/textd.hpp"
 
 namespace bmh::ui {
@@ -18,12 +19,10 @@ namespace {
 void copy(Image& out, const Image& src, int sx, int sy, int x, int y, int w, int h) {
     if (sx < 0 || sy < 0 || x < 0 || y < 0 || sx+w>src.width || sy+h>src.height ||
         x+w>out.width || y+h>out.height) throw FormatError("desk records: Original asset bounds");
-    for(int yy=0;yy<h;++yy) for(int xx=0;xx<w;++xx)
-        out.at(x+xx,y+yy)=src.pixels[size_t(sy+yy)*size_t(src.width)+size_t(sx+xx)];
+    draw::copy_unclipped(out, src, sx, sy, x, y, w, h, -1);
 }
 void fill_rect(Image& out,int x,int y,int w,int h,uint8_t color) {
-    for(int yy=std::max(0,y);yy<std::min(out.height,y+h);++yy)
-        for(int xx=std::max(0,x);xx<std::min(out.width,x+w);++xx) out.at(xx,yy)=color;
+    draw::fill(out, x, y, w, h, color);
 }
 uint8_t source_team_color(const GameState& g,int team) {
     const size_t count=std::min<size_t>(g.manager_teams.size(),4);
@@ -43,7 +42,7 @@ uint8_t source_team_color(const GameState& g,int team) {
 
 DeskRecordsState fair_play_state_from_game(const GameState& g, int league, const Image& underlay,int manager_slot) {
     if(league<0||league>=9) throw FormatError("fair play: invalid Source league");
-    const int first=league_first_team(league), count=kLeagueSizes[league];
+    const int first=league_first_team(league), count=installed_league_system().sizes[league];
     if(first<0||count<=0||first+count>runtime_dimensions.league_teams||g.club_ids.size()<size_t(first+count))
         throw FormatError("fair play: incomplete Source league");
     std::vector<int> teams;for(int i=0;i<count;++i)teams.push_back(first+i);
@@ -83,7 +82,7 @@ DeskRecordsScreen::DeskRecordsScreen(const std::filesystem::path& data,DeskRecor
     if(state_.kind==DeskRecordKind::fair_play) {
         kb56_=load_vga(asset_path(data/"KB","56.VGA"));
         const int bottom=int(state_.fair_play_rows.size())*9+38;
-        if(state_.league<0||(!state_.explicit_teams&&(state_.league>=9||state_.fair_play_rows.size()!=size_t(kLeagueSizes[state_.league])))||state_.fair_play_rows.empty()||state_.fair_play_rows.size()>20||
+        if(state_.league<0||(!state_.explicit_teams&&(state_.league>=9||state_.fair_play_rows.size()!=size_t(installed_league_system().sizes[state_.league])))||state_.fair_play_rows.empty()||state_.fair_play_rows.size()>20||
            kb56_.width<296||kb56_.height<9+(bottom-28-1))
             throw FormatError("fair play: incomplete Original view");
     } else if(state_.highscore.ranked) {

@@ -8,6 +8,8 @@
 
 namespace bmh::ui {
 
+// Desk records page (desk menu kinds 25 and 26). Only opens while the desktop's pending request is exactly the
+// given open_menu owner (same manager slot and revision) and no other child view is active; a mismatch throws.
 void StartupFlow::show_desk_records(DeskRecordsState state,const DeskRequest& owner) {
     if(!desktop_||!engine_attached_||in_preparation_menu()||in_readonly_view()||matchday_results_||
        !desktop_->pending()||*desktop_->pending()!=owner||owner.kind!=DeskRequestKind::open_menu||
@@ -18,6 +20,10 @@ void StartupFlow::show_desk_records(DeskRecordsState state,const DeskRequest& ow
     desktop_->resolve_local_menu();desk_records_=std::move(screen);
 }
 
+// finish_*_input family: called after a child page handled a click or key. If the page now holds a pending
+// action, it is wrapped into a FlowResult request so the engine can answer it (the answer then comes back through
+// the matching acknowledge_*/close_*/reject_* method below); without a pending action only the redraw flag is
+// returned. The Strengths page additionally redirects its league-family actions (pairings, table, close).
 FlowResult StartupFlow::finish_strengths_input(bool changed) {
     if(const auto* pending=pending_strengths()) {
         if(pending->kind==StrengthsAction::pairings||pending->kind==StrengthsAction::table||
@@ -35,6 +41,7 @@ FlowResult StartupFlow::finish_strengths_input(bool changed) {
     }
     return {changed};
 }
+// Top scorers page: forward its pending action (metric, scope or close) as a request.
 FlowResult StartupFlow::finish_top_scorers_input(bool changed) {
     if(const auto* pending=pending_top_scorers()) {
         FlowResult result{changed,FlowRequest::top_scorers_action};
@@ -43,6 +50,7 @@ FlowResult StartupFlow::finish_top_scorers_input(bool changed) {
     }
     return {changed};
 }
+// Opportunities page: forward its pending action (mode change or close) as a request.
 FlowResult StartupFlow::finish_opportunities_input(bool changed) {
     if(const auto* pending=pending_opportunities()) {
         FlowResult result{changed,FlowRequest::opportunities_action};
@@ -50,6 +58,7 @@ FlowResult StartupFlow::finish_opportunities_input(bool changed) {
     }
     return {changed};
 }
+// Statistics menu (menu 23): forward the pending selection or close as a request.
 FlowResult StartupFlow::finish_statistics_menu_input(bool changed) {
     if(const auto* pending=pending_statistics_menu()) {
         FlowResult result{changed,FlowRequest::statistics_menu_action};
@@ -57,6 +66,7 @@ FlowResult StartupFlow::finish_statistics_menu_input(bool changed) {
     }
     return {changed};
 }
+// Statistics sub-pages without their own screen request type (all-time, world cup, finance, series): forwards the stored page action.
 FlowResult StartupFlow::finish_statistics_page_input(bool changed) {
     if(statistics_page_action_) {
         FlowResult result{changed,FlowRequest::statistics_page_action};
@@ -65,6 +75,7 @@ FlowResult StartupFlow::finish_statistics_page_input(bool changed) {
     }
     return {changed};
 }
+// Statistics rankings (history) page: forward the pending category selection or close as a request.
 FlowResult StartupFlow::finish_statistics_rankings_input(bool changed) {
     if(const auto* pending=pending_statistics_rankings()) {
         FlowResult result{changed,FlowRequest::statistics_rankings_action};
@@ -72,6 +83,7 @@ FlowResult StartupFlow::finish_statistics_rankings_input(bool changed) {
     }
     return {changed};
 }
+// Analytics page: forward the pending preference change or close as a request.
 FlowResult StartupFlow::finish_analytics_input(bool changed) {
     if (const auto* pending = pending_analytics()) {
         FlowResult result{changed, FlowRequest::analytics_action};
@@ -80,12 +92,14 @@ FlowResult StartupFlow::finish_analytics_input(bool changed) {
     }
     return {changed};
 }
+// Balance page: forward the pending calculator, close or close-confirmation action as a request.
 FlowResult StartupFlow::finish_balance_input(bool changed) {
     if(const auto* pending=pending_balance()) {
         FlowResult result{changed,FlowRequest::balance_action};result.balance_action=*pending;return result;
     }
     return {changed};
 }
+// Other games page: forward the pending view action (selector, round, mode, team info, close) as a request.
 FlowResult StartupFlow::finish_other_games_input(bool changed) {
     if (const auto* pending = pending_other_games_action()) {
         FlowResult result{changed, FlowRequest::other_games_action};
@@ -94,17 +108,28 @@ FlowResult StartupFlow::finish_other_games_input(bool changed) {
     }
     return {changed};
 }
+// Identity checks shared by the Strengths and Other games acknowledgements. Both compare the page identity that
+// the engine echoed back against the desk as it was before the request, then require that the new desk differs
+// from the old one only in its revision.
 namespace {
+// Throws unless the desk acknowledgement belongs to the Strengths page identity: the new desk revision must be
+// the old one plus one and equal to the page's revision; manager slot, runtime club and day counter must match
+// the old desk; and the club identity must equal the desk's session identity key for that manager (at the
+// national-coach desk that is the national team's identity, not the manager's own club identity). Afterwards the
+// old desk with only the revision replaced must serialize identically to the new desk.
 void validate_strengths_preparation(const StrengthsIdentity& id,const DeskState& before,const PreparationState& next) {
     if(next.desktop.revision!=before.revision+1||next.desktop.revision!=id.revision||
        id.manager!=before.manager_slot||id.runtime_club!=before.runtime_club||id.day_counter!=before.day_counter||
        id.manager<0||size_t(id.manager)>=before.managers.size()||
-       id.club_identity!=before.managers[size_t(id.manager)].club_identity_key)
+       id.club_identity!=before.session_identity_key(size_t(id.manager)))
         throw FormatError("strengths: mismatched desk acknowledgement");
     auto expected=before;expected.revision=id.revision;
     if(desk_json(expected)!=desk_json(next.desktop))throw FormatError("strengths: unrelated desk state changed");
     validate_preparation_context(next);
 }
+// Same contract for the Other games page. Here the runtime team and the club identity are compared against the
+// desk's runtime club and against the manager's own club_identity_key (not the session identity key used for
+// Strengths), so for a national coach this key may differ from the runtime club the desk shows.
 void validate_other_games_preparation(const OtherGamesIdentity& id, const DeskState& before,
                                      const PreparationState& next) {
     if (next.desktop.revision != before.revision + 1 || next.desktop.revision != id.revision ||
@@ -120,6 +145,9 @@ void validate_other_games_preparation(const OtherGamesIdentity& id, const DeskSt
     validate_preparation_context(next);
 }
 }
+// Opens the Strengths page (desk menu 2). The desktop's pending request must be this open_menu owner and the
+// page identity must be a fresh one (sequence 0, with a scope); the desk acknowledgement is validated before
+// the page, the new desk and the preparation state replace the old ones. It also starts the league family.
 void StartupFlow::show_strengths(StrengthsState page,PreparationState preparation,const DeskRequest& owner) {
     if(!desktop_||!engine_attached_||in_preparation_menu()||in_readonly_view()||matchday_results_||
        !desktop_->pending()||*desktop_->pending()!=owner||owner.kind!=DeskRequestKind::open_menu||
@@ -133,6 +161,8 @@ void StartupFlow::show_strengths(StrengthsState page,PreparationState preparatio
     desktop_->resolve_local_menu();desktop_=std::move(desk);preparation_=std::move(next);strengths_=std::move(screen);
     league_family_identity_=strengths_->state().identity;league_family_child_=3;
 }
+// League family (Strengths, pairings, table are siblings of one family): drops whichever child page is active
+// and the family-table dialog and dispatch state so the next child can be installed. Needs an active child.
 void StartupFlow::replace_family_child() {
     if(!league_family_identity_||!league_family_child_)
         throw FormatError("league family: no active child to replace");
@@ -143,12 +173,17 @@ void StartupFlow::replace_family_child() {
     family_table_source_clock_anchor_valid_=false;family_table_reset_clock_after_present_=false;
     family_table_release_barrier_=false;
 }
+// Returns the league-family request waiting for the engine, looking at the stored dispatch, the pairings page and the table, in that order.
 const LeagueFamilyRequest* StartupFlow::pending_league_family_action() const {
     if(family_table_dispatch_pending_)return &*family_table_dispatch_pending_;
     if(const auto* pairing=pending_pairings_family_action())return pairing;
     if(league_table_&&league_table_->pending_family_action())return &*league_table_->pending_family_action();
     return nullptr;
 }
+// Strengths page reached from inside the league family (switch of the family child). Every identity field that
+// belongs to the family (manager, runtime club, club identity, day counter, family id, league group, source
+// parameter, default league) must equal the stored family identity; a mismatch throws. The desk acknowledgement
+// is then validated like for a normally opened Strengths page.
 void StartupFlow::show_family_strengths(StrengthsState page,PreparationState preparation) {
     if(!desktop_||!engine_attached_||!league_family_identity_||
        page.identity.manager!=league_family_identity_->manager||
@@ -168,6 +203,9 @@ void StartupFlow::show_family_strengths(StrengthsState page,PreparationState pre
     replace_family_child();desktop_=std::move(desk);preparation_=std::move(next);
     strengths_=std::move(screen);league_family_identity_=page.identity;league_family_child_=3;
 }
+// Opens the top scorers page (desk menu 20). Besides the owner checks, the page identity must match the desk
+// (manager slot, runtime club, day counter, manager's own club identity) and carry revision + 1; the desk
+// acknowledgement may differ from the old desk only in its revision.
 void StartupFlow::show_top_scorers(TopScorersState page,PreparationState preparation,const DeskRequest& owner) {
     if(!desktop_||!engine_attached_||in_preparation_menu()||in_readonly_view()||matchday_results_||
        !desktop_->pending()||*desktop_->pending()!=owner||owner.kind!=DeskRequestKind::open_menu||
@@ -176,7 +214,7 @@ void StartupFlow::show_top_scorers(TopScorersState page,PreparationState prepara
        page.identity.runtime_team!=desktop_->state().runtime_club||
        page.identity.day_counter!=desktop_->state().day_counter||
        page.identity.revision!=desktop_->state().revision+1||page.identity.sequence!=0||!page.identity.scope||
-       page.identity.club_identity!=int(desktop_->state().managers.at(size_t(owner.manager_slot)).club_identity_key))
+       page.identity.club_identity!=int(desktop_->state().managers[size_t(owner.manager_slot)].club_identity_key))
         throw FormatError("top scorers: mismatched opening acknowledgement");
     if(preparation.desktop.revision!=page.identity.revision||preparation.desktop.manager_slot!=owner.manager_slot||
        preparation.desktop.runtime_club!=desktop_->state().runtime_club||
@@ -191,6 +229,9 @@ void StartupFlow::show_top_scorers(TopScorersState page,PreparationState prepara
     auto next=std::make_unique<PreparationState>(std::move(preparation));
     desktop_->resolve_local_menu();desktop_=std::move(desk);preparation_=std::move(next);top_scorers_=std::move(screen);
 }
+// Top scorers: answer to a metric or scope change. The expected identity is the pending request's identity with
+// revision and sequence each advanced by one, and the page's metric and scope must be the requested ones (or
+// the unchanged ones). Close requests are refused here; they go through close_top_scorers.
 void StartupFlow::acknowledge_top_scorers(TopScorersState page,PreparationState preparation) {
     const auto* pending=pending_top_scorers();
     auto expected_id=pending?pending->identity:TopScorersIdentity{};
@@ -214,6 +255,8 @@ void StartupFlow::acknowledge_top_scorers(TopScorersState page,PreparationState 
     auto next=std::make_unique<PreparationState>(std::move(preparation));
     desktop_=std::move(desk);preparation_=std::move(next);top_scorers_=std::move(screen);
 }
+// Top scorers: answer to a close request. Requires a pending close; the page identity must be the pending one
+// advanced by one revision and one sequence, and the page must still show the same metric and scope.
 void StartupFlow::close_top_scorers(TopScorersState page,PreparationState preparation) {
     const auto* pending=pending_top_scorers();
     if(!pending||!desktop_||!top_scorers_||pending->action!=TopScorersAction::close)
@@ -234,10 +277,15 @@ void StartupFlow::close_top_scorers(TopScorersState page,PreparationState prepar
     auto next=std::make_unique<PreparationState>(std::move(preparation));
     desktop_=std::move(desk);preparation_=std::move(next);top_scorers_.reset();
 }
+// Top scorers: the engine refused the pending action; the page shows the reason and drops the request.
 void StartupFlow::reject_top_scorers(std::string reason) {
     if(!top_scorers_)throw FormatError("top scorers: missing rejection owner");
     top_scorers_->reject_action(std::move(reason));
 }
+// Opens the Opportunities page (desk menu 23). It is opened either from the desktop's pending request or from
+// the statistics menu that has returned to the idle desk (then the menu's owner must match). The identity is
+// compared with the desk using the session identity key. Opening it closes any statistics sub-page and keeps
+// the statistics menu, whose owner revision (and a national-friendly picker's) is moved to the new revision.
 void StartupFlow::show_opportunities(OpportunitiesState page,PreparationState preparation,const DeskRequest& owner) {
     const bool desktop_pending=desktop_&&desktop_->pending()&&*desktop_->pending()==owner;
     const bool returned_selector=statistics_menu_&&statistics_menu_->state().owner==owner&&desktop_&&
@@ -247,7 +295,7 @@ void StartupFlow::show_opportunities(OpportunitiesState page,PreparationState pr
        owner.manager_slot!=desktop_->state().manager_slot||owner.revision!=desktop_->state().revision||
        page.identity.manager_slot!=owner.manager_slot||page.identity.runtime_team!=desktop_->state().runtime_club||
        page.identity.day_counter!=desktop_->state().day_counter||page.identity.revision!=desktop_->state().revision+1||
-       page.identity.sequence!=0||page.identity.stable_club_identity!=int(desktop_->state().managers.at(size_t(owner.manager_slot)).club_identity_key))
+       page.identity.sequence!=0||page.identity.stable_club_identity!=int(desktop_->state().session_identity_key(size_t(owner.manager_slot))))
         throw FormatError("opportunities: mismatched opening acknowledgement");
     if(preparation.desktop.revision!=page.identity.revision||preparation.desktop.manager_slot!=owner.manager_slot||
        preparation.desktop.runtime_club!=desktop_->state().runtime_club||preparation.desktop.day_counter!=desktop_->state().day_counter)
@@ -272,6 +320,8 @@ void StartupFlow::show_opportunities(OpportunitiesState page,PreparationState pr
         }
     }
 }
+// Statistics menu (menu 23): the selector from which the statistics sub-pages are entered. Needs the desktop's
+// pending open_menu request as owner; the transfer-history count must be 0 to 25.
 void StartupFlow::show_statistics_menu(const DeskRequest& owner, int transfer_history_count) {
     if(!desktop_||!engine_attached_||in_preparation_menu()||in_readonly_view()||matchday_results_||
        !desktop_->pending()||*desktop_->pending()!=owner||owner.kind!=DeskRequestKind::open_menu||
@@ -283,6 +333,9 @@ void StartupFlow::show_statistics_menu(const DeskRequest& owner, int transfer_hi
     auto screen=std::make_unique<StatisticsMenuScreen>(data_,StatisticsMenuState{owner,desktop_->render(),transfer_history_count,desktop_->state().gradient_text});
     statistics_menu_=std::move(screen);
 }
+// Statistics sub-page 3 (all-time table). Allowed when the menu has just selected entry 3, or when the menu
+// returned to the idle desk at the same revision; the page owner must equal the menu's owner. The same
+// selected-or-returned test guards the other show_* statistics sub-pages below (entries 4, 5, 6, 7, 8, 1, 2).
 void StartupFlow::show_alltime_table(AllTimeTableState state) {
     const bool selected=statistics_menu_&&statistics_menu_->pending()&&
         !statistics_menu_->pending()->close&&statistics_menu_->pending()->selected_index==3;
@@ -297,6 +350,8 @@ void StartupFlow::show_alltime_table(AllTimeTableState state) {
     world_cup_statistics_.reset();finance_totals_.reset();series_records_.reset();
     statistics_rankings_.reset();analytics_.reset();minute_statistics_.reset();transfer_history_.reset();
 }
+// Statistics sub-page 4 (world cup). When it serves as the national friendly picker, the projection's
+// can_select_opponent flag must agree with the picker state and the stored owners must still match the desk.
 void StartupFlow::show_world_cup_statistics(WorldCupStatisticsProjection state) {
     const bool selected=statistics_menu_&&statistics_menu_->pending()&&
         !statistics_menu_->pending()->close&&statistics_menu_->pending()->selected_index==4;
@@ -315,6 +370,9 @@ void StartupFlow::show_world_cup_statistics(WorldCupStatisticsProjection state) 
     statistics_rankings_.reset();analytics_.reset();minute_statistics_.reset();transfer_history_.reset();
 }
 
+// National friendly: opens the world cup page as an opponent picker, straight from the desk's menu-6 request.
+// Only valid for the national coach (the manager slot has no club team and runtime_team is the no-team value).
+// It stores a fresh request owner for the later booking.
 void StartupFlow::show_national_friendly_picker(WorldCupStatisticsProjection projection,
         const DeskRequest& owner, int runtime_team) {
     if (!desktop_ || !engine_attached_ || in_preparation_menu() || in_readonly_view() || matchday_results_ ||
@@ -341,6 +399,7 @@ void StartupFlow::show_national_friendly_picker(WorldCupStatisticsProjection pro
     alltime_table_.reset();finance_totals_.reset();series_records_.reset();
 }
 
+// Leaves the national friendly picker, through the statistics menu if that is still present.
 void StartupFlow::close_national_friendly_picker() {
     if(!national_friendly_picker_)return;
     if(statistics_menu_)close_statistics_menu();
@@ -352,6 +411,9 @@ void StartupFlow::close_national_friendly_picker() {
     }
 }
 
+// National friendly: the calendar step after an opponent was picked. The booking and its quote must carry the
+// picker's owner (sequence, revision, manager, team, desk menu), the quote must be in the quoted state, and the
+// calendar state must belong to the same national coach on the current desk revision; otherwise throws.
 void StartupFlow::show_national_friendly_calendar(FriendlyMatchState state,
         FriendlyQuoteProjection quote, NationalFriendlyBookingRequest booking) {
     const NationalFriendlyOwner engine_owner{national_friendly_owner_.sequence,
@@ -376,6 +438,7 @@ void StartupFlow::show_national_friendly_calendar(FriendlyMatchState state,
     statistics_menu_.reset();
     friendly_match_=std::move(screen);pending_friendly_action_.reset();
 }
+// Statistics sub-page 5 (finance totals); same selected-or-returned owner test as the other sub-pages.
 void StartupFlow::show_finance_totals(FinanceTotals state) {
     const bool selected=statistics_menu_&&statistics_menu_->pending()&&
         !statistics_menu_->pending()->close&&statistics_menu_->pending()->selected_index==5;
@@ -389,6 +452,7 @@ void StartupFlow::show_finance_totals(FinanceTotals state) {
     alltime_table_.reset();world_cup_statistics_.reset();series_records_.reset();
     statistics_rankings_.reset();analytics_.reset();minute_statistics_.reset();transfer_history_.reset();
 }
+// Statistics sub-page 6 (series records); same selected-or-returned owner test as the other sub-pages.
 void StartupFlow::show_series_records(SeriesRecordsProjection state) {
     const bool selected=statistics_menu_&&statistics_menu_->pending()&&
         !statistics_menu_->pending()->close&&statistics_menu_->pending()->selected_index==6;
@@ -402,6 +466,7 @@ void StartupFlow::show_series_records(SeriesRecordsProjection state) {
     alltime_table_.reset();world_cup_statistics_.reset();finance_totals_.reset();
     statistics_rankings_.reset();analytics_.reset();minute_statistics_.reset();transfer_history_.reset();
 }
+// Closes an idle statistics sub-page and returns to the statistics menu's own close handling.
 void StartupFlow::close_statistics_page() {
     if(!in_statistics_page()||!statistics_menu_||!desktop_)
         throw FormatError("statistics page: no idle child to close");
@@ -409,6 +474,8 @@ void StartupFlow::close_statistics_page() {
     statistics_page_action_.reset();
     close_statistics_menu();
 }
+// Statistics rankings (history) page. May open straight from the initial menu, from menu entry 7, or when
+// returning to the menu at the same revision; it must start on category 0 and season 0 for the desk's manager.
 void StartupFlow::show_statistics_rankings(StatisticsRankingState state) {
     const auto* pending=statistics_menu_&&statistics_menu_->pending()?&*statistics_menu_->pending():nullptr;
     const bool initial_menu=statistics_menu_&&desktop_&&desktop_->pending()&&
@@ -429,6 +496,7 @@ void StartupFlow::show_statistics_rankings(StatisticsRankingState state) {
     statistics_menu_->clear_pending();analytics_.reset();minute_statistics_.reset();transfer_history_.reset();statistics_rankings_=std::move(screen);
     alltime_table_.reset();world_cup_statistics_.reset();finance_totals_.reset();series_records_.reset();statistics_page_action_.reset();
 }
+// Statistics sub-page for menu entry 8 (minute statistics); same selected-or-returned owner test.
 void StartupFlow::show_minute_statistics(MinuteStatisticsProjection projection) {
     const auto* pending=statistics_menu_&&statistics_menu_->pending()?&*statistics_menu_->pending():nullptr;
     const bool selected_case8=pending&&!pending->close&&pending->selected_index==8;
@@ -444,6 +512,7 @@ void StartupFlow::show_minute_statistics(MinuteStatisticsProjection projection) 
     statistics_menu_->clear_pending();statistics_rankings_.reset();analytics_.reset();transfer_history_.reset();minute_statistics_=std::move(screen);
     alltime_table_.reset();world_cup_statistics_.reset();finance_totals_.reset();series_records_.reset();statistics_page_action_.reset();
 }
+// Statistics sub-page for menu entry 1 (transfer history); the vertical source origin must lie in 0..255.
 void StartupFlow::show_transfer_history(TransferHistoryProjection projection,
                                        const GameState& formatting_state, int source_origin_y) {
     const auto* pending=statistics_menu_&&statistics_menu_->pending()?&*statistics_menu_->pending():nullptr;
@@ -462,6 +531,7 @@ void StartupFlow::show_transfer_history(TransferHistoryProjection projection,
     transfer_history_=std::move(screen);
     alltime_table_.reset();world_cup_statistics_.reset();finance_totals_.reset();series_records_.reset();statistics_page_action_.reset();
 }
+// Statistics sub-page for menu entry 2 (analytics); its owner must equal the menu's owner and it cannot open on top of Opportunities.
 void StartupFlow::show_analytics(AnalyticsState state) {
     const auto* pending=statistics_menu_&&statistics_menu_->pending()?&*statistics_menu_->pending():nullptr;
     const bool selected=pending&&!pending->close&&pending->selected_index==2;
@@ -479,6 +549,8 @@ void StartupFlow::show_analytics(AnalyticsState state) {
     transfer_history_.reset();analytics_=std::move(screen);
     alltime_table_.reset();world_cup_statistics_.reset();finance_totals_.reset();series_records_.reset();statistics_page_action_.reset();
 }
+// Analytics: answer to a preference change. The returned flags must be the requested ones with the same
+// underlay; the page owner must advance by exactly one revision, and the desk may differ only in its revision.
 void StartupFlow::acknowledge_analytics(AnalyticsState state,PreparationState preparation) {
     const auto* pending=pending_analytics();
     if(!pending||!analytics_||!statistics_menu_||statistics_menu_->pending()||
@@ -506,15 +578,18 @@ void StartupFlow::acknowledge_analytics(AnalyticsState state,PreparationState pr
     }
     analytics_=std::move(next_screen);desktop_=std::move(next_desk);preparation_=std::move(next_preparation);
 }
+// Closes the analytics page and then the statistics menu behind it.
 void StartupFlow::close_analytics() {
     if(!analytics_)throw FormatError("analytics: no active page");
     analytics_.reset();
     if(statistics_menu_)close_statistics_menu();
 }
+// Analytics: the engine refused the pending action.
 void StartupFlow::reject_analytics() {
     if(!analytics_||!analytics_->pending())throw FormatError("analytics: no pending action");
     analytics_->reject();
 }
+// Rankings: answer to a category selection; the category must be the requested one and manager slot and underlay unchanged.
 void StartupFlow::acknowledge_statistics_rankings(StatisticsRankingState state) {
     const auto* pending=pending_statistics_rankings();
     if(!pending||pending->kind!=StatisticsRankingsRequestKind::select_category||!statistics_rankings_||
@@ -524,15 +599,18 @@ void StartupFlow::acknowledge_statistics_rankings(StatisticsRankingState state) 
         throw FormatError("statistics rankings: mismatched category acknowledgement");
     statistics_rankings_->acknowledge_category(std::move(state));
 }
+// Closes the rankings page.
 void StartupFlow::close_statistics_rankings() {
     if(!statistics_rankings_)throw FormatError("statistics rankings: no active history view");
     statistics_rankings_.reset();
 }
+// Rankings: the engine refused the pending action.
 void StartupFlow::reject_statistics_rankings() {
     if(!statistics_rankings_||!statistics_rankings_->pending())
         throw FormatError("statistics rankings: no pending action");
     statistics_rankings_->reject_action();
 }
+// Closes the statistics menu together with every statistics sub-page and the national friendly picker state.
 void StartupFlow::close_statistics_menu() {
     if(!statistics_menu_)throw FormatError("statistics menu: no active selector");
     if(desktop_&&desktop_->pending())desktop_->resolve_local_menu();
@@ -540,11 +618,14 @@ void StartupFlow::close_statistics_menu() {
     alltime_table_.reset();world_cup_statistics_.reset();finance_totals_.reset();series_records_.reset();statistics_page_action_.reset();
     national_friendly_picker_=false;national_friendly_owner_={};national_friendly_desk_owner_={};
 }
+// Statistics menu: the engine refused the pending selection; a reason is required.
 void StartupFlow::reject_statistics_menu(std::string reason) {
     if(!statistics_menu_||!statistics_menu_->pending()||reason.empty())
         throw FormatError("statistics menu: rejection requires a pending selection");
     statistics_menu_->reject(std::move(reason));
 }
+// Opportunities: answer to a mode change. Identity fields must equal the pending ones, with sequence and
+// revision each one higher, and the mode must be the requested one; the desk may differ only in its revision.
 void StartupFlow::acknowledge_opportunities(OpportunitiesState page,PreparationState preparation) {
     const auto* pending=pending_opportunities();
     if(!pending||!desktop_||pending->action==OpportunitiesAction::close||
@@ -569,6 +650,8 @@ void StartupFlow::acknowledge_opportunities(OpportunitiesState page,PreparationS
         statistics_menu_->update_owner(parent);
     }
 }
+// Opportunities: answer to a close request. The identity must be the pending one advanced once. If the page was
+// entered from the statistics menu, the menu is rebuilt with the new desk revision.
 void StartupFlow::close_opportunities(OpportunitiesState page,PreparationState preparation) {
     const auto* pending=pending_opportunities();
     if(!pending||!desktop_||pending->action!=OpportunitiesAction::close)throw FormatError("opportunities: no close acknowledgement owner");
@@ -590,6 +673,8 @@ void StartupFlow::close_opportunities(OpportunitiesState page,PreparationState p
         }
     }
 }
+// Closes an idle Opportunities page when the user switches to another statistics entry. The desk
+// acknowledgement is checked like a normal close; the parent menu then gets the new revision.
 void StartupFlow::close_opportunities_for_statistics_parent(OpportunitiesState page,PreparationState preparation) {
     if(!opportunities_||!statistics_menu_||opportunities_->pending()||!desktop_)
         throw FormatError("opportunities: parent switch requires an idle active child");
@@ -611,10 +696,14 @@ void StartupFlow::close_opportunities_for_statistics_parent(OpportunitiesState p
         national_friendly_desk_owner_.revision=owner.revision;
     }
 }
+// Opportunities: the engine refused the pending action.
 void StartupFlow::reject_opportunities(std::string reason) {
     if(!opportunities_||!opportunities_->pending())throw FormatError("opportunities: no pending action to reject");
     opportunities_->reject(std::move(reason));
 }
+// Strengths: answer to a page action. All identity fields (including family id and sequence) must equal the
+// pending request's, with sequence and revision one higher; league, group and team checks depend on the kind
+// of action (league select, group toggle, team info for a team that is on the page).
 void StartupFlow::acknowledge_strengths(StrengthsState page,PreparationState preparation) {
     const auto* pending=pending_strengths();
     if(!pending||!desktop_||pending->kind==StrengthsAction::close||
@@ -642,6 +731,7 @@ void StartupFlow::acknowledge_strengths(StrengthsState page,PreparationState pre
     desktop_=std::move(desk);preparation_=std::move(next);strengths_=std::move(screen);
     if(league_family_identity_)league_family_identity_=strengths_->state().identity;
 }
+// Strengths: answer to a close request; the identity must be the pending one advanced by one revision and sequence.
 void StartupFlow::close_strengths(StrengthsState page,PreparationState preparation) {
     const auto* pending=pending_strengths();
     if(!pending||!desktop_||pending->kind!=StrengthsAction::close)
@@ -653,6 +743,7 @@ void StartupFlow::close_strengths(StrengthsState page,PreparationState preparati
     auto next=std::make_unique<PreparationState>(std::move(preparation));
     desktop_=std::move(desk);preparation_=std::move(next);strengths_.reset();
 }
+// Strengths: the engine refused the pending action.
 void StartupFlow::reject_strengths(std::string reason) {
     if(!strengths_)throw FormatError("strengths: missing rejection owner");
     strengths_->reject_action(std::move(reason));
@@ -749,6 +840,10 @@ void StartupFlow::show_other_games(OtherGamesState page, PreparationState prepar
     other_games_ = std::move(screen);
 }
 
+// Other games: answer to a view action. For each action kind the new projection must be exactly what that
+// action implies (selected competition, linked page, wrapped round, toggled display mode, unchanged page after
+// team info) and the participant offset and view byte are derived accordingly; the full identity, including
+// the view byte, must then match the expected one. Close is refused here.
 void StartupFlow::acknowledge_other_games(OtherGamesState page, PreparationState preparation) {
     const auto* pending = pending_other_games_action();
     if (!pending || !other_games_ || !desktop_ || pending->action == OtherGamesAction::close)
@@ -860,6 +955,7 @@ void StartupFlow::acknowledge_other_games(OtherGamesState page, PreparationState
     other_games_ = std::move(screen);
 }
 
+// Other games: answer to a close request; identity advanced once and the view byte left unchanged.
 void StartupFlow::close_other_games(OtherGamesState page, PreparationState preparation) {
     const auto* pending = pending_other_games_action();
     if (!pending || !other_games_ || !desktop_ || pending->action != OtherGamesAction::close)
@@ -877,6 +973,7 @@ void StartupFlow::close_other_games(OtherGamesState page, PreparationState prepa
     other_games_.reset();
 }
 
+// Other games: the engine refused the pending action.
 void StartupFlow::reject_other_games(std::string reason) {
     if (!other_games_) throw FormatError("other games: missing rejection owner");
     other_games_->reject_action(std::move(reason));
@@ -884,6 +981,7 @@ void StartupFlow::reject_other_games(std::string reason) {
 
 
 
+// League pairings page: forward a pending family action first, otherwise the pairings action, as a request.
 FlowResult StartupFlow::finish_league_pairings_input(bool changed) {
     if(const auto* family=pending_pairings_family_action()) {
         FlowResult result{changed,FlowRequest::league_family_action};
@@ -894,6 +992,7 @@ FlowResult StartupFlow::finish_league_pairings_input(bool changed) {
     }
     return {changed};
 }
+// Friendly match question dialog timed out: forwards its expiry as a close, a new action request, or only a redraw.
 FlowResult StartupFlow::expire_friendly_question(bool release_consumed) {
     const auto* question=friendly_question_screen();
     if(!question||(!release_consumed&&question->question_held()))return {};
@@ -912,10 +1011,12 @@ FlowResult StartupFlow::expire_friendly_question(bool release_consumed) {
     }
     return {before!=state_json()};
 }
+// True while a training camp, bank or advertising page shows a notice that disappears by itself.
 bool StartupFlow::timed_notice_open() const {
     return (training_camp_&&training_camp_->timed_notice_open()) ||
         (bank_&&bank_->timed_notice_open()) || (advertising_&&advertising_->timed_notice_open());
 }
+// Dismisses the timed notice of whichever of those pages is active.
 FlowResult StartupFlow::expire_timed_notice() {
     const bool changed=training_camp_?training_camp_->expire_timed_notice():
         bank_?bank_->expire_timed_notice():advertising_?advertising_->expire_timed_notice():false;
@@ -1058,6 +1159,23 @@ FlowResult StartupFlow::process_timer_expired(int pointer_x, int pointer_y) {
     return {}; // other modal callers retain their own input owner
 }
 
+bool StartupFlow::press_hold(int x,int y) {
+    if (advertising_) return advertising_->press(x, y);
+    if (save_load_) return save_load_->press(x, y);
+    if (player_card_) return player_card_->press(x, y);   // the card covers its parent
+    if (pitch_) return pitch_->press(x, y);
+    if (lineup_) return lineup_->press(x, y);
+    if (training_camp_) return training_camp_->press(x, y);
+    if (bank_) return bank_->press(x, y);
+    if (outgoing_transfer_) return outgoing_transfer_->press(x, y);
+    if (manager_ && !desktop_) return manager_->press(x, y);
+    // the setup screen at the start of a game, and its joining variant
+    if (joining_) return !manager_ && !join_options_pending_ && !join_choice_pending_ && join_setup_ && join_setup_->press(x, y);
+    if (screen_name() == "setup") return setup_.press(x, y);
+    return false;
+}
+
+// Routes a mouse press to the active child page (checked in a fixed order); the submenu pages then forward their pending action through finish_*_input.
 FlowResult StartupFlow::pointer_down(int x,int y,bool right) {
     if(world12_friendly_||world12_friendly_release_barrier_)return world12_friendly_down(x,y,right);
     if(world12_readonly_||world12_readonly_release_barrier_)return world12_readonly_down(x,y,right);
@@ -1228,6 +1346,9 @@ FlowResult StartupFlow::pointer_down(int x,int y,bool right) {
     }
     if (environment_) return {environment_->pointer_down(x,y,right)};
     if (advertising_) return {advertising_->move(x,y)};
+    // The transfer market draws the held button pressed (Suchen, Vorschlag, Abwerben, Data ...); the action follows on the release.
+    if (transfer_market_ && !player_card_ && !outgoing_transfer_ && !toto_ && !pitch_ && !lineup_)
+        return {transfer_market_->press(x,y,right)};
     if(pitch_){
         const std::string before=pitch_->state_json();
         const auto request=pitch_->pointer_down(x,y,right);
@@ -1244,17 +1365,23 @@ FlowResult StartupFlow::pointer_down(int x,int y,bool right) {
     }
     return {};
 }
+// Opens the Balance page (desk menu 28). The page identity must be at the desk's current revision (no advance)
+// and carry the desk's session identity key for the manager, which at the national-coach desk is the national
+// team's identity. The runtime club here is the desk's own.
 void StartupFlow::show_balance(BalanceState page,const DeskRequest& owner) {
     if(!desktop_||!engine_attached_||in_preparation_menu()||in_readonly_view()||balance_||matchday_results_||
        !desktop_->pending()||*desktop_->pending()!=owner||owner.kind!=DeskRequestKind::open_menu||owner.menu_kind!=28||
        owner.manager_slot!=desktop_->state().manager_slot||owner.revision!=desktop_->state().revision||
        page.identity.manager_slot!=owner.manager_slot||page.identity.runtime_club!=desktop_->state().runtime_club||
        page.identity.day_counter!=desktop_->state().day_counter||page.identity.revision!=owner.revision||
-       page.identity.sequence!=0||!page.identity.scope||page.identity.club_identity!=int(desktop_->state().managers.at(size_t(owner.manager_slot)).club_identity_key))
+       page.identity.sequence!=0||!page.identity.scope||page.identity.club_identity!=int(desktop_->state().session_identity_key(size_t(owner.manager_slot))))
         throw FormatError("balance: mismatched opening acknowledgement");
     auto screen=std::make_unique<BalanceScreen>(data_,std::move(page));
     desktop_->resolve_local_menu();balance_=std::move(screen);
 }
+// Balance: answer to a calculator or preview action. The identity must equal the pending one with only the
+// sequence advanced, must still match the desk (revision, club identity via the session identity key) and the
+// close flag must agree with the action. Calculator position is local and is carried over.
 void StartupFlow::acknowledge_balance(BalanceState page) {
     const auto* pending=pending_balance();
     if(!pending||pending->kind==BalanceAction::confirm_close||!balance_||!desktop_||
@@ -1263,7 +1390,7 @@ void StartupFlow::acknowledge_balance(BalanceState page) {
        page.identity.revision!=pending->identity.revision||page.identity.scope!=pending->identity.scope||
        page.identity.revision!=desktop_->state().revision||page.identity.manager_slot!=desktop_->state().manager_slot||
        page.identity.runtime_club!=desktop_->state().runtime_club||page.identity.day_counter!=desktop_->state().day_counter||
-       page.identity.club_identity!=int(desktop_->state().managers.at(size_t(page.identity.manager_slot)).club_identity_key)||
+       page.identity.club_identity!=int(desktop_->state().session_identity_key(size_t(page.identity.manager_slot)))||
        page.identity.sequence!=pending->identity.sequence+1||
        (pending->kind==BalanceAction::close)!=page.pending_close)
         throw FormatError("balance: mismatched preview acknowledgement");
@@ -1273,6 +1400,8 @@ void StartupFlow::acknowledge_balance(BalanceState page) {
     page.calculator_y=balance_->state().calculator_y;
     balance_=std::make_unique<BalanceScreen>(data_,std::move(page));
 }
+// Balance: answer to a close or close-confirmation. The identity must be the pending one advanced once and
+// the pending identity must still match the desk; the new desk may differ from the old one only in the listed fields.
 void StartupFlow::close_balance(BalanceState page,PreparationState preparation) {
     const auto* pending=pending_balance();if(!pending||!balance_||!desktop_||
        (pending->kind!=BalanceAction::close&&pending->kind!=BalanceAction::confirm_close))
@@ -1281,7 +1410,7 @@ void StartupFlow::close_balance(BalanceState page,PreparationState preparation) 
     if(page.identity!=expected||pending->identity.manager_slot!=desktop_->state().manager_slot||
        pending->identity.revision!=desktop_->state().revision||pending->identity.runtime_club!=desktop_->state().runtime_club||
        pending->identity.day_counter!=desktop_->state().day_counter||
-       pending->identity.club_identity!=int(desktop_->state().managers.at(size_t(pending->identity.manager_slot)).club_identity_key)||
+       pending->identity.club_identity!=int(desktop_->state().session_identity_key(size_t(pending->identity.manager_slot)))||
        preparation.desktop.revision!=expected.revision||
        preparation.desktop.manager_slot!=expected.manager_slot||
        preparation.desktop.manager_teams!=desktop_->state().manager_teams||
@@ -1298,10 +1427,12 @@ void StartupFlow::close_balance(BalanceState page,PreparationState preparation) 
     auto prep=std::make_unique<PreparationState>(std::move(preparation));
     desktop_=std::move(desk);preparation_=std::move(prep);balance_.reset();
 }
+// Balance: the engine refused the pending action; a reason is required.
 void StartupFlow::reject_balance(std::string reason) {
     if(!balance_||reason.empty())throw FormatError("balance: missing rejection owner");
     balance_->reject_action(std::move(reason));
 }
+// Advances the balance page's time-driven part; reports a request if it changed state.
 FlowResult StartupFlow::tick_balance_source_milliseconds(uint64_t now) {
     if(world12_readonly_&&world12_readonly_->balance()){
         const bool changed=world12_readonly_->tick_balance(now);FlowResult out{changed};if(const auto* request=pending_world12_readonly()){out.request=FlowRequest::world12_readonly_action;out.world12_readonly_action=*request;}return out;
@@ -1309,31 +1440,39 @@ FlowResult StartupFlow::tick_balance_source_milliseconds(uint64_t now) {
     if(!balance_||!balance_->tick_source_milliseconds(now))return {};
     return finish_balance_input(true);
 }
+// Tells the balance page that its frame was shown at the given time.
 void StartupFlow::mark_balance_presented_source_milliseconds(uint64_t now) {
     if(world12_readonly_&&world12_readonly_->balance())world12_readonly_->mark_balance(now);else if(balance_)balance_->mark_presented_source_milliseconds(now);
 }
+// Advances the stadium calculator by source ticks; forwards any resulting request.
 FlowResult StartupFlow::tick_stadium_calculator_source_ticks(unsigned ticks) {
     if (!stadium_ || !stadium_->calculator_advance_source_ticks(ticks)) return {};
     PreparationRequest action;
     if (stadium_->pending()) action = *stadium_->pending();
     return finish_preparation_input(std::move(action), true);
 }
+// Tells the stadium calculator that its frame was shown.
 void StartupFlow::mark_stadium_calculator_presented() {
     if (stadium_) stadium_->calculator_mark_presented();
 }
+// Ends the stadium construction tip when its time is up.
 FlowResult StartupFlow::expire_stadium_tip() {
     if (!stadium_) return {};
     const auto request = stadium_->expire_construction_tip();
     if (request.kind == StadiumRequestKind::none) return {};
     return finish_preparation_input(request, true);
 }
+// Advances the pairings page's clock; forwards a request if it changed state.
 FlowResult StartupFlow::tick_league_pairings_source_seconds(uint64_t now) {
     if (!league_pairings_ || !league_pairings_->tick_source_seconds(now)) return {};
     return finish_league_pairings_input(true);
 }
+// Tells the pairings page that its frame was shown at the given time.
 void StartupFlow::mark_league_pairings_presented_source_seconds(uint64_t now) {
     if (league_pairings_) league_pairings_->mark_presented_source_seconds(now);
 }
+// Opens the league pairings page from the desk's menu-1 request; identity (manager, runtime club, revision,
+// sequence 0) must match the desk.
 void StartupFlow::show_league_pairings(LeaguePairingsState page) {
     if(!desktop_||!engine_attached_||in_preparation_menu()||in_readonly_view()||matchday_results_||
         !desktop_->pending()||desktop_->pending()->kind!=DeskRequestKind::open_menu||desktop_->pending()->menu_kind!=1||
@@ -1343,6 +1482,10 @@ void StartupFlow::show_league_pairings(LeaguePairingsState page) {
     auto next=std::make_unique<LeaguePairingsScreen>(data_,std::move(page));
     desktop_->resolve_local_menu();league_pairings_=std::move(next);
 }
+// Pairings page entered as a member of the league family (with a StrengthsIdentity). If a family is already
+// active, manager, runtime club, club identity, day counter, source parameter and family id must equal the
+// stored family identity. If no family is active yet, the entry must come from the desk's pending menu-1
+// request with a fresh identity (no family sequence, scope or sequence). Pairings is family child 2.
 void StartupFlow::show_family_league_pairings(LeaguePairingsState page,StrengthsIdentity identity) {
     if(!desktop_||!engine_attached_||matchday_results_||
        (league_family_identity_&&(identity.manager!=league_family_identity_->manager||
@@ -1364,6 +1507,10 @@ void StartupFlow::show_family_league_pairings(LeaguePairingsState page,Strengths
     league_pairings_=std::move(screen);league_family_identity_=identity;league_family_child_=2;
     if(desktop_->pending())desktop_->resolve_local_menu();
 }
+// Pairings: answer to a page action. Revision, manager, runtime club, club identity and scope must equal the
+// pending identity and the sequence must advance by one. Inside a family the supplied family identity must
+// also equal the stored one (child 2, same family id, sequence, default league, group) apart from the fields
+// that legitimately follow the page; outside a family a family identity is refused.
 void StartupFlow::acknowledge_league_pairings(LeaguePairingsState page,
                                              std::optional<StrengthsIdentity> family) {
     const auto* pending=pending_league_pairings();
@@ -1391,6 +1538,9 @@ void StartupFlow::acknowledge_league_pairings(LeaguePairingsState page,
         auto next=std::make_unique<LeaguePairingsScreen>(data_,std::move(page));league_pairings_=std::move(next);
     }
 }
+// Pairings: answer to a close request. The new desk (an engine projection) must be exactly one revision ahead
+// of the pending identity, belong to the same manager and runtime club and keep teams, day and season
+// unchanged; the page is then dropped and the desk replaced.
 void StartupFlow::close_league_pairings(PreparationState state) {
     const auto* pending=pending_league_pairings();
     if(!pending||pending->event.kind!=LeaguePairingsAction::close||!desktop_||!engine_attached_||
@@ -1405,11 +1555,14 @@ void StartupFlow::close_league_pairings(PreparationState state) {
     auto next_preparation=std::make_unique<PreparationState>(std::move(state));
     desktop_=std::move(next_desk);preparation_=std::move(next_preparation);league_pairings_.reset();
 }
+// Pairings: the engine refused the pending action.
 void StartupFlow::reject_league_pairings(std::string reason) {
     if(!league_pairings_)throw FormatError("pairings: missing rejection owner");
     league_pairings_->reject_action(std::move(reason));
 }
 
+// Transfer market: answer to a hover quote. The desk revision may stay or advance by one, the quote must carry
+// the new revision, and the new desk may differ from the old one only in its revision.
 void StartupFlow::acknowledge_transfer_market_preview(PreparationState state, TransferMarketPreview quote) {
     const auto* request = pending_transfer_market();
     if (!request || request->kind != TransferMarketRequestKind::preview_quote ||
@@ -1432,6 +1585,9 @@ void StartupFlow::acknowledge_transfer_market_preview(PreparationState state, Tr
     preparation_ = std::move(next_preparation);
 }
 
+// Opens the outgoing offer editor (or the poach editor) from the pending transfer market request. The editor
+// must repeat the request's manager, runtime club, list entry, source slot and player, and the new desk must be
+// exactly one revision ahead.
 void StartupFlow::show_transfer_offer(PreparationState preparation, OutgoingTransferEditorState editor) {
     const auto* request = pending_transfer_market();
     const bool poach=request && request->kind==TransferMarketRequestKind::open_poach;
@@ -1454,6 +1610,9 @@ void StartupFlow::show_transfer_offer(PreparationState preparation, OutgoingTran
     desktop_ = std::move(next_desktop); preparation_ = std::move(next_preparation);
 }
 
+// Transfer offer editor: answer to an editor action. The editor's manager, runtime club, list entry, source
+// slot, player and seller must equal the request's, and the revision may advance by at most one. A closed editor
+// returns to a refreshed market page.
 void StartupFlow::acknowledge_transfer_offer(PreparationState preparation, OutgoingTransferEditorState editor) {
     const auto* request = pending_transfer_offer();
     if (!request || !desktop_ || !engine_attached_ || !preparation.transfer_market ||
@@ -1481,12 +1640,14 @@ void StartupFlow::acknowledge_transfer_offer(PreparationState preparation, Outgo
     desktop_ = std::move(next_desktop); preparation_ = std::move(next_preparation);
 }
 
+// Transfer offer editor: the engine refused the pending action; a reason is required.
 void StartupFlow::reject_transfer_offer(std::string reason) {
     if (!pending_transfer_offer() || reason.empty())
         throw FormatError("transfer offer: rejection requires a pending editor action");
     outgoing_transfer_->reject_action(std::move(reason));
 }
 
+// Draws whichever child page is active; the order here decides which page wins when several exist.
 Image StartupFlow::render() const {
     if(world12_friendly_)return world12_friendly_->render();
     if(world12_readonly_)return world12_readonly_->render();
@@ -1534,6 +1695,7 @@ void StartupFlow::show_environment(EnvironmentView state, const DeskRequest& own
     environment_ = std::move(next);
 }
 
+// Opens the achievements page (desk menu 4); the state must repeat the owner request exactly.
 void StartupFlow::show_achievements(AchievementsState state,const DeskRequest& owner) {
     if(!desktop_||!engine_attached_||!desktop_->pending()||*desktop_->pending()!=owner||
        owner.kind!=DeskRequestKind::open_menu||owner.menu_kind!=4||owner.manager_slot!=desktop_->state().manager_slot||
@@ -1544,6 +1706,9 @@ void StartupFlow::show_achievements(AchievementsState state,const DeskRequest& o
     desktop_->resolve_local_menu();achievements_=std::move(next);
 }
 
+// Environment: answer to a page action. The owner must be the one stored when the page opened. If the revision
+// advanced by one, a matching desk (same manager, runtime club, day, options) must come with it; if not, the
+// revision must be unchanged and no desk may be supplied.
 void StartupFlow::acknowledge_environment(EnvironmentView state, std::optional<PreparationState> preparation) {
     const bool changed = environment_ && environment_->pending() && state.revision == environment_->state().revision + 1;
     if (!environment_ || !environment_->pending() || !desktop_ || !preparation_ ||
@@ -1572,6 +1737,7 @@ void StartupFlow::acknowledge_environment(EnvironmentView state, std::optional<P
     environment_owner_.revision = environment_->state().revision;
 }
 
+// Environment: the engine refused the pending action.
 void StartupFlow::reject_environment_action(std::string reason) {
     if (!environment_ || !environment_->pending()) throw FormatError("environment: no pending action to reject");
     environment_->reject_action(std::move(reason));
@@ -1592,6 +1758,9 @@ void StartupFlow::show_contracts(ContractsState state,std::optional<PreparationS
     contracts_ = std::move(screen);
 }
 
+// Contracts: answer to a demand request. The pending request must be request_demands, the revision advances by
+// exactly one, and the new desk (an engine projection) must equal the old one in teams, runtime club, day,
+// season, name, portrait, badge and options.
 void StartupFlow::acknowledge_contract_quote(ContractsState state, DeskState desk, PreparationState preparation) {
     if (!contracts_ || !contracts_->pending() ||
         contracts_->pending()->kind != ContractActionKind::request_demands || !desktop_ || !engine_attached_ ||
@@ -1616,18 +1785,23 @@ void StartupFlow::acknowledge_contract_quote(ContractsState state, DeskState des
     contracts_ = std::move(next_contracts);
 }
 
+// Contracts: answer to a submitted offer; shares the checks of acknowledge_contract_mutation.
 void StartupFlow::acknowledge_contract_offer(ContractsState state, DeskState desk, PreparationState preparation) {
     acknowledge_contract_mutation(std::move(state), std::move(desk), std::move(preparation), ContractActionKind::submit_offer);
 }
 
+// Contracts: answer to submitted bonuses; shares the checks of acknowledge_contract_mutation.
 void StartupFlow::acknowledge_contract_bonuses(ContractsState state, DeskState desk, PreparationState preparation) {
     acknowledge_contract_mutation(std::move(state), std::move(desk), std::move(preparation), ContractActionKind::submit_bonuses);
 }
 
+// Contracts: answer to an insurance request; shares the checks of acknowledge_contract_mutation.
 void StartupFlow::acknowledge_contract_insurance(ContractsState state, DeskState desk, PreparationState preparation) {
     acknowledge_contract_mutation(std::move(state), std::move(desk), std::move(preparation), ContractActionKind::insure_player);
 }
 
+// Common check for contract changes. The pending request kind must equal the expected one and the desk and
+// revision rules are the same as for demand quotes (one revision ahead, other desk fields unchanged).
 void StartupFlow::acknowledge_contract_mutation(ContractsState state, DeskState desk, PreparationState preparation,
                                                 ContractActionKind expected) {
     if (!contracts_ || !contracts_->pending() || contracts_->pending()->kind != expected || !desktop_ || !engine_attached_ ||
@@ -1655,12 +1829,16 @@ void StartupFlow::acknowledge_contract_mutation(ContractsState state, DeskState 
     contracts_ = std::move(next_contracts);
 }
 
+// Contracts: the engine refused the pending request; a reason is required.
 void StartupFlow::reject_contract_action(std::string reason) {
     if (!contracts_ || !contracts_->pending() || reason.empty())
         throw FormatError("contracts: rejection requires a pending request");
     contracts_->reject(std::move(reason));
 }
 
+// Turns a request from the desk into a flow action: end session and kickoff are passed on, the save and load
+// menus open locally, and the preparation menus (3, 13 to 18, 22) open their screen from the stored
+// preparation state. Anything else is forwarded as a desk action to the engine.
 FlowResult StartupFlow::route_desk(DeskRequest action) {
     if (action.kind == DeskRequestKind::none) return {};
     if (action.kind == DeskRequestKind::end_session) return {true, FlowRequest::end_session, action};
@@ -1738,6 +1916,10 @@ FlowResult StartupFlow::route_desk(DeskRequest action) {
             action, std::move(entry)};
 }
 
+// Common tail of input handling for the preparation pages (lineup, pitch, player card, training, camp, bank,
+// stadium, toto, transfer market, tactics). Opens local child pages (player card, pitch), closes a page that
+// asked to close (copying its state back into the preparation state), and otherwise forwards the pending
+// request to the engine.
 FlowResult StartupFlow::finish_preparation_input(PreparationRequest action, bool changed) {
     if(world12_market_identity_)return finish_world12_market_input(std::move(action),changed);
     if (player_card_) {
@@ -1829,16 +2011,21 @@ bool StartupFlow::matches_pending_lineup(const LineupRequest& request) const {
            lineup_request_json(*lineup_->pending()) == lineup_request_json(request);
 }
 
+// True when the given request is the pitch page's pending request (compared through its JSON form).
 bool StartupFlow::matches_pending_pitch(const PitchRequest& request) const {
     return pitch_ && pitch_->pending() &&
            pitch_request_json(*pitch_->pending()) == pitch_request_json(request);
 }
 
+// True when the given request is the stadium page's pending request (compared through its JSON form).
 bool StartupFlow::matches_pending_stadium(const StadiumRequest& request) const {
     return stadium_ && stadium_->pending() &&
            stadium_request_json(*stadium_->pending()) == stadium_request_json(request);
 }
 
+// Stores a preparation state while the attached desk is idle. The desk in it must be an engine projection that
+// serializes identically to the current desk (same revision); every screen is built once beforehand so a bad
+// projection throws before anything is replaced.
 void StartupFlow::attach_preparation_context(PreparationState state) {
     if (!desktop_ || !engine_attached_ || desktop_->pending() || in_preparation_menu() || in_readonly_view() ||
         state.desktop.source != "engine_projection" || desk_json(state.desktop) != desk_json(desktop_->state()))
@@ -1856,6 +2043,7 @@ void StartupFlow::attach_preparation_context(PreparationState state) {
     preparation_ = std::make_unique<PreparationState>(std::move(state));
 }
 
+// Shows the matchday results on an idle, prepared engine desk; only one results page at a time.
 void StartupFlow::show_matchday_results(MatchdayResults results) {
     if (!desktop_ || !engine_attached_ || desktop_->pending() || !preparation_ ||
         in_preparation_menu() || in_readonly_view() || matchday_results_)
@@ -1864,6 +2052,7 @@ void StartupFlow::show_matchday_results(MatchdayResults results) {
     matchday_results_ = std::move(screen);
 }
 
+// Opens the league table screen (desk menu 0) outside the league family; every table must belong to the desk's manager slot.
 void StartupFlow::show_league_tables(std::array<LeagueTableState, 9> tables, int initial_league) {
     if (!desktop_ || !engine_attached_ || in_preparation_menu() || in_readonly_view() || matchday_results_ ||
         !desktop_->pending() || desktop_->pending()->kind != DeskRequestKind::open_menu ||
@@ -1875,6 +2064,10 @@ void StartupFlow::show_league_tables(std::array<LeagueTableState, 9> tables, int
     desktop_->resolve_local_menu();
     league_table_ = std::move(screen);
 }
+// Table page entered as a member of the league family (family child 1). An active family requires manager,
+// runtime club, club identity, day counter, source parameter, family id and default league to equal the stored
+// identity; without an active family the entry must come from the desk's pending menu-0 request with a fresh
+// identity. When a preparation state is supplied, its desk acknowledgement is validated like for Strengths.
 void StartupFlow::show_family_league_tables(std::array<LeagueTableState, 9> tables,
                                             int initial_league,StrengthsIdentity identity,
                                             std::optional<PreparationState> preparation) {
@@ -1911,6 +2104,13 @@ void StartupFlow::show_family_league_tables(std::array<LeagueTableState, 9> tabl
     if(desk) {desktop_=std::move(desk);preparation_=std::move(next);}
     if(desktop_->pending())desktop_->resolve_local_menu();
 }
+// Installs a Table page (and optionally a range dialog) answering a family request, with the longest chain of
+// checks in this file. In order: the dialog profile and its stage must come together; the identity must match
+// the stored family, and the desk's manager slot, runtime club and session identity key (at the national-coach
+// desk the identity key belongs to the national team, while the desk's own runtime club is separate);
+// the request that authorizes this answer must be the one currently owned by the active child, with the family
+// sequence advanced by one; for the Table child, the kind of request decides whether a modal or forecast must
+// follow; the dialog profile must be plausible; and a changed desk must pass the Strengths preparation check.
 void StartupFlow::show_family_table_dispatch(std::array<LeagueTableState, 9> tables,
         int initial_league, StrengthsIdentity identity,
         std::optional<TableRangeDialogProfile> dialog,
@@ -1933,7 +2133,7 @@ void StartupFlow::show_family_table_dispatch(std::array<LeagueTableState, 9> tab
         throw FormatError("league family: mismatched Table dispatch identity");
     if(identity.manager<0||size_t(identity.manager)>=desktop_->state().managers.size()||
        identity.manager!=desktop_->state().manager_slot||identity.runtime_club!=desktop_->state().runtime_club||
-       identity.club_identity!=int(desktop_->state().managers[size_t(identity.manager)].club_identity_key))
+       identity.club_identity!=int(desktop_->state().session_identity_key(size_t(identity.manager))))
         throw FormatError("league family: invalid Table dispatch manager identity");
     if(!league_family_identity_&&(!desktop_->pending()||
        desktop_->pending()->kind!=DeskRequestKind::open_menu||desktop_->pending()->menu_kind!=(friendly_entry?6:0)||
@@ -1941,6 +2141,7 @@ void StartupFlow::show_family_table_dispatch(std::array<LeagueTableState, 9> tab
        identity.day_counter!=desktop_->state().day_counter||identity.source_param2!=0||
        identity.revision!=desktop_->state().revision||identity.family_sequence||identity.scope||identity.sequence))
         throw FormatError("league family: invalid Table dispatch desktop entry");
+    // Family already active: find the pending request of the current child that authorizes this answer.
     if(league_family_identity_) {
         const auto& prior=*league_family_identity_;
         if(league_family_child_==0) {
@@ -2091,6 +2292,10 @@ void StartupFlow::show_family_table_dispatch(std::array<LeagueTableState, 9> tab
     family_table_source_clock_anchor_=0;
     if(friendly_entry)friendly_table_active_=true;
 }
+// Table page: answer to a league selector or league-group toggle that keeps the same league, handled in place
+// so the visible table frame is kept. The accepted identity must equal the old request's identity in every field
+// except the family sequence (plus one) and the league group (flipped only for a toggle); no dialog, dispatch
+// or forecast may be pending. Any difference throws.
 void StartupFlow::acknowledge_family_selector(const LeagueFamilyRequest& old_request,
     const StrengthsIdentity& accepted_identity) {
     const auto* pending=pending_league_family_action();
@@ -2131,6 +2336,9 @@ void StartupFlow::acknowledge_family_selector(const LeagueFamilyRequest& old_req
     family_table_source_clock_anchor_=0;
 }
 
+// Called after the family table frame was shown. With a range dialog open it reports the dialog outcome as a
+// table_range_result request; with a forecast waiting it reports table_forecast_presented. Either request is
+// stored as the pending dispatch the engine has to answer.
 FlowResult StartupFlow::after_family_table_present(uint64_t absolute_source_units) {
     if(family_table_dispatch_pending_||!in_family_table())return {};
     if(family_table_range_dialog_) {
@@ -2160,12 +2368,15 @@ FlowResult StartupFlow::after_family_table_present(uint64_t absolute_source_unit
     }
     return {};
 }
+// Toto page: reports whether showing its frame changed the page.
 FlowResult StartupFlow::after_toto_present(uint64_t source_units) {
     return {toto_ && toto_->after_present(source_units)};
 }
+// Toto page: advances its time-driven state.
 FlowResult StartupFlow::tick_toto_source_units(uint64_t source_units) {
     return {toto_ && toto_->tick_source_units(source_units)};
 }
+// Family table range dialog: feeds it the time elapsed since the last tick (needs a valid clock anchor and no pending dispatch).
 FlowResult StartupFlow::tick_family_table_source_units(uint64_t absolute_source_units) {
     if(!family_table_range_dialog_||family_table_dispatch_pending_||!family_table_source_clock_anchor_valid_||
        family_table_reset_clock_after_present_)return {};
@@ -2175,12 +2386,17 @@ FlowResult StartupFlow::tick_family_table_source_units(uint64_t absolute_source_
     return {family_table_range_dialog_->tick_source_units(uint32_t(std::min<uint64_t>(elapsed,
         std::numeric_limits<uint32_t>::max())))};
 }
+// Family table range dialog: cancels it on the back event unless a dispatch is already pending.
 FlowResult StartupFlow::cancel_family_table_from_source_event() {
     if(!family_table_range_dialog_||family_table_dispatch_pending_)return {};
     const bool changed=family_table_range_dialog_->cancel_from_source_event();
     if(changed)family_table_reset_clock_after_present_=true;
     return {changed};
 }
+// Starts the league family at the desk (child 0). The identity must be a fresh one for the desk's manager slot,
+// runtime club, day and revision, and its club identity must equal the desk's session identity key for that
+// manager (at the national-coach desk this is the national team's identity, which can differ from the manager's
+// own club identity).
 void StartupFlow::begin_league_family(StrengthsIdentity identity) {
     if(!desktop_||!engine_attached_||league_family_identity_||identity.manager!=desktop_->state().manager_slot||
        identity.runtime_club!=desktop_->state().runtime_club||identity.day_counter!=desktop_->state().day_counter||
@@ -2188,10 +2404,11 @@ void StartupFlow::begin_league_family(StrengthsIdentity identity) {
        identity.family_id==0)
         throw FormatError("league family: invalid desktop entry identity");
     if(identity.manager<0||size_t(identity.manager)>=desktop_->state().managers.size()||
-       identity.club_identity!=int(desktop_->state().managers[size_t(identity.manager)].club_identity_key))
+       identity.club_identity!=int(desktop_->state().session_identity_key(size_t(identity.manager))))
         throw FormatError("league family: invalid manager identity");
     league_family_identity_=identity;league_family_child_=0;
 }
+// Friendly table: answer to choosing the own club's row; the pending family request must still be the stored one.
 void StartupFlow::acknowledge_friendly_own_club(const LeagueFamilyRequest& pending,StrengthsIdentity accepted) {
     const auto* action=pending_league_family_action();
     if(!friendly_table_active_||!league_table_||!league_family_identity_||!action||*action!=pending||
@@ -2200,6 +2417,9 @@ void StartupFlow::acknowledge_friendly_own_club(const LeagueFamilyRequest& pendi
     league_table_->acknowledge_friendly_own_club(accepted);league_family_identity_=accepted;
     family_table_release_barrier_=false;
 }
+// Friendly table: answer to choosing an opponent. The request must be a select_opponent; the opponent must be
+// a real team other than the own one, in the requested league, and the friendly state must agree with the new
+// desk (revision, manager slot, runtime club). The family is then closed and the friendly page opened.
 void StartupFlow::complete_friendly_opponent_table(const LeagueFamilyRequest& pending,
         FriendlyMatchState friendly,PreparationState preparation) {
     const auto* action=pending_league_family_action();
@@ -2216,6 +2436,9 @@ void StartupFlow::complete_friendly_opponent_table(const LeagueFamilyRequest& pe
     close_league_family(close,std::move(preparation));
     friendly_match_=std::move(screen);pending_friendly_action_.reset();
 }
+// League family: answer to a close request from any child. The request must come from the active child and
+// carry the stored manager, runtime club and family id; the new desk must be one revision ahead and keep teams,
+// day and season. All family children and dialog state are then dropped.
 void StartupFlow::close_league_family(const LeagueFamilyRequest& pending,PreparationState state) {
     if(pending.kind!=LeagueFamilyRequestKind::close||pending.target_child!=0||!desktop_||
        !league_family_identity_||pending.from_child!=league_family_child_||
@@ -2244,6 +2467,8 @@ void StartupFlow::close_league_family(const LeagueFamilyRequest& pending,Prepara
     friendly_table_active_=false;
     family_table_release_barrier_=false;
 }
+// League family: the engine refused a request. A stored dispatch (range dialog result or forecast) is undone
+// locally; otherwise the active child (table, pairings or strengths) shows the reason.
 void StartupFlow::reject_league_family(std::string reason) {
     if(reason.empty())throw FormatError("league family: rejection requires a reason");
     if(family_table_dispatch_pending_) {
@@ -2274,6 +2499,8 @@ void StartupFlow::reject_league_family(std::string reason) {
     else throw FormatError("league family: missing pending child request");
 }
 
+// Opens the calendar (desk menus 7 and 8). The current day of the calendar must have the desk's season day
+// and day counter; the owner must be the desk's pending request.
 void StartupFlow::show_calendar(CalendarState state, const DeskRequest& owner) {
     if (!desktop_ || !engine_attached_ || in_preparation_menu() || in_readonly_view() || matchday_results_ ||
         !desktop_->pending() || *desktop_->pending() != owner || owner.kind != DeskRequestKind::open_menu ||
@@ -2290,6 +2517,7 @@ void StartupFlow::show_calendar(CalendarState state, const DeskRequest& owner) {
     calendar_ = std::move(screen);
 }
 
+// Opens the indoor standings (desk menu 9); the state must repeat the owner request exactly.
 void StartupFlow::show_indoor_standings(IndoorStandingsState state, const DeskRequest& owner) {
     if (!desktop_ || !engine_attached_ || in_preparation_menu() || in_readonly_view() || matchday_results_ ||
         !desktop_->pending() || *desktop_->pending() != owner || owner.kind != DeskRequestKind::open_menu ||
@@ -2301,6 +2529,8 @@ void StartupFlow::show_indoor_standings(IndoorStandingsState state, const DeskRe
     indoor_standings_ = std::move(next);
 }
 
+// Calendar: answer to a reschedule. The owner must be menu 7 for the same manager and revision as the new
+// desk, which must be newer than the calendar's owner and equal the preparation state's desk.
 void StartupFlow::acknowledge_reschedule(CalendarState state, DeskRequest owner, DeskState desktop,
                                          PreparationState preparation) {
     if (!calendar_ || !pending_reschedule_action() || owner.menu_kind != 7 ||
@@ -2316,11 +2546,14 @@ void StartupFlow::acknowledge_reschedule(CalendarState state, DeskRequest owner,
     preparation_ = std::move(next_preparation);
 }
 
+// Calendar: the engine refused the pending reschedule.
 void StartupFlow::reject_reschedule() {
     if (!calendar_ || !pending_reschedule_action()) throw FormatError("calendar: no pending reschedule action");
     calendar_->reject_reschedule();
 }
 
+// Friendly match booking for a club (desk menu 6). The state's runtime team must equal the desk's own runtime
+// club; the national coach has no club team and uses the national friendly picker and calendar above instead.
 void StartupFlow::show_friendly_match(FriendlyMatchState state, int menu_kind) {
     if (!desktop_ || !engine_attached_ || in_preparation_menu() || in_readonly_view() || matchday_results_ ||
         !desktop_->pending() || desktop_->pending()->kind != DeskRequestKind::open_menu ||
@@ -2335,6 +2568,7 @@ void StartupFlow::show_friendly_match(FriendlyMatchState state, int menu_kind) {
     pending_friendly_action_.reset();
 }
 
+// Opens the mailbox (desk menu 63); manager slot and revision must equal the desk's.
 void StartupFlow::show_mailbox(MailboxState state) {
     if (!desktop_ || !engine_attached_ || in_preparation_menu() || in_readonly_view() || matchday_results_ ||
         !desktop_->pending() || desktop_->pending()->kind != DeskRequestKind::open_menu ||
@@ -2347,6 +2581,8 @@ void StartupFlow::show_mailbox(MailboxState state) {
     mailbox_ = std::move(screen);
 }
 
+// Opens the settings page (desk menu 19). With an owner sequence the new state is one revision ahead of the
+// desk and the owner must be the matching menu-19 request; without one the revisions are equal.
 void StartupFlow::show_settings(SettingsState state, uint64_t owner_sequence, DeskRequest owner) {
     if (!desktop_ || !engine_attached_ || in_preparation_menu() || in_readonly_view() || matchday_results_ ||
         !desktop_->pending() || desktop_->pending()->kind != DeskRequestKind::open_menu ||
@@ -2381,6 +2617,9 @@ void StartupFlow::show_advertising(AdvertisingState state,std::optional<Preparat
     ++advertising_generation_;
 }
 
+// Advertising: answer to a page action. The request, the old desk and the new state must share manager slot and
+// runtime club, the state must be exactly one revision ahead, and the new desk must keep teams, day, season,
+// name, portrait, badge and options. Only an accepted offer reopens the offers list.
 void StartupFlow::acknowledge_advertising(AdvertisingState state, DeskState desk, PreparationState preparation) {
     if (!advertising_ || !advertising_->pending() || !desktop_ || !engine_attached_)
         throw FormatError("advertising: acknowledgement requires a pending action");
@@ -2414,12 +2653,16 @@ void StartupFlow::acknowledge_advertising(AdvertisingState state, DeskState desk
     ++advertising_generation_;
 }
 
+// Advertising: the engine refused the pending action; a reason is required.
 void StartupFlow::reject_advertising_action(std::string reason) {
     if (!advertising_ || !advertising_->pending() || reason.empty())
         throw FormatError("advertising: rejection requires a pending action");
     advertising_->reject_action(std::move(reason));
 }
 
+// Input tail for the read-only pages (mailbox, calendar, table, settings, advertising): a close request closes
+// the page (the mailbox first reports a close request to the engine), and a changed page with a pending
+// action forwards that action as a request.
 FlowResult StartupFlow::finish_readonly_input(bool changed) {
     if (mailbox_ && mailbox_->close_requested()) {
         if (!pending_mailbox_close_)
@@ -2458,6 +2701,8 @@ FlowResult StartupFlow::finish_readonly_input(bool changed) {
     return {changed};
 }
 
+// Mailbox: answer to a mailbox action. The new state must be one revision ahead of the desk and the pending
+// request, and the new desk must keep manager slot, runtime club, day, season, name, portrait, badge and options.
 void StartupFlow::acknowledge_mailbox(MailboxState state, PreparationState preparation) {
     if (!mailbox_ || !mailbox_->pending() || !desktop_ || !engine_attached_ ||
         state.manager_slot != desktop_->state().manager_slot ||
@@ -2486,10 +2731,13 @@ void StartupFlow::acknowledge_mailbox(MailboxState state, PreparationState prepa
     mailbox_ = std::move(screen);
 }
 
+// Mailbox: the engine refused the pending action.
 void StartupFlow::reject_mailbox(std::string reason) {
     if (mailbox_) mailbox_->reject(std::move(reason));
 }
 
+// Settings: answer to a settings action. The state must be one revision ahead of the pending request and match
+// the desk's manager slot; the new desk must keep teams, runtime club, day, season, name, portrait, badge and options.
 void StartupFlow::acknowledge_settings(SettingsState state, DeskState desk, PreparationState preparation) {
     if (!settings_ || !settings_->pending() || !desktop_ || !engine_attached_ ||
         (desk.source != "engine_projection" && desk.source != "world12") || desk.source != desktop_->state().source || state.manager_slot != desktop_->state().manager_slot ||
@@ -2516,6 +2764,7 @@ void StartupFlow::acknowledge_settings(SettingsState state, DeskState desk, Prep
     settings_ = std::move(next_settings);
 }
 
+// Settings: the mouse release that belonged to a notice was consumed.
 void StartupFlow::acknowledge_settings_notice_release() {
     if (settings_ && !save_load_) {
         settings_release_barrier_ = false;
@@ -2523,10 +2772,13 @@ void StartupFlow::acknowledge_settings_notice_release() {
     }
 }
 
+// Settings: the engine refused the pending action.
 void StartupFlow::reject_settings(std::string reason) {
     if (settings_) settings_->reject(std::move(reason));
 }
 
+// Settings: answer to a file operation started from the settings page. A save/load child with a pending
+// settings-file request must exist, and the new state must be one revision ahead of the settings page.
 void StartupFlow::acknowledge_settings_file(SettingsState state, DeskState desk, PreparationState preparation) {
     if (!settings_ || !save_load_ || !save_load_->pending() ||
         save_load_->pending()->file_kind != SaveLoadFileKind::settings || !desktop_ ||
@@ -2547,6 +2799,7 @@ void StartupFlow::acknowledge_settings_file(SettingsState state, DeskState desk,
     settings_ = std::move(next_settings);
 }
 
+// Settings: the engine refused the pending file operation; both the file child and the page show the reason.
 void StartupFlow::reject_settings_file(std::string reason) {
     if (!settings_ || !save_load_ || !save_load_->pending() ||
         save_load_->pending()->file_kind != SaveLoadFileKind::settings)
@@ -2555,11 +2808,14 @@ void StartupFlow::reject_settings_file(std::string reason) {
     settings_->reject_file(std::move(reason));
 }
 
+// Settings: drops a file request and its save/load child.
 void StartupFlow::cancel_settings_file() {
     if (settings_) settings_->cancel_file_request();
     if (save_load_) save_load_.reset();
 }
 
+// Settings: answer to a close request. The page must have asked to close, and the new state must be newer than
+// the desk, with the new desk agreeing with the preparation state.
 void StartupFlow::acknowledge_settings_closed(SettingsState state, DeskState desk, PreparationState preparation) {
     if (!settings_ || !settings_->close_requested() || !desktop_ || !engine_attached_ ||
         state.manager_slot != desktop_->state().manager_slot || state.revision <= desktop_->state().revision ||
@@ -2574,10 +2830,14 @@ void StartupFlow::acknowledge_settings_closed(SettingsState state, DeskState des
     settings_release_barrier_ = false; // Main consumes a close release after the screen changed.
 }
 
+// Settings: the engine refused the close.
 void StartupFlow::reject_settings_close(std::string reason) {
     if (settings_) settings_->reject_close(std::move(reason));
 }
 
+// Answer to an action on one of the preparation pages (lineup, pitch, training, camp, bank, stadium, toto,
+// transfer market, tactics). The new desk must be newer and keep manager slot, runtime club, day, season, name,
+// portrait, badge and options. All replacement screens are built first so a rejected answer changes nothing.
 void StartupFlow::acknowledge_preparation(PreparationState state, std::string transfer_notice) {
     if (!engine_attached_ || !preparation_ || !in_preparation_menu() || player_card_ || state.desktop.source != preparation_->desktop.source)
         throw FormatError("preparation acknowledgement: requires an attached engine and active menu");
@@ -2660,12 +2920,14 @@ void StartupFlow::acknowledge_preparation(PreparationState state, std::string tr
     pitch_entry_pending_=next_pitch_entry_pending;
 }
 
+// Transfer market: the engine answered without changing anything.
 void StartupFlow::acknowledge_unchanged_transfer_market() {
     if (!in_preparation_menu() || !transfer_market_)
         throw FormatError("no transfer market action context");
     transfer_market_->acknowledge_unchanged();
 }
 
+// The engine refused an action of the active preparation page; the page shows the reason (a pending pitch entry is undone).
 void StartupFlow::reject_preparation_action(std::string reason) {
     if (!in_preparation_menu()) throw FormatError("no preparation action context");
     if (player_card_) throw FormatError("player card has no engine action");

@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Implementation of OutgoingTransferScreen (outgoing_transfer.hpp): draws the bid rows and the money/mode-3
+// calculators, handles click, key and text input, and builds the request JSON used by tests and tooling.
+// It reuses IncomingTransferScreen for the shared panel; the quote values are carried as owner context and
+// never recomputed here.
 #include "formats/executable_layout.hpp"
 #include "ui/outgoing_transfer.hpp"
+#include "ui/button_frame.hpp"
+#include "ui/calculator_widgets.hpp"
 
 #include <algorithm>
 #include <charconv>
@@ -10,47 +16,55 @@
 #include "formats/textd.hpp"
 #include "ui/manager.hpp"
 #include "ui/setup.hpp"
+#include "ui/draw.hpp"
 
 namespace bmh::ui {
 namespace {
+// Address of the text pointer table; text addresses used by this screen are converted to TEXTD indices relative to it.
+// Calculator position on screen: its top-left corner is (103,55).
 constexpr uint32_t kTextBase = ::bmh::layout::TextPointerTable;
 constexpr int kCalculatorX = 103, kCalculatorY = 55;
+// Footer buttons (Team-Info, Spieler-Info, Angebot, Abbruch): left x of each of the four, common y, width and
+// height (the hit area includes the right and bottom edge).
 constexpr std::array<int, 4> kFooterButtonX{1, 80, 156, 232};
 // FormatError3 stores the adjusted height 10 in the hit descriptor; ExpireQuestion's
 // right/bottom comparisons are inclusive, so the hit rectangle ends at y=225.
 constexpr int kFooterButtonY = 215, kFooterButtonWidth = 75, kFooterButtonHeight = 10;
 
+// Returns the TEXTD string for a text-table address; throws if the address is not a table entry.
 std::string_view text_at(const TextDb& texts, uint32_t address) {
     if (address < kTextBase || (address - kTextBase) % 4 != 0)
         throw FormatError("outgoing transfer: invalid Source TEXTD address");
     return texts[(address - kTextBase) / 4];
 }
 
+// Copies a block from a source image to the target; throws on invalid bounds.
+// Pixels equal to `transparent` (if >= 0) are skipped.
 void copy_region(Image& target, const Image& source, int sx, int sy, int x, int y,
                  int width, int height, int transparent = -1) {
     if (sx < 0 || sy < 0 || x < 0 || y < 0 || width < 0 || height < 0 ||
         sx + width > source.width || sy + height > source.height ||
         x + width > target.width || y + height > target.height)
         throw FormatError("outgoing transfer: invalid Source sprite bounds");
-    for (int yy = 0; yy < height; ++yy) for (int xx = 0; xx < width; ++xx) {
-        const auto pixel = source.pixels[size_t(sy + yy) * size_t(source.width) + size_t(sx + xx)];
-        if (transparent < 0 || pixel != transparent) target.at(x + xx, y + yy) = pixel;
-    }
+    draw::copy_unclipped(target, source, sx, sy, x, y, width, height, transparent);
 }
 
+// Fills a rectangle with one palette index; throws if it leaves the image.
 void fill_rect(Image& out, int x, int y, int width, int height, uint8_t color) {
     if (x < 0 || y < 0 || width < 0 || height < 0 || x + width > out.width || y + height > out.height)
         throw FormatError("outgoing transfer: invalid Source rectangle");
-    for (int yy = y; yy < y + height; ++yy)
-        std::fill_n(out.pixels.begin() + size_t(yy) * size_t(out.width) + size_t(x), width, color);
+    draw::fill(out, x, y, width, height, color);
 }
 
+// Number with '.' as thousands separator, no padding.
 std::string grouped(uint32_t value) {
     std::string digits = std::to_string(value);
     for (int at = int(digits.size()) - 3; at > 0; at -= 3) digits.insert(size_t(at), ".");
     return digits;
 }
 
+// Formats a number right-aligned in `width` characters ('%' padding, as the original font expects);
+// with `grouping` it adds thousands separators and compensates with leading spaces so columns line up.
 std::string source_number(uint32_t value, int width, bool grouping = true) {
     std::string digits = std::to_string(value);
     const int actual = int(digits.size());
@@ -66,20 +80,24 @@ std::string source_number(uint32_t value, int width, bool grouping = true) {
     return digits;
 }
 
+// Amount converted with the currency numerator/denominator (if the denominator is non-zero) and suffixed with ' EU'.
 std::string source_money(uint32_t value, uint32_t numerator, uint32_t denominator) {
     if (denominator) value = uint32_t((uint64_t(value) * numerator) / denominator);
     return source_number(value, 1, true) + " EU";
 }
 
+// Text of a calculator value: as money for currency profiles, otherwise as a plain grouped number.
 std::string calculator_value(uint32_t value, const OutgoingTransferCalculatorProfile& profile,
                              uint32_t numerator, uint32_t denominator) {
     return profile.currency ? source_money(value, numerator, denominator) : grouped(value);
 }
 
+// True for the two money fields (fee and monthly salary); the other fields are contract years and bonuses.
 bool money_field(OutgoingTransferField field) {
     return field == OutgoingTransferField::fee || field == OutgoingTransferField::monthly_salary;
 }
 
+// Name of an editor field for the JSON output.
 std::string field_name(OutgoingTransferField field) {
     switch (field) {
     case OutgoingTransferField::fee: return "fee";
@@ -97,6 +115,7 @@ std::string field_name(OutgoingTransferField field) {
     return "fee";
 }
 
+// Sets the panel title to the loan or purchase variant according to the initial action.
 OutgoingTransferEditorState with_source_title(OutgoingTransferEditorState state) {
     state.panel.title = state.initial_action_loan
         ? IncomingTransferTitle::player_loan : IncomingTransferTitle::player_purchase;
@@ -104,6 +123,7 @@ OutgoingTransferEditorState with_source_title(OutgoingTransferEditorState state)
 }
 } // namespace
 
+// Serialises a request (kind, identity, edited field, current values and the quoted values) as JSON.
 std::string outgoing_transfer_request_json(const OutgoingTransferRequest& request) {
     const char* kind = "none";
     switch (request.kind) {
@@ -137,6 +157,9 @@ std::string outgoing_transfer_request_json(const OutgoingTransferRequest& reques
     return out.str();
 }
 
+// Builds the screen and the shared panel and loads the assets. The projection is validated strictly: ids and bid slot
+// (list entry 40..43 are poach entries), panel consistency, mode 1..3, image sizes, that the edited bid row belongs to
+// the active manager and matches the editor values, and that every calculator profile and preset is within its bounds.
 OutgoingTransferScreen::OutgoingTransferScreen(const std::filesystem::path& data,
                                                OutgoingTransferEditorState state)
     :OutgoingTransferScreen(data,std::move(state),load_le(asset_path(data,"BMH.exe"))) {}
@@ -169,6 +192,7 @@ OutgoingTransferScreen::OutgoingTransferScreen(const std::filesystem::path& data
             ((int(row.contract_months) - 1) / 12 + 1) != state_.duration_years))
             throw FormatError("outgoing transfer: editor fields do not match the active Native bid row");
     }
+    // Checks one calculator profile: supported, minimum <= initial <= maximum, and all presets within the bounds.
     auto check_profile = [](const OutgoingTransferCalculatorProfile& profile) {
         if (!profile.supported || profile.minimum > profile.maximum ||
             profile.initial < profile.minimum || profile.initial > profile.maximum)
@@ -191,11 +215,13 @@ OutgoingTransferScreen::OutgoingTransferScreen(const std::filesystem::path& data
     closed_ = state_.closed;
 }
 
+// Identifies the edited bid (manager, club, revision, list entry, slot, player, seller, bid slot); attached to every request.
 OutgoingTransferIdentity OutgoingTransferScreen::identity() const {
     return {state_.manager_slot, state_.runtime_club, state_.revision, state_.list_entry,
             state_.source_slot, state_.player, state_.seller, state_.bid_slot};
 }
 
+// Current value of an editor field.
 uint32_t OutgoingTransferScreen::field_value(OutgoingTransferField field) const {
     switch (field) {
     case OutgoingTransferField::fee: return state_.fee;
@@ -213,6 +239,7 @@ uint32_t OutgoingTransferScreen::field_value(OutgoingTransferField field) const 
     return 0;
 }
 
+// Maximum allowed value of a field, taken from the money profiles (fee, salary) or the mode-3 profiles (years, bonuses).
 uint32_t OutgoingTransferScreen::field_maximum(OutgoingTransferField field) const {
     if (field == OutgoingTransferField::fee) return state_.money_calculators[0].maximum;
     if (field == OutgoingTransferField::monthly_salary) return state_.money_calculators[1].maximum;
@@ -221,6 +248,7 @@ uint32_t OutgoingTransferScreen::field_maximum(OutgoingTransferField field) cons
     return index >= 1 && index < 8 ? state_.mode3_calculators[size_t(index)].maximum : 0;
 }
 
+// Stores a value into an editor field.
 void OutgoingTransferScreen::set_field_value(OutgoingTransferField field, uint32_t value) {
     switch (field) {
     case OutgoingTransferField::fee: state_.fee = value; break;
@@ -237,6 +265,8 @@ void OutgoingTransferScreen::set_field_value(OutgoingTransferField field, uint32
     }
 }
 
+// Builds a request of the given kind from the current identity, field values and the quoted values of the panel.
+// The request is only returned; callers store it as pending.
 OutgoingTransferRequest OutgoingTransferScreen::make_request(OutgoingTransferRequestKind kind,
                                                               OutgoingTransferField field,
                                                               uint32_t value) const {
@@ -256,6 +286,9 @@ OutgoingTransferRequest OutgoingTransferScreen::make_request(OutgoingTransferReq
     return request;
 }
 
+// Closes the calculator. The value is clamped to the field's minimum/maximum. If accepted, it is stored (the four
+// last bonus lines are kept divided by 5) and a quote_change request goes to the session, which recomputes the quote;
+// if cancelled, money fields still send a quote_change with the old value and accepted=false, other fields send nothing.
 OutgoingTransferRequest OutgoingTransferScreen::commit_field(bool accepted) {
     if (!calculator_open_) return {};
     const uint32_t old = field_value(active_field_);
@@ -292,8 +325,11 @@ OutgoingTransferRequest OutgoingTransferScreen::commit_field(bool accepted) {
     return request;
 }
 
+// Draws the two offer lines (fee at x=7, monthly salary at x=170, baseline 130) and, in mode 3, the right-hand list of
+// contract years and the bonus lines (8 rows from y=0x8e, 9 pixels apart; the last four bonuses are shown multiplied by 5).
 void OutgoingTransferScreen::draw_editor_fields(Image& out) const {
     const auto& panel = state_.panel;
+    // Draws body-font text at a baseline, optionally through the vertical colour gradient of the executable.
     auto body_baseline = [&](int x, int baseline, std::string_view text, uint8_t color) {
         const int top = baseline - body_.baseline;
         const int width = body_.text_width(text);
@@ -311,6 +347,7 @@ void OutgoingTransferScreen::draw_editor_fields(Image& out) const {
                 if (mask.at(xx, yy)) out.at(x + xx, top + yy) =
                     gradient < 32 ? exe_.u8(::bmh::layout::Advertising_Text_RuntimeField + uint32_t(gradient * 6 + std::min(yy, 5))) : color;
     };
+    // Amount converted with the panel's currency factors, padded to `width`, with ' EU'.
     auto money_text = [&](uint32_t value, int width) {
         if (panel.currency_denominator)
             value = uint32_t((uint64_t(value) * panel.currency_numerator) / panel.currency_denominator);
@@ -319,6 +356,7 @@ void OutgoingTransferScreen::draw_editor_fields(Image& out) const {
 
     // Keep the asking lines drawn by the shared Source panel at baseline 123.
     // OpenTransferEditor adds the selected bid on its own baseline-130 row.
+    // Draws a label plus (if editable) the amount, with a dark shadow offset by 2 pixels.
     auto offer_line = [&](uint32_t label_address, uint32_t value, int width, int x) {
         std::string line(text_at(texts_, label_address));
         if (state_.editable) line += money_text(value, width);
@@ -351,17 +389,19 @@ void OutgoingTransferScreen::draw_editor_fields(Image& out) const {
     }
 }
 
+// Draws the number calculator if one is open: background at (103,55), shadow, title with the initial value,
+// 15 keys (digits and the letters D, R, C, J, N) and the preset buttons at positions from tables in the executable,
+// and the current input right-aligned. Does nothing otherwise.
 void OutgoingTransferScreen::draw_calculator(Image& out) const {
     constexpr int x0 = kCalculatorX, y0 = kCalculatorY;
     if (!calculator_open_ || !active_profile_.supported) return;
-    copy_region(out, calculator_art_, 0, 0, x0, y0, 113, 136);
-    fill_rect(out, x0 + 113, y0 + 2, 2, 136, 0x40);
-    fill_rect(out, x0 + 2, y0 + 136, 113, 2, 0x40);
+    draw_calculator_panel(out, calculator_art_, x0, y0);   // calculator_widgets.hpp
     std::string title;
     if (active_profile_.source_text_address)
         title = std::string(text_at(texts_, active_profile_.source_text_address));
     title += calculator_value(active_profile_.initial, active_profile_,
         state_.panel.currency_numerator, state_.panel.currency_denominator);
+    // Body-font text at a baseline; the gradient is used only if requested and enabled.
     auto draw_body = [&](int x, int baseline, std::string_view text, uint8_t color, bool gradient) {
         const int top = baseline - body_.baseline;
         const int width = body_.text_width(text);
@@ -385,8 +425,8 @@ void OutgoingTransferScreen::draw_calculator(Image& out) const {
     for (int i = 0; i < 15; ++i) {
         const int x = x0 + exe_.u16(::bmh::layout::Advertising_Click_RuntimeField + size_t(i) * 2);
         const int y = y0 + exe_.u8(::bmh::layout::Advertising_Click_RuntimeField2 + size_t(i));
-        copy_region(out, calculator_art_, 0, 136, x, y, 15, 14);
-        draw_body(x + 5, y + 9, keys.substr(size_t(i), 1), 0x62, false);
+        const int p = draw_calculator_key(out, calculator_art_, x, y, pressed_key_ == i);
+        draw_body(x + 5 + p, y + 9 + p, keys.substr(size_t(i), 1), 0x62, false);
     }
     for (size_t i = 0; i < active_profile_.presets.size(); ++i) {
         if (!active_profile_.presets[i]) continue;
@@ -402,36 +442,27 @@ void OutgoingTransferScreen::draw_calculator(Image& out) const {
     draw_body(x0 + 106 - body_.text_width(value), y0 + 110, value, 0x00, true);
 }
 
+// Draws the four footer buttons (texts 230..233): drop shadow, left piece, repeated 8-pixel middle strips, right end and label.
 void OutgoingTransferScreen::draw_footer(Image& out) const {
     // OpenTransferEditor registers four FormatError3 controls from a216c/a216e/a2170.
     // The address stride in OutgoingTransfer_DrawFooter_TextPointer is exactly one TEXTD pointer (four bytes):
     // IDs 230..233 are Team-Info, Spieler-Info, Angebot and Abbruch.
-    constexpr int drawn_height = 10; // FormatError3 raises requested h=9 for width>31.
     for (size_t i = 0; i < kFooterButtonX.size(); ++i) {
         if((i==0&&!state_.team_info_available)||(i==1&&!state_.player_info_available))continue;
         const int x = kFooterButtonX[i];
-        // FormatError3 first calls ColorBottomRightBevel for the raised control's shadow.
-        fill_rect(out, x + 2, kFooterButtonY + drawn_height, kFooterButtonWidth, 2, 0x40);
-        fill_rect(out, x + kFooterButtonWidth, kFooterButtonY + 2, 2, drawn_height, 0x40);
-        // FormatError3's standard KB0 frame; its requested nine-pixel height
-        // is raised to ten for widths over 31, then the sprite is tiled.
-        copy_region(out, button_art_, 24, 74, x, kFooterButtonY, 31, drawn_height);
-        int used = 31;
-        while (kFooterButtonWidth - used > 20) {
-            const int count = std::min(8, kFooterButtonWidth - used - 20);
-            copy_region(out, button_art_, 24, 84, x + used, kFooterButtonY, count, drawn_height);
-            used += count;
-        }
-        const int remaining = kFooterButtonWidth - used;
-        copy_region(out, button_art_, 45 - remaining, 94, x + used, kFooterButtonY,
-                    remaining, drawn_height);
+        // FormatError3: shadow, KB0 frame (height raised to ten for widths over 31) and tiled middle; a button held
+        // down by the mouse is drawn in the pressed look (button_frame.hpp).
+        const bool down = pressed_button_ == int(i);
+        const int shift = draw_wide_button_frame(out, button_art_, x, kFooterButtonY, kFooterButtonWidth, down);
         const auto label = original_to_utf8(text_at(texts_, ::bmh::layout::OutgoingTransfer_DrawFooter_TextPointer + uint32_t(i) * 4));
         const int text_width = sprite_font_.text_width(label);
-        sprite_font_.draw(out, x + kFooterButtonWidth / 2 - text_width / 2,
-                          kFooterButtonY + 7, label, exe_.u8(::bmh::layout::Advertising_Button_RuntimeField));
+        sprite_font_.draw(out, x + shift + kFooterButtonWidth / 2 - text_width / 2,
+                          kFooterButtonY + shift + 7, label,
+                          exe_.u8(::bmh::layout::Advertising_Button_RuntimeField + int(down)));
     }
 }
 
+// Renders the shared panel and then the editor fields, calculator (if open) and footer on top.
 Image OutgoingTransferScreen::render() const {
     Image out = panel_.render();
     draw_editor_fields(out);
@@ -440,11 +471,38 @@ Image OutgoingTransferScreen::render() const {
     return out;
 }
 
+// Called when the pointer-hold timer fires; handled like a right click (cancel/close).
 OutgoingTransferRequest OutgoingTransferScreen::process_timer_expired() {
     return click(0, 0, true); //BalanceFromGame/OpenTransferEditor event8; right path does not inspect coordinates.
 }
 
+// Handles a click and returns a request for the session when one is needed (the screen then waits for the
+// acknowledgement). Order: double click near the top toggles loan/purchase quote; with the calculator open, keys and
+// presets edit the value and right click cancels it; otherwise right click cancels the screen, footer buttons send
+// team info, player info, submit (only when editable) or cancel; clicks on the fee, salary or (mode 3) contract/bonus
+// areas open the calculator. Opening the calculator is local state and sends no request.
+// Mouse DOWN on a footer button: it is drawn pressed until the release. Returns true when the picture changed.
+bool OutgoingTransferScreen::press(int x, int y) {
+    int id = -1;
+    if (!closed_ && !pending_ && !calculator_open_)
+        for (size_t i = 0; i < kFooterButtonX.size(); ++i)
+            if (x >= kFooterButtonX[i] && x <= kFooterButtonX[i] + kFooterButtonWidth && y >= kFooterButtonY &&
+                y <= kFooterButtonY + kFooterButtonHeight) id = int(i);
+    // a key of the open calculator
+    int key = -1;
+    if (!closed_ && !pending_ && calculator_open_ && active_profile_.supported)
+        for (int i = 0; i < 15; ++i)
+            if (calculator_key_hit(x, y, kCalculatorX + exe_.u16(::bmh::layout::Advertising_Click_RuntimeField + size_t(i) * 2),
+                                   kCalculatorY + exe_.u8(::bmh::layout::Advertising_Click_RuntimeField2 + size_t(i)))) key = i;
+    const bool changed = id != pressed_button_ || key != pressed_key_;
+    pressed_button_ = id;
+    pressed_key_ = key;
+    return changed;
+}
+
 OutgoingTransferRequest OutgoingTransferScreen::click(int x, int y, bool right, bool double_click) {
+    pressed_button_ = -1;   // the release ends the pressed look
+    pressed_key_ = -1;
     if (closed_ || pending_) return {};
     if (double_click && !right && !calculator_open_ && y > 0x12 && y < 0x21) {
         state_.quote_loan = !state_.quote_loan;
@@ -459,6 +517,7 @@ OutgoingTransferRequest OutgoingTransferScreen::click(int x, int y, bool right, 
             const int key_x = kCalculatorX + exe_.u16(::bmh::layout::Advertising_Click_RuntimeField + size_t(i) * 2);
             const int key_y = kCalculatorY + exe_.u8(::bmh::layout::Advertising_Click_RuntimeField2 + size_t(i));
             if (x < key_x || x >= key_x + 16 || y < key_y || y >= key_y + 14) continue;
+            // Keys 0-9 type digits; then D = delete last digit, R = back to the initial value, C = clear, J = accept, N = cancel.
             if (i < 10) { text(std::to_string(i)); return {}; }
             if (i == 10) { calculator_value_ /= 10; numeric_text_ = std::to_string(calculator_value_); return {}; }
             if (i == 11) { calculator_value_ = active_profile_.initial; numeric_text_.clear(); return {}; }
@@ -537,6 +596,7 @@ OutgoingTransferRequest OutgoingTransferScreen::click(int x, int y, bool right, 
     return {};
 }
 
+// Appends typed digits to the calculator input (at most 10 characters), clamped to the profile maximum.
 bool OutgoingTransferScreen::text(std::string_view input) {
     if (closed_ || pending_ || !calculator_open_ || input.empty()) return false;
     for (char c : input) if (c < '0' || c > '9') return false;
@@ -552,6 +612,8 @@ bool OutgoingTransferScreen::text(std::string_view input) {
     return true;
 }
 
+// Keyboard: Esc or N cancels (the calculator first, then the screen), J or Enter accepts the calculator or submits the bid,
+// Backspace or D deletes a digit, C or Space clears, digits are typed.
 OutgoingTransferRequest OutgoingTransferScreen::key(std::string_view key_name) {
     if (closed_ || pending_) return {};
     if (key_name == "ESC" || key_name == "ESCAPE" || (key_name == "N" && calculator_open_)) {
@@ -584,6 +646,8 @@ OutgoingTransferRequest OutgoingTransferScreen::key(std::string_view key_name) {
     return {};
 }
 
+// Session acknowledgement: checks that the new projection is for the same bid (and not older) and replaces the state;
+// the shared panel is recreated, the pending request and the calculator are cleared.
 void OutgoingTransferScreen::acknowledge(OutgoingTransferEditorState state) {
     // Recreate the common panel only after the owner supplies the exact next
     // projection and quote. The caller controls revision advancement.
@@ -606,6 +670,7 @@ void OutgoingTransferScreen::acknowledge(OutgoingTransferEditorState state) {
     panel_ = IncomingTransferScreen(data_, state_.panel, state_.gradient_text,exe_);
 }
 
+// Session rejection: restores the last confirmed state, reopens the screen and shows the reason as feedback.
 void OutgoingTransferScreen::reject_action(std::string reason) {
     pending_.reset();
     state_ = confirmed_state_;
@@ -617,6 +682,7 @@ void OutgoingTransferScreen::reject_action(std::string reason) {
     numeric_text_.clear();
 }
 
+// State as JSON for tests: identity, mode, values, calculator flag, feedback and the pending request.
 std::string OutgoingTransferScreen::state_json() const {
     std::ostringstream out;
     out << "{\"screen\":\"outgoing_transfer\",\"manager_slot\":" << state_.manager_slot

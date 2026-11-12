@@ -1,4 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Manager selection screens: selection, name edit, club picker, confirmation and accepted view for one
+// manager slot. ManagerScreen owns only UI choices (ManagerChoice) and works with a SelectionContext, the
+// club order loaded by load_selection_context(). ManagerChoice uses master database club ids, not the remapped
+// team ids of an initialised career; the roster revision guards against applying an id to a later club order.
+// Implementation: manager.cpp.
 #pragma once
 
 #include <array>
@@ -11,6 +16,7 @@
 #include "formats/font.hpp"
 #include "formats/le.hpp"
 #include "formats/m3d.hpp"
+#include "formats/text_encoding.hpp"
 #include "formats/textd.hpp"
 #include "ui/setup.hpp"
 
@@ -76,6 +82,8 @@ public:
     ManagerView view() const { return view_; }
     std::string screen_name() const;
     bool click(int x, int y, bool right = false);
+    // Mouse DOWN on JA/NEIN of the confirmation: drawn pressed until the release (click()).
+    bool press(int x, int y);
     bool move(int x, int y);
     bool text(std::string_view utf8);
     bool key(std::string_view name);
@@ -116,6 +124,7 @@ private:
     std::vector<ManagerChoice> confirmed_;
     SelectionContext context_;
     ManagerView view_ = ManagerView::selection;
+    int pressed_button_ = -1;   // JA (0) or NEIN (1) held down by the mouse
     std::filesystem::path data_;
     LeImage exe_;
     Database db_;
@@ -130,10 +139,12 @@ private:
     int group_ = 0, hover_ = -1;
 };
 
-// JSON emits UTF-8; rendering/model preserve the original encoding.
-std::string json_quote(std::string_view utf8);
-std::string original_to_utf8(std::string_view original);
-std::string utf8_to_original(std::string_view utf8);
+// JSON emits UTF-8; rendering/model preserve the original encoding. The three functions are
+// defined in formats/text_encoding.hpp (namespace bmh); the screens keep using them as
+// bmh::ui::json_quote etc.
+using ::bmh::json_quote;
+using ::bmh::original_to_utf8;
+using ::bmh::utf8_to_original;
 std::string manager_json(const ManagerChoice& choice);
 
 }  // namespace bmh::ui

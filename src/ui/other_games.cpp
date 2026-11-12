@@ -1,12 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Implementation of OtherGamesScreen (other_games.hpp): draws the source panel, selector, arrows and fixture
+// rows with the original fonts, and hit-tests fixtures and buttons. It never writes game state; navigation is
+// only requested through pending() and takes effect when the session returns a new state.
 #include "formats/executable_layout.hpp"
 #include "ui/other_games.hpp"
+#include "ui/button_frame.hpp"
 
 #include <algorithm>
 #include <cstdlib>
 #include <sstream>
 
 #include "ui/manager.hpp"
+#include "ui/draw.hpp"
 
 namespace bmh::ui {
 namespace {
@@ -15,18 +20,12 @@ void copy(Image& out, const Image& src, int sx, int sy, int x, int y, int w, int
     if (sx < 0 || sy < 0 || x < 0 || y < 0 || w < 0 || h < 0 ||
         sx + w > src.width || sy + h > src.height || x + w > out.width || y + h > out.height)
         throw FormatError("other games: Original atlas bounds");
-    for (int yy = 0; yy < h; ++yy)
-        for (int xx = 0; xx < w; ++xx) {
-            const uint8_t color = src.pixels[size_t(sy + yy) * size_t(src.width) + size_t(sx + xx)];
-            if (color != transparent) out.at(x + xx, y + yy) = color;
-        }
+    draw::copy_unclipped(out, src, sx, sy, x, y, w, h, transparent);
 }
 
 void fill(Image& out, int x, int y, int w, int h, uint8_t color) {
     if (w <= 0 || h <= 0) return;
-    for (int yy = std::max(0, y); yy < std::min(out.height, y + h); ++yy)
-        for (int xx = std::max(0, x); xx < std::min(out.width, x + w); ++xx)
-            out.at(xx, yy) = color;
+    draw::fill(out, x, y, w, h, color);
 }
 
 std::string source_number(unsigned value, unsigned width = 0) {
@@ -224,25 +223,8 @@ void OtherGamesScreen::draw_button(Image& out, int x, int y, int width,
     const bool down = pressed || selected;
     // FormatError3 shifts both a selected competition and a held button by (+2,+2).
     // Keep this Original inset; selection is not an unshifted alternate skin.
-    const int dx = x + (down ? 2 : 0), dy = y + (down ? 2 : 0);
-    if (down) {
-        const uint8_t background = out.at(x, y + 10);
-        fill(out, x, y, width + 1, 2, background);
-        fill(out, x, y, 2, 11, background);
-    } else {
-        fill(out, x + 2, y + 10, width, 2, 0x40);
-        fill(out, x + width, y + 2, 2, 10, 0x40);
-    }
-    const int sy = down ? 44 : 74;
-    copy(out, widgets_, 24, sy, dx, dy, 31, 10, 0xc0);
-    int used = 31;
-    while (width - used > 20) {
-        const int count = std::min(8, width - used - 20);
-        copy(out, widgets_, 24, sy + 10, dx + used, dy, count, 10, 0xc0);
-        used += count;
-    }
-    const int tail = width - used;
-    copy(out, widgets_, 45 - tail, sy + 20, dx + used, dy, tail, 10, 0xc0);
+    const int shift = draw_wide_button_frame(out, widgets_, x, y, width, down, 0xc0);
+    const int dx = x + shift, dy = y + shift;
     const auto label = original_to_utf8(std::string(raw_label));
     sprite_.draw(out, dx + width / 2 - sprite_.text_width(label) / 2, dy + 7, label,
                  exe_.u8(::bmh::layout::Advertising_Button_RuntimeField + (down ? 1u : 0u)));

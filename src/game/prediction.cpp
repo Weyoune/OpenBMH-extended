@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Table prediction and season bonus: predicted final league position of a team, the season
+// bonus paid to a manager and the expected bonus for players.
+// Reads GameState (tables, tactics boards, manager records); season_bonus can book the payment.
+// Draws no random numbers. Interface in prediction.hpp; included by desk.cpp and balance_plan.cpp.
 #include "formats/executable_layout.hpp"
 #include "game/prediction.hpp"
 
@@ -16,14 +20,14 @@ namespace bmh {
 
 namespace {
 
-constexpr size_t kRecord = 0xB0C;     // manager record
-constexpr size_t kBoard = 0x840;      // tactics board of a manager
-constexpr size_t kBoardSlot = 0x58;   // one slot of the board
+constexpr size_t kRecord = kManagerRecordSize;     // manager record
+constexpr size_t kBoard = kTacticsBoardSize;      // tactics board of a manager
+constexpr size_t kBoardSlot = kTacticsBoardSlotSize;   // one slot of the board
 
 // Static league tables of V2.24 (not part of the savegame):
-// (European places per league, CareerSession_InstallLeagueSizes_RuntimeField, are kLeagueEurope of the loaded game; league 0 uses 4)
-// (the relegation places per league, CareerSession_InstallLeagueSizes_RuntimeField2, are kLeagueRelegation of the loaded game)
-const int& kLeagueTeams = runtime_dimensions.league_teams;  // CareerSession_DispatchLineup_RuntimeField: clubs in the league system
+// (European places per league, LeagueEuropeanPlaces, are installed_league_system().europe of the loaded game; league 0 uses 4)
+// (the relegation places per league, LeagueRelegationPlaces, are installed_league_system().relegation of the loaded game)
+const int& kLeagueTeams = runtime_dimensions.league_teams;  // LeagueClubCount: clubs in the league system
 
 // Text of a pointer variable of the text table TextPointerTable.
 }  // namespace
@@ -125,11 +129,11 @@ int table_prediction(GameState& g, int team, int mode, std::array<uint8_t, 24>& 
     // (Fill would refresh the desk warning flags PredictionRuntimeField.. here; they are
     //  run-time only and not needed by the game logic.)
     const size_t rec = size_t(manager) * kRecord;
-    const int size = kLeagueSizes[league];  // local_2c
+    const int size = installed_league_system().sizes[league];  // local_2c
     if (size_word) *size_word = size;       // (stored as a word, see the header)
     if (team >= kLeagueTeams) return 9;
     const int pos = team - league_first_team(league);  // local_24
-    const int target[3] = {0, league == 0 ? 4 : kLeagueEurope[league], size - kLeagueRelegation[league]};
+    const int target[3] = {0, league == 0 ? 4 : installed_league_system().europe[league], size - installed_league_system().relegation[league]};
 
     int from = 0;  // local_10
     if (mode > 3) {
@@ -138,7 +142,7 @@ int table_prediction(GameState& g, int team, int mode, std::array<uint8_t, 24>& 
     }
     const auto full=compute_league_table(g,league,0,rounds,7,0);
     const auto recent=mode==1?full:compute_league_table(g,league,from,rounds,3,0);
-    const auto prediction=calculate_table_prediction(full,recent,pos,mode,matchdays,target[1],kLeagueRelegation[league]);
+    const auto prediction=calculate_table_prediction(full,recent,pos,mode,matchdays,target[1],installed_league_system().relegation[league]);
     buf=prediction.ranks;
 
     if(mode==1)emit_prediction_notices(g,team,league,prediction);
@@ -147,7 +151,7 @@ int table_prediction(GameState& g, int team, int mode, std::array<uint8_t, 24>& 
 
 static uint32_t season_bonus_impl(GameState& g, int manager, int team, int board_slot, int rank, bool pay) {
     const int league = g.projected_match_clubs.empty()?team_league(team):match_team_league(g,team);
-    int size=league<kLeagueCount?kLeagueSizes[league]:0,relegation=league<kLeagueCount?kLeagueRelegation[league]:0;
+    int size=league<kLeagueCount?installed_league_system().sizes[league]:0,relegation=league<kLeagueCount?installed_league_system().relegation[league]:0;
     if(!g.projected_match_clubs.empty()) {
         const auto& context=g.projected_match_clubs.at(size_t(team));
         if(context.league_size<2||context.relegation_places<0)throw std::invalid_argument("season bonus: projected league dimensions missing");
@@ -211,7 +215,7 @@ uint32_t expected_bonus_parked_club_source(GameState& g, int rank, int board_slo
         board_slot<0 || board_slot>=24 || g.tactics.size()<5*kBoard)
         throw std::invalid_argument("expected_bonus: invalid FindManagerForClub parked club context");
     const int team=int(g.manager_records[team_at]) | int(g.manager_records[team_at+1])<<8;
-    if(team<0 || team>=kLeagueTeams)
+    if(team<0 || team>=world_layout().league_teams)
         throw std::invalid_argument("expected_bonus: parked record4 has no ordinary club");
     return expected_bonus_impl(g,4,team,rank,board_slot,player,fitness);
 }

@@ -58,10 +58,10 @@ int main() try {
     install_fixture_tables();
     const auto world=world_fixture();
     int comparisons=0;
-    const uint8_t original_size=bmh::kLeagueSizes[0];
+    const uint8_t original_size=bmh::installed_league_system().sizes[0];
     for (const auto& league:world.catalogue.leagues) {
         if (league.clubs==10) continue; // Newly scheduled group has no legacy table.
-        bmh::kLeagueSizes[0]=league.clubs;
+        bmh::installed_league_system().sizes[0]=league.clubs;
         const auto& members=world.membership[league.id.value].clubs;
         for (int played:{0,1,2,league.rounds()/2,league.rounds()}) {
             auto results=SeasonResults::empty(world.catalogue);
@@ -103,7 +103,7 @@ int main() try {
             }
         }
     }
-    bmh::kLeagueSizes[0]=original_size;
+    bmh::installed_league_system().sizes[0]=original_size;
 
     auto results=SeasonResults::empty(world.catalogue);
     const LeagueId fifth{9};

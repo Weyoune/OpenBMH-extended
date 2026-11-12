@@ -1,4 +1,6 @@
+// Tests for the desk state projection, DesktopScreen input and request flow (ui/desktop.hpp, ui/desk_state.hpp).
 #include "../../tests/runtime_fixture_tables.hpp"
+#include "testing/check.hpp"
 // SPDX-License-Identifier: GPL-3.0-only
 #include "formats/executable_layout.hpp"
 #include "../../tests/test_inputs.hpp"
@@ -30,7 +32,7 @@ using namespace bmh;
 using namespace bmh::ui;
 
 namespace {
-void check(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }
+using bmh::test_support::check;
 void rejected(const std::function<void()>& action) {
     static int index = 0; ++index;
     try { action(); } catch (const FormatError&) { return; }
@@ -315,8 +317,14 @@ void calendar_projection_tests(const LeImage& exe) {
           "saved calendar mask 0xa2594 clears effective bit 0x10");
 
     auto malformed = calendar_fixture(exe,0,0);
-    malformed.memory.set16(::bmh::layout::CalendarState_FormatError_RuntimeField3,1);
+    malformed.season_start = 5; // the origin of the season lies after the current date
     rejected([&]{ calendar_from_game(malformed,exe); });
+    // the memory copies of origin and day hold only the day the game was loaded: after a kickoff the
+    // live values rule (this failed the calendar from the first kickoff on)
+    auto advanced = calendar_fixture(exe,0,0);
+    advanced.date = 24;
+    check(calendar_from_game(advanced,exe).current_day == 24,
+          "the calendar follows the live day of the season, not the load-day copy in memory");
     auto outside = calendar_fixture(exe,0,0);
     outside.date = 365;
     rejected([&]{ calendar_from_game(outside,exe); });
@@ -1147,12 +1155,19 @@ int main(int argc, char** argv) {
         auto special=desk_from_game(special_game,exe,10,&prepared,34);
         check(special.next_competition_label==desk_texts[(::bmh::layout::DeskState_FormatError_RuntimeField4-::bmh::layout::TextPointerTable)/4],
               "Source calendar entry 4006 selects the special competition title");
-        MatchGroup fallback_badge_group=cup_fixture;fallback_badge_group.fixtures={12,100};
+        // OpenBMH shows a club badge for every league club; only the cup-only teams keep the computer portrait.
+        MatchGroup fallback_badge_group=cup_fixture;fallback_badge_group.fixtures={12,200};
         std::vector<MatchGroup> fallback_badge_groups{fallback_badge_group};
         auto fallback_badge=desk_from_game(match_game,exe,10,&fallback_badge_groups,34);
-        check(fallback_badge.next_opponent==100&&fallback_badge.next_opponent_badge_fallback&&
+        check(fallback_badge.next_opponent==200&&fallback_badge.next_opponent_badge_fallback&&
               !fallback_badge.next_opponent_badge,
-              "legacy routine special team range uses its computer-portrait fallback");
+              "a cup-only team uses its computer-portrait fallback");
+        fallback_badge_group.fixtures={12,100};
+        fallback_badge_groups={fallback_badge_group};
+        auto foreign_badge=desk_from_game(match_game,exe,10,&fallback_badge_groups,34);
+        check(foreign_badge.next_opponent==100&&!foreign_badge.next_opponent_badge_fallback&&
+              foreign_badge.next_opponent_badge,
+              "a foreign league club shows its badge");
         prepared.clear();
         auto other_fixture = league_fixture; other_fixture.fixtures={13,14}; prepared.push_back(other_fixture);
         auto unmatched = desk_from_game(match_game,exe,10,&prepared,34);

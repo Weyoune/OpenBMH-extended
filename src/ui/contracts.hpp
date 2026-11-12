@@ -1,4 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Contracts screen: player list with remaining months, salary demands, offers, bonuses and insurance.
+// ContractsState is a read-only copy built by contracts_from_game() (tagged with revision and request id base);
+// ContractsScreen raises ContractRequest values (request demands, submit offer, submit bonuses, insure player)
+// that carry request id, revision and quote id so the session can reject stale input.
+// Implementation: contracts.cpp.
 #pragma once
 
 #include <array>
@@ -94,6 +99,8 @@ public:
     ContractsScreen(const std::filesystem::path&, ContractsState,const LeImage& reference);
     Image render() const;
     bool click(int x, int y, bool right = false);
+    // Mouse DOWN: the button under the pointer is drawn pressed until the release (click()).
+    bool press(int x, int y);
     bool process_timer_expired(int pointer_x, int pointer_y);
     bool key(std::string_view);
     bool move(int x, int y);
@@ -112,6 +119,8 @@ public:
 private:
     enum class Page : uint8_t { roster, player_offer, team_premiums, calculator, insurance, result };
     ContractsState state_;
+    int pressed_button_ = -1;   // button below the panel held down by the mouse
+    int pressed_key_ = -1;      // calculator key held down by the mouse
     LeImage exe_;
     Font font_;
     Font large_font_;

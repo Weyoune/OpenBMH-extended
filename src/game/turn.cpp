@@ -1,4 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Day-by-day turn processing: plain days, empty event days, month step, stock market day,
+// season end day and the preparation and finish of an event with its desk.
+// Reads and writes GameState and calls into month.cpp, weekly.cpp, week.cpp, season.cpp and the
+// matchday code. Takes both generators (GameRandom, WatcomRandom) and reseeds via stir_random at
+// league screens. Interface in turn.hpp; the calendar loop around it is in turn_driver.cpp.
 #include "formats/executable_layout.hpp"
 #include "game/turn.hpp"
 #include "game/trace.hpp"
@@ -197,7 +202,7 @@ void finish_event(GameState& g, std::vector<MatchGroup>& groups, uint16_t calend
         if (id < 0x15) {
             if (league_screen_shown(buttons, 1, 90, int(id))) stir_random(game, rand);
             const int round = g.league_rounds.at(id);
-            for (int m = 0; m < grp.matches(); m++) g.results.at(size_t(id) * 0x17C + size_t(round) * 10 + size_t(m)) = grp.results.at(size_t(m));
+            for (int m = 0; m < grp.matches(); m++) g.results.at(size_t(id) * kLeagueResultsStride + size_t(round) * 10 + size_t(m)) = grp.results.at(size_t(m));
         } else {
             store_cup_results(g, grp);
         }

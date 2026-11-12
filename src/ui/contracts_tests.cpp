@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Tests for the contracts projection and request flow (ui/contracts.hpp).
 #include "ui/contracts.hpp"
 #include "ui/source_notice_test_helpers.hpp"
 #include "ui/manager.hpp"
@@ -6,13 +7,12 @@
 #include "formats/textd.hpp"
 
 #include <stdexcept>
+#include "testing/check.hpp"
 
 using namespace bmh::ui;
 
 namespace {
-void check(bool value, const char* message) {
-    if (!value) throw std::runtime_error(message);
-}
+using bmh::test_support::check;
 }
 
 int main(int argc, char** argv) {

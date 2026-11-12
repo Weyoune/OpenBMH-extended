@@ -1,29 +1,29 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Implements DesktopScreen declared in desktop.hpp: loads the desk art and fonts, renders icons and drawers
+// (via desk_drawers.cpp), handles pointer, key and timer events, queues DeskRequest values, and applies
+// acknowledged DeskState updates. It also provides desk_request_json() and desk_menu_name().
 #include "formats/executable_layout.hpp"
 #include "ui/desktop.hpp"
+#include "ui/dialog_frame.hpp"
 
 #include <algorithm>
 #include <limits>
 #include <sstream>
 
 #include "ui/manager.hpp"
+#include "ui/draw.hpp"
 #include "game/state.hpp"
 #include "game/messages.hpp"
 
 namespace bmh::ui {
 namespace {
 void rect(Image& out, int x, int y, int w, int h, uint8_t color) {
-    for (int yy = std::max(0, y); yy < std::min(out.height, y + h); ++yy)
-        for (int xx = std::max(0, x); xx < std::min(out.width, x + w); ++xx) out.at(xx, yy) = color;
+    draw::fill(out, x, y, w, h, color);
 }
 void copy(Image& out, const Image& src, int sx, int sy, int x, int y, int w, int h, bool transparent = false) {
     if (sx < 0 || sy < 0 || sx + w > src.width || sy + h > src.height)
         throw FormatError("desktop: sprite outside original atlas");
-    for (int yy = 0; yy < h; ++yy) for (int xx = 0; xx < w; ++xx) {
-        const auto color = src.pixels[size_t(sy + yy) * src.width + sx + xx];
-        if (x + xx >= 0 && y + yy >= 0 && x + xx < out.width && y + yy < out.height && (!transparent || color))
-            out.at(x + xx, y + yy) = color;
-    }
+    draw::copy_clipped(out, src, sx, sy, x, y, w, h, transparent ? 0 : -1);
 }
 void border(Image& out, int x, int y) {
     rect(out, x - 1, y - 1, 40, 1, 0x46); rect(out, x - 1, y - 1, 1, 40, 0x46);
@@ -149,19 +149,7 @@ void DesktopScreen::sprite_text(Image& out, int x, int baseline, std::string_vie
 }
 void DesktopScreen::frame(Image& out, int x, int y, int w, int h) const {
     if (w < 8 || h < 8) throw FormatError("desktop: invalid drawer size");
-    for (int yy = 4; yy < h - 3; ++yy) for (int xx = 4; xx < w - 3; ++xx)
-        if (x + xx >= 0 && y + yy >= 0 && x + xx < out.width && y + yy < out.height)
-            out.at(x + xx, y + yy) = exe_.u8(::bmh::layout::Advertising_PatternRect_RuntimeField + ((yy - 4) % 16) * 16 + (xx - 4) % 16);
-    copy(out, widgets_, 0, 0, x, y, 4, 4); copy(out, widgets_, 4, 0, x + w - 4, y, 4, 4);
-    copy(out, widgets_, 0, 4, x, y + h - 4, 4, 4); copy(out, widgets_, 4, 4, x + w - 4, y + h - 4, 4, 4);
-    for (int k = 4; k < w - 4; k += 74) {
-        const int n = std::min(74, w - 4 - k);
-        copy(out, widgets_, 0, 104, x + k, y, n, 4); copy(out, widgets_, 0, 108, x + k, y + h - 4, n, 4);
-    }
-    for (int k = 4; k < h - 4; k += 96) {
-        const int n = std::min(96, h - 4 - k);
-        copy(out, widgets_, 0, 8, x, y + k, 4, n); copy(out, widgets_, 4, 8, x + w - 4, y + k, 4, n);
-    }
+    draw_dialog_frame(out, widgets_, exe_, x, y, w, h, false);   // dialog_frame.hpp
 }
 void DesktopScreen::digits(Image& out, int value, int sx, int sy, int w, int h, int x, int y, int base, int gap) const {
     int count = 1;

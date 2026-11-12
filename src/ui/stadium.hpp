@@ -1,4 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Stadium screen family: investment list, block expansion editor, data charts, panorama scene and the
+// construction tip/notice dialogs with the money calculator. State: StadiumState with investment rows,
+// block overviews and a data projection. Actions become StadiumRequests with revision guards; edits stay
+// presentation state until the session returns an accepted projection via acknowledge() or reject_action().
+// Implemented in stadium.cpp.
 #pragma once
 
 #include <array>
@@ -236,6 +241,9 @@ private:
     int pressed_x_ = -1, pressed_y_ = -1;
     std::optional<GameEndTaxDialog> tip_dialog_, periphery_dialog_;
     int periphery_hover_ = -1;
+    // Yellow frame under the pointer, as on the advertising page: an investment icon or a seat block
+    // that a click would act on (-1 none).
+    int hover_investment_ = -1, hover_block_ = -1;
     int periphery_object_at(int x, int y) const;
     bool periphery_object_contains(int object, int x, int y) const;
     void render_panorama(Image&) const;

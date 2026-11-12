@@ -1,4 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Rescheduling a home league match of a human manager on the calendar screen: which days are
+// offered, conflicts with the friendly plan and replays, and moving the match.
+// Reads and writes the competition calendar, postponed list and friendly plan in the static
+// memory of GameState. Draws no random numbers. Interface in reschedule.hpp; uses schedule.cpp
+// and matchday_setup.hpp.
 #include "formats/executable_layout.hpp"
 #include "game/reschedule.hpp"
 
@@ -25,13 +30,13 @@ constexpr int kWinterBreakFirst = 0x96, kWinterBreakLast = 0xc8;
 // target inside 0x15 .. 0x11e.
 constexpr int kLastReplayDay = 0x11e, kFirstDayAfter = 0x15;
 constexpr uint8_t kRescheduledMark = 0xce;  // param_5 = -0x32
-constexpr size_t kRecordSize = 0xb0c;
+constexpr size_t kRecordSize = kManagerRecordSize;
 constexpr size_t kFloodlights = 0x0e;  // manager record byte (RescheduleRuntimeField)
 // LeagueCalendarBits: calendar bit of a league (the two leagues 2 and 3 share bit 2, the four
-// leagues of 12 clubs bit 4; compare kGroupLeague in matchday_setup.cpp).
-// (kLeagueBit: schedule.hpp, set from the groups of the loaded game; 0xff = not played)
+// leagues of 12 clubs bit 4; compare league_system().group_first in matchday_setup.cpp).
+// (league_system().calendar_bit: schedule.hpp, set from the groups of the loaded game; 0xff = not played)
 
-size_t result_at(int league, int round, int match) { return size_t(match) + size_t(round) * 10 + size_t(league) * 0x17c; }
+size_t result_at(int league, int round, int match) { return size_t(match) + size_t(round) * 10 + size_t(league) * kLeagueResultsStride; }
 
 bool memory_ok(const GameState& g) {
     return g.memory.has(kCalendar + kCalendarDays * 2 - 1) &&
@@ -84,7 +89,7 @@ int team_replay_on(const GameState& g, int day, int team, int league) {
 // (bit 15) when it is free (0, 0x4001 or a calendar event 0x1c0), neither it nor its two
 // neighbours conflict for the club (the neighbours before it may already be marked), the
 // day after it lies in 0x15 .. 0x11e and it is not in the winter break. The national team
-// (manager 0 coaching team 0x165) also checks the club of the Bundestrainer, CupDraw_FormatError_RuntimeField3.
+// (manager 0 coaching team 0x165) also checks the club of the Bundestrainer, ManagerRecord4Club.
 std::vector<uint16_t> marked_calendar(const GameState& g, int team) {
     std::vector<uint16_t> cal(kCalendarDays);
     for (int d = 0; d < kCalendarDays; d++) cal[size_t(d)] = g.memory.u16(kCalendar + uint32_t(d) * 2);
@@ -97,7 +102,7 @@ std::vector<uint16_t> marked_calendar(const GameState& g, int team) {
         bool ok = true;
         for (int i = std::max(0, d - 1); i <= std::min(kCalendarDays - 1, d + 1); i++) {
             if (day_conflict(g, team, -1, cal[size_t(i)], i)) ok = false;
-            if (national && day_conflict(g, int16_t(g.memory.u16(::bmh::layout::CupDraw_FormatError_RuntimeField3)), -1, cal[size_t(i)], i)) ok = false;
+            if (national && day_conflict(g, int16_t(g.memory.u16(::bmh::layout::ManagerRecord4Club)), -1, cal[size_t(i)], i)) ok = false;
         }
         if (d + 1 > kLastReplayDay || d + 1 < kFirstDayAfter) ok = false;
         if (d >= kWinterBreakFirst && d <= kWinterBreakLast) ok = false;
@@ -117,14 +122,14 @@ std::vector<LeagueMatchRef> reschedulable_matches(const GameState& g, int manage
     // The screen only reacts to the calendar bit of the club's league for bits 0-3
     // (local_34 == bit); CalendarCell derives local_34 as league - (league > 2).
     const int screen_bit = league > 2 ? league - 1 : league;
-    if (screen_bit > 3 || kLeagueBit[league] != screen_bit) return out;
+    if (screen_bit > 3 || league_system().calendar_bit[league] != screen_bit) return out;
     // DaysIntoSeason, the day of the season; its saved copy in g.memory is only the load day
     const int today = g.season_day();
     const int matchdays = league_matchdays(league);
     int round = -1;
     for (int day = 0; day < kCalendarDays; day++) {
         const uint32_t comps = day_competitions(g, g.memory.u16(kCalendar + uint32_t(day) * 2));
-        if (kLeagueBit[league] > 7 || !((comps >> kLeagueBit[league]) & 1)) continue;
+        if (league_system().calendar_bit[league] > 7 || !((comps >> league_system().calendar_bit[league]) & 1)) continue;
         ++round;  // local_58 - 1: the league days up to this one
         if (day <= today || round == 0 || round + 2 >= matchdays) continue;
         const std::vector<Fixture> fixtures = round_fixtures(league, round);

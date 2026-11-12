@@ -1,4 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Season-wide steps: offers, club moods and balances, European qualification and cup fields,
+// annual accounts and profit tax, season awards, promotion/relegation, league shuffling, player
+// regeneration and release, and the first-season setup of a career.
+// Reads and writes most of GameState (memory, players, squad_slots, manager records).
+// Draws from WatcomRandom and GameRandom (see the calls below). Interface in season.hpp.
 #include "formats/executable_layout.hpp"
 #include "game/environment.hpp"
 #include "game/season.hpp"
@@ -37,8 +42,8 @@ constexpr uint32_t kTransferList = ::bmh::layout::EditorList;  // 44 entries of 
 constexpr uint32_t kListEntry = 0x58;
 const int& kPoolSlots = runtime_dimensions.pool_first;         // CareerRuntimeField
 constexpr uint32_t kOffers = ::bmh::layout::OfferSlots;        // OfferSlots: 4 offers, -1 = free
-constexpr size_t kBoard = 0x840;             // tactics board of a manager
-constexpr size_t kBoardSlot = 0x58;
+constexpr size_t kBoard = kTacticsBoardSize;             // tactics board of a manager
+constexpr size_t kBoardSlot = kTacticsBoardSlotSize;
 
 uint32_t board32(const GameState& g, size_t at) {
     return uint32_t(g.tactics.at(at) | g.tactics.at(at + 1) << 8 | g.tactics.at(at + 2) << 16) |
@@ -216,7 +221,7 @@ struct Entrants {
 
 // OnTableJust(league, rank, ranks): the club with that final rank (0 if none)
 int club_at_rank(int league, int rank, const uint8_t* ranks) {
-    for (int i = 0; i < kLeagueSizes[league]; i++)
+    for (int i = 0; i < league_system().sizes[league]; i++)
         if (ranks[i] == rank) return league_first_team(league) + i;
     return 0;
 }
@@ -279,8 +284,8 @@ void observe_initial_international_groups(GameState& g, WatcomRandom& rand, int 
             for(const Fixture& fixture:generate_fixtures(schedule_teams,event.round+1,rounds,0)) {
                 for(int position:{fixture.home,fixture.away}) {
                     const int team=mem.u16(teams+uint32_t(position)*2);
-                    const bool manager_national=mem.has(::bmh::layout::CupDraw_FormatError_RuntimeField2)&&mem.has(::bmh::layout::CupDraw_FormatError_RuntimeField3)&&
-                        mem.u16(::bmh::layout::CupDraw_FormatError_RuntimeField2)==kNoTeam&&mem.u16(::bmh::layout::CupDraw_FormatError_RuntimeField3)==team;
+                    const bool manager_national=mem.has(::bmh::layout::ManagerRecord0Club)&&mem.has(::bmh::layout::ManagerRecord4Club)&&
+                        mem.u16(::bmh::layout::ManagerRecord0Club)==kNoTeam&&mem.u16(::bmh::layout::ManagerRecord4Club)==team;
                     const bool human_owned=g.manager_of(team)>=0||manager_national;
                     if(team<runtime_dimensions.record_teams||team==kNoTeam||!human_owned)continue;
                     SeasonCupDrawEvent::GroupAverageSnapshot snapshot;
@@ -342,12 +347,12 @@ void european_setup(GameState& g, GameRandom& game, WatcomRandom& rand, const Se
         if (u == 0) {
             // the national cup winner and finalist (+0x22/+0x24): entry 0, in the English
             // structure the FA Cup proper, entry 28 (U16: SeasonRuntimeField8/83c)
-            const uint32_t cup = kEnglishCompetitions ? ::bmh::layout::CupTable + 28 * 0x28 : ::bmh::layout::CupTable;
+            const uint32_t cup = league_system().english_competitions ? ::bmh::layout::CupTable + 28 * 0x28 : ::bmh::layout::CupTable;
             a = mem.u16(cup + 0x22), b = mem.u16(cup + 0x24);
             if (mem.has(::bmh::layout::Season_CareerSeasonSetup_RuntimeField7)) mem.set16(::bmh::layout::Season_CareerSeasonSetup_RuntimeField7, uint16_t(a));
         } else {
-            a = rand.range(0, kLeagueSizes[kLeague[u]] - 1);
-            do b = rand.range(0, kLeagueSizes[kLeague[u]] - 1); while (b == a);
+            a = rand.range(0, league_system().sizes[kLeague[u]] - 1);
+            do b = rand.range(0, league_system().sizes[kLeague[u]] - 1); while (b == a);
         }
         const int first = kLeague[u] == 0 ? 0 : league_first_team(kLeague[u]);
         league_entrants(g, kLeague[u], uint8_t(a + first), uint8_t(b + first), kUefa[u]);
@@ -367,7 +372,7 @@ void european_setup(GameState& g, GameRandom& game, WatcomRandom& rand, const Se
 void european_fields(GameState& g, GameRandom& game, WatcomRandom& rand) {
     StaticMemory& mem = g.memory;
     Entrants en{mem};
-    const int pool = runtime_dimensions.league_teams + 0x1e;  // CareerSession_DispatchLineup_RuntimeField + CareerSession_InstallLeagueSizes_RuntimeField6: the first foreign club
+    const int pool = runtime_dimensions.league_teams + 0x1e;  // LeagueClubCount + NewcomerClubCount: the first foreign club
     auto pick = [&](int from) {
         int t;
         do t = rand.range(from, from + 6); while (en.find(t) != 0);
@@ -434,13 +439,13 @@ int club_popularity(GameState& g, int m, int team, bool pay, const ClubAttractio
     static const uint8_t kKind[4] = {0, 1, 3, 2};                      // SeasonRuntimeField11
     static const uint8_t kEntry[4] = {0x00, 0x0f, 0x13, 0x15};         // SeasonRuntimeField12
     static const uint8_t kPlus[4] = {0x14, 0x1e, 0x14, 0x0f};          // SeasonRuntimeField13
-    static const int32_t kPremium[4] = {500000, 1500000, 2500000, 1500000};  // SeasonRuntimeField14
+    static const int32_t kPremium[4] = {400000, 850000, 1000000, 850000};  // SeasonRuntimeField14 (Diamond 3.7)
     int8_t p = int8_t(kKind[relations?relations->european_cup:en.find(team)] * 10 + 10);
     if (relations?relations->champion:team == mem.u16(::bmh::layout::Cup_AdvanceCup_RuntimeField6)) {
         if (pay) {
             post_composed(g, m, kChampionshipBonusText);  // ChampionshipBonusText
             book_money(g, m, -700000, true);
-            set_rec32(g, m, 0x874, rec32(g, m, 0x874) + 1000000);
+            set_rec32(g, m, 0x874, rec32(g, m, 0x874) + 700000);
         }
         p = int8_t(p + 10);
     }
@@ -470,7 +475,7 @@ int club_popularity(GameState& g, int m, int team, bool pay, const ClubAttractio
 void season_tickets(GameState& g, int m, WatcomRandom& rand, const ClubAttractionTitles* relations=nullptr) {
     static const uint8_t kBase[5] = {50, 40, 30, 30, 20};                  // SeasonRuntimeField17
     static const uint16_t kTickets[5] = {5000, 2000, 1000, 1000, 300};     // SeasonRuntimeField15
-    static const uint16_t kPrice[5] = {330, 270, 240, 240, 225};           // SeasonRuntimeField16
+    static const uint16_t kPrice[5] = {300, 270, 240, 240, 225};           // SeasonRuntimeField16
     const int team = g.manager_teams.at(size_t(m));
     const int league = std::min(match_team_league(g,team), 4);
     const int pop = club_popularity(g, m, team, true,relations);
@@ -494,7 +499,7 @@ void season_event(GameState& g, int m, GameRandom& game, WatcomRandom& rand, Min
     // Int64T: bankrupt, or out of credit
     const uint8_t cut = rec8(g, m, 0x220);
     const int32_t total = int32_t(rec8(g, m, 0x26f)) * 80000 + (assets(g, m, 0xf) - assets(g, m, 0x10));
-    if (total < -6000000 || ((cut >> 5) == 2 && int32_t(cut & 0x1f) * 100000 <= rec32(g, m, 0x330))) return;
+    if (total < -4000000 || ((cut >> 5) == 2 && int32_t(cut & 0x1f) * 100000 <= rec32(g, m, 0x330))) return;
     if (g.memory.u8(::bmh::layout::GameMode) < 3) set_rec32(g, m, 0x320, rec32(g, m, 0x314) - rec32(g, m, 0x324));
     bool poor = false;
     int32_t w = worth;
@@ -623,59 +628,64 @@ namespace {
 
 }  // namespace
 
-// OpenBMH deviates from the original: retains the enhanced academy player-generation strength bands with monthly youth budgets.
-// The middle youth budget enables the existing enhanced academy recruitment.
-// Old lump-sum contracts remain eligible after their saved season payment.
-// Player search, strength bands, age and board setup retain the shared rules.
+// Youth academy of the Diamond 3.7 programme. The middle monthly youth budget enables it; old lump-sum
+// contracts remain eligible after their saved season payment (environment_academy_active). The strength
+// of the new player is the club's youth-team strength setting (the club's own youth average in game mode 1);
+// the academy is skipped when the squad's youth average lies more than 25 above that setting. Up to two
+// rounds are tried; a round needs W(0, 3) == 0 of the game generator and then looks, from the last squad
+// slot down, for an old enough player of a computer club (age above W(t, t + 3), t from 15 down to 0), whose
+// identity is reused for a freshly generated player (level +-10 %) who joins the academy squad.
 bool youth_academy_player(GameState& g, int m, GameRandom& game, WatcomRandom& rand, MinuteReport& report) {
     const int team = g.manager_teams.at(size_t(m));
-    const int league = match_team_league(g,team);
     if (!environment_academy_active(g, m)) return false;
     if (squad_count(g, team, 3) > 0x16) return false;
-    const auto budget = g.memory.u32(::bmh::layout::Spending + uint32_t(m) * 0x24 + kYouthAcademy * 4);
-    if (budget <= uint32_t(kEnvironmentStep[kYouthAcademy] * 6) &&
-        g.memory.u8(::bmh::layout::CareerDuration) != 1 &&
-        int(g.memory.u8(::bmh::layout::EnvironmentYouthTeams + uint32_t(m) * 0x24 + 2)) <
-            team_average(g, team, 0xf3).value - 25)
-        return false;
+    int level = g.memory.u8(::bmh::layout::EnvironmentYouthTeams + uint32_t(m) * 0x24 + 2);
+    const int average = team_average(g, team, 0xf3).value;
+    if (g.memory.u8(::bmh::layout::GameMode) == 1) level = average;
+    if (average - 0x19 > level) return false;
     const SquadRange own = squad_range(team);
-    if (game.range(0, 0) != 0) return false;
-    for (int t = 0xf;; --t) {
-        for (int s = 0x86f; s >= 0; --s) {
-            const int club = s / 24;
-            if (g.manager_of(slot_team(s)) >= 0) {
-                s -= 0x17;  // the whole squad of a human manager
-                continue;
+    bool added = false;
+    int t = 0xf;
+    for (int round = 0; round < 2; ++round) {
+        if (game.range(0, 3) != 0) continue;
+        bool found = false;
+        for (;;) {
+            for (int s = 0x86f; s >= 0 && !found; --s) {
+                const int club = s / 24;
+                if (g.manager_of(slot_team(s)) >= 0) {
+                    s -= 0x17;  // the whole squad of a human manager
+                    continue;
+                }
+                const int player = g.squad_slots.at(size_t(s)) & 0xfff;
+                if (player == 0xfff) continue;
+                bool loan = false;  // BoughtEntry
+                for (int k = 0; k < 200 && !loan; k++) {
+                    const uint32_t e = g.memory.u32(::bmh::layout::Career_RemoveJoinLoans_RuntimeField + uint32_t(k) * 4);
+                    loan = e != 0 && int(e & 0xfff) == player;
+                }
+                if (loan) continue;
+                const int age = int((g.players.at(size_t(player)).w364 >> 21) & 0x1f);
+                if (age <= game.range(t, t + 3)) continue;  // only a player older than the roll is recycled
+                if (!remove_from_seller(g, club, player, report)) return false;
+                generate_player(g, player, level | 0x1000, game, rand);
+                // PendingOfferAnswer(manager, player | 0xf000, -1, squad start)
+                int slot = -1;
+                for (size_t q = own.first; q < own.first + 24 && slot < 0; q++)
+                    if (g.squad_slots.at(q) == 0xfff) slot = int(q);
+                if (slot < 0) return false;  // (the original shows PendingOffer_FormatError_ExecutableField)
+                g.squad_slots.at(size_t(slot)) = uint16_t(player);
+                new_board_entry(g, m, slot - int(own.first), slot, rand);
+                g.tactics.at(size_t(m) * 0x840 + size_t(slot - int(own.first)) * 0x58 + 0xd) = 0x69;
+                uint32_t& w = g.players.at(size_t(player)).w364;
+                w = (w & 0xff00ffffu) | uint32_t(uint8_t(rand.range(0, 4) << 5)) << 16;
+                found = true;
             }
-            const int player = g.squad_slots.at(size_t(s)) & 0xfff;
-            if (player == 0xfff) continue;
-            bool loan = false;  // BoughtEntry
-            for (int k = 0; k < 200 && !loan; k++) {
-                const uint32_t e = g.memory.u32(::bmh::layout::Career_RemoveJoinLoans_RuntimeField + uint32_t(k) * 4);
-                loan = e != 0 && int(e & 0xfff) == player;
-            }
-            if (loan) continue;
-            const int age = int((g.players.at(size_t(player)).w364 >> 21) & 0x1f);
-            if (age > game.range(t, t + 3)) continue;
-            if (!remove_from_seller(g, club, player, report)) return false;
-            static const int kLevel[4][2] = {{0x4f, 0x5f}, {0x45, 0x55}, {0x31, 0x44}, {0x1d, 0x30}};
-            const int band = league == 0 ? 0 : league == 1 ? 1 : league < 4 ? 2 : 3;
-            const int level = game.range(kLevel[band][0], kLevel[band][1]);
-            generate_player(g, player, level | 0x3000, game, rand);
-            // PendingOfferAnswer(manager, player | 0xf000, -1, squad start)
-            int slot = -1;
-            for (size_t q = own.first; q < own.first + 24 && slot < 0; q++)
-                if (g.squad_slots.at(q) == 0xfff) slot = int(q);
-            if (slot < 0) return false;  // (the original shows PendingOffer_FormatError_ExecutableField)
-            g.squad_slots.at(size_t(slot)) = uint16_t(player);
-            new_board_entry(g, m, slot - int(own.first), slot, rand);
-            g.tactics.at(size_t(m) * 0x840 + size_t(slot - int(own.first)) * 0x58 + 0xd) = 0x69;
-            uint32_t& w = g.players.at(size_t(player)).w364;
-            w = (w & 0xff00ffffu) | uint32_t(uint8_t(rand.range(0, 4) << 5)) << 16;
-            return true;
+            if (found || t == 0) break;
+            --t;
         }
-        if (t == 0) return false;
+        if (found) added = true;
     }
+    return added;
 }
 
 namespace {
@@ -699,7 +709,6 @@ void season_accounts(GameState& g, int m, GameRandom& game, WatcomRandom& rand, 
     const SquadRange range = squad_range(team);
     for (size_t s = 0; s < 24; s++)
         if (g.squad_slots.at(range.first + s) != 0x0FFF) season_bonus(g, m, int(s), uint8_t(pos), true);
-    // OpenBMH deviates from the original: retains the enhanced academy player-generation strength bands with monthly youth budgets.
     // Academy recruitment is posted after the youth season has settled.
     if (youth_academy_player(g, m, game, rand, report)) post_text(g, m, text_id(::bmh::layout::Season_SeasonAccounts_TextPointer));
     if (report.unsupported) return;
@@ -797,7 +806,7 @@ void change_places(GameState& g, int a, int b) {
         replace(::bmh::layout::Career_CompetitionPointersEnglish_ExecutableField19, 0x20);
         replace(::bmh::layout::Career_CompetitionPointersEnglish_ExecutableField25, 0x40);
         // (the English national cup field: 68 clubs at layout field, InitializeNationalCup(0x44, ...))
-        if (kEnglishCompetitions) {
+        if (league_system().english_competitions) {
             if (mem.has(kEnglishFaField)) replace(kEnglishFaField, 0x44);
         } else {
             replace(::bmh::layout::Field, 0x40);
@@ -829,7 +838,7 @@ void change_places(GameState& g, int a, int b) {
 void order_cup_ties(GameState& g, int teams, int offset) {
     StaticMemory& mem = g.memory;
     uint32_t list = mem.pointer(::bmh::layout::CupTable) + uint32_t(offset) * 2;
-    if (kEnglishCompetitions) {
+    if (league_system().english_competitions) {
         // the Football Limited CupField: the FA Cup stage decides the range - qualifying
         // round 1 (48 clubs from 0), round 2 (24 from 48), the proper rounds (entry 28);
         // with 0x80 the League Cup (entry 25)
@@ -906,8 +915,8 @@ namespace {
 void shuffle_leagues(GameState& g, WatcomRandom& rand) {
     int first = 0;
     for (int l = 0; l < kLeagueCount; l++) {
-        const int end = first + kLeagueSizes[l];
-        shuffle_initial_positions(first,kLeagueSizes[l],rand,[&](int a,int b){change_places(g,first+a,first+b);});
+        const int end = first + installed_league_system().sizes[l];
+        shuffle_initial_positions(first,installed_league_system().sizes[l],rand,[&](int a,int b){change_places(g,first+a,first+b);});
         first = end;
     }
 }
@@ -957,7 +966,7 @@ void cup_fields_english(GameState& g, GameRandom& game, const uint8_t (&ranks)[4
     };
     uint32_t n = 0;
     for (int l = 0; l < 4; l++)
-        for (int i = 0; i < kLeagueSizes[l]; i++) {
+        for (int i = 0; i < league_system().sizes[l]; i++) {
             if (l >= 3 && i >= 8) continue;
             const int team = club_at_rank(l, i, ranks[l]);
             mem.set16(kEnglishFaField + n++ * 2, uint16_t(team));
@@ -975,7 +984,7 @@ void cup_fields_english(GameState& g, GameRandom& game, const uint8_t (&ranks)[4
     }
     n = 0;
     for (int l = 0; l < 3; l++)
-        for (int i = 0; i < kLeagueSizes[l]; i++) {
+        for (int i = 0; i < league_system().sizes[l]; i++) {
             if (l >= 2 && i >= 4) continue;
             mem.set16(kEnglishLeagueCupField + n++ * 2, uint16_t(club_at_rank(l, i, ranks[l])));
         }
@@ -992,14 +1001,14 @@ void cup_field(GameState& g, GameRandom& game, const std::function<void(const ch
         const LeagueTable t = compute_league_table(g, l, 0, league_matchdays(l), 7, 1);
         for (int i = 0; i < t.size; i++) ranks[l][i] = uint8_t(t.rank(i));
     }
-    if (kEnglishCompetitions) {
+    if (league_system().english_competitions) {
         cup_fields_english(g, game, ranks, pause, cup_draw);
         return;
     }
     constexpr uint32_t kField = ::bmh::layout::Field;
     uint32_t n = 0;
     for (int l = 0; l < 4; l++)
-        for (int i = 0; i < kLeagueSizes[l]; i++) {
+        for (int i = 0; i < league_system().sizes[l]; i++) {
             if (l >= 2 && i >= 0xe) continue;
             const int team = club_at_rank(l, i, ranks[l]);
             mem.set16(kField + n++ * 2, uint16_t(team));
@@ -1171,7 +1180,8 @@ bool renew_season_player_slots(GameState& g,int first,int end,GameRandom& game,W
             }
             Player& p = g.players.at(size_t(player));
             bool leaves = false;
-            if (s < runtime_dimensions.pool_first && (p.w35c >> 27) == 0x1f) {
+            // Diamond 3.7: out for his career means both the injury type and the duration are 0x1f.
+            if (s < runtime_dimensions.pool_first && (p.w35c >> 27) == 0x1f && ((p.w364 >> 16) & 0x1f) == 0x1f) {
                 // out for his career
                 bool gone = true;
                 if (owner != -1) {
@@ -1225,7 +1235,8 @@ bool renew_season_player_slots(GameState& g,int first,int end,GameRandom& game,W
                 int age = int16_t(((p.w364 >> 21) & 0x1f) + 1);
                 // OpenBMH deviates from the original: includes transfer-market
                 // players in retirement so the five-bit age cannot wrap to 16.
-                if (rand.range(0x10, 0x16) < age && owner == -1) {
+                // Diamond 3.7: slots of the clubs and the transfer pool, not the national pool.
+                if (s < runtime_dimensions.national_slots_first && rand.range(0x10, 0x16) < age && owner == -1) {
                     if (count != 0xff) count = uint8_t(squad_count(g, team, 2) + loans[team]);
                     if (count > 0xd) {
                         count--;
@@ -1360,8 +1371,8 @@ void licence_withdrawals(GameState& g, int league, std::vector<uint16_t>& down, 
     const int first = league_first_team(league);
     for (size_t m = 0; m < g.manager_teams.size(); m++) {
         const int team = g.manager_teams[m];
-        if (team < first || team >= first + kLeagueSizes[league] || ranks[team - first] <= 5) continue;
-        static const uint8_t kDownPlaces[kLeagueCount] = {3, 4, 2, 2, 3, 0, 0, 0, 0};  // CareerSession_InstallLeagueSizes_RuntimeField2
+        if (team < first || team >= first + league_system().sizes[league] || ranks[team - first] <= 5) continue;
+        static const uint8_t kDownPlaces[kLeagueCount] = {3, 4, 2, 2, 3, 0, 0, 0, 0};  // LeagueRelegationPlaces
         if (kDownPlaces[league] == 0) continue;
         const bool broke = season_licence_broke(season_licence_account(g,int(m)));
         if (broke && rec8(g, int(m), 0x210) == 0x1e) {
@@ -1372,7 +1383,7 @@ void licence_withdrawals(GameState& g, int league, std::vector<uint16_t>& down, 
         }
     }
     const auto selected=select_ai_licence_withdrawal(league,g.manager_teams.size(),
-        std::vector<uint8_t>(ranks,ranks+kLeagueSizes[league]),
+        std::vector<uint8_t>(ranks,ranks+installed_league_system().sizes[league]),
         [&](size_t position){return g.manager_of(first+int(position))>=0;},game,rand);
     if(selected) {
         const auto t=first+int(*selected);
@@ -1404,22 +1415,22 @@ void promotion(GameState& g, GameRandom& game, WatcomRandom& rand, MinuteReport&
     }
     // The league ladder is data of the loaded game (schedule.hpp, installed from the EXE):
     // Void reads the German tables, the English ClubName its own copies -
-    // first league / number of leagues of each promotion group (kGroupLeague/s), relegation
-    // places (kLeagueRelegation), the league(s) below (kGroupBelow/Count). German:
+    // first league / number of leagues of each promotion group (league_system().group_first/s), relegation
+    // places (league_system().relegation), the league(s) below (league_system().below_first/Count). German:
     // 0 | 1 | 2+3 (Regionalliga A/B) | 4; English: 0 | 1 | 2 | 3.
-    const uint8_t* kFirst = kGroupLeague;
-    const uint8_t* kCount = kGroupLeagues;
-    const uint8_t* kDown = kLeagueRelegation;
-    const uint8_t* kBelow = kGroupBelow;
-    const uint8_t* kBelowCount = kGroupBelowCount;
-    // The clubs that refill the lowest league: kNewcomerCount clubs from kNewcomerFirst
+    const uint8_t* kFirst = league_system().group_first;
+    const uint8_t* kCount = league_system().group_count;
+    const uint8_t* kDown = league_system().relegation;
+    const uint8_t* kBelow = league_system().below_first;
+    const uint8_t* kBelowCount = league_system().below_count;
+    // The clubs that refill the lowest league: league_system().newcomer_count clubs from league_system().newcomer_first
     // (German: the 30 amateur clubs 138-167). The English game draws from its 12 further
-    // English clubs (ClubName: range(CareerSession_DispatchLineup_RuntimeField, CareerSession_DispatchLineup_RuntimeField + 11)); its later ids have no name.
+    // English clubs (ClubName: range(LeagueClubCount, LeagueClubCount + 11)); its later ids have no name.
     // The span ends at the last named club, which keeps the German draws unchanged.
     // (OpenBMH deviates from the English original here: its extra coin flip per draw is not
     // ported.)
-    const int newcomer_first = kNewcomerFirst;
-    int newcomer_count = kNewcomerCount;
+    const int newcomer_first = league_system().newcomer_first;
+    int newcomer_count = league_system().newcomer_count;
     while (newcomer_count > 1) {
         const std::string name = g.club_name(newcomer_first + newcomer_count - 1);
         if (club_has_name(name)) break;
@@ -1431,7 +1442,7 @@ void promotion(GameState& g, GameRandom& game, WatcomRandom& rand, MinuteReport&
             int places = kDown[l];
             licence_withdrawals(g, l, down, places, ranks[l], game, rand);
             std::vector<uint16_t> ranked;
-            for (int rank = 0; rank < kLeagueSizes[l]; ++rank)
+            for (int rank = 0; rank < installed_league_system().sizes[l]; ++rank)
                 ranked.push_back(uint16_t(club_at_rank(l, rank, ranks[l])));
             append_relegation_places(down, ranked, places);
         }
@@ -1447,7 +1458,7 @@ void promotion(GameState& g, GameRandom& game, WatcomRandom& rand, MinuteReport&
                                                 mem_u16(g, ::bmh::layout::Season_Promotion_ExecutableField)};
             for (int l = kBelow[grp]; l < kBelow[grp] + kBelowCount[grp]; l++) {
                 std::vector<uint16_t> ranked;
-                for (int rank = 0; rank < kLeagueSizes[l]; ++rank)
+                for (int rank = 0; rank < installed_league_system().sizes[l]; ++rank)
                     ranked.push_back(uint16_t(club_at_rank(l, rank, ranks[l])));
                 feeders.push_back(std::move(ranked));
             }
@@ -1504,12 +1515,12 @@ void promotion(GameState& g, GameRandom& game, WatcomRandom& rand, MinuteReport&
 }  // namespace
 
 // LeagueName(buf, league): the name of a league (< 5): the texts from Achievements_FormatError_TextPointer3 on - a
-// league whose suffix letter (CareerSession_InstallLeagueSizes_RuntimeField3, two bytes per league) is set shares the text of
+// league whose suffix letter (LeagueNameSuffixes, two bytes per league) is set shares the text of
 // the one before when its letter is from 'B' on (LeagueName2) - with " " + the letter.
 std::string league_name(const GameState& g, int league) {
-    // CareerSession_InstallLeagueSizes_RuntimeField3 of the loaded game (schedule.hpp: German A/B for the two Regionalligen,
+    // LeagueNameSuffixes of the loaded game (schedule.hpp: German A/B for the two Regionalligen,
     // English none - its four divisions are one ladder)
-    const char* kSuffix = kLeagueSuffix;
+    const char* kSuffix = league_system().suffix;
     int index = 0;
     for (int l = 0; l < league; l++)
         if (uint8_t(kSuffix[l + 1]) < 0x42) index++;
@@ -1533,7 +1544,7 @@ int best_scorer_team(GameState& g, int league, int flags) {
     std::vector<SeasonScoringEntry> counters;
     std::vector<std::pair<uint16_t,uint16_t>> slots;
     const int first = league_first_team(league);
-    for (int team = first; team < first + kLeagueSizes[league]; team++) {
+    for (int team = first; team < first + league_system().sizes[league]; team++) {
         if (g.manager_of(team) < 0 && (flags & 1)) continue;
         const SquadRange range = squad_range(team);
         for(size_t slot=range.first;slot<range.first+range.count;++slot) {
@@ -1558,7 +1569,7 @@ int best_scorer_team(GameState& g, int league, int flags) {
 // club's card counter DeskRecords_Teams_RuntimeField) and 1 per yellow, sorted ascending (Games).
 // Returns the club with the fewest points.
 int fair_play_team(const GameState& g, int league) {
-    const int first = league_first_team(league), count = kLeagueSizes[league];
+    const int first = league_first_team(league), count = installed_league_system().sizes[league];
     std::vector<uint16_t> discipline;discipline.reserve(size_t(count));
     for(int i=0;i<count;++i)discipline.push_back(g.memory.u16(::bmh::layout::DeskRecords_Teams_RuntimeField+uint32_t(first+i)*2));
     return first+int(season_fairplay_winner(discipline));
@@ -1659,11 +1670,11 @@ bool career_season_setup(GameState& g, GameRandom& game, WatcomRandom& rand, Min
     }
     // the title holders of the cup entries (+0x22): none yet, the placeholder clubs
     const uint16_t first_small = uint16_t(league_first_team(5));  // TeamsWithSquads
-    const uint16_t foreign = 189 + runtime_dimensions.league_teams + 30;  // ClubPlayerDetail_ClubPlayerDetailFromGame_RuntimeField3 + CareerSession_DispatchLineup_RuntimeField + CareerSession_InstallLeagueSizes_RuntimeField6 (0x165)
+    const uint16_t foreign = 189 + runtime_dimensions.league_teams + 30;  // ForeignCupClubCount + LeagueClubCount + NewcomerClubCount (0x165)
     mem.set16(::bmh::layout::Season_CareerSeasonSetup_RuntimeField2, foreign);
     mem.set16(::bmh::layout::Season_CareerSeasonSetup_RuntimeField6, uint16_t(first_small + 7));
     mem.set16(::bmh::layout::Season_CareerSeasonSetup_RuntimeField, 7);
-    if (kEnglishCompetitions) mem.set16(::bmh::layout::CupTable + 28 * 0x28 + 0x22, 7);  // (EN: the FA Cup proper, SeasonRuntimeField8)
+    if (installed_league_system().english_competitions) mem.set16(::bmh::layout::CupTable + 28 * 0x28 + 0x22, 7);  // (EN: the FA Cup proper, SeasonRuntimeField8)
     mem.set16(::bmh::layout::Season_CareerSeasonSetup_RuntimeField5, uint16_t(league_first_team(7) + 7));
     mem.set16(::bmh::layout::Season_CareerSeasonSetup_RuntimeField4, uint16_t(league_first_team(6) + 7));
     mem.set16(::bmh::layout::Season_CareerSeasonSetup_RuntimeField3, uint16_t(foreign + 1));

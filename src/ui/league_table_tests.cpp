@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Tests for the league table projection, controls and family requests (ui/league_table.hpp).
 #include "formats/executable_layout.hpp"
 #include "ui/league_table.hpp"
 
@@ -16,6 +17,7 @@
 #include "ui/desktop.hpp"
 #include "ui/manager.hpp"
 #include "ui/setup.hpp"
+#include "testing/check.hpp"
 
 using namespace bmh;
 using namespace bmh::ui;
@@ -23,9 +25,7 @@ using namespace bmh::ui;
 namespace {
 int counted_draws = 0;
 void count_draw(int) { ++counted_draws; }
-void check(bool ok, const char* message) {
-    if (!ok) throw std::runtime_error(message);
-}
+using bmh::test_support::check;
 void rejected(const std::function<void()>& action) {
     try { action(); } catch (const FormatError&) { return; }
     throw std::runtime_error("expected rejected league table input");
@@ -41,7 +41,7 @@ std::string original_league_title(const GameState& game, const LeImage& exe, int
         for (int previous = 0; previous < league; ++previous)
             if (exe.u8(::bmh::layout::Manager_FormatError_RuntimeField + uint32_t(previous) * 2) < 'B') ++text;
         std::string name = (*game.texts)[text];
-        const uint8_t suffix = exe.u8(::bmh::layout::CareerSession_InstallLeagueSizes_RuntimeField3 + uint32_t(league) * 2);
+        const uint8_t suffix = exe.u8(::bmh::layout::LeagueNameSuffixes + uint32_t(league) * 2);
         if (suffix != 0) {
             std::string tail = (*game.texts)[size_t((::bmh::layout::Manager_FormatError_TextPointer2 - ::bmh::layout::TextPointerTable) / 4)];
             check(!tail.empty(), "Original TEXTD league suffix template is present");
@@ -94,7 +94,7 @@ int main(int argc, char** argv) {
             const auto& actual = tables[size_t(league)];
             const auto reference = compute_league_table(game, league, 0, league_matchdays(league), 7, 1);
             check(actual.manager_slot == manager && actual.league_id == league &&
-                  actual.rows.size() == size_t(kLeagueSizes[league]) && actual.points_mode == 1,
+                  actual.rows.size() == size_t(league_system().sizes[league]) && actual.points_mode == 1,
                   "all leagues project an owned state with the engine's configured points rule");
             check(!actual.league_name.empty() && actual.league_name == original_league_title(game, exe, league),
                   "league heading follows the independent EXE-suffix/TEXTD/Nation-ID oracle");

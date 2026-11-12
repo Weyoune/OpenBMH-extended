@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Implements the achievements screen declared in achievements.hpp: achievements_from_game() builds the
+// read-only per-season state (league, cup and Europe result text and graph position) from the game, and
+// AchievementsScreen renders it over the supplied underlay and answers pointer input.
+// The only request it can raise is a close request; it never writes game state.
 #include "formats/executable_layout.hpp"
 #include "ui/achievements.hpp"
 
@@ -11,6 +15,7 @@
 #include "game/schedule.hpp"
 #include "ui/manager.hpp"
 #include "ui/setup.hpp"
+#include "ui/draw.hpp"
 
 namespace bmh::ui {
 namespace {
@@ -28,8 +33,7 @@ void fill(Image& out, int x, int y, int w, int h, uint8_t color) {
 }
 void copy(Image& out,const Image& source,int sx,int sy,int x,int y,int w,int h,int transparent=-1) {
     if(sx<0||sy<0||sx+w>source.width||sy+h>source.height)throw FormatError("achievements: Source KB56 bounds");
-    for(int yy=0;yy<h;++yy)for(int xx=0;xx<w;++xx){const uint8_t c=source.pixels[size_t(sy+yy)*size_t(source.width)+size_t(sx+xx)];
-        if(c!=transparent&&x+xx>=0&&y+yy>=0&&x+xx<out.width&&y+yy<out.height)out.at(x+xx,y+yy)=c;}
+    draw::copy_clipped(out, source, sx, sy, x, y, w, h, transparent);
 }
 uint16_t rd16(const std::vector<uint8_t>& b,size_t at){return uint16_t(b.at(at))|uint16_t(uint16_t(b.at(at+1))<<8);}
 // FNT files consume the game's single-byte encoding; only JSON/test boundaries use UTF-8.

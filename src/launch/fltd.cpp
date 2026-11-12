@@ -1,4 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Implementation of fltd.hpp. translate_fltd() builds the German-layout image of the English
+// FLTD.EXE: a table of entries (generated include launch/fltd_map.inc) says for every German
+// data object whether to copy it from its English address, keep the German values, fill
+// pointers with an empty string, or use one of OpenBMH's own English texts (kOwnTexts, which
+// must fit the German text's room); the English data segment is also placed at its own
+// addresses. prepare_english_game() writes that image and copies the text, database and
+// other data files into the target directory. Addresses come from formats/executable_layout.hpp.
 #include "formats/executable_layout.hpp"
 #include "launch/fltd.hpp"
 
@@ -12,6 +19,7 @@
 #include <vector>
 
 #include "formats/binary.hpp"
+#include "formats/diamond_image.hpp"
 #include "launch/archive.hpp"
 #include "launch/game_data.hpp"
 
@@ -162,9 +170,9 @@ bool prepare_english_game(const fs::path& source, const fs::path& target, std::s
         }
         if (auto f = find_file(source, "TEXTE.BLK")) copy(*f, target / "TEXTD.BLK");
         if (auto f = find_file(source, "M3E.MAN")) copy(*f, target / "M3D.MAN");
+        // FLTD.EXE is optional: without it the numbers built into OpenBMH and the texts of openbmh.dat stand in (formats/diamond_image.hpp)
         const auto exe = find_file(source, "FLTD.EXE");
-        if (!exe) throw std::runtime_error("FLTD.EXE is missing");
-        save_image(translate_fltd(*exe), target / "BMH.exe");
+        save_image(exe ? translate_fltd(*exe) : english_constants_image(source), target / "BMH.exe");
         return true;
     } catch (const std::exception& e) {
         error = e.what();

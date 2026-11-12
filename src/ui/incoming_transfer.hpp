@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Incoming transfer offers: the decision screen where a manager reviews bids on a listed player (four raw
+// bid slots) and accepts or declines. IncomingTransferDecisionView is a read-only copy built from the game;
+// each UI row keeps the engine's bid slot index. The screen raises requests for the session, which applies
+// the transaction. Implementation: incoming_transfer.cpp.
 #pragma once
 
 #include <array>
@@ -150,6 +154,8 @@ public:
     void pointer_down(bool right = false);
     std::optional<int> pointer_up(int x, int y, bool right = false, uint64_t elapsed_ms = 0);
     std::optional<int> click(int x, int y, bool right = false, uint64_t elapsed_ms = 0);
+    // Mouse DOWN on OK of a confirmation: drawn pressed until the release (click()).
+    bool press(int x, int y);
     std::optional<int> key(std::string_view name);
     bool dismiss_notice();
     bool notice_active() const { return !state_.notice_text.empty() && notice_active_; }
@@ -173,6 +179,7 @@ private:
     uint8_t outcome_speed_setting_ = 0;
     bool outcome_dismissed_ = false;
     bool confirmation_mode_ = false, confirmation_dismissed_ = false;
+    bool notice_pressed_ = false;   // OK of the confirmation held down by the mouse
     std::optional<Image> confirmation_backdrop_;
     Image widgets_, faces_, badge_atlas_, seller_badge_atlas_;
 

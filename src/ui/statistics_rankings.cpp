@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Implementation of statistics_rankings_from_game() and StatisticsRankingsScreen (statistics_rankings.hpp): season paging, category buttons with press/cancel handling, and list drawing.
 #include "formats/executable_layout.hpp"
 #include "ui/statistics_rankings.hpp"
 
@@ -8,6 +9,7 @@
 
 #include "ui/setup.hpp"
 #include "ui/manager.hpp"
+#include "ui/draw.hpp"
 
 namespace bmh::ui {
 namespace {
@@ -24,18 +26,13 @@ void copy_transparent(Image& out, const Image& src, int sx, int sy, int x, int y
     if (sx < 0 || sy < 0 || x < 0 || y < 0 || w < 0 || h < 0 ||
         sx + w > src.width || sy + h > src.height || x + w > out.width || y + h > out.height)
         throw FormatError("statistics rankings: Original sprite bounds");
-    for (int yy = 0; yy < h; ++yy)
-        for (int xx = 0; xx < w; ++xx) {
-            const uint8_t color = src.pixels[size_t(sy + yy) * size_t(src.width) + size_t(sx + xx)];
-            if (color != 0xc0) out.at(x + xx, y + yy) = color;
-        }
+    draw::copy_unclipped(out, src, sx, sy, x, y, w, h, 0xc0);
 }
 
 void fill(Image& out, int x, int y, int w, int h, uint8_t color) {
     if (x < 0 || y < 0 || w < 0 || h < 0 || x + w > out.width || y + h > out.height)
         throw FormatError("statistics rankings: Original button bounds");
-    for (int yy = y; yy < y + h; ++yy)
-        for (int xx = x; xx < x + w; ++xx) out.at(xx, yy) = color;
+    draw::fill(out, x, y, w, h, color);
 }
 
 uint8_t original_name_color(const GameState& game, int runtime_team) {

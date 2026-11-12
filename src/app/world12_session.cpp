@@ -33,7 +33,7 @@ RuntimeResources load_runtime_resources(const std::filesystem::path& data) {
     if(!r.english.u8(layout::LeagueStrengthRanges+1))throw FormatError("world12: English strength rules are incomplete; re-export RULES-EN.DAT");
     const auto layout_profile=DataProfile::international_11();
     if(r.german.u32(layout::CareerSession_DataDirectory_RuntimeField)!=layout_profile.counts.clubs||r.german.u32(layout::CareerSession_DataDirectory_RuntimeField3)!=layout_profile.counts.players||
-        r.german.u16(layout::CareerSession_DispatchLineup_RuntimeField)!=layout_profile.counts.league_teams||!r.english.runtime_policy())throw FormatError("world12: unsupported numeric workspace or missing English runtime policy");
+        r.german.u16(layout::LeagueClubCount)!=layout_profile.counts.league_teams||!r.english.runtime_policy())throw FormatError("world12: unsupported numeric workspace or missing English runtime policy");
     install_runtime_profile(layout_profile);install_fixture_tables(r.german);uint8_t sizes[kLeagueCount];for(size_t i=0;i<kLeagueCount;++i)sizes[i]=layout_profile.leagues[i];set_league_sizes(sizes);
     r.reference=startup_reference_state(r.german,layout_profile.counts,read_file(ui::asset_path(data,"M3.MEN")),read_file(ui::asset_path(data,"M3.DAT")));
     if(!resource_exists(data/"REFEREES.JSON"))

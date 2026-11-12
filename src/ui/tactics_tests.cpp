@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Tests for TacticsScreen: projection of board and options, wrap-around of arrows and wings, and that requests do not fake committed state.
 #include "formats/executable_layout.hpp"
 #include "ui/tactics.hpp"
 
@@ -9,11 +10,12 @@
 #include "formats/fbm.hpp"
 #include "formats/savestate.hpp"
 #include "game/state.hpp"
+#include "testing/check.hpp"
 
 using namespace bmh;
 using namespace bmh::ui;
 namespace {
-void check(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }
+using bmh::test_support::check;
 void rejected(const std::function<void()>& f) {
     try { f(); } catch (const FormatError&) { return; }
     throw std::runtime_error("expected FormatError");

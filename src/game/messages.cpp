@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Mailbox and text helpers: posting messages to managers, looking up message texts and
+// formatting numbers with the original's flag conventions.
+// Reads and writes the mailbox of GameState and reads the text tables installed from the
+// executable. Draws no random numbers. Interface in messages.hpp.
 #include "formats/executable_layout.hpp"
 #include "game/messages.hpp"
 #include "game/schedule.hpp"
@@ -215,12 +219,12 @@ std::string format_number_wide(const GameState& g, int64_t value, int flags) {
 std::string format_amount(const GameState& g, int32_t value) { return format_number(g, value, 0x101); }
 
 void install_message_texts(const LeImage& exe) {
-    kContractEndsSoonText = exe.cstring(kEnglishCompetitions ? ::bmh::layout::EnglishContractExpiryWarningText : ::bmh::layout::ContractExpiryWarningText);
-    kMastersQualificationText = kEnglishCompetitions ? "Masters entry confirmed. Your participation bonus has been credited." : exe.cstring(::bmh::layout::MastersQualificationText);
-    kMastersWinnerText = kEnglishCompetitions ? "Masters title won. Your prize money has been credited." : exe.cstring(::bmh::layout::MastersWinnerText);
-    kIndoorInvitationText = kEnglishCompetitions ? "Indoor event entry bonus credited for " : exe.cstring(::bmh::layout::IndoorInvitationText);
-    kChampionshipBonusText = kEnglishCompetitions ? "League title bonus credited." : exe.cstring(::bmh::layout::ChampionshipBonusText);
-    kFriendlyPayerPrefixText = kEnglishCompetitions ? "Your share: " : exe.cstring(::bmh::layout::NationalFriendlyPayerPrefixText);
+    kContractEndsSoonText = exe.cstring(league_system().english_competitions ? ::bmh::layout::EnglishContractExpiryWarningText : ::bmh::layout::ContractExpiryWarningText);
+    kMastersQualificationText = league_system().english_competitions ? "Masters entry confirmed. Your participation bonus has been credited." : exe.cstring(::bmh::layout::MastersQualificationText);
+    kMastersWinnerText = league_system().english_competitions ? "Masters title won. Your prize money has been credited." : exe.cstring(::bmh::layout::MastersWinnerText);
+    kIndoorInvitationText = league_system().english_competitions ? "Indoor event entry bonus credited for " : exe.cstring(::bmh::layout::IndoorInvitationText);
+    kChampionshipBonusText = league_system().english_competitions ? "League title bonus credited." : exe.cstring(::bmh::layout::ChampionshipBonusText);
+    kFriendlyPayerPrefixText = league_system().english_competitions ? "Your share: " : exe.cstring(::bmh::layout::NationalFriendlyPayerPrefixText);
 }
 
 }  // namespace bmh

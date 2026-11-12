@@ -45,7 +45,7 @@ DesktopEntryOutcome enter_initial_manager_desktop(CareerSnapshot& state,ManagerA
     // or reordered roster, or to an English process-wide reference layout.
     for(size_t i=0;i<state.world.managers.size();++i)if(!scheduled&&!nomination&&!annual&&!closing&&state.world.managers[i].seat!=i)
         throw std::invalid_argument("world12: initial desktop requires ordered manager seats");
-    if(kEnglishCompetitions)throw std::invalid_argument("world12: desktop requires the German numeric reference profile");
+    if(installed_league_system().english_competitions)throw std::invalid_argument("world12: desktop requires the German numeric reference profile");
     // Season-end sponsorship has its own financial/message owner. Do not run
     // that extra path accidentally with a stale Core template flag.
     if(!closing&&reference.memory.has(layout::CareerSession_RuntimeError_RuntimeField4)&&reference.memory.u8(layout::CareerSession_RuntimeError_RuntimeField4))

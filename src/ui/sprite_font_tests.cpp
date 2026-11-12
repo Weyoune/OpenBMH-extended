@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Tests for SpriteFont: mode-5 text width, space advance and title centering.
 #include "formats/executable_layout.hpp"
 #include "ui/sprite_font.hpp"
 
@@ -8,14 +9,13 @@
 #include <stdexcept>
 
 #include "ui/setup.hpp"
+#include "testing/check.hpp"
 
 using namespace bmh;
 using namespace bmh::ui;
 
 namespace {
-void check(bool condition, const char* message) {
-    if (!condition) throw std::runtime_error(message);
-}
+using bmh::test_support::check;
 }
 
 int main(int argc, char** argv) {

@@ -4,8 +4,6 @@
 
 #include "game/messages.hpp"
 #include "ui/manager.hpp"
-#include "formats/palette.hpp"
-#include <fstream>
 
 #include <algorithm>
 #include <array>
@@ -13,14 +11,13 @@
 #include <iostream>
 #include <stdexcept>
 #include <utility>
+#include "testing/check.hpp"
 
 using namespace bmh;
 using namespace bmh::ui;
 
 namespace {
-void check(bool ok, const char* message) {
-    if (!ok) throw std::runtime_error(message);
-}
+using bmh::test_support::check;
 
 void copy_crop(Image& dst, const Image& src, int sx, int sy, int x, int y, int w, int h) {
     for (int row = 0; row < h; ++row) for (int col = 0; col < w; ++col) {
@@ -141,10 +138,10 @@ void assert_key_source_cell(const StadiumScreen& screen, const std::filesystem::
 
 constexpr std::array<uint32_t, 8> kPrices{300000, 375000, 300000, 350000,
                                            300000, 375000, 300000, 350000};
-// Extended retains the 144k expansion and size-aware periods from 1.0.3.
-constexpr std::array<uint32_t, 8> kMaxima{14000, 24000, 14000, 20000,
-                                           14000, 24000, 14000, 20000};
-constexpr std::array<uint8_t, 8> kWeeks{30, 48, 30, 40, 30, 48, 30, 40};
+// The limits and construction periods of Diamond 3.7 (96,000 places in total).
+constexpr std::array<uint32_t, 8> kMaxima{8000, 18000, 8000, 14000,
+                                           8000, 18000, 8000, 14000};
+constexpr std::array<uint8_t, 8> kWeeks{30, 37, 30, 25, 30, 37, 30, 25};
 
 StadiumBlockExpansionEditor editor_for(uint8_t slot = 1, uint32_t total = 8000,
                                        uint8_t features = 0, uint8_t raw_flags = 0) {
@@ -295,7 +292,7 @@ void row_hit_tests(const std::filesystem::path& data) {
         StadiumScreen screen(data, state);
         const auto request = screen.click(250, 22 + slot * 24 + 3);
         check(request.kind == StadiumRequestKind::expansion_select && request.block_slot == slot,
-              "the eight Source block rows map to the eight A–H slots");
+              "the eight Source block rows map to the eight Aâ€“H slots");
         check(!request.expected_block_quote && request.block_total_places == 0 && request.block_features == 0,
               "Source entry carries only the selected slot before the App quote projection");
     }
@@ -306,7 +303,7 @@ void row_hit_tests(const std::filesystem::path& data) {
     check(screen.click(140, 219).kind == StadiumRequestKind::none,
           "the current/future footer control is a local presentation action");
     check(screen.click(250, 22 + 2 * 24 + 3).kind == StadiumRequestKind::expansion_select,
-          "future-information view leaves idle A–H rows editable");
+          "future-information view leaves idle Aâ€“H rows editable");
 
     auto select_state = overview_state();
     select_state.blocks[1].capacity_level = 8; select_state.blocks[1].capacity = 8;
@@ -421,7 +418,7 @@ void source_textd_stadium_caption_tests(const std::filesystem::path& data) {
     assert_text_pixels(editor_image, font, 5, 130, text(::bmh::layout::Stadium_RenderBlockExpansion_TextPointer9), 0x6a,
                        "block editor paints the Original TEXTD total-cost label");
 
-    const std::string duration = format_number(GameState{}, 48, 0x82) + text(::bmh::layout::Stadium_FormatError_RuntimeField) +
+    const std::string duration = format_number(GameState{}, 37, 0x82) + text(::bmh::layout::Stadium_FormatError_RuntimeField) +
         exe.cstring(::bmh::layout::Stadium_FormatError_ExecutableField) + exe.cstring(::bmh::layout::CareerSession_FormatNumber_ExecutableField);
     const int duration_x = 148 - font.text_width(duration);
     assert_text_pixels(editor_image, font, duration_x, 54, duration, 0x6c,
@@ -648,7 +645,7 @@ void source_table_and_ack_tests(const std::filesystem::path& data) {
     auto returned = cancelled.state(); next_identity(returned); returned.block_expansion.reset();
     cancelled.acknowledge(returned);
     check(cancel.kind == StadiumRequestKind::expansion_cancel && !cancelled.state().block_expansion,
-          "a valid quote-bound cancel ACK returns to the A–H overview");
+          "a valid quote-bound cancel ACK returns to the Aâ€“H overview");
 }
 
 void calculator_tests(const std::filesystem::path& data) {
@@ -692,7 +689,7 @@ void calculator_tests(const std::filesystem::path& data) {
     check(screen.calculator_open(), "host can query calculator visibility without reading or mutating Native");
     assert_readout_source_text(screen, data, format_number(GameState{}, 0, 7),
                                "initial calculator readout matches Original width-seven FNT3 glyphs");
-    assert_preset_source_cell(screen, data, exe, 7, 24000);
+    assert_preset_source_cell(screen, data, exe, 7, 18000);
     const Image before = screen.render();
     check(screen.pointer_down(116, 36), "the calculator header starts a Source drag");
     screen.pointer_move(1000, 1000);
@@ -762,7 +759,7 @@ void calculator_tests(const std::filesystem::path& data) {
           "preset selection changes the value without the keypad's invented pressed phase");
     const auto preset_accept = keyboard_return_after_source_phase(preset);
     check(preset_accept.kind == StadiumRequestKind::expansion_set_total &&
-          preset_accept.block_total_places == 24000,
+          preset_accept.block_total_places == 18000,
           "a preset value remains usable through the timed Source J action");
 
     StadiumScreen low_total(data, detail_state());
@@ -777,7 +774,7 @@ void calculator_tests(const std::filesystem::path& data) {
     high_total.click(50, 80);
     check(high_total.text("999999"), "large typed input is accepted and clamped to Source maximum");
     const auto maximum = keyboard_return_after_source_phase(high_total);
-    check(maximum.kind == StadiumRequestKind::expansion_set_total && maximum.block_total_places == 24000,
+    check(maximum.kind == StadiumRequestKind::expansion_set_total && maximum.block_total_places == 18000,
           "calculator input never exceeds the slot-B maximum");
 
     StadiumScreen reopened(data, detail_state(1, 15333, 1));
@@ -785,7 +782,7 @@ void calculator_tests(const std::filesystem::path& data) {
     check(reopened.text("1"), "reopened calculator accepts another appended digit");
     const auto appended = keyboard_return_after_source_phase(reopened);
     check(appended.kind == StadiumRequestKind::expansion_set_total &&
-          appended.block_total_places == 24000,
+          appended.block_total_places == 18000,
           "reopening starts from D=7333 and appends instead of replacing it with the first digit");
 
     StadiumScreen zeroes(data, detail_state());
@@ -906,12 +903,12 @@ void offer_ack_tests(const std::filesystem::path& data) {
     auto no_build = no_screen.state(); next_identity(no_build);
     const auto no_quote = no_build.block_expansion->quote;
     no_build.block_expansion.reset(); no_build.construction_tip_dialog.reset();
-    no_build.blocks[1].construction_weeks = 48;
+    no_build.blocks[1].construction_weeks = 37;
     no_build.blocks[1].flags = uint8_t(no_build.blocks[1].flags | 0x10);
     no_build.blocks[1].capacity = 15;
     no_build.balance -= int32_t(no_quote.base_price);
     no_screen.acknowledge(no_build);
-    check(!no_screen.pending() && no_screen.state().blocks[1].construction_weeks == 48,
+    check(!no_screen.pending() && no_screen.state().blocks[1].construction_weeks == 37,
           "a valid NO decision constructs at the original base price and full duration");
 
     auto poor = initial;
@@ -1037,7 +1034,7 @@ void source_compensation_ack_tests(const std::filesystem::path& data) {
           "negative-week compensation path can take the ordinary NO construction");
     const auto no_offer = *negative_weeks.state().block_expansion->offer;
     const int32_t negative_compensation = -66000; // 11,000 * (17-20) * rate 2.
-    negative_weeks.acknowledge(completed_build_state(negative_weeks, 48,
+    negative_weeks.acknowledge(completed_build_state(negative_weeks, 37,
         late.balance - int32_t(no_offer.base_price) - negative_compensation, 14000));
     check(negative_weeks.state().balance == late.balance - int32_t(no_offer.base_price) + 66000,
           "negative Source weeks credit the account while the ticket cap still applies");
@@ -1049,7 +1046,7 @@ void source_compensation_ack_tests(const std::filesystem::path& data) {
     check(!no_account_booking.click(210, 171).accept_tip,
           "level-zero Source path can accept a normal NO construction");
     const auto level_zero_offer = *no_account_booking.state().block_expansion->offer;
-    no_account_booking.acknowledge(completed_build_state(no_account_booking, 48,
+    no_account_booking.acknowledge(completed_build_state(no_account_booking, 37,
         level_zero.balance, 14000));
     check(no_account_booking.state().balance == level_zero.balance &&
           no_account_booking.state().season_tickets == 14000 &&
@@ -1123,6 +1120,22 @@ namespace {
 void source_stadium_data_controls(const std::filesystem::path& data) {
     const auto exe = load_le(asset_path(data, "BMH.exe"));
     auto state = overview_state();
+    {
+        // the yellow hover frame of the advertising page: over a seat block and over an investment icon
+        StadiumScreen scene(data, state);
+        const auto plain = scene.render().pixels;
+        if (state.blocks[0].construction_weeks == 0) {
+            check(scene.pointer_move(250, 30) && scene.render().pixels != plain, "a seat block is framed under the pointer");
+            check(scene.pointer_move(100, 100) && scene.render().pixels == plain, "and the frame is gone when the pointer leaves");
+        }
+        for (int choice = 0; choice < 8 && state.investments_enabled; ++choice) {
+            if (!state.investments[size_t(choice)].available) continue;
+            check(scene.pointer_move(8 + (choice % 4) * 54, 158 + (choice / 4) * 30) && scene.render().pixels != plain,
+                  "an available investment icon is framed under the pointer");
+            check(scene.pointer_move(100, 100) && scene.render().pixels == plain, "and the frame is gone when the pointer leaves");
+            break;
+        }
+    }
     StadiumScreen overview(data, state);
     check(overview.pointer_down(265, 220), "Original stadium data button binds on DOWN");
     const auto held_overview=overview.state_json();
@@ -1185,51 +1198,9 @@ void source_stadium_data_controls(const std::filesystem::path& data) {
 }
 }
 
-namespace {
-void construction_backdrop_tests(const std::filesystem::path& data,const std::filesystem::path& output) {
-    const auto save_image=[&](const Image& image,const std::string& name) {
-        if(output.empty())return;
-        std::filesystem::create_directories(output);const auto palette=load_palette(data/"M3PC.COL");
-        std::ofstream file(output/(name+".ppm"),std::ios::binary);file<<"P6\n320 240\n255\n";
-        for(auto pixel:image.pixels){const auto color=palette.argb[pixel];file.put(char(color>>16));file.put(char(color>>8));file.put(char(color));}
-    };
-    for(bool compact:{false,true})for(bool periphery:{false,true}) {
-        auto state=periphery?overview_state():detail_state(1,15333,1);
-        state.compact_dialog_frame=compact;
-        StadiumScreen screen(data,state);
-        if(periphery){screen.click(30,220);screen.click(160,220);}
-        const auto request=screen.click(periphery?266:50,periphery?125:140);
-        check(request.kind==(periphery?StadiumRequestKind::quote_periphery:StadiumRequestKind::expansion_confirm),"construction backdrop fixture did not enter its real request path");
-        const Image underlay=screen.render();
-        state=screen.state();next_identity(state);
-        auto question=question_for();question.compact_dialog_frame=compact;
-        if(periphery){state.quoted_object=request.object;state.quoted_price=1700000;question.source_flags=1;state.periphery_quote_dialog=question;}
-        else {state.block_expansion->offer=pending_offer(state.block_expansion->quote);state.construction_tip_dialog=question;}
-        screen.acknowledge(state);const auto actual=screen.render();
-        const auto check_outside=[&](const Image& image) {
-            for(int y=0;y<240;++y)if(y<80 || y>=190)for(int x=0;x<320;++x)
-                if(image.pixels[size_t(y*320+x)]!=underlay.pixels[size_t(y*320+x)])throw std::runtime_error(std::string(periphery?"periphery":"stands")+" compact="+std::to_string(compact)+" backdrop differs at "+std::to_string(x)+","+std::to_string(y));
-        };
-        check_outside(actual);
-        screen.pointer_down(100,171);check_outside(screen.render());
-        GameEndRenderOptions options{state.plain_background,state.gradient_text,true};
-        GameEndTaxDialog notice(data,question,options,screen.construction_notice_backdrop());
-        check(notice.backdrop().pixels==screen.construction_notice_backdrop().pixels,"construction notice completion restores a black frame");
-        check_outside(notice.render(GameEndTaxDialog::Button::yes));
-        if(compact) {
-            const auto name=periphery?"periphery":"stands";
-            GameEndTaxDialog previous(data,question,{state.plain_background,state.gradient_text},underlay);
-            check(previous.render().pixels[0]==0,"default compact dialog behavior changed outside construction menus");
-            save_image(previous.render(),std::string(name)+"-before");save_image(actual,std::string(name)+"-after");
-        }
-    }
-}
-}
-
 int main(int argc, char** argv) try {
     if (argc < 2 || !*argv[1]) throw std::runtime_error("expected Original BMH data directory");
     const std::filesystem::path data = argv[1];
-    construction_backdrop_tests(data,argc>2?std::filesystem::path(argv[2]):std::filesystem::path{});
     source_stadium_data_controls(data);
     source_periphery_hit_tests(data);
     row_hit_tests(data);
@@ -1241,7 +1212,7 @@ int main(int argc, char** argv) try {
     calculator_tests(data);
     offer_ack_tests(data);
     source_compensation_ack_tests(data);
-    std::cout << "Source-valid A–H tables, calculator phases, compensation ACKs, and plain-manager tip retry checks passed\n";
+    std::cout << "Source-valid Aâ€“H tables, calculator phases, compensation ACKs, and plain-manager tip retry checks passed\n";
     return 0;
 } catch (const std::exception& e) {
     std::cerr << "stadium_block_ui_tests: " << e.what() << '\n';

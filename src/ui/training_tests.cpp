@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Tests for TrainingScreen: squad projection, skill bars, blocking of input while a request is pending, rejection, and right-button return to the desktop.
 #include "formats/executable_layout.hpp"
 #include "ui/training.hpp"
 
@@ -9,12 +10,13 @@
 #include "formats/fbm.hpp"
 #include "formats/savestate.hpp"
 #include "game/state.hpp"
+#include "testing/check.hpp"
 
 using namespace bmh;
 using namespace bmh::ui;
 
 namespace {
-void check(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }
+using bmh::test_support::check;
 void rejected(const std::function<void()>& fn) {
     try { fn(); } catch (const FormatError&) { return; }
     throw std::runtime_error("expected rejected operation");
@@ -66,6 +68,16 @@ int main(int argc, char** argv) {
               "projection may not change original game tables");
         TrainingScreen screen(data, s); const auto frame = screen.render().pixels;
         check(frame == screen.render().pixels, "repeat rendering is deterministic and pure");
+        {
+            // the seven skill bars follow the player row under the pointer
+            const int bx = exe.u16(::bmh::layout::Training_Click_RuntimeField + 6), by = exe.u8(::bmh::layout::Training_Click_RuntimeField3 + 3);
+            const int dy = exe.u8(::bmh::layout::Training_Click_RuntimeField9 + 3);
+            TrainingScreen hover(data, s);
+            check(!hover.move(0, 0) && hover.render().pixels == frame, "a pointer off the list changes nothing");
+            check(hover.move(bx + 1, by + dy + 1) && hover.render().pixels != frame,
+                  "the skill bars show the player row under the pointer");
+            check(hover.move(0, 0) && hover.render().pixels == frame, "the bars are empty again when the pointer leaves");
+        }
         check(screen.click(175, 26).kind == TrainingRequestKind::none, "condition+technique cannot exceed four balls");
         auto r = screen.click(155, 26);
         check(r.kind == TrainingRequestKind::set_area && r.index == 0 && r.value == 1 && r.manager_slot == 1 &&

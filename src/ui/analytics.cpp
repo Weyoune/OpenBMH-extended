@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Implements the analytics page declared in analytics.hpp: analytics_from_game() copies the six series and
+// the saved flag byte, and AnalyticsScreen draws the chart over the parent underlay and handles the metric
+// and scale buttons. A flag change is only a pending request until the owner acknowledges it.
 #include "formats/executable_layout.hpp"
 #include "ui/analytics.hpp"
 
@@ -13,7 +16,7 @@
 
 namespace bmh::ui {
 namespace {
-constexpr size_t kManagerRecord = 0xb0c;
+constexpr size_t kManagerRecord = kManagerRecordSize;
 constexpr size_t kFlags = ::bmh::layout::Flags;
 constexpr int kSeriesCount = 6;
 constexpr int kSourcePointLimit = 52; // local_1d8[52] in CopyOpaqueSlice.

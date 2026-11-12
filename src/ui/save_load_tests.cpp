@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Tests for SaveLoadScreen: no writes from picker input, overwrite confirmation, cancel paths, and filename editing.
 #include "ui/save_load.hpp"
 #include "ui/flow.hpp"
 
@@ -7,14 +8,13 @@
 #include <iostream>
 #include <iterator>
 #include <stdexcept>
+#include "testing/check.hpp"
 
 using namespace bmh;
 using namespace bmh::ui;
 
 namespace {
-void check(bool value, const char* message) {
-    if (!value) throw std::runtime_error(message);
-}
+using bmh::test_support::check;
 }
 
 int main(int argc, char** argv) {

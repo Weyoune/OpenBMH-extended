@@ -1,4 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Per-match environment values of the match engine: weather and temperature by month and region,
+// crowd bonus for the home side, and the start-of-match tactics choice for computer teams.
+// Reads GameState (clubs, month, spectators); the match state is filled by the caller.
+// Draws from WatcomRandom (weather, crowd, substitution mode); the minute simulation itself is
+// match_engine.cpp. Interface in match.hpp.
 #include "game/match.hpp"
 
 #include <cstdlib>
@@ -25,7 +30,7 @@ constexpr int8_t kRegionTemperature[48] = {0,  -1, 5,  0,  0, 5,  0, -1, -5, -4,
 constexpr uint8_t kLeagueCrowd[10] = {27, 12, 7, 7, 3, 27, 27, 27, 27, 27};
 // First league that counts as a regional league (LeaguePairings_LeaguePairingsConstants_RuntimeField).
 constexpr int kFirstRegionalLeague = 5;
-// Number of cup-only teams before the amateur blocks (CareerSession_InstallLeagueSizes_RuntimeField6).
+// Number of cup-only teams before the amateur blocks (NewcomerClubCount).
 constexpr int kCupTeams = 30;
 
 int clamp(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
@@ -76,7 +81,7 @@ int team_region(int team) {
     if (team == kNoTeam) return 0;
     int t = team;
     for (int league = 0; league < kLeagueCount; league++) {
-        t -= kLeagueSizes[league];
+        t -= league_system().sizes[league];
         if (t < 0) return league >= kFirstRegionalLeague ? league - kFirstRegionalLeague + 1 : 0;
     }
     if (t - kCupTeams >= 0) return (t - kCupTeams) / 7 - kFirstRegionalLeague + 10;
@@ -149,12 +154,13 @@ void rate_side(GameState& g, const MatchSetup& m, int side, int previous6, Watco
     // (the original lets two cheat codes, CareerSession_FormatError_RuntimeField9, set a human side's six ratings to
     //  fixed values; not ported)
     if (manager < 0) {
-        int rhythm = r[6] >> 1;  // computer teams: half the balance, at least 50
-        r[7] = uint8_t(rhythm < 50 ? 50 : rhythm);
+        int rhythm = r[6] >> 1;  // computer teams: half the balance, at least 48
+        r[7] = uint8_t(rhythm < 48 ? 48 : rhythm);  // Diamond 3.7: at least 48 (50 before)
     } else {
-        // human teams: record +0xd9 (signed) * 5 plus the balance, scaled to 0-100
+        // human teams: record +0xd9 (signed) * 5 plus a constant 110, scaled to 0-100. Diamond 3.7: the
+        // condition/technique balance r[6] no longer enters (before: d9 * 5 + r[6]).
         const int8_t d9 = int8_t(g.manager_records.at(size_t(manager) * 0xB0C + 0xd9));
-        r[7] = uint8_t((d9 * 5 + r[6]) * 100 / 0xFF);
+        r[7] = uint8_t((d9 * 5 + 110) * 100 / 0xFF);
     }
 }
 

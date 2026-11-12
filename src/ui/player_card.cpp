@@ -12,6 +12,9 @@
 #include "formats/savestate.hpp"
 #include "game/state.hpp"
 #include "ui/manager.hpp"
+#include "ui/draw.hpp"
+#include "ui/dialog_frame.hpp"
+#include "ui/button_frame.hpp"
 
 namespace bmh::ui {
 namespace {
@@ -46,7 +49,7 @@ PlayerCardState project(LineupState lineup,const LeImage& exe,int row,const Byte
     const auto& p=out.lineup.players.at(size_t(row));
     out.badge=le16(club_heap,size_t(out.lineup.runtime_club)*2)&511;
     const int nation=p.attributes.nationality()+((p.bonus&0x80)?32:0);
-    const size_t nation_club=exe.u16(::bmh::layout::ClubPlayerDetail_ClubPlayerDetailFromGame_RuntimeField3)+exe.u16(::bmh::layout::NoTeamSquadStart)+nation;
+    const size_t nation_club=exe.u16(::bmh::layout::ForeignCupClubCount)+exe.u16(::bmh::layout::NoTeamSquadStart)+nation;
     out.nationality_name=pool_name(names,offsets.at(nation_club));
     if (national || out.lineup.runtime_club == kNoTeam) {
         // The national runtime slot is absent from the ordinary short-name
@@ -92,17 +95,13 @@ void context(PlayerCardState& out,const StaticMemory& memory,const Bytes& club_h
     }
 }
 void rect(Image& out,int x,int y,int w,int h,uint8_t c) {
-    for(int yy=std::max(0,y);yy<std::min(out.height,y+h);++yy)
-        for(int xx=std::max(0,x);xx<std::min(out.width,x+w);++xx)out.at(xx,yy)=c;
+    draw::fill(out, x, y, w, h, c);
 }
 void copy(Image& out,const Image& src,int sx,int sy,int x,int y,int w,int h,int transparent=-1) {
     if(sx<0||sy<0||sx+w>src.width||sy+h>src.height)
         throw FormatError("player card: original atlas bounds "+std::to_string(sx)+","+std::to_string(sy)+
             ":"+std::to_string(w)+"x"+std::to_string(h)+" in "+std::to_string(src.width)+"x"+std::to_string(src.height));
-    for(int yy=0;yy<h;++yy)for(int xx=0;xx<w;++xx){
-        const auto c=src.pixels.at(size_t(sy+yy)*src.width+sx+xx);
-        if(c!=transparent&&x+xx>=0&&x+xx<out.width&&y+yy>=0&&y+yy<out.height)out.at(x+xx,y+yy)=c;
-    }
+    draw::copy_clipped(out, src, sx, sy, x, y, w, h, transparent);
 }
 std::string number(int64_t value,int width=1,bool grouped=false) {
     auto n=std::to_string(value);const bool negative=value<0;
@@ -220,22 +219,16 @@ void PlayerCardScreen::text(Image& out,int x,int baseline,std::string_view value
         out.at(x+xx,baseline-font.baseline+yy)=state_.lineup.gradient_text?exe_.u8(::bmh::layout::Advertising_Text_RuntimeField+gradient*6+yy):color;
 }
 void PlayerCardScreen::frame(Image& out,int x,int y,int w,int h) const {
-    for(int yy=4;yy<h-3;++yy)for(int xx=4;xx<w-3;++xx)out.at(x+xx,y+yy)=exe_.u8(::bmh::layout::Advertising_PatternRect_RuntimeField+((yy-4)%16)*16+(xx-4)%16);
-    copy(out,widgets_,0,0,x,y,4,4);copy(out,widgets_,4,0,x+w-4,y,4,4);
-    copy(out,widgets_,0,4,x,y+h-4,4,4);copy(out,widgets_,4,4,x+w-4,y+h-4,4,4);
-    for(int at=4;at<w-4;at+=74){const int n=std::min(74,w-4-at);copy(out,widgets_,0,104,x+at,y,n,4);copy(out,widgets_,0,108,x+at,y+h-4,n,4);}
-    for(int at=4;at<h-4;at+=96){const int n=std::min(96,h-4-at);copy(out,widgets_,0,8,x,y+at,4,n);copy(out,widgets_,4,8,x+w-4,y+at,4,n);}
+    draw_dialog_frame(out,widgets_,exe_,x,y,w,h,false);   // dialog_frame.hpp
 }
 void PlayerCardScreen::button(Image& out,int x,int y,int width,std::string_view value,bool active) const {
     const int height=width>31?10:9;
-    if(active){const auto base=out.at(x,y+height);rect(out,x,y,width+1,2,base);rect(out,x,y,2,height+1,base);x+=2;y+=2;}
-    else {rect(out,x+2,y+height,width,2,0x40);rect(out,x+width,y+2,2,height,0x40);}
-    if(width>31){
-        const int sy=active?44:74;
-        copy(out,widgets_,24,sy,x,y,31,10);int at=31,remaining=width-31;
-        while(remaining>20){const int n=std::min(8,remaining-20);copy(out,widgets_,24,sy+10,x+at,y,n,10);at+=n;remaining-=n;}
-        copy(out,widgets_,45-remaining,sy+20,x+at,y,remaining,10);
-    }else frame(out,x,y,width,height);
+    if(width>31){const int shift=draw_wide_button_frame(out,widgets_,x,y,width,active);x+=shift;y+=shift;}   // button_frame.hpp
+    else{
+        if(active){const auto base=out.at(x,y+height);rect(out,x,y,width+1,2,base);rect(out,x,y,2,height+1,base);x+=2;y+=2;}
+        else {rect(out,x+2,y+height,width,2,0x40);rect(out,x+width,y+2,2,height,0x40);}
+        frame(out,x,y,width,height);
+    }
     const int font=exe_.u8(::bmh::layout::Advertising_Button_RuntimeField + int(active));
     if(font==3){text(out,x,y+height/2+2,value,0,x+width);return;}
     int length=0;for(unsigned char c:value){const int g=exe_.u8(::bmh::layout::ClubInfo_Raw_RuntimeField3 + c);length+=g?exe_.u16(::bmh::layout::ClubInfo_Raw_RuntimeField2+g*2)-exe_.u16(::bmh::layout::ClubInfo_Raw_RuntimeField+g*2):2;}
@@ -329,7 +322,7 @@ Image PlayerCardScreen::render_card() const {
         if(i==5){const auto market=player_card_market_value(a,exe_);value=market?cash(*market,1)+exe_.cstring(::bmh::layout::ClubPlayerDetail_Copy_ExecutableField):"?";}
         text(out,x,base+11,value,0x6a);
     }
-    button(out,8,211,60,label(::bmh::layout::ClubPlayerDetail_Copy_TextPointer7));button(out,80,211,96,label(::bmh::layout::ClubPlayerDetail_Copy_ExecutableField5),statistics_open_);
+    button(out,8,211,60,label(::bmh::layout::ClubPlayerDetail_Copy_TextPointer7),pressed_button_==0);button(out,80,211,96,label(::bmh::layout::ClubPlayerDetail_Copy_ExecutableField5),statistics_open_||pressed_button_==1);
     return out;
 }
 
@@ -368,11 +361,22 @@ Image PlayerCardScreen::render_statistics() const {
     }
     button(out,265,142,30,label(::bmh::layout::ClubPlayerDetail_RenderStatistics_ExecutableField),(statistics_flags_&0x40)!=0);
     button(out,265,153,30,label(::bmh::layout::ClubPlayerDetail_RenderStatistics_ExecutableField2),(statistics_flags_&0x80)!=0);
-    button(out,8,185,140,label(::bmh::layout::ClubPlayerDetail_RenderStatistics_ExecutableField3));
+    button(out,8,185,140,label(::bmh::layout::ClubPlayerDetail_RenderStatistics_ExecutableField3),pressed_button_==2);
     return out;
 }
 
+// Mouse DOWN on a button of the card (Schließen, Statistik, and Zurück of the statistics page): drawn pressed until
+// the release. Returns true when the picture changed.
+bool PlayerCardScreen::press(int x,int y) {
+    int id=-1;
+    if(!close_){
+        if(statistics_open_){if(x>=8&&x<=148&&y>=185&&y<=195)id=2;}
+        else if(y>=211&&y<=220){if(x>=8&&x<=68)id=0;else if(x>=80&&x<=176)id=1;}
+    }
+    const bool changed=id!=pressed_button_;pressed_button_=id;return changed;
+}
 bool PlayerCardScreen::click(int x,int y,bool right) {
+    pressed_button_=-1;   // the release ends the pressed look
     if(close_)return false;
     if(statistics_open_){
         if(right||(x>=8&&x<=148&&y>=185&&y<=195)){

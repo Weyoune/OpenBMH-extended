@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Poaching a player from another club: asking percentage of the club, remaining attempts per
+// manager and the start and finish of a poach attempt.
+// Reads and writes GameState (manager records attempt list, transfer list in memory, squad_slots).
+// Draws from WatcomRandom. Interface in poach.hpp.
 #include "formats/executable_layout.hpp"
 #include "game/poach.hpp"
 
@@ -12,7 +16,7 @@ namespace bmh {
 
 namespace {
 
-constexpr size_t kRecordSize = 0xb0c;
+constexpr size_t kRecordSize = kManagerRecordSize;
 constexpr size_t kAttempts = 0x8b6;           // five player ids, 0xffff free
 constexpr uint32_t kTransferList = ::bmh::layout::EditorList;   // 44 rows of 0x58 bytes
 constexpr uint32_t kListRow = 0x58;

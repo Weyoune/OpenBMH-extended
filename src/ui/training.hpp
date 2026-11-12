@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Training screen: team training types per position group, focus areas, per-player intensity and focus, and the
+// automation flag. TrainingState is an owned projection of the squad and the manager training bytes (from a
+// save or the live game). Every edit becomes a TrainingRequest with revision guards, and further input is
+// blocked until the session calls acknowledge() or reject_action(). Implemented in training.cpp.
 #pragma once
 
 #include <array>
@@ -55,6 +59,9 @@ public:
     Image render() const;
     TrainingRequest click(int x, int y, bool right = false);
     TrainingRequest key(std::string_view key);
+    // The original's skill display: while the pointer rests on a player's row of the training list, the
+    // seven skill bars (T S S P Z F E) at the bottom show that player's skills; leaving it clears them.
+    bool move(int x, int y);
     // Opening an uninitialized original screen invokes Initialize. This
     // explicit request must be serviced by an engine adapter, never by render().
     TrainingRequest initialize();
@@ -74,6 +81,7 @@ private:
     std::optional<TrainingRequest> pending_;
     bool close_requested_ = false;
     std::string last_rejection_;
+    std::optional<int> hovered_row_;
     void text(Image&, int x, int baseline, std::string_view, uint8_t color, int right = -1, bool shadow = true) const;
     void sprite_text(Image&, int x, int baseline, std::string_view, int font) const;
     void button(Image&, int x, int y, int width, int height, std::string_view, bool active) const;

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Test driver for the setup screen: needs the original data directory as its single argument and checks defaults, limits, requests and rendering size.
 #include <cstdio>
 #include <stdexcept>
 
@@ -41,6 +42,18 @@ int main(int argc, char** argv) {
             StartupFlow pending(argv[1],{},SetupLeagueSymbol::country_selection);
             check(pending.click(10,210,true).request==FlowRequest::new_career && pending.pending_career() &&
                 pending.pending_career()->managers.empty(),"country selection entered a legacy German manager picker");
+        }
+        {   // minus and plus look pressed (the darker picture) while held, raised again after the release
+            SetupScreen probe(argv[1]);
+            const auto raised = probe.render();
+            check(!probe.press(5, 5) && !probe.press(130, 214), "no pressed look outside the buttons");
+            check(probe.press(30, 30) && probe.render().pixels != raised.pixels, "minus shows the pressed look");
+            check(!probe.press(30, 30), "an unchanged press does not redraw");
+            check(probe.press(260, 30) && probe.render().pixels != raised.pixels, "plus shows the pressed look");
+            probe.click(5, 5);   // released elsewhere: the button is raised again and nothing is changed
+            check(probe.render().pixels == raised.pixels && probe.options() == SetupOptions{}, "the release ends the pressed look");
+            probe.press(260, 30);
+            check(probe.click(260, 30).changed, "the release redraws even when the value cannot change");
         }
         check(!screen.click(-1, 30).changed && !screen.click(320, 239, true).changed, "outside viewport");
         check(screen.click(130, 214).request == SetupRequest::none, "gap between controls");

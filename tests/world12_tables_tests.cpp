@@ -24,8 +24,8 @@ void test_models(){const auto texts=labels();int compared=0;
                 check(page.groups[0]==scope.germany&&page.groups[1]==scope.england&&page.groups[2],"table groups contradict country scope");
                 check(std::find(page.leagues.begin(),page.leagues.end(),id)!=page.leagues.end(),"table league not in its visible group");
                 if(league.clubs==10){check(page.table.rows.size()==10&&league.rounds()==18,"English fifth tier stretched to18/20 rows");continue;}
-                const auto saved_size=kLeagueSizes[0];kLeagueSizes[0]=league.clubs;
-                struct Restore{uint8_t value;~Restore(){kLeagueSizes[0]=value;}} restore{saved_size};
+                const auto saved_size=installed_league_system().sizes[0];installed_league_system().sizes[0]=league.clubs;
+                struct Restore{uint8_t value;~Restore(){installed_league_system().sizes[0]=value;}} restore{saved_size};
                 GameState legacy;legacy.results.assign(9*0x17c,0xcc);legacy.league_rounds.assign(9,0);legacy.league_rounds[0]=3;
                 for(int round=1;round<=3;++round)for(int match=0;match<league.clubs/2;++match){const auto score=state.results.result(state.world.catalogue,id,round,match);legacy.results[size_t(round-1)*10+match]=uint8_t(score.home<<4|score.away);}
                 const auto expected=compute_league_table(legacy,0,selected.first_round,selected.end_round,selected.aggregation,selected.normal_mode+14-int((selected.word>>3)&14));

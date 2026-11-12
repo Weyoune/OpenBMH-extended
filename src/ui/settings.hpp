@@ -1,4 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Settings screen over the 180 saved setting bytes of a manager, plus the in-settings readme viewer
+// (SettingsReadmeScreen). SettingsState keeps the raw bytes unmodified; the display copy with entry-time
+// availability is derived by project_settings_availability(). An edit becomes a SettingsWriteRequest holding the
+// expected raw bytes; file actions use SaveLoadRequest. The session answers with acknowledge()/reject().
+// Implemented in settings.cpp.
 #pragma once
 
 #include <array>
@@ -63,6 +68,10 @@ SettingsState settings_from_game(const GameState&, int manager, uint64_t revisio
 // The two SettingsSourceRefusal rule refusals call SDLFlushEvents3; generic/stale errors do not.
 std::optional<uint32_t> settings_source_refusal(const GameState& state,
     const SettingsWriteRequest& request, uint64_t revision);
+
+// The product line of the settings page: "OpenBMH" and, below it, this build's version. Set once by the
+// application (the UI library does not include the generated version); empty keeps the original text.
+void set_settings_product_version(std::string version);
 
 class SettingsScreen {
 public:

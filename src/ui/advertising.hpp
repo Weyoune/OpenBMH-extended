@@ -1,4 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Advertising (sponsor) screen: board contracts, shirt sponsor, television rights, offers and spending.
+// Owns AdvertisingState (a read-only copy built by advertising_from_game, tagged with a revision) and the
+// AdvertisingRequest values the screen raises (accept offer, set spending, check renewal).
+// Also exposes original_finance_preview(), the monthly income/expense preview shared with the statistics
+// pages and finance_totals.hpp. Implementation: advertising.cpp.
+// Request/acknowledge flow: a request carries manager, club and revision so the session can reject stale input.
 #pragma once
 
 #include <array>
@@ -111,6 +117,8 @@ public:
     Image render() const;
     bool move(int x, int y);
     bool click(int x, int y);
+    // Mouse DOWN on a button of the open offer: drawn pressed until the release (click()).
+    bool press(int x, int y);
     bool key(std::string_view key);
     bool open_offers(int display_slot);
     bool text(std::string_view input);
@@ -162,6 +170,8 @@ private:
               int max_width = 310, bool use_gradient = true) const;
     void begin_offer_browser(int display_slot);
     void submit_selected_offer();
+    // True when the selected offer of the open browser can be accepted (draws ANNEHMEN).
+    bool offer_acceptable() const;
     void open_spending_calculator(int display_slot);
     bool accept_spending_calculator();
     void close_spending_calculator();
@@ -171,7 +181,9 @@ private:
     void draw_notification(Image&) const;
     void pattern_rect(Image&, int x, int y, int width, int height) const;
     void source_frame(Image&, int x, int y, int width, int height, bool shadow = true) const;
-    void button(Image&, int x, int y, int width, std::string_view label) const;
+    void button(Image&, int x, int y, int width, std::string_view label, bool pressed = false) const;
+    int pressed_key_ = -1;      // spending calculator key held down by the mouse
+    int pressed_button_ = -1;   // offer button held down by the mouse (0 cancel, 1 accept)
 };
 
 } // namespace bmh::ui

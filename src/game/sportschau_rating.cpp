@@ -1,4 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Sportschau ratings: reads the rating tables from the executable and derives the player ratings
+// of a match group from the logged events of a fixture.
+// Reads the fixture view and writes ratings into the MatchGroup; draws from WatcomRandom
+// (score offsets). Declared in sportschau_presentation.hpp; siblings are sportschau_awards.cpp
+// and sportschau_replay.cpp.
 #include "formats/executable_layout.hpp"
 #include "game/sportschau_presentation.hpp"
 
@@ -10,7 +15,7 @@ namespace bmh {
 
 SportschauRatingTables sportschau_rating_tables(const LeImage& exe) {
     SportschauRatingTables t;
-    t.domestic_teams = exe.u16(::bmh::layout::CareerSession_DispatchLineup_RuntimeField);
+    t.domestic_teams = exe.u16(::bmh::layout::LeagueClubCount);
     for (size_t i = 0; i < 4; ++i) {
         const auto offset = uint32_t(i);
         t.position_limit[i] = std::bit_cast<int8_t>(exe.u8(::bmh::layout::SportschauRating_SportschauRatingTables_RuntimeField + offset));

@@ -1,8 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Implements the advertising screen declared in advertising.hpp: building AdvertisingState from the game
+// (contracts, offers, spending, texts), rendering, and turning clicks into AdvertisingRequest values.
+// Also holds the monthly finance preview formulas that finance_totals.cpp reuses through
+// original_finance_preview(). Game changes happen only when the session accepts a request.
 #include "formats/executable_layout.hpp"
 #include "formats/badge_policy.hpp"
 #include "game/environment.hpp"
 #include "ui/advertising.hpp"
+#include "ui/dialog_frame.hpp"
+#include "ui/button_frame.hpp"
+#include "ui/calculator_widgets.hpp"
 #include "ui/game_end.hpp"
 
 #include <algorithm>
@@ -21,10 +28,11 @@
 #include "game/state.hpp"
 #include "ui/manager.hpp"
 #include "ui/setup.hpp"
+#include "ui/draw.hpp"
 
 namespace bmh::ui {
 namespace {
-constexpr size_t kManagerRecord = 0xb0c;
+constexpr size_t kManagerRecord = kManagerRecordSize;
 constexpr size_t kAdvertisingContracts = 0xa34;
 constexpr size_t kContractBytes = 0x0c;
 constexpr int kBoardCount = 14;
@@ -194,7 +202,7 @@ AdvertisingFinancePreview original_finance_preview_impl(const GameState& game, i
             int32_t(game.manager_records.at(rec + 0x2e + size_t(i)) & 7) * kFacilityCost[size_t(i)]);
     expenses = wrap_add(expenses, signed32(u32(game.manager_records, rec + 0x854)));
     expenses = wrap_add(expenses, signed32(u32(game.manager_records, rec + 0x858)));
-    constexpr size_t kBoard = 0x840, kBoardSlot = 0x58;
+    constexpr size_t kBoard = kTacticsBoardSize, kBoardSlot = kTacticsBoardSlotSize;
     for (size_t slot = 0; slot < 24; ++slot) {
         const size_t board = size_t(manager) * kBoard + slot * kBoardSlot;
         if (game.tactics.at(board + 0x3d) == 0xff) continue;
@@ -264,17 +272,13 @@ void copy(Image& out, const Image& src, int sx, int sy, int x, int y, int w, int
     if (sx < 0 || sy < 0 || sx + w > src.width || sy + h > src.height ||
         x < 0 || y < 0 || x + w > out.width || y + h > out.height)
         throw FormatError("advertising: original VGA crop outside image");
-    for (int yy = 0; yy < h; ++yy)
-        for (int xx = 0; xx < w; ++xx)
-            out.at(x + xx, y + yy) = src.pixels[size_t(sy + yy) * src.width + sx + xx];
+    draw::copy_unclipped(out, src, sx, sy, x, y, w, h, -1);
 }
 
 void fill_rect(Image& image, int x, int y, int width, int height, uint8_t color) {
     if (x < 0 || y < 0 || width < 0 || height < 0 || x + width > image.width || y + height > image.height)
         throw FormatError("advertising: rectangle outside image");
-    for (int yy = y; yy < y + height; ++yy)
-        for (int xx = x; xx < x + width; ++xx)
-            image.at(xx, yy) = color;
+    draw::fill(image, x, y, width, height, color);
 }
 
 void rectangle(Image& image, int x, int y, int width, int height, uint8_t color) {
@@ -759,8 +763,11 @@ Image AdvertisingScreen::render() const {
 
             copy(image, logos_, 32, 217, 138, 174, 11, 14);
 
-            button(image, 89, 191, 66, state_.cancel_label);
-            button(image, 164, 191, 66, state_.accept_label);
+            button(image, 89, 191, 66, state_.cancel_label, pressed_button_ == 0);
+            // The original shows ABBRECHEN only when the selected offer cannot be accepted
+            // (for example while a running sponsor contract is not terminable).
+            if (offer_acceptable())
+                button(image, 164, 191, 66, state_.accept_label, pressed_button_ == 1);
         }
     }
     if (hovered_target_ >= 0) {
@@ -776,21 +783,37 @@ Image AdvertisingScreen::render() const {
     return image;
 }
 
-void AdvertisingScreen::button(Image& image, int x, int y, int width, std::string_view label) const {
-    // FormatError3's normal KB/0 bevel. Source promotes any wide button shorter
-    // than ten pixels to a ten-pixel button before tiling its centre.
-    constexpr int height = 10;
-    copy(image, widgets_, 24, 74, x, y, 31, height);
-    int used = 31;
-    while (width - used > 20) {
-        const int count = std::min(8, width - used - 20);
-        copy(image, widgets_, 24, 84, x + used, y, count, height);
-        used += count;
-    }
-    copy(image, widgets_, 45 - (width - used), 94, x + used, y, width - used, height);
+void AdvertisingScreen::button(Image& image, int x, int y, int width, std::string_view label, bool pressed) const {
+    // FormatError3's KB/0 bevel (button_frame.hpp: raised with shadow, or pressed while the mouse button is held).
+    // Source promotes any wide button shorter than ten pixels to a ten-pixel button before tiling its centre.
+    const int shift = draw_wide_button_frame(image, widgets_, x, y, width, pressed);
     if (!label.empty())
-        sprite_font_.draw(image, x + width / 2 - sprite_font_.text_width(label) / 2, y + 7,
-                          label, exe_.u8(::bmh::layout::Advertising_Button_RuntimeField));
+        sprite_font_.draw(image, x + shift + width / 2 - sprite_font_.text_width(label) / 2, y + shift + 7,
+                          label, exe_.u8(::bmh::layout::Advertising_Button_RuntimeField + int(pressed)));
+}
+
+// Mouse DOWN on ABBRECHEN or the accept button of the open offer: drawn pressed until the release.
+bool AdvertisingScreen::press(int x, int y) {
+    int id = -1;
+    // OK of an acknowledging notification (id 2); a warning is timed and has no button
+    if (notification_open() && !close_requested_ && !pending_ && !state_.notification_warning &&
+        source_dialog_button_at(TaxDialogKind::acknowledgement, false, x, y) == GameEndTaxDialog::Button::acknowledge)
+        id = 2;
+    else if (offer_open_ && !close_requested_ && !pending_ && !notification_open() && !spending_calculator_open_ &&
+        y >= 191 && y <= 200) {
+        if (x >= 89 && x <= 154) id = 0;
+        else if (x >= 164 && x <= 229 && offer_acceptable()) id = 1;
+    }
+    // a key of the open spending calculator
+    int key = -1;
+    if (spending_calculator_open_ && !notification_open() && !pending_ && !close_requested_)
+        for (int i = 0; i < 15; ++i)
+            if (calculator_key_hit(x, y, 103 + exe_.u16(::bmh::layout::Advertising_Click_RuntimeField + size_t(i) * 2),
+                                   55 + exe_.u8(::bmh::layout::Advertising_Click_RuntimeField2 + size_t(i)))) key = i;
+    const bool changed = id != pressed_button_ || key != pressed_key_;
+    pressed_button_ = id;
+    pressed_key_ = key;
+    return changed;
 }
 
 void AdvertisingScreen::pattern_rect(Image& out, int x, int y, int width, int height) const {
@@ -800,30 +823,13 @@ void AdvertisingScreen::pattern_rect(Image& out, int x, int y, int width, int he
 }
 
 void AdvertisingScreen::source_frame(Image& out, int x, int y, int width, int height, bool shadow) const {
-    if (shadow) { fill_rect(out, x + 2, y + height, width, 2, 0x40); fill_rect(out, x + width, y + 2, 2, height, 0x40); }
-    pattern_rect(out, x + 4, y + 4, width - 7, height - 7);
-    copy(out, widgets_, 0, 0, x, y, 4, 4);
-    copy(out, widgets_, 4, 0, x + width - 4, y, 4, 4);
-    copy(out, widgets_, 0, 4, x, y + height - 4, 4, 4);
-    copy(out, widgets_, 4, 4, x + width - 4, y + height - 4, 4, 4);
-    for (int at = 4; at < width - 4; at += 74) {
-        const int n = std::min(74, width - 4 - at);
-        copy(out, widgets_, 0, 104, x + at, y, n, 4);
-        copy(out, widgets_, 0, 108, x + at, y + height - 4, n, 4);
-    }
-    for (int at = 4; at < height - 4; at += 96) {
-        const int n = std::min(96, height - 4 - at);
-        copy(out, widgets_, 0, 8, x, y + at, 4, n);
-        copy(out, widgets_, 4, 8, x + width - 4, y + at, 4, n);
-    }
+    draw_dialog_frame(out, widgets_, exe_, x, y, width, height, shadow);   // dialog_frame.hpp
 }
 
 void AdvertisingScreen::draw_spending_calculator(Image& out) const {
     constexpr int x0 = 103, y0 = 55;
     if (calculator_.width < 113 || calculator_.height < 150) return;
-    copy(out, calculator_, 0, 0, x0, y0, 113, 136);
-    fill_rect(out, x0 + 113, y0 + 2, 2, 136, 0x40);
-    fill_rect(out, x0 + 2, y0 + 136, 113, 2, 0x40);
+    draw_calculator_panel(out, calculator_, x0, y0);   // calculator_widgets.hpp
     const std::string& title = selected_spending_slot_ == 16 ? state_.merchandise_calculator_title :
                                                                state_.budget_calculator_title;
     const std::string bytes = utf8_to_original(title);
@@ -833,9 +839,9 @@ void AdvertisingScreen::draw_spending_calculator(Image& out) const {
     for (int i = 0; i < 15; ++i) {
         const int x = x0 + exe_.u16(::bmh::layout::Advertising_Click_RuntimeField + size_t(i) * 2);
         const int y = y0 + exe_.u8(::bmh::layout::Advertising_Click_RuntimeField2 + size_t(i));
-        copy(out, calculator_, 0, 136, x, y, 15, 14);
+        const int p = draw_calculator_key(out, calculator_, x, y, pressed_key_ == i);
         // Render calls the raw font renderer for key legends.
-        text(out, x + 5, y + 9, keys.substr(size_t(i), 1), 98, 15, false);
+        text(out, x + 5 + p, y + 9 + p, keys.substr(size_t(i), 1), 98, 15, false);
     }
     for (int i = 0; i < 8; ++i) {
         const int x = x0 + exe_.u16(::bmh::layout::Advertising_Click_RuntimeField + size_t(i + 15) * 2);
@@ -856,7 +862,8 @@ void AdvertisingScreen::draw_notification(Image& out) const {
     notice.body=utf8_to_original(state_.notification_text);
     notice.source_manager_flags=state_.notification_warning?0x40:0x80;
     draw_source_dialog(out,{widgets_,faces_,badge_atlas_?&*badge_atlas_:nullptr,
-        font_,large_font_,exe_,sprite_font_,texts_},notice,state_.font_gradient);
+        font_,large_font_,exe_,sprite_font_,texts_},notice,state_.font_gradient,
+        pressed_button_ == 2 ? std::optional<GameEndTaxDialog::Button>(GameEndTaxDialog::Button::acknowledge) : std::nullopt);
 }
 
 bool AdvertisingScreen::dismiss_notification() {
@@ -974,6 +981,14 @@ bool AdvertisingScreen::open_offers(int display_slot) {
     return true;
 }
 
+bool AdvertisingScreen::offer_acceptable() const {
+    if (!offer_open_ || selected_contract_ < 0 || selected_contract_ >= 16 || selected_offer_ < 0) return false;
+    for (const auto& candidate : state_.offers[size_t(selected_contract_)].offers)
+        if (candidate.raw_slot == selected_offer_)
+            return candidate.present && candidate.can_accept && candidate.monthly_amount != 0;
+    return false;
+}
+
 void AdvertisingScreen::submit_selected_offer() {
     if (pending_ || !offer_open_ || selected_contract_ < 0 || selected_contract_ >= 16 || selected_offer_ < 0)
         return;
@@ -1041,6 +1056,8 @@ bool AdvertisingScreen::move(int x, int y) {
 }
 
 bool AdvertisingScreen::click(int x, int y) {
+    pressed_button_ = -1;   // the release ends the pressed look
+    pressed_key_ = -1;
     pointer_position_ = std::array<int, 2>{x, y};
     if (close_requested_ || pending_ || x < 0 || y < 0 || x >= 320 || y >= 240) return false;
     if (notification_open()) return dismiss_notification();

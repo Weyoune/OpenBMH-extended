@@ -2,7 +2,7 @@
 
 OpenBMH aims to preserve the familiar game while handling malformed input and unsafe edge cases explicitly. A reconstruction can remain faithful without reproducing a crash or pretending to implement an unknown path.
 
-- Content such as names, text, graphics and edition-specific tables is loaded from the user's installation. The loaded program retains its own rule-table values; loading no longer applies the former shared replacement profile.
+- Names, text, graphics and compatible data tables come from the user's installation. The common gameplay implementation follows the documented Diamond 3.7 engine policy; original programme instructions are not executed or selected as separate engines.
 - Safety checks reject transactions that would exhaust required return capacity, use stale identities or lose a valid state. Unsupported operations report their limitation rather than inventing an outcome.
 - Calendar progression handles boundary days and seasonal transitions without relying on unsafe fixed-day assumptions.
 - Saves are written from the committed session state. Saving does not deliberately replay unrelated game actions.
@@ -23,7 +23,7 @@ An unavailable native message box also cancels the request. This applies to
 voluntary application exits, including quit events received during animations;
 normal completed-career handling remains separate.
 
-## Original edition rules in 1.0
+## Common engine and source data
 
 Loaded executable images retain their own rule tables. Career strength ranges are read from all nine pairs of the supplied original table.
 

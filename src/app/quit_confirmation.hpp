@@ -1,9 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Quit confirmation (a deliberate deviation from the original): a native message box in
+// German or English whose default button is "Cancel". poll() and peep() wrap
+// SDL_PollEvent / SDL_PeepEvents and drop SDL_QUIT events the user does not confirm. The
+// dialog is shown from the UI thread only, and a dialog that fails to open counts as "not
+// confirmed". The presenter is injectable (defaults to SDL_ShowMessageBox). Header-only.
 #pragma once
 
 #include <SDL.h>
 #include <functional>
 #include <utility>
+
+#include "app/robot.hpp"
 
 namespace bmh::app {
 
@@ -41,6 +48,15 @@ public:
         if (!event) return SDL_PollEvent(nullptr);
         while (SDL_PollEvent(event)) {
             if (event->type != SDL_QUIT || confirm()) return 1;
+        }
+        // No input waiting: a robot run (app/robot.hpp, inactive in normal play) may queue the
+        // events of its next script command now.
+        Robot& robot = Robot::instance();
+        if (robot.active()) {
+            robot.idle();
+            while (SDL_PollEvent(event)) {
+                if (event->type != SDL_QUIT || confirm()) return 1;
+            }
         }
         return 0;
     }

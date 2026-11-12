@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Implements the contracts screen declared in contracts.hpp: contracts_from_game() builds the player rows
+// and premiums from the game, and ContractsScreen renders list, negotiation and insurance views and converts
+// input into ContractRequest values. Applying an offer or insurance is left to the session.
 #include "formats/executable_layout.hpp"
 #include "formats/badge_policy.hpp"
 #include "ui/contracts.hpp"
+#include "ui/dialog_frame.hpp"
+#include "ui/button_frame.hpp"
+#include "ui/calculator_widgets.hpp"
 #include "ui/game_end.hpp"
 
 #include <algorithm>
@@ -10,57 +16,50 @@
 
 #include "game/state.hpp"
 #include "ui/manager.hpp"
+#include "ui/draw.hpp"
 
 namespace bmh::ui {
 namespace {
-constexpr size_t kManagerRecord = 0xb0c;
-constexpr size_t kBoard = 0x840;
-constexpr size_t kBoardSlot = 0x58;
+// Record sizes: one manager record, the per-manager block of player board entries (24 slots)
+// and one board entry (per-player data such as contract, insurance and premiums).
+constexpr size_t kManagerRecord = kManagerRecordSize;
+constexpr size_t kBoard = kTacticsBoardSize;
+constexpr size_t kBoardSlot = kTacticsBoardSlotSize;
 
+// Copies a block from a widget/atlas image to the target; throws on out-of-range rectangles.
+// With `transparent` set, palette index 0 is skipped.
 void copy_region(Image& target, const Image& source, int sx, int sy, int x, int y, int width, int height, bool transparent = false) {
     if (sx < 0 || sy < 0 || x < 0 || y < 0 || width < 0 || height < 0 ||
         sx + width > source.width || sy + height > source.height || x + width > target.width || y + height > target.height)
         throw FormatError("contracts: invalid original widget bounds");
-    for (int yy = 0; yy < height; ++yy) for (int xx = 0; xx < width; ++xx) {
-        const uint8_t value = source.pixels[size_t(sy + yy) * size_t(source.width) + size_t(sx + xx)];
-        if (!transparent || value != 0) target.at(x + xx, y + yy) = value;
-    }
+    draw::copy_unclipped(target, source, sx, sy, x, y, width, height, transparent ? 0 : -1);
 }
 
+// Forward declaration; fill() is defined below and is used by frame().
 void fill(Image& target, int x, int y, int width, int height, uint8_t color);
 
+// Tiles the 16x16 background pattern stored in the executable over a rectangle.
 void pattern(Image& out, const LeImage& exe, int x, int y, int width, int height) {
     for (int yy = 0; yy < height; ++yy)
         for (int xx = 0; xx < width; ++xx)
             out.at(x + xx, y + yy) = exe.u8(::bmh::layout::Advertising_PatternRect_RuntimeField + size_t(yy % 16) * 16 + size_t(xx % 16));
 }
 
+// Draws a panel in the original style: optional drop shadow, tiled pattern inside, four 4x4 corners
+// and edge strips (copied in pieces of at most 74 pixels horizontally and 96 vertically).
 void frame(Image& out, const LeImage& exe, const Image& widgets, int x, int y, int width, int height, bool shadow = true) {
-    if (shadow) { fill(out, x + 2, y + height, width, 2, 0x40); fill(out, x + width, y + 2, 2, height, 0x40); }
-    pattern(out, exe, x + 4, y + 4, width - 7, height - 7);
-    copy_region(out, widgets, 0, 0, x, y, 4, 4);
-    copy_region(out, widgets, 4, 0, x + width - 4, y, 4, 4);
-    copy_region(out, widgets, 0, 4, x, y + height - 4, 4, 4);
-    copy_region(out, widgets, 4, 4, x + width - 4, y + height - 4, 4, 4);
-    for (int at = 4; at < width - 4; at += 74) {
-        const int n = std::min(74, width - 4 - at);
-        copy_region(out, widgets, 0, 104, x + at, y, n, 4);
-        copy_region(out, widgets, 0, 108, x + at, y + height - 4, n, 4);
-    }
-    for (int at = 4; at < height - 4; at += 96) {
-        const int n = std::min(96, height - 4 - at);
-        copy_region(out, widgets, 0, 8, x, y + at, 4, n);
-        copy_region(out, widgets, 4, 8, x + width - 4, y + at, 4, n);
-    }
+    draw_dialog_frame(out, widgets, exe, x, y, width, height, shadow);   // dialog_frame.hpp
 }
 
+// Fills a rectangle with one palette index; throws if it leaves the image.
 void fill(Image& target, int x, int y, int width, int height, uint8_t color) {
     if (x < 0 || y < 0 || width < 0 || height < 0 || x + width > target.width || y + height > target.height)
         throw FormatError("contracts: invalid fill bounds");
-    for (int row = 0; row < height; ++row)
-        std::fill_n(target.pixels.begin() + size_t(y + row) * size_t(target.width) + size_t(x), size_t(width), color);
+    draw::fill(target, x, y, width, height, color);
 }
 
+// Formats a number right-aligned in `width` characters; with `grouped`, '.' is inserted as thousands separator
+// and the result is padded with spaces for missing separators so columns stay aligned.
 // FormatGroupedDigits: '%' is the original bitmap font's blank padding glyph.
 std::string original_number(uint32_t value, int width, bool grouped = false) {
     std::string digits = std::to_string(value);
@@ -76,14 +75,19 @@ std::string original_number(uint32_t value, int width, bool grouped = false) {
     }
     return digits;
 }
+// Amount with the currency text ' EU', e.g. for the contract panels.
 std::string money(uint32_t value, int width = 5) {
     return original_number(value, width, true) + " EU";
 }
+// Number with thousands separators and no padding.
 std::string plain_number(uint32_t value) {
     return original_number(value, 0, true);
 }
 }
 
+// Builds the contracts view data for one manager: club, manager identity (name, portrait, badge) and one row
+// per squad player with remaining months, monthly salary, insurance data and the premium values of the board entry.
+// The team premiums are the per-component minimum over all players. Called when the screen opens and after each acknowledgement.
 ContractsState contracts_from_game(const GameState& game, int manager_slot, uint64_t revision) {
     if (manager_slot < 0 || manager_slot >= 4 || size_t(manager_slot) >= game.manager_teams.size() ||
         size_t(manager_slot) * kManagerRecord + kManagerRecord > game.manager_records.size())
@@ -129,15 +133,19 @@ ContractsState contracts_from_game(const GameState& game, int manager_slot, uint
         view.name = original_to_utf8(game.player_name(player));
         view.age = source.age();
         view.position = source.position();
+        // Remaining contract in months (255 is shown with a special text by render_roster).
         view.remaining_months = game.tactics.at(at + 0x0c);
         view.current_monthly_salary = uint32_t(game.tactics.at(at + 0x50)) |
                               uint32_t(game.tactics.at(at + 0x51)) << 8 |
                               uint32_t(game.tactics.at(at + 0x52)) << 16 |
                               uint32_t(game.tactics.at(at + 0x53)) << 24;
         view.insurance = game.tactics.at(at + 0x43);
+        // Insurance can be taken out only if there is none yet, flags 0x60 are clear and the player has no marker/injury in the top bits of w35c.
         view.insurance_available = view.insurance == 0 && (game.tactics.at(at + 0x0b) & 0x60) == 0 &&
                                    (source.w35c >> 27) == 0;
+        // Top bit of the byte at 0x4f blocks new contract offers for this player; the low 7 bits belong to the insurance fee.
         view.offer_blocked = (game.tactics.at(at + 0x4f) & 0x80) != 0;
+        // 15-bit insurance fee: byte 0x4e plus the low 7 bits of byte 0x4f.
         view.insurance_fee = uint16_t(game.tactics.at(at + 0x4e)) |
                              uint16_t(game.tactics.at(at + 0x4f) & 0x7f) << 8;
         for (size_t premium = 0; premium < view.team_premiums.size(); ++premium)
@@ -161,6 +169,7 @@ ContractsState contracts_from_game(const GameState& game, int manager_slot, uint
     return state;
 }
 
+// Serialises a ContractRequest as JSON (kind, ids, quote, term, demand, salary, bonuses).
 std::string contract_request_json(const ContractRequest& r) {
     const char* kind = "demands";
     switch (r.kind) {
@@ -182,6 +191,7 @@ std::string contract_request_json(const ContractRequest& r) {
     return out.str();
 }
 
+// Serialises the contracts state (players, demands, feedback) as JSON for diagnostics and tests.
 std::string contracts_state_json(const ContractsState& s) {
     std::ostringstream out;
     out << "{\"manager_slot\":" << s.manager_slot << ",\"runtime_club\":" << s.runtime_club
@@ -208,6 +218,8 @@ std::string contracts_state_json(const ContractsState& s) {
     return out.str();
 }
 
+// Loads fonts, textures and executable data, validates the state, and loads the club badge image
+// (the widget image is used as the badge atlas when the club has a fallback badge).
 ContractsScreen::ContractsScreen(const std::filesystem::path& data, ContractsState state)
     : ContractsScreen(data,std::move(state),load_le(asset_path(data,"BMH.exe"))) {}
 ContractsScreen::ContractsScreen(const std::filesystem::path& data, ContractsState state,const LeImage& reference)
@@ -233,6 +245,8 @@ ContractsScreen::ContractsScreen(const std::filesystem::path& data, ContractsSta
     else badge_atlas_ = load_vga(asset_path(data / "W", std::to_string(state_.badge_sprite >> 3) + ".VGA"));
 }
 
+// Draws UTF-8 text with the small font at a baseline; nothing is drawn if it does not fit left of `right`.
+// The colour index may be replaced by the executable's vertical text gradient when gradient text is enabled.
 void ContractsScreen::text(Image& out, int x, int baseline, std::string_view value, uint8_t color, int right) const {
     std::string bytes = utf8_to_original(value);
     const int limit = right < 0 ? out.width : std::min(right, out.width);
@@ -249,6 +263,8 @@ void ContractsScreen::text(Image& out, int x, int baseline, std::string_view val
             if (mask.at(xx, yy)) out.at(x + xx, top + yy) = state_.gradient_text && exe_.u8(::bmh::layout::TextGradientMode) == 2 && gradient < 32 ? exe_.u8(::bmh::layout::Advertising_Text_RuntimeField + gradient * 6 + std::min(yy, 5)) : color;
 }
 
+// Queues a request for the session: stamps it with a unique id, the state revision, manager and club.
+// Only one request can be pending; further input is ignored until it is acknowledged or rejected.
 void ContractsScreen::emit(ContractRequest request) {
     if (pending_) return;
     request.request_id = state_.request_id_base + next_request_id_++;
@@ -258,6 +274,10 @@ void ContractsScreen::emit(ContractRequest request) {
     pending_ = request;
 }
 
+// Opens the number-entry calculator over the current screen. `target` selects what is edited:
+// 0..6 = a bonus/premium (0..2 percent, max 20; 3..6 max 1000), -2 = insurance months (max 60),
+// other negative = the salary offer (max 200000). Sets the maximum, six preset buttons and the initial value;
+// presets above the maximum are marked UINT32_MAX (hidden) and the last two presets are 0 and the maximum.
 void ContractsScreen::open_calculator(int target, Page return_page, uint32_t initial) {
     calculator_backdrop_ = render();
     calculator_bonus_index_ = target;
@@ -273,6 +293,8 @@ void ContractsScreen::open_calculator(int target, Page return_page, uint32_t ini
         calculator_max_ = 60;
         for (size_t i = 0; i < 6; ++i) calculator_presets_[i] = 12u + uint32_t(i) * 6u;
     } else {
+        // Salary offer: presets are spaced by a step derived from the initial value (about a tenth, rounded to a power of ten)
+        // starting three steps below the value rounded down to thousands.
         calculator_max_ = 200000;initial=std::min(initial,calculator_max_);
         uint32_t factor=1000, step=0;
         while(!step && factor) {step=factor*((initial/factor)/10);if(!step)factor/=10;}
@@ -290,6 +312,8 @@ void ContractsScreen::open_calculator(int target, Page return_page, uint32_t ini
     editing_salary_ = true;
 }
 
+// Typed characters while the calculator is open: digits are appended unless the maximum would be exceeded,
+// backspace removes the last digit. Returns true if the input changed.
 bool ContractsScreen::text(std::string_view value) {
     if (pending_ || !editing_salary_) return false;
     bool changed = false;
@@ -306,6 +330,9 @@ bool ContractsScreen::text(std::string_view value) {
     return changed;
 }
 
+// Draws the roster page: background (or plain bars), title, club name, column header, and one row per player.
+// The three roster tabs share the layout of the lineup screen; tab_ 0 and 1 show attribute/status and statistics pages,
+// tab_ 2 and 3 show age, monthly salary, remaining months and insurance.
 // LineupScreen, contract mode: the same roster as lineup, including its
 // original fixed-width number strings, jersey marks, and bitmap icons.
 Image ContractsScreen::render_roster() const {
@@ -314,11 +341,13 @@ Image ContractsScreen::render_roster() const {
         fill(out, 0, 4, 320, 13, 0x44); fill(out, 1, 5, 318, 11, 0x39);
         fill(out, 0, 228, 320, 10, 0x44); fill(out, 1, 229, 318, 8, 0x39);
     }
+    // Draws a string in the original encoding; with `right` it is centred between x and right.
     auto original_text = [&](int x, int y, std::string_view raw, uint8_t color, int right = -1) {
         const int width = font_.text_width(raw);
         if (right >= 0) x += (right - x) / 2 - width / 2;
         text(out, x, y, original_to_utf8(raw), color, -1);
     };
+    // Fixed-width number helper (width characters, optional thousands grouping).
     const auto fixed = [](uint32_t value, int width, bool grouped = false) { return original_number(value, width, grouped); };
     const auto count = [](uint64_t value) { auto s = std::to_string(value); if(s.size()<3)s.insert(0,3-s.size(),'%'); return s; };
     const auto title = original_to_utf8(texts_[(::bmh::layout::Contracts_RenderRoster_TextPointer2 - ::bmh::layout::TextPointerTable) / 4]);
@@ -327,6 +356,8 @@ Image ContractsScreen::render_roster() const {
     const auto header = tab_ == 0 ? texts_[(::bmh::layout::ClubInfo_Render_TextPointer3 - ::bmh::layout::TextPointerTable) / 4] : tab_ == 1 ? texts_[(::bmh::layout::ClubInfo_Render_TextPointer4 - ::bmh::layout::TextPointerTable) / 4] : exe_.cstring(exe_.u32(::bmh::layout::Contracts_RenderRoster_TextPointer));
     original_text(0, 26, header, 0x51);
     int baseline = 36;
+    // Rows start at baseline 36 with 7 pixels per row; the baseline grows by 2 where the status bits (0xc000) of the
+    // slot change from the previous player (a visual gap). `preceding` remembers the previous slot word.
     uint16_t preceding = 0;
     for (size_t visual = 0; visual < state_.players.size(); ++visual) {
         const auto& p = state_.players[visual]; const auto& s = p.source; const auto& a = s.attributes;
@@ -338,6 +369,7 @@ Image ContractsScreen::render_roster() const {
             original_text(4, baseline, std::string(1, char('0' + jersey % 10)), color);
             if (jersey >= 10) original_text(0, baseline, exe_.cstring(::bmh::layout::ClubInfo_Render_TextPointer), color);
         }
+        // Name colour: selected row, hovered row, blocked contract (tab 2 only) or alternating row colours.
         const uint8_t name_color = p.row == state_.selected_row ? 0x27 : p.row == hovered_row_ ? 0x3e :
             tab_ == 2 && (p.offer_blocked || (p.board_flags & 0x20)) ? 0xf7 : visual % 2 ? 0x67 : 0x6b;
         original_text(13, baseline, s.name, name_color);
@@ -353,6 +385,7 @@ Image ContractsScreen::render_roster() const {
             if (tab_ == 2 || tab_ == 3) {
                 values += fixed(a.age(), 2) + texts_[(::bmh::layout::Contracts_RenderRoster_TextPointer3 - ::bmh::layout::TextPointerTable) / 4];
                 const uint32_t numerator = state_.currency_numerator, denominator = state_.currency_denominator;
+                // Amount scaled with the currency multiplier/divisor followed by the currency suffix.
                 const auto currency = [&](uint32_t value, int width) { return fixed(uint32_t(value * numerator) / denominator, width, true) + exe_.cstring(::bmh::layout::CurrencySuffixText); };
                 values += currency(p.current_monthly_salary, 6) + exe_.cstring(::bmh::layout::Contracts_RenderRoster_ExecutableField2);
                 values += p.remaining_months == 255 ? exe_.cstring(::bmh::layout::Contracts_RenderRoster_ExecutableField3) : fixed(p.remaining_months, 2) + exe_.cstring(::bmh::layout::Contracts_RenderRoster_ExecutableField4);
@@ -380,6 +413,7 @@ Image ContractsScreen::render_roster() const {
         } else {
             original_text(65, baseline, fixed(a.age(), 2) + texts_[(::bmh::layout::ClubInfo_Render_TextPointer5 - ::bmh::layout::TextPointerTable) / 4], 0x6c);
             for (int skill = 0; skill < 7; ++skill) copy_region(out, atlas_, 256 + a.skill(Player::Skill(skill)) * 16, 32, 87 + skill * 10, baseline - 5, 16, 5, true);
+            // Reads a little-endian 16-bit value from the player's board entry.
             auto word = [&](int at) { return uint16_t(s.board[at] | uint16_t(s.board[at + 1]) << 8); };
             original_text(165, baseline, fixed(s.bonus & 127, 3) + exe_.cstring(::bmh::layout::ClubInfo_Render_ExecutableField5) + count(s.statistics ? s.statistics->appearances[0] : s.board[7]) + exe_.cstring(::bmh::layout::ClubInfo_Render_ExecutableField5) +
                 count(s.statistics ? s.statistics->appearances[2] : s.board[9]) + exe_.cstring(::bmh::layout::ClubInfo_Render_ExecutableField5) + count(s.statistics ? s.statistics->total : word(0x48)) + exe_.cstring(::bmh::layout::ClubInfo_Raw_ExecutableField2) +
@@ -390,6 +424,8 @@ Image ContractsScreen::render_roster() const {
     return out;
 }
 
+// Renders the complete screen. The base is the roster, or the saved backdrop while the calculator or the
+// result dialog is shown; on top come the tab buttons and the negotiation panel, calculator or result notice.
 Image ContractsScreen::render() const {
     Image out(320, 240);
     if (page_ == Page::result && result_backdrop_) out = *result_backdrop_;
@@ -401,38 +437,37 @@ Image ContractsScreen::render() const {
     }
     const auto selected = std::find_if(state_.players.begin(), state_.players.end(),
         [&](const auto& p) { return p.row == state_.selected_row; });
+    // Tab captions come from text entries 117..120; the fourth tab (team premiums) exists only in mode three.
     const std::array<std::string,4> tabs{original_to_utf8(texts_[117]),original_to_utf8(texts_[118]),original_to_utf8(texts_[119]),original_to_utf8(texts_[120])};
     for (int i = 0; i < (state_.mode_three?4:3); ++i) {
         const int x = i * 60 + 2, w = i == 3 ? 71 : 51;
-        if(i!=tab_) {fill(out,x+2,225,w,2,0x40);fill(out,x+w,217,2,10,0x40);}
-        else {const uint8_t color=out.at(x,225);fill(out,x,215,w+1,2,color);fill(out,x,215,2,11,color);}
-        const int source_y = i == tab_ ? 44 : 74;
-        const int dest_y = 215 + (i == tab_ ? 2 : 0);
-        const int dest_x = x + (i == tab_ ? 2 : 0);
-        copy_region(out, widgets_, 24, source_y, dest_x, dest_y, 31, 10);
-        int tab_at = 31, remain = w - 31;
-        while (remain > 20) { const int n = std::min(8, remain - 20); copy_region(out, widgets_, 24, source_y + 10, dest_x + tab_at, dest_y, n, 10); tab_at += n; remain -= n; }
-        if (remain > 0) copy_region(out, widgets_, 45 - remain, source_y + 20, dest_x + tab_at, dest_y, remain, 10);
+        const int shift = draw_wide_button_frame(out, widgets_, x, 215, w, i == tab_);   // button_frame.hpp
+        const int dest_y = 215 + shift;
+        const int dest_x = x + shift;
         sprite_font_.draw(out, dest_x + w/2 - sprite_font_.text_width(tabs[size_t(i)])/2, dest_y+7, tabs[size_t(i)], exe_.u8(::bmh::layout::Advertising_Button_RuntimeField + (i==tab_)));
     }
 
+    // Draws a framed panel.
     auto panel = [&](int x, int y, int w, int h, bool shadow = true) {
         frame(out, exe_, widgets_, x, y, w, h, shadow);
     };
-    auto button = [&](int x, int y, int w, std::string_view label) {
-        fill(out, x + 2, y + 10, w, 2, 0x40); fill(out, x + w, y + 2, 2, 10, 0x40);
-        copy_region(out, widgets_, 24, 74, x, y, 31, 10);
-        int at = 31, remaining = w - 31;
-        while (remaining > 20) { const int n = std::min(8, remaining - 20); copy_region(out, widgets_, 24, 84, x + at, y, n, 10); at += n; remaining -= n; }
-        if (remaining > 0) copy_region(out, widgets_, 45 - remaining, 94, x + at, y, remaining, 10);
-        const int font = exe_.u8(::bmh::layout::Advertising_Button_RuntimeField);
-        sprite_font_.draw(out, x + (w - sprite_font_.text_width(label)) / 2, y + 7, label, font);
+    // Draws a button of width w: 31 pixel left part, repeated strips and the right end, with the label centred.
+    // `id` is the button's number on the page; the one held down by the mouse is drawn pressed (button_frame.hpp).
+    auto button = [&](int id, int x, int y, int w, std::string_view label) {
+        const bool down = pressed_button_ == id;
+        const int shift = draw_wide_button_frame(out, widgets_, x, y, w, down);
+        const int font = exe_.u8(::bmh::layout::Advertising_Button_RuntimeField + int(down));
+        sprite_font_.draw(out, x + shift + (w - sprite_font_.text_width(label)) / 2, y + shift + 7, label, font);
     };
+    // Looks up a text from the original text table by its pointer-table address.
     auto db = [&](uint32_t address) { return original_to_utf8(texts_[(address-::bmh::layout::TextPointerTable)/4]); };
+    // Draws text centred between two x positions.
     auto centered = [&](int left,int right,int y,std::string_view value,uint8_t color) {
         const int x=left+(right-left)/2-font_.text_width(utf8_to_original(value))/2;
         text(out,x,y,value,color,-1);
     };
+    // Negotiation panel: player offer page or premium page. It is placed at y=22 for team premiums or for players
+    // in rows >= 13, otherwise at y=130, so the selected player's row stays visible.
     const bool negotiating = page_ == Page::player_offer || page_ == Page::team_premiums;
     if (negotiating) {
         const bool team = page_ == Page::team_premiums && team_premium_mode_;
@@ -454,20 +489,27 @@ Image ContractsScreen::render() const {
         if(page_==Page::player_offer && selected!=state_.players.end()) {
             text(out,5,top+46,db(::bmh::layout::Contracts_Out_ExecutableField14),106,-1);text(out,5,top+54,db(::bmh::layout::Contracts_Out_TextPointer5),106,-1);
             if(state_.mode_three)text(out,5,top+72,db(::bmh::layout::Contracts_Out_TextPointer6),106,-1);
+            // Four contract-term columns (1..4 years), 60 pixels wide from x=70: the entered salary offer for the chosen term,
+            // the club's demand for each term (UINT32_MAX = no quote yet) and, in mode three, the insurance row.
             for(int term=0;term<4;++term) {
                 const int left=70+60*term;
                 centered(left,left+60,top+37,std::to_string(term+1)+db(::bmh::layout::Contracts_Out_ExecutableField15)+(term?exe_.cstring(::bmh::layout::ClubPlayerDetail_RenderCard_TextPointer):""),107);
                 if(salary_offer_set_ && term==offer_term_) centered(left,left+60,top+46,money(offer_salary_),108);
+                // Demand is shown in a different colour (251) if no quote exists or the player cannot receive offers.
                 const uint32_t demand=state_.demands?(*state_.demands)[size_t(term)]:UINT32_MAX;
                 centered(left,left+60,top+54,demand==UINT32_MAX?db(::bmh::layout::Contracts_Out_ExecutableField16):money(demand),
                     demand==UINT32_MAX || selected->offer_blocked || (selected->board_flags&0x60)?251:95);
                 if(state_.mode_three) {
                     centered(left,left+55,top+64,db(::bmh::layout::ClubPlayerDetail_Copy_TextPointer6+term*4),107);
+                    // Insurance fee shown per insurance term column; the active insurance term is highlighted.
                     const uint32_t fee=(((uint32_t(term*10+10)*selected->current_monthly_salary)/1000)*10);
                     centered(left,left+60,top+72,original_number(fee,5,true)+db(::bmh::layout::ClubPlayerDetail_Copy_ExecutableField4),selected->insurance && ((selected->insurance>>6)&3)==term?39:106);
                 }
             }
         } else {
+            // Premium page: seven bonus lines. The shown amount is the percentage (rate times 1 for the first three lines,
+            // times 5 for the others) of the basis salary: the player's monthly salary, or for the team page a value derived from
+            // the summed salaries and the number of players.
             uint32_t base=0; int occupied=0;
             if(team)for(const auto& p:state_.players){base+=p.current_monthly_salary;++occupied;}
             else if(selected!=state_.players.end())base=selected->current_monthly_salary;
@@ -483,17 +525,18 @@ Image ContractsScreen::render() const {
                 }
             }
         }
-        button(5,top+76,51,db(::bmh::layout::Contracts_Out_ExecutableField17));button(90,top+76,80,db(::bmh::layout::Contracts_Out_ExecutableField18));
-        if(!team&&state_.mode_three)button(261,top+76,51,db(page_==Page::player_offer?::bmh::layout::Contracts_Out_ExecutableField2: ::bmh::layout::Contracts_Out_ExecutableField));
+        button(0,5,top+76,51,db(::bmh::layout::Contracts_Out_ExecutableField17));button(1,90,top+76,80,db(::bmh::layout::Contracts_Out_ExecutableField18));
+        if(!team&&state_.mode_three)button(2,261,top+76,51,db(page_==Page::player_offer?::bmh::layout::Contracts_Out_ExecutableField2: ::bmh::layout::Contracts_Out_ExecutableField));
     } else if (page_ == Page::calculator) {
-        copy_region(out, calculator_, 0, 0, 10, 10, 113, 136);
-        fill(out,123,12,2,136,0x40);fill(out,12,146,113,2,0x40);
+        // Calculator: background image at (10,10), drop shadow, label, 15 keys (digits and the letters D, R, C, J, N),
+        // 8 preset buttons and the current input right-aligned. Key and preset positions come from tables in the executable.
+        draw_calculator_panel(out, calculator_, 10, 10);   // calculator_widgets.hpp
         const auto label=calculator_bonus_index_==-2?db(::bmh::layout::Contracts_Out_ExecutableField19):calculator_bonus_index_<0?db(::bmh::layout::Contracts_Out_ExecutableField14):db(::bmh::layout::Contracts_Out_ExecutableField4+calculator_bonus_index_*4);
         centered(18,115,24,label,98);
         for(int i=0;i<15;++i) {
             const int x=10+exe_.u16(::bmh::layout::Advertising_Click_RuntimeField+i*2), y=10+exe_.u8(::bmh::layout::Advertising_Click_RuntimeField2+i);
-            copy_region(out,calculator_,0,136,x,y,15,14);
-            text(out,x+5,y+9,std::string(1,"0123456789DRCJN"[i]),98,-1);
+            const int p=draw_calculator_key(out,calculator_,x,y,pressed_key_==i);
+            text(out,x+5+p,y+9+p,std::string(1,"0123456789DRCJN"[i]),98,-1);
         }
         for(int i=0;i<8;++i) {
             const int x=10+exe_.u16(::bmh::layout::Advertising_Click_RuntimeField+(i+15)*2), y=10+exe_.u8(::bmh::layout::Advertising_Click_RuntimeField2+i+15);
@@ -504,6 +547,7 @@ Image ContractsScreen::render() const {
         const auto value=plain_number(salary_input_);
         text(out,116-font_.text_width(value),120,value,0,-1);
     } else if (page_ == Page::result) {
+        // Result page: the manager's answer is shown as the original-style notice dialog over the saved backdrop.
         TaxDialogProjection notice;
         notice.manager_name=utf8_to_original(state_.manager_name);
         notice.portrait=state_.manager_portrait;
@@ -512,12 +556,49 @@ Image ContractsScreen::render() const {
         notice.body=utf8_to_original(state_.feedback);
         notice.source_manager_flags=0x80;
         draw_source_dialog(out,{widgets_,faces_,&badge_atlas_,font_,large_font_,
-            exe_,sprite_font_,texts_},notice,state_.gradient_text);
+            exe_,sprite_font_,texts_},notice,state_.gradient_text,
+            pressed_button_==3?std::optional<GameEndTaxDialog::Button>(GameEndTaxDialog::Button::acknowledge):std::nullopt);
     }
     return out;
 }
 
+// Handles a mouse click on the current page and returns true if the screen changed.
+// Result page: the OK button closes the notice. Roster: right click on a name asks for the player's demands
+// (a request that the session acknowledges), the tab row switches tabs, left click on a name shows player info.
+// Calculator: keys, presets and accept/cancel. Offer and premium pages: term columns, premium lines and the buttons
+// at top+76 (back, send, switch page).
+// Mouse DOWN on one of the buttons below the offer or premium panel (back, send, switch page): drawn pressed until the
+// release. Returns true when the picture changed.
+bool ContractsScreen::press(int x, int y) {
+    int id = -1;
+    if (page_ == Page::result) {
+        // OK of the manager's answer (id 3)
+        if (source_dialog_button_at(TaxDialogKind::acknowledgement, false, x, y) == GameEndTaxDialog::Button::acknowledge) id = 3;
+    } else if (page_ == Page::player_offer || page_ == Page::team_premiums) {
+        const bool team = page_ == Page::team_premiums && team_premium_mode_;
+        const auto selected = std::find_if(state_.players.begin(), state_.players.end(), [&](const auto& p) { return p.row == state_.selected_row; });
+        const int top = team || selected == state_.players.end() || selected->row >= 13 ? 22 : 130;
+        if (y >= top + 76 && y <= top + 85) {
+            if (x < 60) id = 0;
+            else if (x >= 90 && x <= 170) id = 1;
+            else if (x >= 261 && x <= 312 && !team && state_.mode_three) id = 2;
+        }
+    }
+    // a key of the open calculator
+    int key = -1;
+    if (page_ == Page::calculator)
+        for (int i = 0; i < 15; ++i)
+            if (calculator_key_hit(x, y, 10 + exe_.u16(::bmh::layout::Advertising_Click_RuntimeField + size_t(i) * 2),
+                                   10 + exe_.u8(::bmh::layout::Advertising_Click_RuntimeField2 + size_t(i)))) key = i;
+    const bool changed = id != pressed_button_ || key != pressed_key_;
+    pressed_button_ = id;
+    pressed_key_ = key;
+    return changed;
+}
+
 bool ContractsScreen::click(int x, int y, bool right) {
+    pressed_button_ = -1;   // the release ends the pressed look
+    pressed_key_ = -1;
     if (page_ == Page::result) {
         if (x >= 95 && x <= 220 && y >= 166 && y <= 176) { page_ = result_return_; result_backdrop_.reset(); state_.feedback.clear(); return true; }
         return false;
@@ -540,6 +621,8 @@ bool ContractsScreen::click(int x, int y, bool right) {
     if(right && page_==Page::calculator){page_=calculator_return_;calculator_backdrop_.reset();editing_salary_=false;return true;}
     if(right && page_!=Page::roster){page_=Page::roster;return true;}
     if (page_ == Page::calculator) {
+        // Applies the calculator value for the edited target: bonus (stored as value, or value/5 for the lines from 3),
+        // insurance (creates an insure_player request, max 60 months) or the salary offer for the chosen term.
         auto accept_calculator = [&]() {
             if (calculator_bonus_index_ >= 0) {
                 const auto selected_player = std::find_if(state_.players.begin(), state_.players.end(), [&](const auto& p) { return p.row == state_.selected_row; });
@@ -564,6 +647,7 @@ bool ContractsScreen::click(int x, int y, bool right) {
             salary_input_ = 0;
             return true;
         }
+        // Digit keys type, then the editing keys in order: backspace, reset to initial value, clear, accept, cancel.
         // Key positions are read from the original calculator hitbox table.
         for (int i = 0; i < 15; ++i) {
             const int key_x = 10 + exe_.u16(::bmh::layout::Advertising_Click_RuntimeField + size_t(i) * 2);
@@ -665,6 +749,8 @@ bool ContractsScreen::click(int x, int y, bool right) {
     return false;
 }
 
+// Called when the pointer-hold timer fires: on the roster it behaves like a right click (opens the talk with the
+// player under the pointer), on the calculator and the negotiation pages it discards the local input and goes back.
 bool ContractsScreen::process_timer_expired(int pointer_x, int pointer_y) {
     //InstallDefaultHooks(0x80) dispatches event8 against the actual name-column row:
     //outside the list it returns; over a player it enters the normal talk.
@@ -690,6 +776,7 @@ bool ContractsScreen::process_timer_expired(int pointer_x, int pointer_y) {
     return false; // result notices retain their separate physical input owner
 }
 
+// Pointer movement over the roster names (x 0..60): updates the hovered row; returns true if it changed.
 bool ContractsScreen::move(int x,int y) {
     if (page_ != Page::roster || pending_) return false;
     int next=-1, baseline=36;
@@ -702,6 +789,7 @@ bool ContractsScreen::move(int x,int y) {
     hovered_row_=next;return true;
 }
 
+// Keyboard input: Esc goes back one page or closes the screen (ignored in the calculator), digits, backspace and clear edit the calculator value.
 bool ContractsScreen::key(std::string_view key) {
     if (key == "ESC" || key == "ESCAPE") {
         if (page_ == Page::calculator) return false;
@@ -720,6 +808,8 @@ bool ContractsScreen::key(std::string_view key) {
     return false;
 }
 
+// Session reply to a demands request: checks that it matches the pending request and player, takes over the new
+// state with the demands and quote id, resets the form and opens the player offer page.
 void ContractsScreen::acknowledge_quote(const ContractsState& state) {
     if (!pending_ || pending_->kind != ContractActionKind::request_demands || state.revision <= state_.revision ||
         state.manager_slot != state_.manager_slot || state.runtime_club != state_.runtime_club || !state.demands ||
@@ -744,6 +834,7 @@ void ContractsScreen::acknowledge_quote(const ContractsState& state) {
     page_ = Page::player_offer;
 }
 
+// Session reply to an offer (or bonus) request: takes over the new state and shows the manager's answer as result page.
 void ContractsScreen::acknowledge_offer(const ContractsState& state) {
     if (!pending_ || (pending_->kind != ContractActionKind::submit_offer && pending_->kind != ContractActionKind::submit_bonuses) || state.revision <= state_.revision ||
         state.manager_slot != state_.manager_slot || state.runtime_club != state_.runtime_club)
@@ -759,6 +850,7 @@ void ContractsScreen::acknowledge_offer(const ContractsState& state) {
     result_return_=Page::roster;page_ = Page::result;
 }
 
+// Session reply to a bonus request: takes over the new state; the result page is shown only if there is a message.
 void ContractsScreen::acknowledge_bonus_offer(const ContractsState& state) {
     if (!pending_ || pending_->kind != ContractActionKind::submit_bonuses ||
         state.revision <= state_.revision || state.manager_slot != state_.manager_slot || state.runtime_club != state_.runtime_club)
@@ -768,6 +860,7 @@ void ContractsScreen::acknowledge_bonus_offer(const ContractsState& state) {
     state_ = state; state_.request_id_base = base; pending_.reset(); result_return_=Page::roster;page_ = state.feedback.empty() ? Page::roster : Page::result;
 }
 
+// Session reply to an insurance request: checks quote and player identity, takes over the state, back to the offer page.
 void ContractsScreen::acknowledge_insurance(const ContractsState& state) {
     if (!pending_ || pending_->kind != ContractActionKind::insure_player || state.revision <= state_.revision ||
         state.manager_slot != state_.manager_slot || state.runtime_club != state_.runtime_club ||
@@ -782,6 +875,7 @@ void ContractsScreen::acknowledge_insurance(const ContractsState& state) {
     calculator_backdrop_.reset(); editing_salary_ = false;
 }
 
+// Session rejection of the pending request: shows the reason as feedback; a rejected insurance returns to the offer page.
 void ContractsScreen::reject(std::string feedback) {
     if (!pending_) throw FormatError("contracts: no action to reject");
     const auto kind = pending_->kind;
@@ -789,6 +883,7 @@ void ContractsScreen::reject(std::string feedback) {
     if (kind == ContractActionKind::insure_player) page_ = Page::player_offer;
 }
 
+// State as JSON for tests: contracts state plus calculator input, selected term, editing flag and page.
 std::string ContractsScreen::state_json() const {
     auto out = contracts_state_json(state_);
     out.pop_back();

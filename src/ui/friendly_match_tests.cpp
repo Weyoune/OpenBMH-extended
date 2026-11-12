@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Tests for the friendly match screen stages and requests (ui/friendly_match.hpp).
 #include "formats/executable_layout.hpp"
 #include "ui/friendly_match.hpp"
 
@@ -11,13 +12,12 @@
 #include "game/schedule.hpp"
 #include "game/state.hpp"
 #include "game/messages.hpp"
+#include "testing/check.hpp"
 
 using namespace bmh::ui;
 
 namespace {
-void check(bool ok, const char* message) {
-    if (!ok) throw std::runtime_error(message);
-}
+using bmh::test_support::check;
 
 FriendlyMatchState fixture(const std::filesystem::path& data) {
     FriendlyMatchState state;
@@ -60,7 +60,7 @@ FriendlyMatchState fixture(const std::filesystem::path& data) {
         table.league_id = league;
         table.league_name = "Liga";
         table.header_text = "Tabelle";
-        for (int team = 0; team < bmh::kLeagueSizes[league]; ++team) {
+        for (int team = 0; team < bmh::league_system().sizes[league]; ++team) {
             LeagueTableRow row;
             row.rank = team + 1;
             row.runtime_team_id = runtime++;
@@ -272,7 +272,7 @@ int main(int argc, char** argv) {
               "only the authoritative success ACK completes the interaction");
         check(!screen.acknowledge_booking(accepted), "duplicate booking ACK is inert after completion");
         check(original.revision == 7 && original.planner_count == 4 &&
-              original.leagues[0].rows.size() == size_t(bmh::kLeagueSizes[0]),
+              original.leagues[0].rows.size() == size_t(bmh::league_system().sizes[0]),
               "screen interaction leaves its source projection unchanged");
         check(initial_json.find("friendly_match") != std::string::npos,
               "screen exposes machine-readable state for app routing");

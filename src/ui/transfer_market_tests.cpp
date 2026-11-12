@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Tests for TransferMarketScreen: projection of native inputs, quote and bid requests, owner preview, feedback text and listing order.
 #include "formats/executable_layout.hpp"
 #include "ui/transfer_market.hpp"
 
@@ -73,7 +74,9 @@ int main(int argc,char** argv){
         const auto rejected_frame = screen.render();
         screen.key("V");
         screen.reject_action("Anderer sichtbarer Hinweis");
-        check(screen.render().pixels != rejected_frame.pixels, "host rejection is actually rendered in the footer");
+        // the original has no status line: the footer keeps showing the club name, the text stays in state_json()
+        check(screen.render().pixels == rejected_frame.pixels, "host rejection does not replace the club name in the footer");
+        check(screen.state_json().find("Anderer sichtbarer Hinweis")!=std::string::npos,"host rejection stays in the state");
 
         TransferMarketScreen selected(argv[1],s);
         auto marked_market=selected.click(210,28);selected.acknowledge_preview(s,quote(marked_market));
@@ -93,9 +96,20 @@ int main(int argc,char** argv){
         review.acknowledge_unchanged();
         listed.items[0].offers=0;TransferMarketScreen waiting(argv[1],listed);
         auto hover_waiting=waiting.click(20,32);waiting.acknowledge_preview(listed,quote(hover_waiting));
-        check(waiting.key("V").kind==TransferMarketRequestKind::none&&
-              waiting.state_json().find("Noch keine Angebote")!=std::string::npos,
-              "an own listing without incoming offers gives visible feedback");
+        const auto withdraw=waiting.key("V");
+        check(withdraw.kind==TransferMarketRequestKind::review_offers&&withdraw.ask_withdraw&&withdraw.bid.list_entry==4&&
+              transfer_market_request_json(withdraw).find("\"ask_withdraw\":true")!=std::string::npos,
+              "selling a listed own player without offers still asks whether he leaves the list");
+        {   // the same question when the listed player is chosen in the market list (right panel), with and without offers
+            for(const uint8_t offers:{uint8_t(0),uint8_t(1)}) {
+                auto own_state=listed;own_state.items[0].offers=offers;
+                TransferMarketScreen own(argv[1],own_state);
+                auto chosen=own.click(210,28);own.acknowledge_preview(own_state,quote(chosen));
+                const auto sell_listed=own.click(200,206);
+                check(sell_listed.kind==TransferMarketRequestKind::review_offers&&sell_listed.ask_withdraw&&sell_listed.bid.list_entry==4,
+                      "selling an own listing chosen in the market list asks whether the player leaves the list");
+            }
+        }
         auto expired=fixture();expired.squad_slots[2932]=0x0fff;
         check(!transfer_market_from_game(expired,5).squad[0].already_listed,
               "cleared rejected/expired pool entry immediately makes the player listable again");

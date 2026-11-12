@@ -71,9 +71,9 @@ int main()try{
     }
     // Independent Original table oracle: use packed synthetic result bytes,
     // retaining the Source rank-to-draw-slot interpretation (flags 7, mode 1).
-    const auto original_size=bmh::kLeagueSizes[0];int comparisons=0;
+    const auto original_size=bmh::installed_league_system().sizes[0];int comparisons=0;
     for(const auto& l:w.catalogue.leagues)if(l.id.value<10&&l.clubs!=10) {
-        bmh::kLeagueSizes[0]=l.clubs;bmh::GameState legacy;legacy.results.assign(9*0x17c,0xcc);legacy.league_rounds.assign(9,0);legacy.league_rounds[0]=uint8_t(l.rounds());
+        bmh::installed_league_system().sizes[0]=l.clubs;bmh::GameState legacy;legacy.results.assign(9*0x17c,0xcc);legacy.league_rounds.assign(9,0);legacy.league_rounds[0]=uint8_t(l.rounds());
         for(int r=1;r<=l.rounds();++r)for(int m=0;m<l.clubs/2;++m) {
             const auto& s=results.result(w.catalogue,l.id,r,m);legacy.results[size_t(r-1)*10+size_t(m)]=uint8_t(s.home<<4|s.away);
         }
@@ -84,7 +84,7 @@ int main()try{
             check(row.rank==table.rank(int(pos))+1&&row.points==uint8_t(table.points[size_t(pos)]),"annual final standings diverge from Original");++comparisons;
         }
     }
-    bmh::kLeagueSizes[0]=original_size;
+    bmh::installed_league_system().sizes[0]=original_size;
     // Shared ordering kernel: Source puts each regional winner before its
     // champion, while absent play-offs reduce the visible exchanged prefix.
     const std::vector<std::vector<int>> feeders{{10,11,12},{20,21,22}};

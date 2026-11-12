@@ -18,7 +18,7 @@ namespace bmh {
 
 namespace {
 
-constexpr size_t kRecord = 0xB0C;
+constexpr size_t kRecord = kManagerRecordSize;
 
 // DeskRuntimeField: which of the 0x36 desk buttons exist, for the pseudo club 0x165 and per
 // game mode (GameMode; the table for mode m starts at DeskRuntimeField + m * 0x36).
@@ -75,7 +75,7 @@ void enter_desk(GameState& g, int manager, GameRandom& game, WatcomRandom& rand,
             uint8_t v = uint8_t(g.memory.u8(at) & 0xf);
             // EN AlwaysHidesRecordIndoorTableIncluding always hides record 10 (IndoorTable), including
             // Modus III. DE HasNoEquivalentCondition has no equivalent condition.
-            if ((kEnglishCompetitions && b == 10) ||
+            if ((installed_league_system().english_competitions && b == 10) ||
                 (is_national_team(g,team) && kButtons[b] == 0) || (mode < 3 && kButtons[mode * 0x36 + b] == 0) ||
                 (b == 0x16 && mode2 == 1 && g.date < 0x16e))
                 v |= 0x10;

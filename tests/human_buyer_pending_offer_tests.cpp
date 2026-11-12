@@ -18,6 +18,7 @@
 #include "game/prediction.hpp"
 #include "game/save.hpp"
 #include "game/season.hpp"
+#include "testing/check.hpp"
 
 // Private QA composition of format field -> IncomingTransferScreen/ProjectTransferOfferList -> Void2 ->
 // SettleHumanBuyerSale -> PendingOfferAnswer -> 42707. No production pending adapter is called.
@@ -428,7 +429,7 @@ using namespace bmh;
 namespace {
 constexpr uint32_t kOffers=::bmh::layout::OfferSlots, kList=::bmh::layout::EditorList+40*0x58;
 constexpr size_t kPool=0xb70+40, kRecord=0xb0c, kBoard=0x840, kBoardSlot=0x58;
-void check(bool v,const char* what){if(!v)throw std::runtime_error(what);}
+using bmh::test_support::check;
 uint32_t read32(const std::vector<uint8_t>& b,size_t at){uint32_t v=0;for(int i=0;i<4;++i)v|=uint32_t(b.at(at+size_t(i)))<<(8*i);return v;}
 void write32(std::vector<uint8_t>& b,size_t at,uint32_t v){for(int i=0;i<4;++i)b.at(at+size_t(i))=uint8_t(v>>(i*8));}
 bool contains(const GameState& g,int team,int player){const auto r=squad_range(team);for(size_t i=r.first;i<r.first+r.count;++i)if((g.squad_slots.at(i)&0x0fff)==player)return true;return false;}
@@ -453,7 +454,7 @@ Control make_control(GameState& g,int free_row=-1,bool buyer_full=false,bool sal
  c.player=listing.player;c.seller_row=player_row(g,c.seller,c.player);
  check(c.seller_row>=0,"listed player remains in a concrete seller row");
  const uint32_t ordinary=::bmh::layout::EditorList+uint32_t(listing.list_entry)*0x58;
- const uint32_t fee_base=(g.memory.u32(ordinary+0x2c)/10000)*0x30d4;
+ const uint32_t fee_base=(g.memory.u32(ordinary+0x2c)/10000)*10000;
  const uint32_t salary_base=((100u*g.memory.u32(ordinary+0x30))/10000)*100;
  TransferBidRequest bid;bid.manager=1;bid.list_entry=listing.list_entry;bid.player=listing.player;
  bid.fee=int32_t(fee_base);bid.annual_salary=int32_t(salary_base*2);bid.contract_years=1;

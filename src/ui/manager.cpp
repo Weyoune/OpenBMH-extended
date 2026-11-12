@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Implements ManagerScreen and load_selection_context() declared in manager.hpp: renders the selection,
+// name entry, club picker and confirmation dialogs, handles click, move and text input and keeps the
+// current ManagerChoice. The flow applies the confirmed choice; this file does not initialise a career.
 #include "formats/badge_policy.hpp"
 #include "formats/executable_layout.hpp"
 #include "ui/manager.hpp"
@@ -12,24 +15,21 @@
 #include <set>
 #include <sstream>
 #include <utility>
+#include "ui/dialog_frame.hpp"
+#include "ui/button_frame.hpp"
+#include "ui/draw.hpp"
 
 namespace bmh::ui {
 namespace {
 
 void rect(Image& out, int x, int y, int w, int h, uint8_t color) {
-    for (int yy = std::max(y, 0); yy < std::min(y + h, out.height); ++yy)
-        for (int xx = std::max(x, 0); xx < std::min(x + w, out.width); ++xx) out.at(xx, yy) = color;
+    draw::fill(out, x, y, w, h, color);
 }
 
 void copy(Image& out, const Image& src, int sx, int sy, int x, int y, int w, int h, bool transparent = false) {
     if (sx < 0 || sy < 0 || sx + w > src.width || sy + h > src.height)
         throw FormatError("manager: sprite outside original atlas");
-    for (int yy = 0; yy < h; ++yy)
-        for (int xx = 0; xx < w; ++xx) {
-            const auto c = src.pixels[size_t(sy + yy) * src.width + sx + xx];
-            if (x + xx >= 0 && y + yy >= 0 && x + xx < out.width && y + yy < out.height && (!transparent || c))
-                out.at(x + xx, y + yy) = c;
-        }
+    draw::copy_clipped(out, src, sx, sy, x, y, w, h, transparent ? 0 : -1);
 }
 
 void border(Image& out, int x, int y) {
@@ -39,47 +39,7 @@ void border(Image& out, int x, int y) {
     rect(out, x + 38, y - 1, 1, 40, 0x40);
 }
 
-constexpr std::array<std::string_view, 7> german = {"Ä", "Ö", "Ü", "ä", "ö", "ü", "ß"};
-constexpr std::string_view original_german = "[\\]{|}~";
-
 }  // namespace
-
-std::string json_quote(std::string_view value) {
-    std::ostringstream s; s << '"';
-    for (unsigned char c : value) {
-        if (c == '"' || c == '\\') s << '\\' << c;
-        else if (c < 32) s << "\\u" << std::hex << std::setw(4) << std::setfill('0') << int(c) << std::dec;
-        else s << c;
-    }
-    s << '"'; return s.str();
-}
-
-std::string original_to_utf8(std::string_view value) {
-    std::string out;
-    for (char c : value) {
-        auto i = original_german.find(c);
-        if (i != std::string_view::npos) out += german[i];
-        else if (static_cast<unsigned char>(c) < 128) out += c;
-        else out += "�"; // Unsupported original byte remains visibly unknown.
-    }
-    return out;
-}
-
-std::string utf8_to_original(std::string_view value) {
-    std::string out;
-    for (size_t i = 0; i < value.size();) {
-        bool found = false;
-        for (size_t j = 0; j < german.size(); ++j)
-            if (value.substr(i, german[j].size()) == german[j]) {
-                out += original_german[j]; i += german[j].size(); found = true; break;
-            }
-        if (found) continue;
-        const unsigned char c = value[i++];
-        if (c >= 128) throw FormatError("manager name: unsupported UTF-8 character");
-        out += char(c);
-    }
-    return out;
-}
 
 SelectionContext load_selection_context(const std::filesystem::path& path, uint64_t revision) {
     std::ifstream input(path);
@@ -119,13 +79,14 @@ ManagerScreen::ManagerScreen(const std::filesystem::path& data, int slot, const 
     if (background_.width != 320 || background_.height != 240 || exe_.u8(::bmh::layout::LeaguePairings_LeaguePairingsConstants_RuntimeField) != 5)
         throw FormatError("manager selection: unsupported original layout");
     choice_.slot=slot;choice_.roster_revision=context_.revision;
-    choice_.name=texts_[(::bmh::layout::Career_NewCareerMarketsAndMoods_ExecutableField-::bmh::layout::TextPointerTable)/4+slot];
+    // The default name of a new manager: OpenBMH (the original text blocks offer "Nobody" for every slot).
+    choice_.name="OpenBMH";
     if(!context_.world) {
     if (context_.club_order.empty()) {
         context_.club_order.resize(db_.club_names.size());
         std::iota(context_.club_order.begin(), context_.club_order.end(), 0);
     }
-    if (context_.club_order.size() < size_t(exe_.u16(::bmh::layout::CareerSession_DispatchLineup_RuntimeField)) + exe_.u16(::bmh::layout::CareerSession_InstallLeagueSizes_RuntimeField6))
+    if (context_.club_order.size() < size_t(exe_.u16(::bmh::layout::LeagueClubCount)) + exe_.u16(::bmh::layout::NewcomerClubCount))
         throw FormatError("manager selection: club order does not cover all selectable groups");
     std::set<int> unique;
     for (int id : context_.club_order)
@@ -148,7 +109,7 @@ ManagerScreen::ManagerScreen(const std::filesystem::path& data, int slot, const 
         first_[i] = start; last_[i] = start + exe_.u8(::bmh::layout::LeagueSizes + i) - 1;
         start = last_[i] + 1;
         leagues_[i] = texts_[text_id];
-        if (auto suffix = exe_.u8(::bmh::layout::CareerSession_InstallLeagueSizes_RuntimeField3 + i * 2)) {
+        if (auto suffix = exe_.u8(::bmh::layout::LeagueNameSuffixes + i * 2)) {
             auto tail = texts_[(::bmh::layout::Manager_FormatError_TextPointer2 - ::bmh::layout::TextPointerTable) / 4];
             if (tail.empty()) throw FormatError("manager: missing league suffix");
             tail.back() = char(suffix); leagues_[i] += tail;
@@ -157,8 +118,8 @@ ManagerScreen::ManagerScreen(const std::filesystem::path& data, int slot, const 
         if (last_[i] - first_[i] >= 20) throw FormatError("manager: league exceeds picker grid");
     }
     for(int i=player_league_count(exe_);i<5;++i){last_[i]=first_[i]-1;leagues_[i].clear();}
-    first_[5] = exe_.u16(::bmh::layout::CareerSession_DispatchLineup_RuntimeField); last_[5] = first_[5] + 19;
-    first_[6] = first_[5] + 20; last_[6] = first_[5] + exe_.u16(::bmh::layout::CareerSession_InstallLeagueSizes_RuntimeField6) - 1;
+    first_[5] = exe_.u16(::bmh::layout::LeagueClubCount); last_[5] = first_[5] + 19;
+    first_[6] = first_[5] + 20; last_[6] = first_[5] + exe_.u16(::bmh::layout::NewcomerClubCount) - 1;
     leagues_[5] = texts_[(::bmh::layout::Manager_FormatError_TextPointer - ::bmh::layout::TextPointerTable) / 4]; leagues_[6] = leagues_[5];
     if (leagues_[6].empty()) throw FormatError("manager: missing extra-team label");
     leagues_[6].back() = 'B';
@@ -254,6 +215,7 @@ void ManagerScreen::country_flag(Image& out,int x,int y)const {
 
 int ManagerScreen::visible_league_count() const {if(national_only())return 0;return context_.world?(choice_.country==bmh::world12::Country::england?4:5):player_league_count(exe_);}
 
+
 int ManagerScreen::master_id(int selection_id) const {
     return context_.club_order.at(size_t(selection_id));
 }
@@ -288,7 +250,19 @@ bool ManagerScreen::move(int x, int y) {
     if (next == hover_) return false;
     hover_ = next; return true;
 }
+// Mouse DOWN on JA or NEIN of the confirmation: the button is drawn pressed until the release.
+bool ManagerScreen::press(int x, int y) {
+    int id = -1;
+    if (view_ == ManagerView::confirmation && y >= 166 && y <= 176) {
+        if (x >= 62 && x <= 137) id = 0;
+        else if (x >= 175 && x <= 250) id = 1;
+    }
+    const bool changed = id != pressed_button_;
+    pressed_button_ = id;
+    return changed;
+}
 bool ManagerScreen::click(int x, int y, bool right) {
+    pressed_button_ = -1;   // the release ends the pressed look
     if (x < 0 || x >= 320 || y < 0 || y >= 240 || view_ == ManagerView::accepted || view_ == ManagerView::name_edit) return false;
     if (view_ == ManagerView::confirmation) {
         if (y >= 166 && y <= 176) {
@@ -303,6 +277,7 @@ bool ManagerScreen::click(int x, int y, bool right) {
             int bx = i < 4 ? 64 : 161, by = 175 + (i < 4 ? i : i - 4) * 11;
             if (x >= bx && x <= bx + 94 && y >= by && y <= by + 10) {
                 if(national_only()||last_[i]<first_[i])return false;
+                if(i<5&&i>=visible_league_count())return false;
                 bool changed = group_ != i; group_ = i; hover_ = hovered_club(x, y); return changed;
             }
         }
@@ -395,21 +370,7 @@ void ManagerScreen::small_text(Image& out, int x, int baseline, std::string_view
                 out.at(x + xx, baseline - 5 + y) = exe_.u8(::bmh::layout::Advertising_Text_RuntimeField + gradient * 6 + y);
 }
 void ManagerScreen::frame(Image& out, int x, int y, int w, int h, bool shadow) const {
-    if (shadow) {
-        rect(out, x + 2, y + h, w, 2, 0x40);
-        rect(out, x + w, y + 2, 2, h, 0x40);
-    }
-    pattern(out, x + 4, y + 4, w - 7, h - 7);
-    copy(out, widgets_, 0, 0, x, y, 4, 4); copy(out, widgets_, 4, 0, x + w - 4, y, 4, 4);
-    copy(out, widgets_, 0, 4, x, y + h - 4, 4, 4); copy(out, widgets_, 4, 4, x + w - 4, y + h - 4, 4, 4);
-    for (int k = 4; k < w - 4; k += 74) {
-        int n = std::min(74, w - 4 - k);
-        copy(out, widgets_, 0, 104, x + k, y, n, 4); copy(out, widgets_, 0, 108, x + k, y + h - 4, n, 4);
-    }
-    for (int k = 4; k < h - 4; k += 96) {
-        int n = std::min(96, h - 4 - k);
-        copy(out, widgets_, 0, 8, x, y + k, 4, n); copy(out, widgets_, 4, 8, x + w - 4, y + k, 4, n);
-    }
+    draw_dialog_frame(out, widgets_, exe_, x, y, w, h, shadow);   // dialog_frame.hpp
 }
 int ManagerScreen::sprite_text_width(std::string_view value) const {
     int width = 0;
@@ -430,20 +391,8 @@ void ManagerScreen::sprite_text(Image& out, int x, int y, std::string_view value
     }
 }
 void ManagerScreen::button(Image& out, int x, int y, int w, std::string_view label, bool selected) const {
-    if (selected) {
-        const auto c = out.at(x, y + 10);
-        rect(out, x, y, w + 1, 2, c); rect(out, x, y, 2, 11, c); x += 2; y += 2;
-    } else {
-        rect(out, x + 2, y + 10, w, 2, 0x40); rect(out, x + w, y + 2, 2, 10, 0x40);
-    }
-    int sy = selected ? 44 : 74;
-    copy(out, widgets_, 24, sy, x, y, 31, 10);
-    int k = 31;
-    for (; w - k > 20;) {
-        int n = std::min(8, w - k - 20);
-        copy(out, widgets_, 24, sy + 10, x + k, y, n, 10); k += n;
-    }
-    copy(out, widgets_, 45 - (w - k), sy + 20, x + k, y, w - k, 10);
+    const int shift = draw_wide_button_frame(out, widgets_, x, y, w, selected);
+    x += shift; y += shift;
     int font = exe_.u8(::bmh::layout::Advertising_Button_RuntimeField + int(selected));
     sprite_text(out, x + w / 2 - sprite_text_width(label) / 2, y + 7, label, font);
 }
@@ -483,7 +432,7 @@ Image ManagerScreen::render() const {
             }
         }
         for (int i = 0; i < 7; ++i)
-            if(last_[i]>=first_[i])button(out, i < 4 ? 64 : 161, 175 + (i < 4 ? i : i - 4) * 11, 94, leagues_[i], group_ == i);
+            if(last_[i]>=first_[i]&&(i>=5||i<visible_league_count()))button(out, i < 4 ? 64 : 161, 175 + (i < 4 ? i : i - 4) * 11, 94, leagues_[i], group_ == i);
         // Hover clear uses a new local pattern origin, even when no club is hovered.
         pattern(out, 81, 222, 151, 8);
         if (hover_ >= 0) {
@@ -500,8 +449,10 @@ Image ManagerScreen::render() const {
         badge(out, 54, 89, context_.world?choice_.selection_club:choice_.master_club); portrait(out, 221, 89, choice_.portrait);
         const auto& prompt = texts_[(::bmh::layout::Manager_SmallText_TextPointer - ::bmh::layout::TextPointerTable) / 4];
         small_text(out, 73 + 170 / 2 - small_.text_width(prompt) / 2, 140, prompt);
-        button(out, 62, 166, 75, texts_[(::bmh::layout::GameEnd_Copy_TextPointer - ::bmh::layout::TextPointerTable) / 4], false);
-        button(out, 175, 166, 75, texts_[(::bmh::layout::GameEnd_Copy_TextPointer2 - ::bmh::layout::TextPointerTable) / 4], false);
+        // The original shows JA pushed in for a moment after it is clicked.
+        button(out, 62, 166, 75, texts_[(::bmh::layout::GameEnd_Copy_TextPointer - ::bmh::layout::TextPointerTable) / 4],
+               view_ == ManagerView::accepted || pressed_button_ == 0);
+        button(out, 175, 166, 75, texts_[(::bmh::layout::GameEnd_Copy_TextPointer2 - ::bmh::layout::TextPointerTable) / 4], pressed_button_ == 1);
     }
     return out;
 }

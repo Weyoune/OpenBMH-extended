@@ -82,7 +82,7 @@ GameState startup_reference_state(const LeImage&,const DbCounts&,const Bytes& m3
 // the leagues, cups and tournaments.
 void competition_pointers(StaticMemory& mem, const LeImage& exe);
 
-// The memory of the English-only competitions (Football Limited, kEnglishCompetitions):
+// The memory of the English-only competitions (Football Limited, league_system().english_competitions):
 // blocks at their English addresses, which no German address uses. FA Cup results (67
 // matches) and fields (68 clubs: the 20 Premier League clubs, the 48 of the qualifying
 // stage, the proper rounds), the League Cup (44 clubs, three entries) and entry 35.

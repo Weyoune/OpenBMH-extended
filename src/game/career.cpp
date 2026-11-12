@@ -1,4 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Start of a new career: league strength ranges read from the executable, generation of players
+// (startup squads, the extra and market players), initial club moods and markets, the starting
+// state built from the data files, plus new-manager setup (stadium, sponsors, competition blocks).
+// Writes most of GameState (players, squad_slots, memory, manager records).
+// Draws from both generators: WatcomRandom for attributes and levels, GameRandom for the
+// reseeding done by stir_random and the mood reset.
+// Interface in career.hpp; the season-wide steps follow in season.cpp.
 #include "formats/executable_layout.hpp"
 #include "game/career.hpp"
 #include "game/lineup.hpp"
@@ -17,10 +24,10 @@ const int& kTailFrom = runtime_dimensions.market_special_first;
 const int& kTailTo = runtime_dimensions.free_first;      // CareerRuntimeField2
 const int& kExtraSlots = runtime_dimensions.extra_slots_first;  // CareerSession_DataDirectory_RuntimeField4: 54 extra players from here
 const int& kSquadSlots = runtime_dimensions.total_slots;
-const int& kLeagueTeams = runtime_dimensions.league_teams;     // CareerSession_DispatchLineup_RuntimeField
+const int& kLeagueTeams = runtime_dimensions.league_teams;     // LeagueClubCount
 
 // LeagueSizes: clubs per league; LeagueStrengthRanges: (minimum, maximum) strength per league.
-// (the clubs per league are kLeagueSizes, schedule.hpp)
+// (the clubs per league are league_system().sizes, schedule.hpp)
 int kLeagueStrength[9][2] = {{71, 93}, {49, 71}, {28, 49}, {28, 49}, {10, 28},
                                        {85, 95}, {90, 95}, {75, 95}, {80, 95}};
 
@@ -78,11 +85,11 @@ void startup_players(GameState& g, GameRandom& game, WatcomRandom& rand) {
         generate_player(g, int16_t(g.squad_slots.at(kExtraSlots + i)), int16_t(level), game, rand);
     }
     int previous = 0, index = -1;  // local_18, local_1c
-    for (int team = 0; team < kLeagueTeams; team++) {
+    for (int team = 0; team < world_layout().league_teams; team++) {
         const int league = team_league(team);
         index = league == previous ? index + 1 : 0;
         previous = league;
-        const uint32_t count = uint32_t(kLeagueSizes[league]);
+        const uint32_t count = uint32_t(league_system().sizes[league]);
         const uint32_t range = uint32_t(kLeagueStrength[league][1] - kLeagueStrength[league][0]);
         const int level = int16_t(int((count - uint32_t(index)) * range * 100) / int(count) / 100) + kLeagueStrength[league][0];
         const SquadRange r = squad_range(team);
@@ -278,7 +285,7 @@ namespace bmh {
 
 namespace {
 
-constexpr size_t kRecord = 0xb0c;
+constexpr size_t kRecord = kManagerRecordSize;
 
 uint16_t team_of(const GameState& g, int m) {
     const size_t at = size_t(m) * kRecord + 0x290;
@@ -373,7 +380,7 @@ void put32(std::vector<uint8_t>& v, size_t o, uint32_t x) {
 // CareerAddManager2(team, mode): condition and technique of every player of a league club around
 // a level of its league (mode 0 random W(min, max), 1 min + 3, 2 the middle + 1, 3 max - 3).
 void set_club_strength(GameState& g, int team, int mode, WatcomRandom& rand) {
-    if (team >= kLeagueTeams) return;
+    if (team >= world_layout().league_teams) return;
     const int league = team_league(team);
     initialize_career_club_strength(g,team,mode,{kLeagueStrength[league][0],kLeagueStrength[league][1]},rand);
 }
@@ -441,7 +448,7 @@ void starting_sponsors(GameState& g, int m) {
     const size_t rec = size_t(m) * kRecord;
     int league = g.manager_records.at(rec + 0x210);
     if (league > 2) league--;
-    const int v = (((league * -20 + 80) * 60000 + 1000000) / 12 * (mem.u8(::bmh::layout::Difficulty) * -5 + 0xaa)) / 3000000 * 10000;
+    const int v = (((league * -20 + 80) * 60000 + 1000000) / 12 * (mem.u8(::bmh::layout::Difficulty) * -5 + 0x7d)) / 3000000 * 10000;
     for (size_t o : {size_t(0xae8), size_t(0xadc), size_t(0xa34)}) put32(g.manager_records, rec + o, uint32_t(v));
     for (size_t o : {size_t(0xaed), size_t(0xae1), size_t(0xa39)}) g.manager_records.at(rec + o) = 1;
 }
@@ -480,7 +487,8 @@ void initialize_career_manager_formations(GameState& g,int manager) {
 void initialize_career_manager_funds(GameState& g,int manager,int difficulty,int league) {
     if(manager<0||manager>3||difficulty<0||difficulty>9||league<0||league>2||g.manager_records.size()<size_t(manager+1)*kRecord)
         throw std::invalid_argument("career: invalid initial manager financial context");
-    const auto rec=size_t(manager)*kRecord;const uint32_t money=difficulty==0?50000000u:4000000u-uint32_t(difficulty)*200000u;
+    const auto rec=size_t(manager)*kRecord;const uint32_t money=difficulty==0?50000000u:3000000u-uint32_t(difficulty)*200000u;  // Diamond 3.7: 3 million start capital step base (4 million before)
+   
     put32(g.manager_records,rec+0x314,money);put32(g.manager_records,rec+0x324,money);
     // CareerAddManager enables the four supplied outdoor and indoor presets.
     initialize_career_manager_formations(g,manager);
@@ -721,7 +729,7 @@ void english_competition_blocks(StaticMemory& mem) {
 }
 
 void competition_pointers(StaticMemory& mem, const LeImage& exe) {
-    if (kEnglishCompetitions) {
+    if (league_system().english_competitions) {
         competition_pointers_english(mem, exe);
         return;
     }

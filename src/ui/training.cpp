@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Implementation of TrainingScreen and the training projections (training.hpp): initialization state, skill bars under the pointer, request construction and JSON output.
 #include "formats/executable_layout.hpp"
 #include "ui/training.hpp"
+#include "ui/button_frame.hpp"
 
 #include <algorithm>
 #include <numeric>
@@ -11,6 +13,7 @@
 #include "game/state.hpp"
 #include "game/national_identity.hpp"
 #include "ui/manager.hpp"
+#include "ui/draw.hpp"
 
 namespace bmh::ui {
 namespace {
@@ -57,7 +60,7 @@ TrainingState project(const StaticMemory& memory, const Bytes& records, const By
     if (manager_count < 1 || manager_count > 4 || s.manager_slot >= manager_count || teams.size() != size_t(manager_count))
         throw FormatError("training: inconsistent active manager");
     s.runtime_club = teams.at(s.manager_slot);
-    const int max24 = exe.u16(::bmh::layout::TeamsWithSquads), max16 = exe.u16(::bmh::layout::CareerSession_DispatchLineup_RuntimeField);
+    const int max24 = exe.u16(::bmh::layout::TeamsWithSquads), max16 = exe.u16(::bmh::layout::LeagueClubCount);
     const bool national=game&&!game->projected_national_teams.empty()&&is_national_team(*game,s.runtime_club);
     if(!national&&(s.runtime_club<0||s.runtime_club>=max16))throw FormatError("training: national/cup-only squad unsupported");
     if(national&&!has_national_squad(*game,s.runtime_club))throw FormatError("training: actual national squad is unavailable");
@@ -86,17 +89,12 @@ TrainingState project(const StaticMemory& memory, const Bytes& records, const By
     validate(s); return s;
 }
 void rect(Image& out, int x, int y, int w, int h, uint8_t color) {
-    for (int yy = std::max(0, y); yy < std::min(out.height, y + h); ++yy)
-        for (int xx = std::max(0, x); xx < std::min(out.width, x + w); ++xx) out.at(xx, yy) = color;
+    draw::fill(out, x, y, w, h, color);
 }
 void copy(Image& out, const Image& atlas, int sx, int sy, int x, int y, int w, int h, int transparent = -1) {
     if (sx < 0 || sy < 0 || sx + w > atlas.width || sy + h > atlas.height)
         throw FormatError("training: sprite outside original atlas");
-    for (int yy = 0; yy < h; ++yy) for (int xx = 0; xx < w; ++xx) {
-        const auto c = atlas.pixels[size_t(sy + yy) * atlas.width + sx + xx];
-        if (c != transparent && x + xx >= 0 && y + yy >= 0 && x + xx < out.width && y + yy < out.height)
-            out.at(x + xx, y + yy) = c;
-    }
+    draw::copy_clipped(out, atlas, sx, sy, x, y, w, h, transparent);
 }
 const char* request_name(TrainingRequestKind kind) {
     switch (kind) {
@@ -194,19 +192,16 @@ void TrainingScreen::sprite_text(Image& out, int x, int baseline, std::string_vi
     }
 }
 void TrainingScreen::button(Image& out, int x, int y, int width, int height, std::string_view label, bool active) const {
-    if (!active) {
-        rect(out, x + 2, y + height, width, 2, 0x40); rect(out, x + width, y + 2, 2, height, 0x40);
+    if (height == 10 && width > 31) {
+        const int shift = draw_wide_button_frame(out, widgets_, x, y, width, active);   // button_frame.hpp
+        x += shift; y += shift;
     } else {
-        const uint8_t base = out.pixels.at(size_t(y + height) * out.width + x);
-        rect(out, x, y, width + 1, 2, base); rect(out, x, y, 2, height + 1, base); x += 2; y += 2;
-    }
-    if (height < 11 && width > 31) {
-        const int shift = active ? -30 : 0;
-        copy(out, widgets_, 24, 74 + shift, x, y, 31, 10);
-        int cursor = 31, left = width - 31;
-        while (left > 20) { const int n = std::min(8, left - 20); copy(out, widgets_, 24, 84 + shift, x + cursor, y, n, 10); cursor += n; left -= n; }
-        copy(out, widgets_, 45 - left, 94 + shift, x + cursor, y, left, 10);
-    } else {
+        if (!active) {
+            rect(out, x + 2, y + height, width, 2, 0x40); rect(out, x + width, y + 2, 2, height, 0x40);
+        } else {
+            const uint8_t base = out.pixels.at(size_t(y + height) * out.width + x);
+            rect(out, x, y, width + 1, 2, base); rect(out, x, y, 2, height + 1, base); x += 2; y += 2;
+        }
         // PatternStartsAt(0,0x12): original four-pixel frame and patterned interior.
         for (int yy = 4; yy < height - 3; ++yy) for (int xx = 4; xx < width - 3; ++xx)
             out.at(x + xx, y + yy) = exe_.u8(::bmh::layout::Advertising_PatternRect_RuntimeField + ((yy - 4) % 16) * 16 + (xx - 4) % 16);
@@ -258,7 +253,16 @@ Image TrainingScreen::render() const {
     }
     rect(out, 190, 222, 66, 6, 0x44);
     text(out, 190, 220, texts_[(::bmh::layout::Training_Render_TextPointer4 - ::bmh::layout::TextPointerTable) / 4], 0x51, -1, false);
-    for (int i = 0; i < 7; ++i) copy(out, skill_atlas_, 256, 32, 190 + i * 10, 222, 16, 5, 0);
+    // The original's skill display: seven bars, one per skill (two bits each of the player's skill word); each
+    // takes the atlas tile of its level 0-3, all empty while no player's row is under the pointer.
+    const auto hovered = hovered_row_ ? std::find_if(state_.players.begin(), state_.players.end(),
+                                                    [&](const auto& p) { return p.row == *hovered_row_; })
+                                      : state_.players.end();
+    for (int i = 0; i < 7; ++i) {
+        const int level = hovered == state_.players.end() ? 0 : int(hovered->skills >> (2 * i) & 3);
+        const int sx = 256 + level * 16;  // KB/2 is 314 wide: the last tile may be cut short
+        copy(out, skill_atlas_, sx, 32, 190 + i * 10, 222, std::min(16, skill_atlas_.width - sx), 5, 0);
+    }
     // Int6: four original table-driven groups, transparent index DesktopRuntimeField=0.
     for (int group = 0; group < 4; ++group) {
         const int count = group == 3 ? int(state_.players.size()) : exe_.u8(::bmh::layout::Training_Click_RuntimeField7 + group);
@@ -354,6 +358,24 @@ TrainingRequest TrainingScreen::click(int x, int y, bool right) {
         pending_ = r; last_rejection_.clear(); return r;
     }
     return {};
+}
+bool TrainingScreen::move(int x, int y) {
+    if (pending_) return false;
+    // The player group (3) of the click table: its box selects the row exactly as a click does.
+    std::optional<int> row;
+    const int count = int(state_.players.size());
+    const int bx = exe_.u16(::bmh::layout::Training_Click_RuntimeField + 3 * 2), by = exe_.u8(::bmh::layout::Training_Click_RuntimeField3 + 3);
+    const int dx = exe_.u8(::bmh::layout::Training_Click_RuntimeField8 + 3), dy = exe_.u8(::bmh::layout::Training_Click_RuntimeField9 + 3);
+    const int ball_dx = exe_.u8(::bmh::layout::Training_Click_RuntimeField5 + 3), ball_dy = exe_.u8(::bmh::layout::Training_Click_RuntimeField6 + 3);
+    if (x >= bx - 14 && y >= by && x < bx + count * dx + 3 * ball_dx && y < by + count * dy + 3 * ball_dy) {
+        const int index = dx ? (x - bx) / dx : (y - by) / dy;
+        if (index >= 0 && index < count &&
+            std::any_of(state_.players.begin(), state_.players.end(), [&](const auto& p) { return p.row == index; }))
+            row = index;
+    }
+    const bool changed = row != hovered_row_;
+    hovered_row_ = row;
+    return changed;
 }
 TrainingRequest TrainingScreen::key(std::string_view key) {
     if (!pending_ && (key == "ESC" || key == "ESCAPE" || key == "BACKSPACE")) close_requested_ = true;

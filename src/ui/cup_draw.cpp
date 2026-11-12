@@ -18,6 +18,7 @@
 #include "game/state.hpp"
 #include "game/season.hpp"
 #include "ui/manager.hpp"
+#include "ui/draw.hpp"
 
 namespace bmh::ui {
 namespace {
@@ -32,8 +33,7 @@ void copy(Image& dst,const Image& src,int sx,int sy,int x,int y,int w,int h) {
     // FormatError2 passes ff as the VGA plane bitmask. The copy is opaque and an
     // out-of-bounds rectangle is rejected in full by SourceMaskCopy.
     if(!valid_rect(dst,src,sx,sy,x,y,w,h))return;
-    for(int yy=0;yy<h;++yy)for(int xx=0;xx<w;++xx)
-        dst.at(x+xx,y+yy)=src.pixels[size_t(sy+yy)*size_t(src.width)+size_t(sx+xx)];
+    draw::copy_unclipped(dst, src, sx, sy, x, y, w, h, -1);
 }
 void copy_key0(Image& dst,const Image& src,int sx,int sy,int x,int y,int w,int h) {
     if(!valid_rect(dst,src,sx,sy,x,y,w,h))return;
@@ -43,8 +43,7 @@ void copy_key0(Image& dst,const Image& src,int sx,int sy,int x,int y,int w,int h
     }
 }
 void fill(Image& out,int x,int y,int w,int h,uint8_t c) {
-    for(int yy=std::max(0,y);yy<std::min(out.height,y+h);++yy)
-        for(int xx=std::max(0,x);xx<std::min(out.width,x+w);++xx)out.at(xx,yy)=c;
+    draw::fill(out, x, y, w, h, c);
 }
 void source_frame(Image& out,int x,int y) {
     for(int xx=x-1;xx<=x+38;++xx)if(xx>=0&&xx<out.width&&y-1>=0&&y-1<out.height)out.at(xx,y-1)=0x46;
@@ -55,7 +54,7 @@ void source_frame(Image& out,int x,int y) {
 int region_for_team(int id) {
     if(id==kNoTeam)return 0;
     int t=id;
-    for(int league=0;league<kLeagueCount;++league){t-=kLeagueSizes[league];if(t<0)return league>=5?league-5+1:0;}
+    for(int league=0;league<kLeagueCount;++league){t-=league_system().sizes[league];if(t<0)return league>=5?league-5+1:0;}
     if(t-kCupOnlyTeams>=0)return (t-kCupOnlyTeams)/7-5+10;
     return 0;
 }
@@ -143,7 +142,7 @@ CupDrawProjection cup_draw_from_game(const GameState& game,const SeasonCupDrawEv
         std::string context;
         if(event.group_stage&&event.phase==SeasonCupDrawPhase::overview) {
         const bool human_national=game.manager_of(id)>=0||
-            (game.memory.has(::bmh::layout::CupDraw_FormatError_RuntimeField2)&&game.memory.has(::bmh::layout::CupDraw_FormatError_RuntimeField3)&&game.memory.u16(::bmh::layout::CupDraw_FormatError_RuntimeField2)==kNoTeam&&game.memory.u16(::bmh::layout::CupDraw_FormatError_RuntimeField3)==id);
+            (game.memory.has(::bmh::layout::ManagerRecord0Club)&&game.memory.has(::bmh::layout::ManagerRecord4Club)&&game.memory.u16(::bmh::layout::ManagerRecord0Club)==kNoTeam&&game.memory.u16(::bmh::layout::ManagerRecord4Club)==id);
         if(id>=runtime_dimensions.record_teams&&!human_national) {
             if(size_t(id-runtime_dimensions.record_teams)>=game.foreign_strength.size())throw FormatError("cup draw: missing Source foreign-strength byte");
             const uint8_t strength=game.foreign_strength[size_t(id-runtime_dimensions.record_teams)];

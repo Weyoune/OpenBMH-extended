@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Tests for TopScorersScreen: rejection keeps the shown projection and dragging off a footer button cancels its pressed state.
 #include "ui/top_scorers.hpp"
 
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
+#include "testing/check.hpp"
 
 using namespace bmh;
 using namespace bmh::ui;
 
 namespace {
-void check(bool ok, const char* message) {
-    if (!ok) throw std::runtime_error(message);
-}
+using bmh::test_support::check;
 
 TopScorersState state_for(TopScorersMetric metric, TopScorersScope scope) {
     TopScorersState state;

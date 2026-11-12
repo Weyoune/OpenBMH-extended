@@ -31,7 +31,9 @@ ASSET_SUFFIXES = {
 }
 # Newly supplied project artwork and an unchanged MIT/public-domain decoder.
 # Exact hashes keep this exception from admitting original-game asset dumps.
-REVIEWED_BINARY_FILES = {"assets/start-screen.jpg": "8552d54d2381686f879129fffbfbae5e8d07fd50a740fb497ffd42ce9fdc93b8"}
+# data/openbmh.dat: the game texts of the original executables (tools/diamond_constants/generate.py); regenerate = new hash here
+REVIEWED_BINARY_FILES = {"assets/start-screen.jpg": "8552d54d2381686f879129fffbfbae5e8d07fd50a740fb497ffd42ce9fdc93b8",
+                         "data/openbmh.dat": "ae313060d3c34a9b45adae8565715618182137443ab20c1485b2da6e2c9e62a4"}
 REVIEWED_UPSTREAM_FILES = {"src/app/third_party/stb_image.h": "594c2fe35d49488b4382dbfaec8f98366defca819d916ac95becf3e75f4200b3"}
 PRIVATE_PREFIXES = (
     ("data", "original"), ("docs", "manuals"), ("docs", "analyses"),
@@ -44,6 +46,8 @@ PRIVATE_DOCUMENTS = {
     "PUBLIC_RELEASE_TODO.md", "chat.txt",
 }
 SOURCE_SUFFIXES = {".cpp", ".hpp", ".h", ".c", ".inc"}
+# Unmodified third-party sources (miniz, MIT) keep their authors' own headers and are not ours to rewrite.
+VENDORED_PREFIX = "third_party/"
 SKIP_DIRECTORIES = {".git", "__pycache__", ".cache", "_deps", "node_modules"}
 
 LEGACY_SYMBOLS = re.compile(
@@ -230,6 +234,8 @@ def scan_tree(root: Path):
     findings = []
     names = checked_files(root)
     for name in names:
+        if name.startswith(VENDORED_PREFIX):
+            continue
         path = root / name
         if path.is_symlink():
             findings.append(Finding(name, 0, "symlink-not-reviewed"))
@@ -255,6 +261,8 @@ def scan_history(root: Path):
             metadata, name = entry.split(b"\t", 1)
             mode, kind, object_id = metadata.decode().split()
             path = name.decode("utf-8")
+            if path.startswith(VENDORED_PREFIX):
+                continue
             if kind != "blob":
                 findings.append(Finding(path, 0, "unreviewed-history-object"))
                 continue

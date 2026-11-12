@@ -1,4 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Implementation of game_data.hpp: recognises the game family from the EXE name and size
+// (German BMH.EXE, English FLTD.EXE, the 1994 disk version as unsupported), checks that
+// the required data files exist with the expected sizes (tables of pictures, badges and
+// common files in this file; file names matched without regard to case), unpacks an archive
+// into the cache directory under a content hash, and resolves directory/EXE/archive input to
+// a ResolvedGame. The English game is converted via fltd.hpp. Problems are collected as text
+// in GameCheck::problems rather than thrown; describe() formats them for message boxes.
 #include "launch/game_data.hpp"
 
 #include <algorithm>
@@ -13,6 +20,7 @@
 #include "formats/binary.hpp"
 #include "formats/resource_bundle.hpp"
 #include "formats/data_profile.hpp"
+#include "formats/diamond_image.hpp"
 #include "formats/le.hpp"
 #include "formats/m3d.hpp"
 #include "formats/textd.hpp"
@@ -65,6 +73,26 @@ std::optional<Family> family_of_exe(const std::string& file_name) {
     for (const Family& f : kFamilies)
         if (u == f.exe) return f;
     return std::nullopt;
+}
+
+// Whether `directory` holds the asset files of the English game and the built-in numbers have their texts (openbmh.dat):
+// then FLTD.EXE is not needed. Without openbmh.dat the game needs the executable.
+bool has_english_assets(const fs::path& directory) {
+    std::error_code ec;
+    if (!fs::is_directory(directory, ec)) return false;
+    const auto kb = find_file(directory, "KB");
+    return find_file(directory, "TEXTE.BLK") && find_file(directory, "M3E.MAN") && kb && fs::is_directory(*kb, ec) &&
+           !find_texts_file(directory).empty();
+}
+
+// Whether `directory` holds the asset files of the German game and the built-in numbers have their texts (openbmh.dat):
+// then BMH.EXE is not needed. Without openbmh.dat the game needs the executable.
+bool has_german_assets(const fs::path& directory) {
+    std::error_code ec;
+    if (!fs::is_directory(directory, ec)) return false;
+    const auto kb = find_file(directory, "KB");
+    return find_file(directory, "TEXTD.BLK") && find_file(directory, "M3D.MAN") && kb && fs::is_directory(*kb, ec) &&
+           !find_texts_file(directory).empty();
 }
 
 // Every game EXE directly in `directory`.
@@ -149,11 +177,13 @@ void check_german(GameCheck& c) {
     // (a translated English game has BMH.exe in the OpenBMH image format, launch/fltd.hpp)
     const bool bundled=fs::is_regular_file(c.directory/kCommunityBundle);
     bool image = false;
-    if (const auto exe = find_file(c.directory, "BMH.EXE"); exe && !bundled) {
+    const auto exe = find_file(c.directory, "BMH.EXE");
+    if (exe) {
         std::ifstream in(*exe, std::ios::binary);
         char head[13] = {};
         in.read(head, sizeof head);
         image = std::string(head, sizeof head) == "OPENBMH-IMAGE";
+        require(c, c.directory, "BMH.EXE", image ? 0 : 602527, "BMH.EXE");
     }
     require(c, c.directory, "BMH.EXE", (image || bundled) ? 0 : 602527, bundled ? "RUNTIME.DAT" : "BMH.EXE");
     require(c, c.directory, "TEXTD.BLK", 0, "TEXTD.BLK");
@@ -161,13 +191,12 @@ void check_german(GameCheck& c) {
     for (const Required& r : kCommon) require(c, c.directory, r.name, r.size, r.name);
     require_media(c);
     if (!c.problems.empty()) return;
-    // the files must also load: the engine reads tables from the EXE, the texts and the
-    // database of clubs and players
+    // the files must also load: the engine reads tables from the EXE (or the built-in numbers and texts), the
+    // texts and the database of clubs and players
     try {
-        const auto runtime=load_le(*find_file(c.directory, "BMH.EXE"));
-        if(bundled && (!runtime.runtime_policy() || !runtime.expanded_profile()))throw FormatError("unsupported standalone runtime/profile");
+        load_le(exe ? *exe : c.directory / "BMH.EXE");
     } catch (const std::exception& e) {
-        c.problems.push_back(std::string("BMH.EXE cannot be read: ") + e.what());
+        c.problems.push_back(std::string("BMH.EXE") + " cannot be read: " + e.what());
     }
     try {
         const TextDb texts = load_textd(*find_file(c.directory, "TEXTD.BLK"));
@@ -187,7 +216,8 @@ void check_german(GameCheck& c) {
 }
 
 void check_english(GameCheck& c) {
-    require(c, c.directory, "FLTD.EXE", 507925, "FLTD.EXE");
+    // (FLTD.EXE is optional: the numbers and texts of Football Limited are built into OpenBMH)
+    if (find_file(c.directory, "FLTD.EXE")) require(c, c.directory, "FLTD.EXE", 507925, "FLTD.EXE");
     require(c, c.directory, "TEXTE.BLK", 0, "TEXTE.BLK");
     require(c, c.directory, "M3E.MAN", 0, "M3E.MAN");
     for (const Required& r : kCommon) require(c, c.directory, r.name, r.size, r.name);
@@ -258,11 +288,18 @@ ResolvedGame unpack(const fs::path& file, const fs::path& cache) {
             if (is_archive_name(base)) nested = true;
             if (upper(base) == "INSTALL.EXE") installer = true;
         }
+        // no executable: the asset files are enough (the text block marks the game's folder)
+        if (exes.empty())
+            for (size_t i = 0; i < entries.size(); ++i) {
+                if (entries[i].directory) continue;
+                const std::string& n = entries[i].name;
+                { const std::string leaf = upper(n.substr(n.find_last_of('/') + 1)); if (leaf == "TEXTD.BLK" || leaf == "TEXTE.BLK") exes.push_back(i); }
+            }
         if (exes.empty()) {
             if (installer) r.error = "The archive holds an installer (INSTALL.EXE), not an installed game.";
             else if (nested) r.error = "The archive contains further archives (a box with several editions). "
                                        "Please choose the archive of one edition.";
-            else r.error = "The archive contains no BMH.EXE or FLTD.EXE.";
+            else r.error = "The archive contains no BMH.EXE, FLTD.EXE or game asset files (TEXTD.BLK, TEXTE.BLK).";
             return r;
         }
         if (exes.size() > 1) {
@@ -335,19 +372,32 @@ GameCheck check_game_directory(const fs::path& path) {
     std::error_code ec;
     fs::path dir = fs::is_directory(path, ec) ? path : path.parent_path();
     auto exes = game_exes(dir);
-    if (exes.empty()) {
+    if (exes.empty() && !has_german_assets(dir) && !has_english_assets(dir)) {
         // an edition folder with the game one level below (e.g. "BMH 2026-27 supported rule profile\BMH")
         std::vector<fs::path> candidates;
         for (const auto& e : fs::directory_iterator(dir, ec))
-            if (e.is_directory(ec) && !game_exes(e.path()).empty()) candidates.push_back(e.path());
+            if (e.is_directory(ec) && (!game_exes(e.path()).empty() || has_german_assets(e.path()) || has_english_assets(e.path()))) candidates.push_back(e.path());
         if (candidates.size() == 1) {
             dir = candidates[0];
             exes = game_exes(dir);
         }
     }
     c.directory = dir;
+    // The German game without BMH.EXE: the asset files are enough (the numbers of the executable are built in).
+    if (exes.empty() && has_german_assets(dir)) {
+        c.family = GameFamily::german;
+        check_german(c);
+        c.playable = c.problems.empty();
+        return c;
+    }
+    // The English game without FLTD.EXE: the asset files are enough as well.
+    if (exes.empty() && has_english_assets(dir)) {
+        c.family = GameFamily::english;
+        check_english(c);
+        return c;
+    }
     if (exes.empty()) {
-        c.problems.push_back("no BMH.EXE or FLTD.EXE in " + path_to_utf8(dir));
+        c.problems.push_back("no BMH.EXE or FLTD.EXE in " + path_to_utf8(dir) + ". The game needs either BMH.EXE (FLTD.EXE for the English game) and the asset files, or openbmh.dat (from the release package) and the asset files.");
         return c;
     }
     // a named EXE decides; otherwise the German game before the English one
@@ -383,25 +433,27 @@ ResolvedGame resolve_game(const fs::path& input, const fs::path& cache) {
         // The English Football Limited runs on the same engine through a German-layout data
         // directory, built once in the cache (launch/fltd.hpp); its name follows FLTD.EXE.
         if (game.error.empty() && game.check.family == GameFamily::english && game.check.problems.empty()) {
-            const fs::path prepared = cache / ("en-" + content_hash(game.check.exe));
+            const fs::path prepared = cache / ("en-" + (game.check.exe.empty() ? std::string("embedded") : content_hash(game.check.exe)));
             const fs::path marker = prepared / ".openbmh-english";
             // the version of the translation (launch/fltd.cpp, fltd_map.inc): a cache built
             // by another version is built again
-            constexpr const char* kTranslation = "english translation 17";  // 17: English monthly environment tables (16: overwrite question)
+            constexpr const char* kTranslation = "english translation 18";  // 18: numbers built in (no FLTD.EXE needed), 17: English monthly environment tables (16: overwrite question)
+            const std::string texts = texts_signature(game.check.directory);  // an English game made without openbmh.dat is made again with it
+            const std::string version = std::string(kTranslation) + (game.check.exe.empty() ? " " + texts : std::string());
             std::string built;
             {
                 std::ifstream in(marker);
                 std::getline(in, built);
             }
             std::error_code ec;
-            if (built != kTranslation) {
+            if (built != version) {
                 fs::remove_all(prepared, ec);
                 std::string error;
                 if (!prepare_english_game(game.check.directory, prepared, error)) {
                     game.error = "The English version cannot be prepared: " + error;
                     return game;
                 }
-                std::ofstream(marker) << kTranslation << "\n" << path_to_utf8(game.check.directory) << "\n";
+                std::ofstream(marker) << version << "\n" << path_to_utf8(game.check.directory) << "\n";
             }
             game.check.directory = prepared;
             game.check.playable = true;
@@ -470,6 +522,7 @@ std::string describe(const ResolvedGame& game) {
     if (!c.title.empty()) text += c.title + "\n";
     text += path_to_utf8(c.directory) + "\n";
     for (const auto& p : c.problems) text += "- " + p + "\n";
+    for (const auto& n : c.notes) text += "Note: " + n + "\n";
     if (!c.unsupported.empty()) text += c.unsupported + "\n";
     if (c.playable) text += "The game data is complete.\n";
     return text;

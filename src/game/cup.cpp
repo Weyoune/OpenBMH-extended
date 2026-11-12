@@ -136,7 +136,7 @@ void store_replays(GameState& g, int day) {
         if (mem.u16(at) != day) continue;
         const uint16_t r = mem.u16(kReplayResults + uint32_t(k++) * 2);
         const uint8_t result = uint8_t(((r >> 5) << 4) | (r & 0xf));
-        g.results.at(size_t(mem.u8(at + 4)) + size_t(mem.u8(at + 2)) * 10 + size_t(mem.u8(at + 3)) * 0x17C) = result;
+        g.results.at(size_t(mem.u8(at + 4)) + size_t(mem.u8(at + 2)) * 10 + size_t(mem.u8(at + 3)) * kLeagueResultsStride) = result;
         mem.set16(at, 0);
     }
     remove_competition(mem, 9);
@@ -350,7 +350,7 @@ void setup_cup_groups(GameState& g, int id, std::vector<MatchGroup>& groups, Min
         grp.desc.at(1) = flags;
         // competition 11 is the German indoor tournament; in the English game the same entry
         // is the League Cup ("Koka Kola Cup"), an ordinary cup on grass (EN Put32)
-        if (type == 0xb && !kEnglishCompetitions) g.indoor = true;
+        if (type == 0xb && !league_system().english_competitions) g.indoor = true;
         put32(grp.desc, 0xcc, e);
         // the first leg of a two-legged knockout tie is never decided on the day
         if ((flags & 5) == 5 && mem.u8(e + 0x1d) % 2 == 0) grp.desc.at(1) &= 0xF7;
@@ -442,7 +442,7 @@ void national_tournament_end(GameState& g) {
     for (int i = 0; i < 4; i++) {
         if(explicit_nations){const auto manager=g.manager_of(teams[i]);if(manager>=0&&is_national_team(g,teams[i]))book_money(g,manager,-kPremium[i],true,true);}
         else if (teams[i] == kNoTeam && coach) book_money(g, 0, -kPremium[i], true, true);
-        // (0x8a + 0x1e + 0xbd = 0x165: CareerSession_DispatchLineup_RuntimeField + CareerSession_InstallLeagueSizes_RuntimeField6 + ClubPlayerDetail_ClubPlayerDetailFromGame_RuntimeField3)
+        // (0x8a + 0x1e + 0xbd = 0x165: LeagueClubCount + NewcomerClubCount + ForeignCupClubCount)
         if (mem.has(::bmh::layout::Placements)) mem.set8(::bmh::layout::Placements + uint32_t(i), uint8_t((teams[i] - kNoTeam) | 0x80));
     }
 }
@@ -527,7 +527,7 @@ void advance_cup(GameState& g, int id, WatcomRandom& rand, MinuteReport& report,
     if (type == 9) return store_replays(g, g.season_day());
     // EndCompetition(type), re-added at the next preparation; the English Put32 keeps its
     // League Cup (type 0xb) running like the other cups
-    if (type == 0xb && !kEnglishCompetitions) remove_competition(mem, type);
+    if (type == 0xb && !league_system().english_competitions) remove_competition(mem, type);
     if (type == 10) {
         // the friendlies: off the running list, the day's calendar entry masked with 0xffe
         // (0x4001 becomes 0) and no teams left in today's entry (CupRuntimeField2)
@@ -630,8 +630,8 @@ void advance_cup(GameState& g, int id, WatcomRandom& rand, MinuteReport& report,
             if (mem.u8(e + 0x17) != 0 && winners.size() > 1)
                 mem.set16(cup_entry_address(mem.u8(e + 0x17)) + 0x22, winners[1]);
             // (the indoor tournament only: the English League Cup has no Masters; its winner
-            //  would go to EN CupRuntimeField6 for Europe - not ported, see docs/fltd.md)
-            if (type != 0xb || kEnglishCompetitions) return;
+            //  would go to EN CupRuntimeField6 for Europe - not ported)
+            if (type != 0xb || league_system().english_competitions) return;
             // the indoor tournament: the four places (CupRuntimeField7 picks them from the list
             // champion..fourth) earn points for the Masters (CupRuntimeField8 x strength class
             // Cup_AdvanceCup_RuntimeField3, clubs of the first two leagues only), then the next tournament is
@@ -668,7 +668,7 @@ void advance_cup(GameState& g, int id, WatcomRandom& rand, MinuteReport& report,
             static constexpr uint8_t kPlacePoints[5] = {0, 6, 4, 2, 1};  // CupRuntimeField8
             for (int i = 0; i < 4 && size_t(kPlaceOrder[i]) < winners.size(); i++) {  // Uint32T
                 const int team = winners[kPlaceOrder[i]];
-                if (team < kLeagueSizes[0] + kLeagueSizes[1]) {
+                if (team < league_system().sizes[0] + league_system().sizes[1]) {
                     const uint32_t at = ::bmh::layout::Cup_AdvanceCup_ExecutableField + uint32_t(team) * 2;
                     mem.set16(at, uint16_t(mem.u16(at) + kPlacePoints[i + 1] * mem.u8(::bmh::layout::Cup_AdvanceCup_RuntimeField3)));
                 }

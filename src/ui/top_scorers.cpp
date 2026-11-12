@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Implementation of TopScorersScreen (top_scorers.hpp): list and podium drawing, footer button handling including drag-off cancel, and request construction.
 #include "formats/executable_layout.hpp"
 #include "ui/top_scorers.hpp"
+#include "ui/button_frame.hpp"
 
 #include <algorithm>
 #include <sstream>
 
 #include "ui/manager.hpp"
+#include "ui/draw.hpp"
 
 namespace bmh::ui {
 namespace {
@@ -23,15 +26,11 @@ void copy(Image& out, const Image& src, int sx, int sy, int x, int y, int w, int
     if (sx < 0 || sy < 0 || x < 0 || y < 0 || w < 0 || h < 0 ||
         sx + w > src.width || sy + h > src.height || x + w > out.width || y + h > out.height)
         throw FormatError("top scorers: Original sprite bounds");
-    for (int yy = 0; yy < h; ++yy)
-        for (int xx = 0; xx < w; ++xx)
-            out.at(x + xx, y + yy) = src.pixels[size_t(sy + yy) * size_t(src.width) + size_t(sx + xx)];
+    draw::copy_unclipped(out, src, sx, sy, x, y, w, h, -1);
 }
 
 void fill(Image& out, int x, int y, int w, int h, uint8_t color) {
-    for (int yy = y; yy < y + h; ++yy)
-        for (int xx = x; xx < x + w; ++xx)
-            out.at(xx, yy) = color;
+    draw::fill(out, x, y, w, h, color);
 }
 
 std::string source_number(unsigned value, unsigned width = 0) {
@@ -110,25 +109,8 @@ void TopScorersScreen::draw_text(Image& out, int x, int baseline, std::string_vi
 
 void TopScorersScreen::draw_button(Image& out, int x, int y, int width,
                                    std::string_view original_label, bool pressed) const {
-    const int dx = x + (pressed ? 2 : 0), dy = y + (pressed ? 2 : 0);
-    if (pressed) {
-        const auto background = out.at(x, y + 10);
-        fill(out, x, y, width + 1, 2, background);
-        fill(out, x, y, 2, 11, background);
-    } else {
-        fill(out, x + 2, y + 10, width, 2, 0x40);
-        fill(out, x + width, y + 2, 2, 10, 0x40);
-    }
-    const int source_y = pressed ? 44 : 74;
-    copy(out, button_art_, 24, source_y, dx, dy, 31, 10);
-    int used = 31;
-    while (width - used > 20) {
-        const int count = std::min(8, width - used - 20);
-        copy(out, button_art_, 24, source_y + 10, dx + used, dy, count, 10);
-        used += count;
-    }
-    const int tail = width - used;
-    copy(out, button_art_, 45 - tail, source_y + 20, dx + used, dy, tail, 10);
+    const int shift = draw_wide_button_frame(out, button_art_, x, y, width, pressed);
+    const int dx = x + shift, dy = y + shift;
     const auto label = original_to_utf8(std::string(original_label));
     sprite_.draw(out, dx + width / 2 - sprite_.text_width(label) / 2, dy + 7, label,
                  exe_.u8(::bmh::layout::Advertising_Button_RuntimeField + uint32_t(pressed)));

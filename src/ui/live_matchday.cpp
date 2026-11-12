@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Implements the live matchday overview declared in live_matchday.hpp: LiveMatchdayScreen and the live
+// projection functions declared there. It only observes engine data copied into frames and does not change
+// the running match.
 #include "formats/executable_layout.hpp"
 #include "ui/live_matchday.hpp"
 
@@ -12,6 +15,7 @@
 #include "ui/manager.hpp"
 #include "ui/live_set_piece.hpp"
 #include "ui/setup.hpp"
+#include "ui/draw.hpp"
 
 namespace bmh::ui {
 namespace {
@@ -22,12 +26,7 @@ void copy_region(Image& target, const Image& source, int sx, int sy, int dx, int
                  int width, int height, int transparent = -1) {
     if (sx < 0 || sy < 0 || width < 0 || height < 0 || sx + width > source.width || sy + height > source.height)
         throw FormatError("live matchday: original asset crop out of bounds");
-    for (int y = 0; y < height; ++y) for (int x = 0; x < width; ++x) {
-        const uint8_t pixel = source.pixels[size_t(sy + y) * size_t(source.width) + size_t(sx + x)];
-        const int tx = dx + x, ty = dy + y;
-        if (pixel != transparent && tx >= 0 && ty >= 0 && tx < target.width && ty < target.height)
-            target.at(tx, ty) = pixel;
-    }
+    draw::copy_clipped(target, source, sx, sy, dx, dy, width, height, transparent);
 }
 
 void pattern_rect(Image& target, const LeImage& exe, int x, int y, int width, int height) {
@@ -136,6 +135,18 @@ LiveMatchdayFrame live_matchday_frame(int minute, const std::vector<MatchGroup>&
         if (match != candidates.end() && frame.matches.size() < 4) frame.matches.push_back(*match);
     }
     return frame;
+}
+
+LiveMatchdayFrame live_matchday_frame_before_chance(int minute, const std::vector<MatchGroup>& groups,
+                                                    const GameState& state, const LiveChanceEvent& event) {
+    // MatchEngine::chance writes two log pairs (outcome, then kind/distance) = 4 words before the preview hook.
+    // The copy is small: chances are rare and only the log of one group is shortened.
+    if (event.group < 0 || size_t(event.group) >= groups.size() || groups[size_t(event.group)].log.size() < 4)
+        return live_matchday_frame(minute, groups, state);
+    std::vector<MatchGroup> before = groups;
+    auto& log = before[size_t(event.group)].log;
+    log.resize(log.size() - 4);
+    return live_matchday_frame(minute, before, state);
 }
 
 LiveChanceProjection live_chance_projection(const LiveChanceEvent& event,

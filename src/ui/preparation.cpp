@@ -96,7 +96,7 @@ PreparationState preparation_from_game(const GameState& game, const LeImage& exe
 PreparationState load_preparation_reference(const std::filesystem::path& path, const LeImage& exe) {
     const auto fbm = load_savegame(path);
     require_native_savegame(fbm, exe.expanded_profile());
-    const DbCounts counts{exe.u32(::bmh::layout::CareerSession_DataDirectory_RuntimeField), exe.u32(::bmh::layout::CareerSession_DataDirectory_RuntimeField3), exe.u32(::bmh::layout::CareerSession_DataDirectory_RuntimeField2), exe.u32(::bmh::layout::CareerSession_DataDirectory_RuntimeField4), uint32_t(exe.u16(layout::CareerSession_DispatchLineup_RuntimeField)), 30};
+    const DbCounts counts{exe.u32(::bmh::layout::CareerSession_DataDirectory_RuntimeField), exe.u32(::bmh::layout::CareerSession_DataDirectory_RuntimeField3), exe.u32(::bmh::layout::CareerSession_DataDirectory_RuntimeField2), exe.u32(::bmh::layout::CareerSession_DataDirectory_RuntimeField4), uint32_t(exe.u16(layout::LeagueClubCount)), 30};
     const SaveState save(fbm.stream, counts);
     PreparationState result;
     result.desktop = desk_from_save(save, exe);

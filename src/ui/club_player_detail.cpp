@@ -3,24 +3,25 @@
 #include "formats/badge_policy.hpp"
 #include "formats/executable_layout.hpp"
 #include "ui/club_player_detail.hpp"
+#include "ui/dialog_frame.hpp"
+#include "ui/button_frame.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
 #include "ui/manager.hpp"
+#include "ui/draw.hpp"
 
 namespace bmh::ui {
 namespace {
 void rect(Image& out,int x,int y,int w,int h,uint8_t c) {
-    for(int yy=std::max(0,y);yy<std::min(out.height,y+h);++yy)
-        for(int xx=std::max(0,x);xx<std::min(out.width,x+w);++xx)out.at(xx,yy)=c;
+    draw::fill(out, x, y, w, h, c);
 }
 void copy(Image& out,const Image& src,int sx,int sy,int x,int y,int w,int h,int transparent=-1) {
-    if(sx<0||sy<0||sx+w>src.width||sy+h>src.height)throw FormatError("player card: original atlas bounds");
-    for(int yy=0;yy<h;++yy)for(int xx=0;xx<w;++xx){
-        const auto c=src.pixels.at(size_t(sy+yy)*src.width+sx+xx);
-        if(c!=transparent&&x+xx>=0&&x+xx<out.width&&y+yy>=0&&y+yy<out.height)out.at(x+xx,y+yy)=c;
-    }
+    if(sx<0||sy<0||sx+w>src.width||sy+h>src.height)
+        throw FormatError("club player detail: original atlas bounds "+std::to_string(sx)+","+std::to_string(sy)+
+            ":"+std::to_string(w)+"x"+std::to_string(h)+" in "+std::to_string(src.width)+"x"+std::to_string(src.height));
+    draw::copy_clipped(out, src, sx, sy, x, y, w, h, transparent);
 }
 std::string number(int64_t value,int width=1,bool grouped=false) {
     auto n=std::to_string(value);const bool negative=value<0;
@@ -45,7 +46,7 @@ ClubPlayerDetailProjection club_player_detail_from_game(const GameState& g,
     const int nation=c.attributes.nationality()+((c.bonus&0x80)?32:0);
     if(const auto label=g.projected_nationality_names.find(uint8_t(nation));label!=g.projected_nationality_names.end())p.original_nationality_name=label->second;
     else if(!g.projected_match_clubs.empty())p.original_nationality_name="?";
-    else p.original_nationality_name=g.club_name(exe.u16(::bmh::layout::ClubPlayerDetail_ClubPlayerDetailFromGame_RuntimeField3)+exe.u16(::bmh::layout::NoTeamSquadStart)+nation);
+    else p.original_nationality_name=g.club_name(exe.u16(::bmh::layout::ForeignCupClubCount)+exe.u16(::bmh::layout::NoTeamSquadStart)+nation);
     for(int i=0;i<2;++i){
         const int id=i?c.secondary_club:c.primary_club;if(id<0||id==0xffff)continue;
         ClubPlayerDetailClub club;club.runtime_team=id;club.original_full_name=g.club_name(id);club.original_short_name=club.original_full_name;
@@ -133,22 +134,16 @@ void ClubPlayerDetailScreen::text(Image& out,int x,int baseline,std::string_view
         out.at(x+xx,baseline-font.baseline+yy)=projection_.gradient_text?exe_.u8(::bmh::layout::Advertising_Text_RuntimeField+gradient*6+yy):color;
 }
 void ClubPlayerDetailScreen::frame(Image& out,int x,int y,int w,int h) const {
-    for(int yy=4;yy<h-3;++yy)for(int xx=4;xx<w-3;++xx)out.at(x+xx,y+yy)=exe_.u8(::bmh::layout::Advertising_PatternRect_RuntimeField+((yy-4)%16)*16+(xx-4)%16);
-    copy(out,widgets_,0,0,x,y,4,4);copy(out,widgets_,4,0,x+w-4,y,4,4);
-    copy(out,widgets_,0,4,x,y+h-4,4,4);copy(out,widgets_,4,4,x+w-4,y+h-4,4,4);
-    for(int at=4;at<w-4;at+=74){const int n=std::min(74,w-4-at);copy(out,widgets_,0,104,x+at,y,n,4);copy(out,widgets_,0,108,x+at,y+h-4,n,4);}
-    for(int at=4;at<h-4;at+=96){const int n=std::min(96,h-4-at);copy(out,widgets_,0,8,x,y+at,4,n);copy(out,widgets_,4,8,x+w-4,y+at,4,n);}
+    draw_dialog_frame(out,widgets_,exe_,x,y,w,h,false);   // dialog_frame.hpp
 }
 void ClubPlayerDetailScreen::button(Image& out,int x,int y,int width,std::string_view value,bool active) const {
     const int height=width>31?10:9;
-    if(active){const auto base=out.at(x,y+height);rect(out,x,y,width+1,2,base);rect(out,x,y,2,height+1,base);x+=2;y+=2;}
-    else {rect(out,x+2,y+height,width,2,0x40);rect(out,x+width,y+2,2,height,0x40);}
-    if(width>31){
-        const int sy=active?44:74;
-        copy(out,widgets_,24,sy,x,y,31,10);int at=31,remaining=width-31;
-        while(remaining>20){const int n=std::min(8,remaining-20);copy(out,widgets_,24,sy+10,x+at,y,n,10);at+=n;remaining-=n;}
-        copy(out,widgets_,45-remaining,sy+20,x+at,y,remaining,10);
-    }else frame(out,x,y,width,height);
+    if(width>31){const int shift=draw_wide_button_frame(out,widgets_,x,y,width,active);x+=shift;y+=shift;}   // button_frame.hpp
+    else{
+        if(active){const auto base=out.at(x,y+height);rect(out,x,y,width+1,2,base);rect(out,x,y,2,height+1,base);x+=2;y+=2;}
+        else {rect(out,x+2,y+height,width,2,0x40);rect(out,x+width,y+2,2,height,0x40);}
+        frame(out,x,y,width,height);
+    }
     const int font=exe_.u8(::bmh::layout::Advertising_Button_RuntimeField + int(active));
     if(font==3){text(out,x,y+height/2+2,value,0,x+width);return;}
     int length=0;for(unsigned char c:value){const int g=exe_.u8(::bmh::layout::ClubInfo_Raw_RuntimeField3 + c);length+=g?exe_.u16(::bmh::layout::ClubInfo_Raw_RuntimeField2+g*2)-exe_.u16(::bmh::layout::ClubInfo_Raw_RuntimeField+g*2):2;}

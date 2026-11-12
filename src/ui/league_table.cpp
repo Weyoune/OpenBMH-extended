@@ -13,6 +13,7 @@
 #include "game/table.hpp"
 #include "ui/manager.hpp"
 #include "ui/setup.hpp"
+#include "ui/draw.hpp"
 
 namespace bmh::ui {
 namespace {
@@ -74,7 +75,7 @@ void blit_table_region(Image& out, const Image& source, int source_y, int dest_y
 uint8_t original_rank_color(int league, int zero_based_rank) {
     uint8_t color = 0x37;
     if (zero_based_rank < kEuropeanPlaces[size_t(league)]) color = 0x51;
-    else if (int(kLeagueSizes[league]) - zero_based_rank <= kRelegationPlaces[size_t(league)]) color = 0xf7;
+    else if (int(league_system().sizes[league]) - zero_based_rank <= kRelegationPlaces[size_t(league)]) color = 0xf7;
     if (league == 0) {
         if (zero_based_rank == 0) color = 0x27;
         else if (zero_based_rank < 5) color = 0x7a;
@@ -89,15 +90,11 @@ void copy_region(Image& out, const Image& source, int sx, int sy, int x, int y,
         sx + width > source.width || sy + height > source.height ||
         x + width > out.width || y + height > out.height)
         throw FormatError("league table: original atlas bounds");
-    for (int dy = 0; dy < height; ++dy) for (int dx = 0; dx < width; ++dx) {
-        const auto pixel = source.pixels[size_t(sy + dy) * size_t(source.width) + size_t(sx + dx)];
-        if (pixel != transparent) out.at(x + dx, y + dy) = pixel;
-    }
+    draw::copy_unclipped(out, source, sx, sy, x, y, width, height, transparent);
 }
 
 void fill_region(Image& out, int x, int y, int width, int height, uint8_t color) {
-    for (int dy = y; dy < y + height; ++dy)
-        for (int dx = x; dx < x + width; ++dx) out.at(dx, dy) = color;
+    draw::fill(out, x, y, width, height, color);
 }
 }
 
@@ -125,7 +122,7 @@ LeagueTableState project_league_table(const bmh::GameState& game, int manager_sl
     if (source_context && source_context->accepted_engine_table) {
         if (source_context->accepted_engine_league != league_id ||
             source_context->accepted_engine_table->league != league_id ||
-            source_context->accepted_engine_table->size != bmh::kLeagueSizes[league_id])
+            source_context->accepted_engine_table->size != bmh::league_system().sizes[league_id])
             throw FormatError("league table: accepted engine projection belongs to another league");
         engine_table = *source_context->accepted_engine_table;
     } else if (source_context) {
@@ -168,7 +165,7 @@ LeagueTableState project_league_table(const bmh::GameState& game, int manager_sl
         state.retained_range_label_source_bytes = source_context->retained_range_label_source_bytes;
         state.forecast = source_context->forecast;
     }
-    if (engine_table.size != bmh::kLeagueSizes[league_id])
+    if (engine_table.size != bmh::league_system().sizes[league_id])
         throw FormatError("league table: incomplete engine projection for league " + std::to_string(league_id));
 
     std::array<int, 20> order{};
@@ -263,7 +260,7 @@ LeagueTableScreen::LeagueTableScreen(const std::filesystem::path& data,
     for (int league = 0; league < bmh::kLeagueCount; ++league) {
         const auto& table = tables_[size_t(league)];
         if (table.manager_slot != manager || table.league_id != league || table.header_text.empty() ||
-            table.rows.size() != size_t(bmh::kLeagueSizes[league]) ||
+            table.rows.size() != size_t(bmh::league_system().sizes[league]) ||
             table.original_table_panel != tables_[0].original_table_panel ||
             table.decorated_background != tables_[0].decorated_background ||
             table.secondary_leagues != tables_[0].secondary_leagues)
@@ -425,7 +422,10 @@ Image LeagueTableScreen::render() const {
             text(image, 12, y, "(" + formatted_field(row.previous_rank, 2) +
                 original_text(exe_, ::bmh::layout::CupDraw_DrawGroupOverview_TextPointer3), previous_color, 24);
         }
-        text(image, 30, y, row.name, row.name_color, 78);
+        // The original does not clip the name: 19 character names (BORUSSIA M'GLADBACH, TSG 1899 HOFFENHEIM) are
+        // shown in full and the games column, drawn afterwards at x=0x72, simply covers what reaches into it
+        // (checked against the real 3.7 table). 120 only guards against absurdly long names.
+        text(image, 30, y, row.name, row.name_color, 120);
         const std::string matches = formatted_field(row.games, 2) + original_text(exe_, ::bmh::layout::CupDraw_DrawGroupOverview_TextPointer4) +
             formatted_field(row.wins, 2) + original_text(exe_, ::bmh::layout::CupDraw_DrawGroupOverview_TextPointer5) +
             formatted_field(row.draws, 2) + original_text(exe_, ::bmh::layout::CupDraw_DrawGroupOverview_TextPointer5) +
@@ -491,8 +491,8 @@ Image LeagueTableScreen::render() const {
             int last_round = std::min<int>(table.rounds_played & 0x7f,
                                            league_matchdays(table.league_id));
             if (last_round < first_round) last_round = first_round;
-            const size_t start=kEnglishCompetitions ? 0 : 4;
-            const size_t finish=kEnglishCompetitions ? 3 : 7;
+            const size_t start=league_system().english_competitions ? 0 : 4;
+            const size_t finish=league_system().english_competitions ? 3 : 7;
             label[start] = char('0' + first_round / 10);
             label[start+1] = char('0' + first_round % 10);
             label[finish] = char('0' + last_round / 10);

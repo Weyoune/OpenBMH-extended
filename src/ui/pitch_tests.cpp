@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Tests for PitchScreen: drag/swap requests, rendering without mutating positions, hover and affinity colors, set-piece editor and team-sheet actions.
 #include "formats/executable_layout.hpp"
 #include "ui/pitch.hpp"
 #include "ui/source_hold.hpp"
@@ -9,11 +10,12 @@
 #include "formats/fbm.hpp"
 #include "formats/savestate.hpp"
 #include "game/state.hpp"
+#include "testing/check.hpp"
 
 using namespace bmh;
 using namespace bmh::ui;
 namespace {
-void check(bool ok,const char* message){if(!ok)throw std::runtime_error(message);}
+using bmh::test_support::check;
 void rejected(const std::function<void()>& fn){try{fn();}catch(const FormatError&){return;}throw std::runtime_error("expected pitch rejection");}
 LineupState lineup(){LineupState s;s.manager_slot=0;s.runtime_club=12;s.revision=7;s.source="engine_projection";
     s.club_name="UNITFC";s.entry_prepared=true;s.view=LineupView::data_b;
@@ -169,6 +171,13 @@ int main(int argc,char**argv){try{
     selector_copy.acknowledge(selected_lineup,selected);
     check(selector_copy.state_json().find("\"shooter_selection\":1")!=std::string::npos,
           "accepted taker write returns the original selector to neutral mode 1");
+    {
+        // the field stays editable inside the editor while no taker kind is chosen
+        const auto neutral_frame=selector_copy.render().pixels;
+        selector_copy.click(20,31);
+        check(selector_copy.render().pixels!=neutral_frame,
+              "inside the editor a click marks a player for placement when no taker kind is chosen");
+    }
     auto automatic=selector_copy.click(260,215);
     check(automatic.kind==PitchRequestKind::auto_set_piece_takers&&
           automatic.expected_set_piece_values[0]==1&&automatic.expected_display_word==0x018b,

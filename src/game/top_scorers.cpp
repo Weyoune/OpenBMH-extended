@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Top scorers view: ranks players of a league or of the human managers by goals, assists or
+// scorer score and determines the owning manager of each club.
+// Read-only projection of GameState; invalid input throws FormatError. Draws no random numbers.
+// Interface in top_scorers.hpp.
 #include "game/top_scorers.hpp"
 
 #include <array>
@@ -11,7 +15,6 @@
 namespace bmh::game {
 namespace {
 
-constexpr size_t kManagerRecordSize = 0xb0c;
 constexpr size_t kNationalBackupManager = 4;
 constexpr size_t kManagerTeamOffset = 0x290;
 
@@ -76,7 +79,7 @@ TopScorersProjection top_scorers_from_game(const GameState& g, int manager_slot,
         invalid("manager team is outside Source's nine domestic leagues");
 
     const int first_team = league_first_team(league);
-    const int team_count = kLeagueSizes[league];
+    const int team_count = installed_league_system().sizes[league];
     if (first_team < 0 || first_team + team_count > runtime_dimensions.league_teams ||
         g.club_ids.size() < size_t(first_team + team_count) || g.club_names.empty())
         invalid("incomplete domestic club table");

@@ -1,4 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Bank screen: account and fixed deposit, stock and fund trading, stock tips, and bank or inter-manager credit.
+// Owns BankState (a read-only copy of balances, prices, holdings and credit offers built by bank_from_game,
+// tagged with a revision) and BankScreen. Money-moving actions are BankRequest values (kind, amount, asset
+// index, expected credit terms) that the session validates against the revision before applying.
+// Implementation: bank.cpp.
 #pragma once
 
 #include <cstdint>
@@ -109,6 +114,8 @@ public:
     BankScreen(const std::filesystem::path&, BankState,const LeImage& reference);
     Image render() const;
     BankRequest click(int x, int y, bool right = false);
+    // Mouse DOWN: draws the bottom button under the pointer pressed until the release (click()).
+    bool press(int x, int y);
     BankRequest key(std::string_view);
     bool text(std::string_view);
     bool close_requested() const { return close_requested_; }
@@ -150,6 +157,9 @@ private:
     bool credit_fee_confirmation_open_ = false, credit_notice_open_ = false;
     bool credit_fees_accepted_ = false;
     bool selling_shares_ = false;
+    int pressed_button_ = -1;   // 0 left, 1 right bottom button while the mouse button is held
+    int pressed_key_ = -1;      // calculator key held down by the mouse
+    int pressed_dialog_ = 0;   // GameEndTaxDialog::Button (0 none) of an open notice/question held down by the mouse
     bool calculator_stock_count_ = false;
     bool calculator_property_count_ = false;
     int selected_stock_ = 11;

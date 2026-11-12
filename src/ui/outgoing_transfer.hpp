@@ -1,4 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Interactive editor for an outgoing transfer bid (fee, monthly salary, contract years, seven bonus fields
+// and a loan quote toggle) with the original number calculator. State: OutgoingTransferEditorState wrapping the
+// shared incoming-transfer panel, plus a confirmed copy. Edits become typed OutgoingTransferRequests (edit field,
+// quote change, team/player info, submit, cancel) with identity guards; the session acknowledges with a new
+// state or rejects. The renderer must not invent calculator limits: they are supplied by the caller.
+// Implemented in outgoing_transfer.cpp.
 #pragma once
 
 #include <array>
@@ -96,6 +102,8 @@ public:
     OutgoingTransferScreen(const std::filesystem::path&,OutgoingTransferEditorState,const LeImage&);
     Image render() const;
     OutgoingTransferRequest click(int x, int y, bool right = false, bool double_click = false);
+    // Mouse DOWN: the footer button under the pointer is drawn pressed until the release (click()).
+    bool press(int x, int y);
     // Source event8 returns calculator cancellation before closing its editor.
     OutgoingTransferRequest process_timer_expired();
     OutgoingTransferRequest key(std::string_view key);
@@ -124,6 +132,8 @@ private:
     std::string numeric_text_, feedback_;
     bool calculator_open_ = false;
     bool closed_ = false;
+    int pressed_button_ = -1;   // footer button held down by the mouse
+    int pressed_key_ = -1;      // calculator key held down by the mouse
     std::optional<OutgoingTransferRequest> pending_;
 
     OutgoingTransferIdentity identity() const;

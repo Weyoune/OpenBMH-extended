@@ -271,7 +271,10 @@ bool replay_matchday(GameState& b, std::vector<MatchGroup>& groups, GameRandom& 
                         MatchEngine trial{sc, gc, gg, wr, engine.referees};
                         trial.month = engine.month;
                         MinuteReport tr;
-                        trial.rerate_team(team, tr);
+                        {
+                            NoHook no_hook;  // (the trial draws on copies: they must not count as draws of the port)
+                            trial.rerate_team(team, tr);
+                        }
                         const bool hit = !tr.unsupported && gg.seed() == int32_t(std::stoll(field(after.line, "game_seed"))) &&
                                          wr.seed() == uint32_t(std::stoull(field(after.line, "rand_seed")));
                         if (!hit) continue;
@@ -1054,10 +1057,11 @@ const Entry* desk = &pause;  // (after an offer message box the next pause)
         GameRandom gp = bg;
         WatcomRandom wp = br;
         bool g_ahead = false, w_ahead = false;
+        long g_steps = 0, w_steps = 0;  // draws the snapshot lies ahead of our state (reported below)
         for (long k = 0; k < 20000 && !g_ahead; k++, gp.range(0, 1))
-            g_ahead = gp.seed() == int32_t(std::stoll(field(e.line, "game_seed")));
+            g_ahead = gp.seed() == int32_t(std::stoll(field(e.line, "game_seed"))), g_steps = k;
         for (long k = 0; k < 20000 && !w_ahead; k++, wp.rand())
-            w_ahead = wp.seed() == uint32_t(std::stoull(field(e.line, "rand_seed")));
+            w_ahead = wp.seed() == uint32_t(std::stoull(field(e.line, "rand_seed"))), w_steps = k;
         if (!w_ahead) {
             // (a Watcom seed on no path of the stream: the snapshot caught a temporary generator
             //  state, as with minute snapshots - not counted)
@@ -1082,7 +1086,8 @@ const Entry* desk = &pause;  // (after an offer message box the next pause)
             }
         }
         if (!g_ahead || !w_ahead) return false;
-        std::printf("  (late snapshot: taken inside the processing of day %u, not counted)\n", b.date);
+        std::printf("  (late snapshot: taken inside the processing of day %u, %ld game and %ld Watcom draws ahead of the "
+                    "port's state, both on the port's streams; not counted)\n", b.date, g_steps, w_steps);
         return true;
     };
 
@@ -1751,6 +1756,13 @@ const Entry* desk = &pause;  // (after an offer message box the next pause)
             std::printf("indoor round: desk (date %s) -> kick-off -> minute 40 -> pause\n", field(desk.line, "date").c_str());
             GameState s = saved;
             s.texts = &textdb;
+            if (const char* pw = std::getenv("WEEK_PREV_WEATHER")) {
+                // The chance weather is a runtime value that the savegame does not hold: the kick-off of an indoor
+                // round still rates the sides with the weather of the last chance of the round before (printed as
+                // "last chance weather" by the check of the previous turn): WEEK_PREV_WEATHER=rain,temperature
+                int rain = 0, temp = 0;
+                if (std::sscanf(pw, "%d,%d", &rain, &temp) == 2) s.chance_rain = rain, s.chance_temperature = temp;
+            }
             if (i1 < entries.size() && !field(entries[i1].state, "a3d4c").empty())
                 s.trend_rotation = std::stoi(field(entries[i1].state, "a3d4c"));
             if (!field(desk.state, "results").empty()) {
@@ -1778,6 +1790,105 @@ const Entry* desk = &pause;  // (after an offer message box the next pause)
             }
             if (!sk.unsupported) kick_off(s, sat, sc, sr0, sg0, sk);
             if (sk.unsupported) std::printf("  not supported: %s\n", sk.reason.c_str());
+            if (i1 < entries.size() && std::getenv("WEEK_INDOOR_WEATHER")) {
+                // development helper: the (runtime only) chance weather that reproduces the recorded kick-off sides
+                // of the indoor round (sides 0..5 except byte 2) for the first match of every group
+                const std::vector<MatchGroup> rec_in = groups_from_snapshot(entries[i1].line);
+                for (size_t gi = 0; gi < sat.size() && gi < rec_in.size(); gi++)
+                    for (int rain = 0; rain < 20; rain++)
+                        for (int temp = -30; temp < 50; temp++) {
+                            bool same = true;
+                            for (size_t side = 0; side < 4 && same && side < sat[gi].fixtures.size(); side++)
+                                for (int i = 0; i < 6 && same; i++) {
+                                    if (i == 2) continue;
+                                    GameState copy = s;
+                                    RatingContext rc{rain, temp};
+                                    WatcomRandom wr = sr0;
+                                    GameRandom gr = sg0;
+                                    rc.rand = &wr, rc.game = &gr;
+                                    const int v = team_rating(copy, sat[gi].fixtures[side], kRatingProfiles[i], rc);
+                                    if (side * 9 + size_t(i) < rec_in[gi].records.size() &&
+                                        v != rec_in[gi].records[side * 9 + size_t(i)])
+                                        same = false;
+                                }
+                            if (same) std::printf("  group %zu: chance weather rain %d temperature %d reproduces the sides\n", gi, rain, temp);
+                        }
+            }
+            if (i1 < entries.size() && std::getenv("WEEK_INDOOR_TABLE")) {
+                // development helper: the six ratings of every side with the formation table at offset k*0xB0
+                const std::vector<MatchGroup> rec_in = groups_from_snapshot(entries[i1].line);
+                std::printf("  formations table size %zu\n", s.formations.size());
+                for (size_t gi = 0; gi < sat.size() && gi < rec_in.size(); gi++)
+                    for (size_t side = 0; side < sat[gi].fixtures.size() && (side + 1) * 9 <= rec_in[gi].records.size(); side++) {
+                        const int team = sat[gi].fixtures[side];
+                        if (s.manager_of(team) >= 0) continue;
+                        std::printf("  g%zu team %3d orig:", gi, team);
+                        for (int i = 0; i < 6; i++) std::printf(" %02x", rec_in[gi].records[side * 9 + size_t(i)]);
+                        std::printf("\n");
+                        if (!field(entries[i1].state, "squad_slots").empty()) {
+                            // the same ratings from the recorded tables of minute 1 (players, flags, morale, bonus)
+                            GameState rs = state_from_dump(entries[i1].state);
+                            rs.formations = s.formations, rs.indoor = true, rs.level = s.level, rs.texts = s.texts;
+                            RatingContext rc{s.chance_rain, s.chance_temperature};
+                            std::printf("      recorded tables:");
+                            for (int i = 0; i < 6; i++) std::printf(" %02x", team_rating(rs, team, kRatingProfiles[i], rc));
+                            std::printf("\n");
+                            const SquadRange r = squad_range(team);
+                            for (size_t k = r.first; k < r.first + r.count; k++) {
+                                const int pl = s.squad_slots[k] & 0xfff;
+                                if (pl == 0xfff) break;
+                                const Player& a = s.players.at(size_t(pl));
+                                const Player& o = rs.players.at(size_t(pl));
+                                if (a.w35c != o.w35c || a.w364 != o.w364 || a.w368 != o.w368 ||
+                                    s.player_bonus.at(size_t(pl)) != rs.player_bonus.at(size_t(pl)))
+                                    std::printf("      player %d: w35c %08x/%08x w364 %08x/%08x w368 %08x/%08x bonus %02x/%02x\n", pl,
+                                                unsigned(a.w35c), unsigned(o.w35c), unsigned(a.w364), unsigned(o.w364), unsigned(a.w368),
+                                                unsigned(o.w368), s.player_bonus.at(size_t(pl)), rs.player_bonus.at(size_t(pl)));
+                            }
+                            if (s.team_morale.at(size_t(team)) != rs.team_morale.at(size_t(team)))
+                                std::printf("      morale %02x/%02x\n", s.team_morale.at(size_t(team)), rs.team_morale.at(size_t(team)));
+                        }
+                        if (std::getenv("WEEK_INDOOR_WEATHER")) {
+                            // AI sides only: the chance weather that reproduces bytes 0, 1 and 3
+                            int found = 0;
+                            for (int rain = 0; rain < 20 && found < 6; rain++)
+                                for (int temp = -30; temp < 50 && found < 6; temp++) {
+                                    bool same = true;
+                                    for (int i : {0, 1, 3}) {
+                                        GameState copy = s;
+                                        RatingContext rc{rain, temp};
+                                        if (team_rating(copy, team, kRatingProfiles[i], rc) != rec_in[gi].records[side * 9 + size_t(i)]) same = false;
+                                    }
+                                    if (same) found++, std::printf("      weather rain %d temp %d reproduces bytes 0,1,3\n", rain, temp);
+                                }
+                            if (!found) std::printf("      no weather reproduces bytes 0,1,3\n");
+                        }
+                        for (size_t k = 0; k * 0xB0 + 0xB0 <= s.formations.size(); k++) {
+                            GameState copy = s;
+                            for (size_t i = 0; i < 0xB0; i++) copy.formations[0xB0 + i] = s.formations[k * 0xB0 + i];
+                            RatingContext rc{s.chance_rain, s.chance_temperature};
+                            std::printf("      table %zu:", k);
+                            for (int i = 0; i < 6; i++) std::printf(" %02x", team_rating(copy, team, kRatingProfiles[i], rc));
+                            std::printf("\n");
+                        }
+                    }
+            }
+            if (i1 < entries.size() && std::getenv("WEEK_INDOOR_LINEUP") && !field(entries[i1].state, "squad_slots").empty()) {
+                // development helper: line-ups (squad slots with the line-up bit) of the port against the recording
+                const GameState rs = state_from_dump(entries[i1].state);
+                for (const MatchGroup& grp : sat)
+                    for (int team : grp.fixtures) {
+                        const SquadRange r = squad_range(team);
+                        std::printf("  lineup team %3d:", team);
+                        for (int pass = 0; pass < 2; pass++) {
+                            const GameState& st = pass == 0 ? s : rs;
+                            std::printf(pass == 0 ? " ours" : " | orig");
+                            for (size_t k = r.first; k < r.first + r.count && k < st.squad_slots.size(); k++)
+                                if (st.squad_slots[k] & 0x8000) std::printf(" %d/%d", int(k - r.first), st.squad_slots[k] & 0xfff);
+                        }
+                        std::printf("\n");
+                    }
+            }
             if (i1 < entries.size()) {
                 std::printf("  kick-off against minute 1:\n");
                 compare_kickoff(sat, groups_from_snapshot(entries[i1].line), &s);

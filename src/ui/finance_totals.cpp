@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Implements the finance totals page declared in finance_totals.hpp: finance_totals_from_game() collects the
+// row values and formats them with the game's currency settings, and FinanceTotalsScreen draws them.
+// Row 4 is a group separator without a value. Presentation only.
 #include "formats/executable_layout.hpp"
 #include "finance_totals.hpp"
 
@@ -11,7 +14,7 @@
 
 namespace bmh::ui {
 namespace {
-constexpr size_t kManagerRecord = 0xb0c;
+constexpr size_t kManagerRecord = kManagerRecordSize;
 
 uint32_t require_memory(const GameState& g, uint32_t address, size_t bytes) {
     if (bytes == 0 || !g.memory.has(address) || !g.memory.has(address + uint32_t(bytes - 1)))

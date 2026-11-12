@@ -7,6 +7,7 @@
 #include <stdexcept>
 
 #include "game/rating.hpp"
+#include "game/world_layout.hpp"
 
 namespace bmh {
 

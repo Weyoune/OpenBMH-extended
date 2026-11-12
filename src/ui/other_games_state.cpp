@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Implementation of other_games_state_from_game(): builds fixture rows, selector labels, headings and table rows
+// for one competition, linked page and round from the GameState and original text tables. Pure projection:
+// it reads the game and executable data but does not mutate either.
 #include "formats/executable_layout.hpp"
 #include "ui/other_games_state.hpp"
 
@@ -175,7 +178,7 @@ uint8_t source_country(const LeImage& exe, int team) {
             return 0;
         }
     }
-    const int remainder = remaining - int16_t(exe.u16(::bmh::layout::CareerSession_InstallLeagueSizes_RuntimeField6));
+    const int remainder = remaining - int16_t(exe.u16(::bmh::layout::NewcomerClubCount));
     if (remainder >= 0) return uint8_t(remainder / 7 - domestic_cutoff + 10);
     return 0;
 }

@@ -35,7 +35,7 @@ struct Workspace {
     uint16_t local(ClubId id)const{if(!id.valid())return 65535;const auto found=std::find(map.begin(),map.end(),id);require(found!=map.end(),"club is outside its owned physical namespace");return uint16_t(found-map.begin());}
     ClubId global(uint16_t id)const{if(id==65535)return {};require(id<map.size(),"Core returned an unknown physical club");return map[id];}
     Workspace(const CareerSnapshot& state,const GameState& reference):map(state.world.indoor->selection_slots){
-        require(runtime_dimensions.domestic_teams==90&&runtime_dimensions.league_teams==164&&!kEnglishCompetitions,"common shared numeric reference profile is required");
+        require(runtime_dimensions.domestic_teams==90&&runtime_dimensions.league_teams==164&&!installed_league_system().english_competitions,"common shared numeric reference profile is required");
         const auto& world=state.world;if(map.empty()){map=selection_slots(world);for(auto id:world.indoor->previous_holders)if(std::find(map.begin(),map.end(),id)==map.end())map.push_back(id);for(auto id:world.indoor->masters_scratch)if(id.valid()&&std::find(map.begin(),map.end(),id)==map.end())map.push_back(id);}
         std::vector<ClubId> humans;for(const auto& manager:world.managers)humans.push_back(manager.club);
         const auto& settings=*world.settings;

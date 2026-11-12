@@ -22,8 +22,8 @@ int main()try {
     for(uint8_t raw:{0,1,2,128,129,255}) {
         (*s.world.economy->presentation_options)[16*9+4]=raw;
         original.memory.set8(layout::CalendarState_FormatError_RuntimeField,raw);
-        kEnglishCompetitions=false;const bool indoor=day_competitions(original,0x4002)!=0;
-        kEnglishCompetitions=true;const bool league_cup=day_competitions(original,0x4002)!=0;kEnglishCompetitions=false;
+        installed_league_system().english_competitions=false;const bool indoor=day_competitions(original,0x4002)!=0;
+        installed_league_system().english_competitions=true;const bool league_cup=day_competitions(original,0x4002)!=0;installed_league_system().english_competitions=false;
         const auto admitted=admitted_other_appointments(s,1);
         check(std::count_if(admitted.begin(),admitted.end(),[](const auto& a){return a.domain==CalendarDomain::germany;})==int(indoor),"German admission differs from Original calendar kernel");
         check(std::count_if(admitted.begin(),admitted.end(),[](const auto& a){return a.domain==CalendarDomain::england;})==int(league_cup),"German indoor switch removed English League Cup");
@@ -41,4 +41,4 @@ int main()try {
     s.world.economy->presentation_options.reset();check(prepare_day(s)->others.size()==1,"unknown German policy blocked an English-only cup date");
     s.date=1;s.calendar->next_day=1;rejects([&]{prepare_day(s);},"missing saved indoor policy borrowed current defaults");
     std::cout<<"Original indoor admission oracle, English League Cup separation, immutable calendar, stale tickets, exact quiet-day commit and FBM passed\n";
-}catch(const std::exception& e){kEnglishCompetitions=false;std::cerr<<e.what()<<'\n';return 1;}
+}catch(const std::exception& e){installed_league_system().english_competitions=false;std::cerr<<e.what()<<'\n';return 1;}

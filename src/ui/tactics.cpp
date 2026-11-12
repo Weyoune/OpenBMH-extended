@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Implementation of TacticsScreen and the tactics_from_save/game projections (tactics.hpp): option arrow cycling, board drawing and request JSON; changes are never committed locally.
 #include "formats/executable_layout.hpp"
 #include "ui/tactics.hpp"
 
@@ -9,6 +10,7 @@
 #include "game/state.hpp"
 #include "game/national_identity.hpp"
 #include "ui/manager.hpp"
+#include "ui/draw.hpp"
 
 namespace bmh::ui {
 namespace {
@@ -59,17 +61,12 @@ TacticsState project(const StaticMemory& memory, const Bytes& managers, const By
     return s;
 }
 void rect(Image& out, int x, int y, int w, int h, uint8_t color) {
-    for (int yy = std::max(0, y); yy < std::min(out.height, y + h); ++yy)
-        for (int xx = std::max(0, x); xx < std::min(out.width, x + w); ++xx) out.at(xx, yy) = color;
+    draw::fill(out, x, y, w, h, color);
 }
 void copy(Image& out, const Image& src, int sx, int sy, int x, int y, int w, int h, bool transparent = false) {
     if (sx < 0 || sy < 0 || sx + w > src.width || sy + h > src.height)
         throw FormatError("tactics: sprite outside original atlas");
-    for (int yy = 0; yy < h; ++yy) for (int xx = 0; xx < w; ++xx) {
-        const auto c = src.pixels.at(size_t(sy + yy) * src.width + sx + xx);
-        if (x + xx >= 0 && y + yy >= 0 && x + xx < out.width && y + yy < out.height && (!transparent || c))
-            out.at(x + xx, y + yy) = c;
-    }
+    draw::copy_clipped(out, src, sx, sy, x, y, w, h, transparent ? 0 : -1);
 }
 } // namespace
 

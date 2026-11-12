@@ -80,7 +80,7 @@ void kernel_oracles() {
         const auto actual=draw_season_newcomers(3,pool,named,random);
         check(actual==expected&&random.seed()==oracle.seed()&&random.calls()==oracle.calls(),"newcomer Source rejection sequence changed");
     }
-    check(!season_licence_broke({0,0,-6000000,0,0})&&season_licence_broke({0,0,-6000001,0,0}),"licence asset threshold changed");
+    check(!season_licence_broke({0,0,-4000000,0,0})&&season_licence_broke({0,0,-4000001,0,0}),"licence asset threshold changed");
     check(!season_licence_broke({0,65,0,0,99999})&&season_licence_broke({0,65,0,0,100000}),"transfer-ban threshold changed");
 }
 void tail_capture() {

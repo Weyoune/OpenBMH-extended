@@ -1,5 +1,7 @@
 #include "../../tests/test_inputs.hpp"
+#include "testing/check.hpp"
 // SPDX-License-Identifier: GPL-3.0-only
+// Tests for season_entrants_from_game(): footer order, untouched competition pools, and suppression in non-league mode.
 #include "formats/executable_layout.hpp"
 #include "ui/season_entrants.hpp"
 
@@ -11,9 +13,7 @@
 #include "ui/manager.hpp"
 
 namespace {
-void check(bool ok, const char* message) {
-    if (!ok) throw std::runtime_error(message);
-}
+using bmh::test_support::check;
 
 bmh::GameState fixture() {
     bmh::GameState g;

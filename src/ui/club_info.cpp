@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Implements the club info screen declared in club_info.hpp: club_info_from_game() builds the player rows
+// (including loan projections and manager board data for human clubs), and ClubInfoScreen renders both data
+// views and converts button and row clicks into ClubInfoRequest values. It does not change the game itself.
 #include "formats/executable_layout.hpp"
 #include "ui/club_info.hpp"
+#include "ui/button_frame.hpp"
 
 #include <algorithm>
 #include <array>
@@ -9,6 +13,7 @@
 #include "game/club_info.hpp"
 #include "game/state.hpp"
 #include "ui/manager.hpp"
+#include "ui/draw.hpp"
 
 namespace bmh::ui {
 namespace {
@@ -18,15 +23,10 @@ void copy(Image& out, const Image& src, int sx, int sy, int x, int y, int w, int
         throw FormatError("club info: Original asset rectangle outside source: " + std::to_string(sx) + "," +
                           std::to_string(sy) + " " + std::to_string(w) + "x" + std::to_string(h) + " in " +
                           std::to_string(src.width) + "x" + std::to_string(src.height));
-    for (int yy = 0; yy < h; ++yy) for (int xx = 0; xx < w; ++xx) {
-        const uint8_t value = src.pixels[size_t(sy + yy) * size_t(src.width) + size_t(sx + xx)];
-        if (value != transparent && x + xx >= 0 && y + yy >= 0 &&
-            x + xx < out.width && y + yy < out.height) out.at(x + xx, y + yy) = value;
-    }
+    draw::copy_clipped(out, src, sx, sy, x, y, w, h, transparent);
 }
 void rect(Image& out, int x, int y, int w, int h, uint8_t color) {
-    for (int yy = std::max(0, y); yy < std::min(out.height, y + h); ++yy)
-        for (int xx = std::max(0, x); xx < std::min(out.width, x + w); ++xx) out.at(xx, yy) = color;
+    draw::fill(out, x, y, w, h, color);
 }
 std::string padded(uint64_t value, int width = 2) {
     std::string s = std::to_string(value);
@@ -45,7 +45,7 @@ int sprite_width(const LeImage& exe, std::string_view value) {
 int source_manager_of(const GameState& game, int team) {
     const int manager = game.manager_of(team);
     if (manager >= 0) return manager;
-    constexpr size_t fifth_team_offset = size_t(4) * 0xb0c + 0x290;
+    constexpr size_t fifth_team_offset = size_t(4) * kManagerRecordSize + 0x290;
     if (!game.manager_teams.empty() && game.manager_teams.front() == kNoTeam &&
         game.manager_records.size() >= fifth_team_offset + 2) {
         const uint16_t fifth_team = uint16_t(game.manager_records[fifth_team_offset] |
@@ -65,8 +65,8 @@ ClubInfoProjection club_info_from_game(const GameState& g, int team,
     out.original_club_name = g.club_name(team);
     out.gradient_text = g.memory.u8(::bmh::layout::TextGradientDisabled) == 0 && exe.u8(::bmh::layout::TextGradientMode) == 2;
     out.decorated_background = g.memory.u8(::bmh::layout::PlainBackground) == 0;
-    out.has_squad = team == kNoTeam || team < exe.u16(::bmh::layout::CareerSession_DispatchLineup_RuntimeField);
-    if (team != kNoTeam && team >= exe.u16(::bmh::layout::CareerSession_DispatchLineup_RuntimeField)) {
+    out.has_squad = team == kNoTeam || team < exe.u16(::bmh::layout::LeagueClubCount);
+    if (team != kNoTeam && team >= exe.u16(::bmh::layout::LeagueClubCount)) {
         out.has_squad = false;
         out.category = team >= 0 && size_t(team) < g.team_morale.size()
             ? uint8_t((g.team_morale[size_t(team)] >> 6) & 3) : 0;
@@ -324,13 +324,8 @@ Image ClubInfoScreen::render() const {
         const bool active = (x == 1 && pressed_button_ == (projection_.has_squad ? ClubInfoButton::view : ClubInfoButton::category)) ||
                             (x == 60 && pressed_button_ == ClubInfoButton::statistics) ||
                             (x == 120 && pressed_button_ == ClubInfoButton::category);
-        if (active) { const uint8_t base = out.at(x, 225); rect(out, x, 215, width + 1, 2, base); rect(out, x, 215, 2, height + 1, base); x += 2; }
-        else { rect(out, x + 2, 225, width, 2, 0x40); rect(out, x + width, 217, 2, height, 0x40); }
-        const int sy = active ? 44 : 74;
-        copy(out, widgets_, 24, sy, x, 215 + (active ? 2 : 0), 31, 10);
-        int at = 31, remain = width - 31;
-        while (remain > 20) { const int n = std::min(8, remain - 20); copy(out, widgets_, 24, sy + 10, x + at, 215 + (active ? 2 : 0), n, 10); at += n; remain -= n; }
-        copy(out, widgets_, 45 - remain, sy + 20, x + at, 215 + (active ? 2 : 0), remain, 10);
+        (void)height;
+        x += draw_wide_button_frame(out, widgets_, x, 215, width, active);   // button_frame.hpp
         if (!label.empty()) {
             const int mode = exe_.u8(::bmh::layout::Advertising_Button_RuntimeField + int(active));
             const int label_baseline = active ? 224 : 222;

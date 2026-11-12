@@ -16,8 +16,8 @@
 
 namespace bmh::ui {
 namespace {
-constexpr size_t kManagerRecord = 0xb0c;
-constexpr size_t kClubRecord = 0x4a;
+constexpr size_t kManagerRecord = kManagerRecordSize;
+constexpr size_t kClubRecord = kClubRecordSize;
 constexpr uint32_t kSeriesSelector = ::bmh::layout::SeriesSelector;
 constexpr uint32_t kTableFlags = ::bmh::layout::TableFlags;
 
@@ -70,7 +70,7 @@ SeriesRecordsProjection series_records_from_game(const GameState& game, const Le
     out.league = league;
     out.league_row = team - league_first_team(league);
     out.rounds = game.league_rounds[size_t(league)];
-    if (out.league_row < 0 || out.league_row >= kLeagueSizes[size_t(league)])
+    if (out.league_row < 0 || out.league_row >= league_system().sizes[size_t(league)])
         throw FormatError("series records: manager club is outside the Source league");
     out.club_name = game.club_name(team);
 
@@ -114,7 +114,7 @@ SeriesRecordsScreen::SeriesRecordsScreen(const std::filesystem::path& data,
         projection_.runtime_team < 0 || projection_.runtime_team > kNoTeam ||
         (projection_.source_available &&
          (projection_.league < 0 || (!projection_.explicit_league_size&&projection_.league >= kLeagueCount) ||
-          projection_.league_row < 0 || projection_.league_row >= (projection_.explicit_league_size?projection_.explicit_league_size:kLeagueSizes[size_t(projection_.league)]))) ||
+          projection_.league_row < 0 || projection_.league_row >= (projection_.explicit_league_size?projection_.explicit_league_size:league_system().sizes[size_t(projection_.league)]))) ||
         backdrop_.width != 320 || backdrop_.height != 240)
         throw FormatError("series records: incomplete Original projection");
 }

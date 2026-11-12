@@ -1,4 +1,5 @@
 #include "test_inputs.hpp"
+#include "testing/check.hpp"
 // SPDX-License-Identifier: GPL-3.0-only
 #include "formats/executable_layout.hpp"
 #include "formats/league_visibility.hpp"
@@ -16,6 +17,7 @@
 #include "app/controller.hpp"
 #include "app/window_actions.hpp"
 #include "ui/manager.hpp"
+#include "ui/pending_offer.hpp"
 #include "ui/contracts.hpp"
 #include "game/month.hpp"
 #include "game/desk_actions.hpp"
@@ -46,7 +48,7 @@ using namespace bmh;
 using namespace bmh::ui;
 
 namespace {
-void check(bool value, const char* message) { if (!value) throw std::runtime_error(message); }
+using bmh::test_support::check;
 
 uint8_t session_runtime_byte(const GameState& state,const std::map<uint32_t,uint8_t>& runtime,uint32_t address) {
     if(state.memory.has(address))return state.memory.u8(address);
@@ -408,6 +410,228 @@ void check_transfer_market_controller(const std::filesystem::path& data) {
     check(save_stream(game) == listed_snapshot && revision == listed_revision &&
           session->rand().seed() == listed_seed && session->rand().calls() == listed_calls,
           "consumed list request replay is inert");
+
+    {   // GUI route: the offers on an own listing are reviewed from the roster and accepted before the listing expires
+        int entry = -1;
+        for (int e = 0; e < 40; ++e) if ((game.squad_slots.at(0xb70 + size_t(e)) & 0xfff) == listed_player) entry = e;
+        check(entry >= 0, "the own listing has a transfer-list entry");
+        const uint32_t list = ::bmh::layout::EditorList + uint32_t(entry) * 0x58;
+        MinuteReport bid_report;
+        for (int tries = 0; tries < 400 && int16_t(game.memory.u16(list)) == -1; ++tries)
+            transfer_bid(game, 0xb70 + entry, list, false, -1, session->game(), session->rand(), bid_report);
+        check(!bid_report.unsupported && int16_t(game.memory.u16(list)) != -1, "the engine places a bid on the own listing");
+        flow.send_key("ESC");
+        flow.attach_preparation_context(session->preparation_projection(revision));
+        const auto menu17 = std::find_if(flow.desktop()->state().items.begin(), flow.desktop()->state().items.end(),
+            [](const DeskItem& item) { return item.kind == 17 && !item.disabled; });
+        check(menu17 != flow.desktop()->state().items.end(), "the desktop still offers the market");
+        flow.click(menu17->x + menu17->width / 2, menu17->y + menu17->height / 2);
+        const auto marked = flow.click(20, list_y);   // marking a roster player first asks for the value preview
+        if (marked.request == FlowRequest::submenu_action)
+            check(app::serve_flow_request(flow, marked, session, data, data, 0x1789abcd, revision, playback, audio_session, false,
+                {}, {}, {}, {}, {}, {}, {}, {}, {}, app::PendingOfferEntryPolicy::legacy_unpresented, {},
+                app::HumanBuyerMarketEntryPolicy::normal_interactive).empty(), "the roster preview is served");
+        const auto review_request = flow.click(200, 207);
+        check(review_request.request == FlowRequest::submenu_action &&
+              std::holds_alternative<TransferMarketRequest>(review_request.submenu_action) &&
+              std::get<TransferMarketRequest>(review_request.submenu_action).kind == TransferMarketRequestKind::review_offers,
+              "an already listed player opens the review of his offers");
+        int offers_shown = 0;
+        HumanBuyerSaleHooks hooks;
+        hooks.allocator_gate = HumanBuyerSaleAllocatorGate::zero;
+        hooks.direct_mode = HumanBuyerSaleDirectMode::ordinary_ai_purchase;
+        hooks.notice = [](const GameState&, const HumanBuyerSaleNotice&) {};
+        const app::TransferOfferPresenter review = [&](const GameState&, const TransferOfferListView& view) {
+            offers_shown = view.offer_count;
+            return 0;   // accept the first bid
+        };
+        const auto error = app::serve_flow_request(flow, review_request, session, data, data, 0x1789abcd,
+            revision, playback, audio_session, false, {}, review, {}, {}, {}, {}, {}, {}, {},
+            app::PendingOfferEntryPolicy::legacy_unpresented, hooks, app::HumanBuyerMarketEntryPolicy::normal_interactive);
+        check(error.empty() && offers_shown > 0, "the review presents the offers");
+        check((game.squad_slots.at(0xb70 + size_t(entry)) & 0xfff) != listed_player && !flow.pending_transfer_market(),
+              "accepting a bid in the review sells the player and settles the request");
+    }
+
+    {   // a declined listing: at expiry the player leaves the list (the seller declines every offer) and can be listed again
+        const auto before = transfer_market_from_game(game, revision);
+        int row2 = -1;
+        for (int row = std::min(17, int(before.squad.size()) - 1); row >= 11 && row2 < 0; --row) {
+            const auto& player = before.squad[size_t(row)];
+            if (player.player < 0 || player.already_listed || player.row == listing_row) continue;
+            auto trial_state = game; auto trial_rand = session->rand(); MinuteReport trial_report;
+            if (list_manager_player(trial_state, before.manager_slot, player.row, trial_rand, trial_report).status ==
+                TransferActionStatus::accepted && !trial_report.unsupported) row2 = player.row;
+        }
+        check(row2 >= 0, "another listable reserve player exists");
+        MinuteReport report;
+        const auto listed = list_manager_player(game, before.manager_slot, row2, session->rand(), report);
+        check(listed.status == TransferActionStatus::accepted && listed.list_entry >= 0, "the second player is listed");
+        const int entry = listed.list_entry;
+        const uint32_t list = ::bmh::layout::EditorList + uint32_t(entry) * 0x58;
+        for (int tries = 0; tries < 400 && int16_t(game.memory.u16(list)) == -1; ++tries)
+            transfer_bid(game, 0xb70 + entry, list, false, -1, session->game(), session->rand(), report);
+        check(int16_t(game.memory.u16(list)) != -1, "a bid arrives on the second listing");
+        game.memory.set8(list + 0x56, 1);   // expires with this countdown
+        int declined = 0;
+        game.transfer_offer_selector = [&](const GameState&, const TransferOfferListView&) { ++declined; return -1; };
+        transfer_list_countdown(game, session->game(), session->rand(), report, false, TransferAllocatorContext::zero);
+        game.transfer_offer_selector = {};
+        check(!report.unsupported && declined > 0, "the seller was asked and declined");
+        check((game.squad_slots.at(0xb70 + size_t(entry)) & 0xfff) == 0xfff, "after the decline the player has left the transfer list");
+
+        const auto fresh = transfer_market_from_game(game, revision);
+        int y2 = -1, line = 36;
+        for (size_t n = 0; n < fresh.roster.players.size(); ++n) {
+            const auto& player = fresh.roster.players[n];
+            if (player.borrowed) continue;
+            if (n && (player.displayed_slot & 0xc000) != (fresh.roster.players[n-1].displayed_slot & 0xc000)) line += 2;
+            if (player.player_id < 0) continue;
+            if (player.physical_row == row2) { y2 = line - 3; break; }
+            line += 7;
+        }
+        check(y2 >= 29 && y2 < 215, "the declined player is visible in the roster");
+        flow.send_key("ESC");
+        flow.attach_preparation_context(session->preparation_projection(revision));
+        const auto menu = std::find_if(flow.desktop()->state().items.begin(), flow.desktop()->state().items.end(),
+            [](const DeskItem& item) { return item.kind == 17 && !item.disabled; });
+        check(menu != flow.desktop()->state().items.end(), "the desktop offers the market again");
+        flow.click(menu->x + menu->width / 2, menu->y + menu->height / 2);
+        HumanBuyerSaleHooks relist_hooks;
+        relist_hooks.allocator_gate = HumanBuyerSaleAllocatorGate::zero;
+        relist_hooks.direct_mode = HumanBuyerSaleDirectMode::ordinary_ai_purchase;
+        relist_hooks.notice = [](const GameState&, const HumanBuyerSaleNotice&) {};
+        const auto serve_relist = [&](const FlowResult& result) {
+            return app::serve_flow_request(flow, result, session, data, data, 0x1789abcd, revision, playback, audio_session, false,
+                {}, {}, {}, {}, {}, {}, {}, {}, {}, app::PendingOfferEntryPolicy::legacy_unpresented, relist_hooks,
+                app::HumanBuyerMarketEntryPolicy::normal_interactive);
+        };
+        const auto marked_again = flow.click(20, y2);
+        if (marked_again.request == FlowRequest::submenu_action) check(serve_relist(marked_again).empty(), "the roster preview is served");
+        const auto relist = flow.click(200, 207);
+        check(relist.request == FlowRequest::submenu_action && std::holds_alternative<TransferMarketRequest>(relist.submenu_action) &&
+              std::get<TransferMarketRequest>(relist.submenu_action).kind == TransferMarketRequestKind::list_player,
+              "a player who left the list after a decline can be listed again from the roster");
+        check(serve_relist(relist).empty(), "the second listing is served");
+        bool listed_again = false;
+        for (int e = 0; e < 40; ++e) listed_again |= (game.squad_slots.at(0xb70 + size_t(e)) & 0xfff) ==
+            (game.squad_slots.at(squad_range(before.runtime_club).first + size_t(row2)) & 0xfff);
+        check(listed_again, "the declined player stands on the transfer list again");
+
+        // VERKAUFEN on a listed player asks "Wollen Sie ... vom Transfermarkt holen?"; no keeps the listing, yes takes him off
+        const auto player_id = game.squad_slots.at(squad_range(before.runtime_club).first + size_t(row2)) & 0xfff;
+        const auto on_list = [&] {
+            for (int e = 0; e < 40; ++e) if ((game.squad_slots.at(0xb70 + size_t(e)) & 0xfff) == player_id) return true;
+            return false;
+        };
+        std::string asked;
+        bool answer = false;
+        relist_hooks.confirm = [&](const GameState&, int, const std::string& text) { asked = text; return answer; };
+        for (const bool yes : {false, true}) {
+            answer = yes; asked.clear();
+            auto selected = FlowResult{};
+            auto sell_again = flow.click(200, 207);   // after a "no" the player is still selected
+            if (sell_again.request != FlowRequest::submenu_action) {
+                selected = flow.click(20, y2);
+                if (selected.request == FlowRequest::submenu_action) check(serve_relist(selected).empty(), "the listed player's preview is served");
+                sell_again = flow.click(200, 207);
+            }
+            check(sell_again.request == FlowRequest::submenu_action && std::holds_alternative<TransferMarketRequest>(sell_again.submenu_action) &&
+                  std::get<TransferMarketRequest>(sell_again.submenu_action).kind == TransferMarketRequestKind::review_offers &&
+                  std::get<TransferMarketRequest>(sell_again.submenu_action).ask_withdraw,
+                  "selling a listed player starts the withdraw question even without offers");
+            const app::TransferOfferPresenter no_bid = [](const GameState&, const TransferOfferListView&) { return -1; };
+            check(app::serve_flow_request(flow, sell_again, session, data, data, 0x1789abcd, revision, playback, audio_session, false,
+                      {}, no_bid, {}, {}, {}, {}, {}, {}, {}, app::PendingOfferEntryPolicy::legacy_unpresented, relist_hooks,
+                      app::HumanBuyerMarketEntryPolicy::normal_interactive).empty(), "the withdraw question is served");
+            check(!asked.empty(), "the question 'vom Transfermarkt holen' was asked");
+            check(on_list() == !yes, yes ? "answering yes takes the player off the transfer list" : "answering no keeps the player on the list");
+        }
+    }
+
+    {   // the search dialog behind the buttons Suchen and Vorschlag (Source sub_19409)
+        flow.send_key("ESC");
+        flow.attach_preparation_context(session->preparation_projection(revision));
+        const auto menu = std::find_if(flow.desktop()->state().items.begin(), flow.desktop()->state().items.end(),
+            [](const DeskItem& item) { return item.kind == 17 && !item.disabled; });
+        check(menu != flow.desktop()->state().items.end(), "the desktop offers the market for the search dialog");
+        flow.click(menu->x + menu->width / 2, menu->y + menu->height / 2);
+        const auto exe = load_le(asset_path(data, "BMH.exe"));
+        const auto button_at = [&](int n) {
+            return std::pair<int, int>{exe.u16(::bmh::layout::TransferMarket_Click_RuntimeField + uint32_t(n) * 6) + 2,
+                                       exe.u16(::bmh::layout::TransferMarket_Click_RuntimeField2 + uint32_t(n) * 6) + 2};
+        };
+        HumanBuyerSaleHooks hooks;
+        hooks.allocator_gate = HumanBuyerSaleAllocatorGate::zero;
+        hooks.direct_mode = HumanBuyerSaleDirectMode::ordinary_ai_purchase;
+        std::vector<std::string> boxes;
+        // Like the graphical client, every notice is turned into its dialog (an unknown notice there refuses the whole action).
+        hooks.notice = [&](const GameState& state, const HumanBuyerSaleNotice& notice) {
+            (void)pending_offer_notice_dialog(state, PendingOfferNotice{notice.manager, notice.raw_offer_slot,
+                notice.source_text_address, notice.original_message});
+            boxes.push_back(notice.original_message);
+        };
+        // All notices the transfer routes can raise have a dialog (the poached player's agreement and the scouting boxes included).
+        for (const uint32_t address : {::bmh::layout::DeskActions_SubmitTransferOfferEditorSource_TextPointer,
+                 ::bmh::layout::DeskActions_SubmitTransferOfferEditorSource_RuntimeField,
+                 ::bmh::layout::DeskActions_SubmitTransferOfferEditorSource_ExecutableField,
+                 ::bmh::layout::DeskActions_SubmitTransferBidImpl_ExecutableField,
+                 ::bmh::layout::DeskActions_Unsupported_ExecutableField, ::bmh::layout::DeskActions_Unsupported_ExecutableField2,
+                 ::bmh::layout::DeskActions_Unsupported_ExecutableField3, ::bmh::layout::DeskActions_Unsupported_TextPointer3,
+                 ::bmh::layout::Month_SearchProfileNews_TextPointer3, ::bmh::layout::Month_SearchProfileNews_TextPointer4})
+            (void)pending_offer_notice_dialog(game, PendingOfferNotice{initial.manager_slot, -1, address, "x"});
+        const auto serve_search = [&](const FlowResult& result) {
+            return app::serve_flow_request(flow, result, session, data, data, 0x1789abcd, revision, playback, audio_session, false,
+                {}, {}, {}, {}, {}, {}, {}, {}, {}, app::PendingOfferEntryPolicy::legacy_unpresented, hooks,
+                app::HumanBuyerMarketEntryPolicy::normal_interactive);
+        };
+        const int manager = initial.manager_slot;
+        // Suchen: opens locally with the stored profile (the career starts with an inactive one: every value 1)
+        const auto [search_x, search_y] = button_at(1);
+        check(flow.click(search_x, search_y).request == FlowRequest::none &&
+              flow.state_json().find("\"search_open\":true") != std::string::npos, "Suchen opens the dialog without a request");
+        check(flow.state_json().find("\"search_edit\":[0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]") != std::string::npos,
+              "the dialog shows the stored profile (a new career: off bit, otherwise all 1) without its off bit");
+        flow.click(272, 25);            // switch the midfielder cell off (row y 25, 25 px cells)
+        flow.click(316, 42);            // age slider: the upper end to the right edge
+        flow.click(316, 58);            // strength slider: the upper end to 99
+        check(flow.render().width == 320, "the market with the open search dialog renders");
+        flow.move_action(200, 100);     // the pointer moves under an open dialog are ignored
+        const auto confirm = flow.click(285, 145);   // the confirm button
+        check(confirm.request == FlowRequest::submenu_action && std::holds_alternative<TransferMarketRequest>(confirm.submenu_action) &&
+              std::get<TransferMarketRequest>(confirm.submenu_action).kind == TransferMarketRequestKind::store_search_profile,
+              "the confirm button posts the profile");
+        const auto& stored_request = std::get<TransferMarketRequest>(confirm.submenu_action);
+        check(stored_request.search_apply && !stored_request.search_cancelled && stored_request.search_profile[2] == 0 &&
+              stored_request.search_profile[5] == 24 && stored_request.search_profile[7] == 99,
+              "the posted profile carries the edits");
+        const uint64_t before_store = revision;
+        check(serve_search(confirm).empty(), "the profile is stored by the production controller");
+        const auto stored = search_profile(game, manager);
+        check(revision == before_store + 1 && !(stored[0] & kSearchProfileOff) && stored[2] == 0 && stored[5] == 24 && stored[7] == 99,
+              "the stored profile is active and has the edits");
+        check(boxes.size() == search_profile_hits(game, manager).size() + 1 && boxes.size() > 1,
+              "the scouting department reports first, then every listing that fits gets its message box");
+        check(flow.state_json().find("\"search_open\":false") != std::string::npos && !flow.pending_transfer_market(),
+              "the dialog is closed and the request settled");
+        // Vorschlag opens with the profile the squad asks for; leaving by right click keeps it but switches the search off
+        const auto [suggest_x, suggest_y] = button_at(2);
+        check(flow.click(suggest_x, suggest_y).request == FlowRequest::none &&
+              flow.state_json().find("\"search_open\":true") != std::string::npos, "Vorschlag opens the dialog");
+        const auto expected = suggest_search_profile(game, manager, false);
+        std::string expected_json = "\"search_edit\":[";
+        for (size_t i = 0; i < expected.size(); ++i) expected_json += (i ? "," : "") + std::to_string(i == 0 ? expected[i] & 0x3f : expected[i]);
+        check(flow.state_json().find(expected_json) != std::string::npos, "the dialog shows the suggestion of the squad");
+        boxes.clear();
+        const auto leave = flow.click(100, 100, true);
+        check(leave.request == FlowRequest::submenu_action &&
+              std::get<TransferMarketRequest>(leave.submenu_action).search_cancelled &&
+              !std::get<TransferMarketRequest>(leave.submenu_action).search_apply, "the right button posts a cancelled profile");
+        check(serve_search(leave).empty(), "the cancelled profile is stored");
+        const auto switched_off = search_profile(game, manager);
+        check((switched_off[0] & kSearchProfileOff) && switched_off[1] == expected[1] && boxes.empty(),
+              "the suggestion is kept, switched off, and nothing is announced");
+    }
 
     // The old KB23 editor/legacy heuristic is no longer the ordinary GUI route.
     // Keep its controller capability checks on real Source KB31 events, with
@@ -873,13 +1097,13 @@ void check_strengths_semantic_and_controller(const std::filesystem::path& data) 
     for(int n=0;n<9;++n) {
         const int league=(first_navigation+1+n)%9;
         page=action(StrengthsAction::select_league,StrengthsControl::condition,league);
-        check(page&&page->page.projection.rows.size()==size_t(kLeagueSizes[league])&&
+        check(page&&page->page.projection.rows.size()==size_t(league_system().sizes[league])&&
             page->page.projection.age_scratch.basis==StrengthsAgeBasis::entry_or_league_change_bit10&&
             !page->page.projection.age_scratch.lineup_only,"all nine ordinary leagues refresh age from current bit10");
         if(league>=5)check(page->page.projection.league_name==original_to_utf8(session->state().club_name(0x165+league-4)),
             "foreign ordinary leagues use actual country names without domestic suffix-table lookup");
         for(const auto& row:page->page.projection.rows)check(row.runtime_team>=league_first_team(league)&&
-            row.runtime_team<league_first_team(league)+kLeagueSizes[league],"sorted rows retain authoritative runtime club identity");
+            row.runtime_team<league_first_team(league)+league_system().sizes[league],"sorted rows retain authoritative runtime club identity");
     }
     neutral({id,StrengthsAction::team_info,StrengthsControl::condition,0});
     neutral({id,StrengthsAction::pairings});neutral({id,StrengthsAction::table});
@@ -1269,6 +1493,18 @@ void check_calendar_readonly_controller(const std::filesystem::path& data) {
     check(flow.click(0, 0, true).request == FlowRequest::none, "menu 7 close release is consumed");
     check(!flow.calendar() && flow.screen_name() == "desktop",
         "right event8 closes menu 7 and returns to the refreshed desk");
+    // After a kickoff the memory copy of the season day is only the day the game was loaded: the
+    // calendar follows the live day (it was refused from the first kickoff on).
+    ui::DeskRequest kickoff;
+    kickoff.kind = ui::DeskRequestKind::advance_turn;
+    kickoff.manager_slot = int(game.memory.u8(::bmh::layout::ActiveManager));
+    kickoff.revision = revision;
+    std::string kickoff_error;
+    const auto advanced = session->dispatch_kickoff(kickoff, revision, kickoff_error);
+    check(advanced.kind != TurnDeskKind::Failed, "the fixture's first kickoff is played");
+    const auto after_kickoff = ui::calendar_from_game(game, load_le(asset_path(data, "BMH.exe")));
+    check(after_kickoff.current_day == game.season_day() + after_kickoff.leading_days,
+        "the calendar after a kickoff shows the live day of the season");
 }
 
 void check_readonly_views(const std::filesystem::path& data) {
@@ -3186,28 +3422,46 @@ void check_settings_writer(const std::filesystem::path& data) {
           revision == before_revision + 4 && save_stream(game) == save_stream(expected),
           "operation mismatch is rejected without changing memory or revision");
 
-    const auto unsupported = flow.click(67 + 8 * 24 + 5, 25 + 9 * 10 + 5); // J9, no current Source presentation consumer.
+    // The original stores every unlocked switch, also one that no OpenBMH consumer reads yet:
+    // J9 (a number, steps of two) and O3 (a switch) change their byte, one revision per click.
+    const uint32_t j9_address = ::bmh::layout::LeaguePresentationOptions + 9 * 9 + 8;
+    const uint8_t j9_old = game.memory.u8(j9_address);
+    const auto unsupported = flow.click(67 + 8 * 24 + 5, 25 + 9 * 10 + 5); // J9
     check(unsupported.request == FlowRequest::settings_action &&
           unsupported.settings_action.row == 9 && unsupported.settings_action.operation == SettingsEdit::increment,
           "left half maps to one increment action; no implicit held-step loop");
     serve(unsupported);
-    check(!flow.pending_settings() && revision == before_revision + 4 && save_stream(game) == save_stream(expected),
-          "unconsumed Original numeric field is safely rejected");
+    const bool j9_stepped = j9_old < 198;
+    check(!flow.pending_settings() && revision == before_revision + (j9_stepped ? 5 : 4) &&
+              game.memory.u8(j9_address) == uint8_t(j9_stepped ? j9_old + 2 : j9_old),
+          "an Original numeric field without a consumer is stored, not refused");
     const auto unsupported_minus = flow.click(67 + 8 * 24 + 15, 25 + 9 * 10 + 5);
     check(unsupported_minus.request == FlowRequest::settings_action &&
           unsupported_minus.settings_action.operation == SettingsEdit::decrement,
           "right half maps to one decrement action");
     serve(unsupported_minus);
-    check(revision == before_revision + 4 && save_stream(game) == save_stream(expected),
-          "unconsumed minus action leaves the exact state unchanged");
+    check(revision == before_revision + (j9_stepped ? 6 : 4) && game.memory.u8(j9_address) == j9_old,
+          "the minus action steps the same field back");
 
+    const uint32_t o3_address = ::bmh::layout::LeaguePresentationOptions + 14 * 9 + 2;
+    const auto o3_state = settings_from_game(game, int(game.memory.u8(::bmh::layout::ActiveManager)), revision,
+                                             load_le(asset_path(data, "BMH.exe")));
+    const uint8_t o3_old = game.memory.u8(o3_address);
+    const bool o3_free = o3_state.display_cells && !((*o3_state.display_cells)[14 * 9 + 2] & 0x80) && o3_old <= 1;
     const auto unsupported_o3 = flow.click(67 + 2 * 24 + 5, 25 + 14 * 10 + 5);
     check(unsupported_o3.request == FlowRequest::settings_action &&
           unsupported_o3.settings_action.row == 14 && unsupported_o3.settings_action.column == 2,
           "O3 maps to its exact grid identity");
     serve(unsupported_o3);
-    check(revision == before_revision + 4 && save_stream(game) == save_stream(expected),
-          "unconsumed middle rows/columns are rejected by the bounded source whitelist");
+    check(o3_free ? game.memory.u8(o3_address) == uint8_t(o3_old ^ 1)
+                  : game.memory.u8(o3_address) == o3_old,
+          "an unlocked switch without a consumer toggles; a locked one stays");
+    if (o3_free) {
+        serve(flow.click(67 + 2 * 24 + 5, 25 + 14 * 10 + 5));
+        check(game.memory.u8(o3_address) == o3_old, "O3 toggles back");
+    }
+    const uint64_t settled = revision;
+    check(save_stream(game) == save_stream(expected), "the stepped switches leave the exact state again");
 
     // Exact Q5 date boundary: the Original handler blocks inclusive days 110..230.
     for (size_t i = 0; i < 180; ++i) game.memory.set8(::bmh::layout::LeaguePresentationOptions + uint32_t(i), 0);
@@ -3221,13 +3475,13 @@ void check_settings_writer(const std::filesystem::path& data) {
     };
     auto q5 = q5_request();
     const auto q5_before = save_stream(game);
-    check(!session->dispatch_settings(q5, revision, error) && revision == before_revision + 4 &&
+    check(!session->dispatch_settings(q5, revision, error) && revision == settled &&
           save_stream(game) == q5_before && game.date == game.season_start + 110,
           "Q5 is rejected on day 110 with no memory/revision/date change");
     game.date = game.season_start + 230;
     q5 = q5_request();
     const auto q5_end_before = save_stream(game);
-    check(!session->dispatch_settings(q5, revision, error) && revision == before_revision + 4 &&
+    check(!session->dispatch_settings(q5, revision, error) && revision == settled &&
           save_stream(game) == q5_end_before,
           "Q5 is also rejected on inclusive day 230");
 
@@ -3237,7 +3491,7 @@ void check_settings_writer(const std::filesystem::path& data) {
     for (size_t i = 0; i < locked.expected_raw.size(); ++i) locked.expected_raw[i] = game.memory.u8(::bmh::layout::LeaguePresentationOptions + uint32_t(i));
     locked.row = 1; locked.column = 4; locked.operation = SettingsEdit::toggle_binary;
     const auto lock_before = save_stream(game);
-    check(!session->dispatch_settings(locked, revision, error) && revision == before_revision + 4 &&
+    check(!session->dispatch_settings(locked, revision, error) && revision == settled &&
           save_stream(game) == lock_before,
           "recomputed Original mode lock rejects B5 without a saved write");
 
@@ -3248,7 +3502,7 @@ void check_settings_writer(const std::filesystem::path& data) {
     for (size_t i = 0; i < at_limit.expected_raw.size(); ++i) at_limit.expected_raw[i] = game.memory.u8(::bmh::layout::LeaguePresentationOptions + uint32_t(i));
     at_limit.row = 1; at_limit.column = 7; at_limit.operation = SettingsEdit::increment;
     const auto limit_before = save_stream(game);
-    check(!session->dispatch_settings(at_limit, revision, error) && revision == before_revision + 4 &&
+    check(!session->dispatch_settings(at_limit, revision, error) && revision == settled &&
           save_stream(game) == limit_before,
           "source table upper bound is a no-op, with no write or revision bump");
 
@@ -3259,7 +3513,7 @@ void check_settings_writer(const std::filesystem::path& data) {
         stale_lock.expected_raw[i] = game.memory.u8(::bmh::layout::LeaguePresentationOptions + uint32_t(i));
     stale_lock.row = 10; stale_lock.column = 4; stale_lock.operation = SettingsEdit::toggle_binary;
     const auto stale_lock_before = save_stream(game);
-    check(!session->dispatch_settings(stale_lock, revision, error) && revision == before_revision + 4 &&
+    check(!session->dispatch_settings(stale_lock, revision, error) && revision == settled &&
           save_stream(game) == stale_lock_before,
           "recomputed unlocked display does not authorize writing a raw cell still >=2");
 
@@ -3315,8 +3569,9 @@ void check_settings_writer(const std::filesystem::path& data) {
     other_column9.row = 9;
     for (size_t i = 0; i < other_column9.expected_raw.size(); ++i)
         other_column9.expected_raw[i] = i9_game.memory.u8(::bmh::layout::LeaguePresentationOptions + uint32_t(i));
-    check(!i9_session.dispatch_settings(other_column9, i9_revision, error) && i9_revision == 3,
-          "other ninth-column cells remain unavailable until their consumer is ported");
+    const uint8_t j9_raw = i9_game.memory.u8(::bmh::layout::LeaguePresentationOptions + 9 * 9 + 8);
+    check(i9_session.dispatch_settings(other_column9, i9_revision, error) == (j9_raw < 198),
+          "other ninth-column cells are stored too, without waiting for a consumer");
 }
 
 void check_live_delay_settings_writer(const std::filesystem::path& data,const std::filesystem::path& save_path) {
@@ -4203,7 +4458,7 @@ void check_loaded_lineup(const std::filesystem::path& data, const std::filesyste
     check(session.game().calls() == game_calls && session.rand().calls() == random_calls,
           "pre-kickoff swap consumes no RNG");
 
-    bool saw_fixture = false, order_preserved = false, live_overview_roundtrip = false;
+    bool saw_fixture = false, order_preserved = false, live_overview_roundtrip = false, pairings_first_roundtrip = false;
     session.set_live_minute([&](int minute, MatchEngine& engine, std::vector<MatchGroup>& groups, GameState& state) {
         if (!live_overview_roundtrip && minute >= 3 && !groups.empty() && groups[0].desc.size() > 0xcf &&
             groups[0].desc[0] == 0 && std::any_of(groups.begin(),groups.end(),[&](const MatchGroup& group) {
@@ -4218,14 +4473,65 @@ void check_loaded_lineup(const std::filesystem::path& data, const std::filesyste
             if(!opened)throw std::runtime_error("actual WEEK196 live G key failed to open: "+error);
             check(opened->kind==app::CareerSession::LiveOverviewKind::league_table && opened->table.has_value(),
                   "real kickoff observer opens the Source G table for the first league descriptor");
+            // The family's children as the buttons reach them: Tabelle -> Stärken -> Tabelle ->
+            // Spiele -> Tabelle, each handoff accepted while the minute is held.
+            const auto hop=[&](ui::StrengthsIdentity from,int from_child,int target_child,const char* what) {
+                ui::LeagueFamilyRequest nav;
+                nav.identity=from; nav.kind=ui::LeagueFamilyRequestKind::navigate;
+                nav.from_child=from_child; nav.target_child=target_child;
+                auto page=session.dispatch_live_overview(app::CareerSession::LiveOverviewAction{nav},engine,revision,error);
+                if(!page)throw std::runtime_error(std::string("live overview ")+what+" failed: "+error);
+                return *page;
+            };
+            auto strengths=hop(opened->family_identity,1,3,"Tabelle -> Stärken");
+            check(strengths.kind==app::CareerSession::LiveOverviewKind::league_strengths,"the live family opens Stärken");
+            auto table_again=hop(strengths.family_identity,3,1,"Stärken -> Tabelle");
+            auto pairings=hop(table_again.family_identity,1,2,"Tabelle -> Spiele");
+            check(pairings.kind==app::CareerSession::LiveOverviewKind::league_pairings,"the live family opens Spiele");
+            auto table_last=hop(pairings.family_identity,2,1,"Spiele -> Tabelle");
             ui::LeagueFamilyRequest close;
-            close.identity=opened->family_identity; close.kind=ui::LeagueFamilyRequestKind::close;
+            close.identity=table_last.family_identity; close.kind=ui::LeagueFamilyRequestKind::close;
             close.from_child=1; close.target_child=0;
             auto closed=session.dispatch_live_overview(app::CareerSession::LiveOverviewAction{close},engine,revision,error);
             if(!closed)throw std::runtime_error("actual WEEK196 live G key failed to close: "+error);
             check(closed->closed && closed->preparation.has_value() && error.empty(),
                   "real kickoff observer closes the Source G family and resumes the same minute");
             live_overview_roundtrip=true;
+        }
+        // The Spiele page opened first (key slot 1, as at the end of a phase): its Tabelle and
+        // Stärken buttons hand over to the other children and back.
+        if (live_overview_roundtrip && !pairings_first_roundtrip && minute >= 5 && !groups.empty() &&
+            groups[0].desc.size() > 0xcf && groups[0].desc[0] == 0) {
+            pairings_first_roundtrip = true;
+            app::CareerSession::LiveOverviewRequest live;
+            live.key_slot=1; live.minute=minute; live.group_index=0;
+            live.manager_slot=manager; live.runtime_team=team; live.revision=revision;
+            live.sequence=0xfeee;
+            auto opened=session.open_live_overview(live,engine,revision,Image{},error);
+            if(!opened)throw std::runtime_error("live Spiele page failed to open: "+error);
+            check(opened->kind==app::CareerSession::LiveOverviewKind::league_pairings,"key slot 1 opens the Spiele page");
+            const auto hop2=[&](ui::StrengthsIdentity from,int from_child,int target_child,const char* what) {
+                ui::LeagueFamilyRequest nav;
+                nav.identity=from; nav.kind=ui::LeagueFamilyRequestKind::navigate;
+                nav.from_child=from_child; nav.target_child=target_child;
+                auto page=session.dispatch_live_overview(app::CareerSession::LiveOverviewAction{nav},engine,revision,error);
+                if(!page)throw std::runtime_error(std::string("live overview ")+what+" failed: "+error);
+                return *page;
+            };
+            // the buttons of the Spiele page itself: Stärken directly, and back
+            auto direct=hop2(opened->family_identity,2,3,"Spiele -> Stärken");
+            check(direct.kind==app::CareerSession::LiveOverviewKind::league_strengths,"Spiele hands over to Stärken");
+            auto again=hop2(direct.family_identity,3,2,"Stärken -> Spiele");
+            auto table=hop2(again.family_identity,2,1,"Spiele -> Tabelle");
+            check(table.kind==app::CareerSession::LiveOverviewKind::league_table,"Spiele hands over to Tabelle");
+            auto strengths=hop2(table.family_identity,1,3,"Tabelle -> Stärken");
+            auto pairings=hop2(strengths.family_identity,3,2,"Stärken -> Spiele");
+            ui::LeagueFamilyRequest close;
+            close.identity=pairings.family_identity; close.kind=ui::LeagueFamilyRequestKind::close;
+            close.from_child=2; close.target_child=0;
+            auto closed=session.dispatch_live_overview(app::CareerSession::LiveOverviewAction{close},engine,revision,error);
+            if(!closed)throw std::runtime_error("live Spiele page failed to close: "+error);
+            check(closed->closed,"the Spiele page closes and resumes the minute");
         }
         if (saw_fixture) return;
         for (const auto& group : groups) {
@@ -4235,6 +4541,36 @@ void check_loaded_lineup(const std::filesystem::path& data, const std::filesyste
             order_preserved = (state.squad_slots.at(squad.first) & 0x0fff) == (second & 0x0fff) &&
                               (state.squad_slots.at(squad.first + 11) & 0x0fff) == (first & 0x0fff);
         }
+    });
+    // The end-of-phase results page (key slot 1 at the Source phase boundary) is the viewer the
+    // players meet after every match: Spiele -> Stärken -> Spiele -> Tabelle -> close must not strand it.
+    int phase_pages = 0;
+    session.set_phase_results([&](const PhaseResultRequest&, const std::vector<MatchGroup>&, const GameState&) {
+        if (phase_pages >= 2) return;
+        std::string phase_error;
+        auto opened = session.open_phase_results(revision, Image{}, phase_error);
+        if (!opened) return; // a phase of another group or competition: nothing to view here
+        ++phase_pages;
+        const auto hop = [&](ui::StrengthsIdentity from, int from_child, int target_child, const char* what) {
+            ui::LeagueFamilyRequest nav;
+            nav.identity = from; nav.kind = ui::LeagueFamilyRequestKind::navigate;
+            nav.from_child = from_child; nav.target_child = target_child;
+            auto page = session.dispatch_phase_results(app::CareerSession::LiveOverviewAction{nav}, revision, phase_error);
+            if (!page) throw std::runtime_error(std::string("phase results ") + what + " failed: " + phase_error);
+            return *page;
+        };
+        ui::StrengthsIdentity at = opened->family_identity;
+        int child = opened->kind == app::CareerSession::LiveOverviewKind::league_table ? 1 : 2;
+        const int path[] = {3, 2, 1, 3, 1, 2};
+        for (const int next : path) {
+            auto page = hop(at, child, next, "handover");
+            at = page.family_identity; child = next;
+        }
+        ui::LeagueFamilyRequest close;
+        close.identity = at; close.kind = ui::LeagueFamilyRequestKind::close;
+        close.from_child = child; close.target_child = 0;
+        auto closed = session.dispatch_phase_results(app::CareerSession::LiveOverviewAction{close}, revision, phase_error);
+        if (!closed || !closed->closed) throw std::runtime_error("phase results page did not close: " + phase_error);
     });
     int turns = 0;
     for (; turns < 8 && (!saw_fixture || turns < 2); ++turns) {
@@ -7153,6 +7489,9 @@ int main(int argc, char** argv) {
         }
         if(argc==3 && std::string_view(argv[2])=="--live-intervention-only") {
             check_live_observer_determinism(data); return 0;
+        }
+        if(argc==3 && std::string_view(argv[2])=="--market-only") {
+            check_transfer_market_controller(data);return 0;
         }
         if(argc==3 && std::string_view(argv[2])=="--poach-only") {
             check_poach_ui_components(data);return 0;

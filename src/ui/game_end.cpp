@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Implements the end-of-career screens declared in game_end.hpp (highscore, final messages, tax dialog,
+// program error screen) and wrap_source_text(). Each screen loads its own art and font and renders from
+// values supplied by the caller; nothing here changes game state.
 #include "formats/badge_policy.hpp"
 #include "formats/executable_layout.hpp"
 #include "ui/game_end.hpp"
+#include "ui/dialog_frame.hpp"
+#include "ui/button_frame.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -13,18 +18,15 @@
 #include "ui/manager.hpp"
 #include "ui/setup.hpp"
 #include "ui/sprite_font.hpp"
+#include "ui/draw.hpp"
 
 namespace bmh::ui {
 namespace {
 void copy(Image& d,const Image& s,int sx,int sy,int x,int y,int w,int h,bool transparent=false) {
-    for(int yy=0;yy<h;++yy) for(int xx=0;xx<w;++xx) {
-        const auto p=s.pixels[size_t(sy+yy)*size_t(s.width)+size_t(sx+xx)];
-        if(x+xx>=0&&y+yy>=0&&x+xx<d.width&&y+yy<d.height&&(!transparent||p)) d.at(x+xx,y+yy)=p;
-    }
+    draw::copy_clipped(d, s, sx, sy, x, y, w, h, transparent ? 0 : -1);
 }
 void fill(Image& im,int x,int y,int w,int h,uint8_t c) {
-    for(int yy=std::max(0,y);yy<std::min(im.height,y+h);++yy)
-        for(int xx=std::max(0,x);xx<std::min(im.width,x+w);++xx) im.at(xx,yy)=c;
+    draw::fill(im, x, y, w, h, c);
 }
 Image source_base(const Image& original,bool plain_background,bool has_header_footer_text) {
     if(!plain_background) {
@@ -151,12 +153,7 @@ private:
     }
 };
 void frame(Image& o,const Image& a,const LeImage& exe,int x,int y,int w,int h,bool shadow) {
-    if(shadow){fill(o,x+2,y+h,w,2,0x40);fill(o,x+w,y+2,2,h,0x40);}
-    for(int yy=4;yy<h-3;++yy)for(int xx=4;xx<w-3;++xx)
-        o.at(x+xx,y+yy)=exe.u8(::bmh::layout::Advertising_PatternRect_RuntimeField+size_t((yy-4)&15)*16+size_t((xx-4)&15));
-    copy(o,a,0,0,x,y,4,4);copy(o,a,4,0,x+w-4,y,4,4);copy(o,a,0,4,x,y+h-4,4,4);copy(o,a,4,4,x+w-4,y+h-4,4,4);
-    for(int at=4;at<w-4;at+=74){int n=std::min(74,w-4-at);copy(o,a,0,104,x+at,y,n,4);copy(o,a,0,108,x+at,y+h-4,n,4);}
-    for(int at=4;at<h-4;at+=96){int n=std::min(96,h-4-at);copy(o,a,0,8,x,y+at,4,n);copy(o,a,4,8,x+w-4,y+at,4,n);}
+    draw_dialog_frame(o,a,exe,x,y,w,h,shadow);   // dialog_frame.hpp
 }
 std::string source_number(int32_t value, unsigned minimum_digits) {
     const bool negative = value < 0;
@@ -173,12 +170,7 @@ std::string source_number(int32_t value, unsigned minimum_digits) {
 }
 void button(Image& o,const Image& a,const SpriteFont& sf,const LeImage& exe,int x,int y,int w,
             std::string_view label,bool selected=false){
-    if(selected){const auto under=o.at(x,y+10);fill(o,x,y,w+1,2,under);fill(o,x,y,2,11,under);x+=2;y+=2;}
-    else {fill(o,x+2,y+10,w,2,0x40);fill(o,x+w,y+2,2,10,0x40);}
-    const int sy=selected?44:74;
-    copy(o,a,24,sy,x,y,31,10);int used=31;
-    while(w-used>20){int n=std::min(8,w-used-20);copy(o,a,24,sy+10,x+used,y,n,10);used+=n;}
-    copy(o,a,45-(w-used),sy+20,x+used,y,w-used,10);
+    const int shift=draw_wide_button_frame(o,a,x,y,w,selected);x+=shift;y+=shift;
     sf.draw(o,x+w/2-sf.text_width(label)/2,y+7,label,exe.u8(::bmh::layout::Advertising_Button_RuntimeField + int(selected)));
 }
 std::string_view text_at(const TextDb& texts,uint32_t address) {
@@ -341,6 +333,14 @@ void draw_source_dialog(Image& out,const SourceDialogAssets& assets,const TaxDia
         button(out,assets.widgets,assets.sprite,assets.exe,62,166,75,yes,pressed==Button::yes);
         button(out,assets.widgets,assets.sprite,assets.exe,175,166,75,no,pressed==Button::no);
     }
+}
+GameEndTaxDialog::Button source_dialog_button_at(TaxDialogKind kind,bool timed_notice,int x,int y){
+    using Button=GameEndTaxDialog::Button;
+    if(y<166||y>176)return Button::none;
+    if(kind==TaxDialogKind::acknowledgement)return !timed_notice&&x>=95&&x<=220?Button::acknowledge:Button::none;
+    if(x>=62&&x<=137)return Button::yes;
+    if(x>=175&&x<=250)return Button::no;
+    return Button::none;
 }
 GameEndTaxDialog::Button GameEndTaxDialog::hit_test(int x,int y)const{
     if(y<166||y>176)return Button::none;

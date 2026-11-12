@@ -1,5 +1,8 @@
 #include "game/national_identity.hpp"
 // SPDX-License-Identifier: GPL-3.0-only
+// Implementation of PitchScreen and the pitch_extras_from_save/game projections (pitch.hpp): board geometry,
+// drag-and-drop, formation and set-piece editors, and request construction. Rendering does not mutate the
+// authoritative positions; changes only appear after the session acknowledges a new lineup and extras.
 #include "formats/executable_layout.hpp"
 #include "ui/pitch.hpp"
 #include "formats/badge_policy.hpp"
@@ -13,6 +16,8 @@
 #include "game/state.hpp"
 #include "game/schedule.hpp"
 #include "ui/manager.hpp"
+#include "ui/draw.hpp"
+#include "ui/button_frame.hpp"
 
 namespace bmh::ui {
 namespace {
@@ -22,8 +27,7 @@ Bytes block(const SaveState& save, uint32_t address) {
 }
 void copy(Image& out,const Image& src,int sx,int sy,int x,int y,int w,int h,int transparent=-1) {
     if(sx<0||sy<0||sx+w>src.width||sy+h>src.height)throw FormatError("pitch: original atlas bounds");
-    for(int yy=0;yy<h;++yy)for(int xx=0;xx<w;++xx){const auto c=src.pixels.at(size_t(sy+yy)*src.width+sx+xx);
-        if(c!=transparent&&x+xx>=0&&y+yy>=0&&x+xx<out.width&&y+yy<out.height)out.at(x+xx,y+yy)=c;}
+    draw::copy_clipped(out, src, sx, sy, x, y, w, h, transparent);
 }
 void source_mask_copy(Image& out,const Image& src,int sx,int sy,int x,int y,int w,int h,
                       int transparent=-1) {
@@ -40,8 +44,7 @@ void source_mask_copy(Image& out,const Image& src,int sx,int sy,int x,int y,int 
     }
 }
 void rect(Image& out,int x,int y,int w,int h,uint8_t color){
-    for(int yy=std::max(0,y);yy<std::min(out.height,y+h);++yy)
-        for(int xx=std::max(0,x);xx<std::min(out.width,x+w);++xx)out.at(xx,yy)=color;
+    draw::fill(out, x, y, w, h, color);
 }
 const char* kind_name(PitchRequestKind k){switch(k){case PitchRequestKind::none:return "none";
     case PitchRequestKind::move_player:return "move_player";case PitchRequestKind::swap_players:return "swap_players";
@@ -62,10 +65,17 @@ PitchExtras extras(const StaticMemory& memory,const Bytes& managers,const Bytes&
     const int count=memory.u8(::bmh::layout::ManagerCount);
     if(count<1||count>4||e.manager_slot>=count||teams.size()!=size_t(count))throw FormatError("pitch: invalid active manager");
     e.runtime_club=teams.at(e.manager_slot);
-    const bool national=game&&!game->projected_national_teams.empty()&&is_national_team(*game,e.runtime_club)&&has_national_squad(*game,e.runtime_club)&&game->manager_of(e.runtime_club)==e.manager_slot;
-    if(e.runtime_club<0||(e.runtime_club>=exe.u16(::bmh::layout::CareerSession_DispatchLineup_RuntimeField)&&!national))throw FormatError("pitch: unsupported club");
+    // The national-team desk has no club of its own (runtime club kNoTeam) and runs on the
+    // national pool; the lineup page accepts it under the same condition (see lineup.cpp).
+    const bool classic_national=e.runtime_club==kNoTeam&&e.manager_slot==0&&count==1&&
+        ((memory.u32(::bmh::layout::CompetitionSelection)&2)!=0||
+         (memory.has(::bmh::layout::CoachActive)&&memory.u8(::bmh::layout::CoachActive)!=0));
+    // A typed national projection can hold several independently owned coaches.
+    const bool national=classic_national||(game&&!game->projected_national_teams.empty()&&is_national_team(*game,e.runtime_club)&&has_national_squad(*game,e.runtime_club)&&game->manager_of(e.runtime_club)==e.manager_slot);
+    if(e.runtime_club<0||(e.runtime_club>=exe.u16(::bmh::layout::LeagueClubCount)&&!national))throw FormatError("pitch: unsupported club");
     const size_t m=size_t(e.manager_slot)*0xb0c,f=size_t(e.manager_slot)*0x160;
-    if(managers.size()<m+0xb0c||formations.size()<f+0x160||badges.size()<size_t(e.runtime_club+1)*2)
+    if(managers.size()<m+0xb0c||formations.size()<f+0x160||
+       (!national&&badges.size()<size_t(e.runtime_club+1)*2))
         throw FormatError("pitch: truncated manager/formations/badges");
     e.formation_mask=managers.at(m+0x218);e.automatic_weights=managers.at(m+0x288);
     auto manager_u16=[&](size_t at){return uint16_t(managers.at(m+at)|uint16_t(managers.at(m+at+1))<<8);};
@@ -73,7 +83,8 @@ PitchExtras extras(const StaticMemory& memory,const Bytes& managers,const Bytes&
     e.set_piece_signature=manager_u16(0xb0a);
     if(memory.has(uint32_t(::bmh::layout::CareerSession_AnyOf_ExecutableField+e.manager_slot*2)))
         e.native_display_word=memory.u16(uint32_t(::bmh::layout::CareerSession_AnyOf_ExecutableField+e.manager_slot*2));
-    e.badge=le16(badges,size_t(e.runtime_club)*2)&0x1ff;
+    // The national team has no club badge entry; badge sheet 0 is used.
+    e.badge=national?0:le16(badges,size_t(e.runtime_club)*2)&0x1ff;
     e.mode=memory.has(::bmh::layout::GameMode)?memory.u8(::bmh::layout::GameMode):exe.u8(::bmh::layout::GameMode);
     std::copy_n(formations.begin()+f,8*22,e.formations.begin());
     return e;
@@ -241,11 +252,11 @@ void PitchScreen::text(Image& out,int x,int baseline,std::string_view value,uint
 }
 void PitchScreen::button(Image& out,int x,int y,std::string_view value,bool selected)const{
     constexpr int width=43,height=10;
-    if(selected){ // FormatError3 erases the upper/left frame, then offsets its pressed atlas by two pixels.
-        rect(out,x,y,width+1,2,0x42);rect(out,x,y,2,height+1,0x42);x+=2;y+=2;
-    }else{rect(out,x+2,y+height,width,2,0x40);rect(out,x+width,y+2,2,height,0x40);}
-    const int sy=selected?44:74,font=exe_.u8(::bmh::layout::Advertising_Button_RuntimeField + int(selected));
-    copy(out,widgets_,24,sy,x,y,31,10);copy(out,widgets_,33,sy+20,x+31,y,12,10);
+    // FormatError3 erases the upper/left frame (colour 0x42 here), then offsets its pressed atlas by two pixels
+    // (button_frame.hpp).
+    const int shift=draw_wide_button_frame(out,widgets_,x,y,width,selected,-1,0x42);x+=shift;y+=shift;
+    (void)height;
+    const int font=exe_.u8(::bmh::layout::Advertising_Button_RuntimeField + int(selected));
     if(font==3)text(out,x+width/2-font_.text_width(value)/2,y+7,value,0);
     else {int length=0;for(unsigned char c:value){const int g=exe_.u8(::bmh::layout::ClubInfo_Raw_RuntimeField3 + c);length+=g?exe_.u16(::bmh::layout::ClubInfo_Raw_RuntimeField2+g*2)-exe_.u16(::bmh::layout::ClubInfo_Raw_RuntimeField+g*2):2;}
         int xx=x+width/2-length/2;for(unsigned char c:value){if(c<=31||c>=128)continue;const int g=exe_.u8(::bmh::layout::ClubInfo_Raw_RuntimeField3 + c);
@@ -256,13 +267,10 @@ void PitchScreen::diamond_button(Image& out,int x,int y,std::string_view value,b
     // FormatError3: width60, height9 normalized to 10, with pressed frame and
     // runtime font byte Advertising_Button_RuntimeField+selected. Match the original +2 pressed offset.
     constexpr int width=60,height=10;
-    int dx=x,dy=y;const int mode=exe_.u8(::bmh::layout::Advertising_Button_RuntimeField + unsigned(selected));
-    if(selected){const uint8_t bg=out.at(x,y+height);rect(out,x,y,width+1,2,bg);rect(out,x,y,2,height+1,bg);dx+=2;dy+=2;}
-    else{rect(out,x+2,y+height,width,2,0x40);rect(out,x+width,y+2,2,height,0x40);}
-    const int row=selected?44:74;copy(out,widgets_,24,row,dx,dy,31,10,0xc0);
-    int used=31;while(width-used>20){const int amount=std::min(8,width-used-20);
-        copy(out,widgets_,24,row+10,dx+used,dy,amount,10,0xc0);used+=amount;}
-    const int tail=width-used;copy(out,widgets_,45-tail,row+20,dx+used,dy,tail,10,0xc0);
+    const int mode=exe_.u8(::bmh::layout::Advertising_Button_RuntimeField + unsigned(selected));
+    const int shift=draw_wide_button_frame(out,widgets_,x,y,width,selected,0xc0);   // button_frame.hpp
+    const int dx=x+shift,dy=y+shift;
+    (void)height;
     if(mode==3){const auto native_value=utf8_to_original(value);
         text(out,dx+width/2-font_.text_width(native_value)/2,dy+7,native_value,0);}
     else sprite_.draw(out,dx+width/2-sprite_.text_width(value)/2,dy+7,value,mode);
@@ -420,8 +428,8 @@ Image PitchScreen::render()const{
     if(automatic_page()&&extras_.mode!=1)for(int f=0;f<3;++f){
         const int x=241+f*27;copy(out,atlas_,196+f*24,38,x,205,24,18);
         copy(out,atlas_,256+((extras_.automatic_weights>>(2*f))&3)*16,32,x+19,211,4,5);}
-    button(out,196,110,texts_[(::bmh::layout::Lineup_Render_TextPointer-::bmh::layout::TextPointerTable)/4+(state_.view==LineupView::data_a?1:0)]);
-    button(out,196,123,texts_[(::bmh::layout::Pitch_Render_TextPointer-::bmh::layout::TextPointerTable)/4]);
+    button(out,196,110,texts_[(::bmh::layout::Lineup_Render_TextPointer-::bmh::layout::TextPointerTable)/4+(state_.view==LineupView::data_a?1:0)],pressed_lower_button_==0);
+    button(out,196,123,texts_[(::bmh::layout::Pitch_Render_TextPointer-::bmh::layout::TextPointerTable)/4],pressed_lower_button_==1);
     button(out,196,136,texts_[(::bmh::layout::Pitch_Render_TextPointer2-::bmh::layout::TextPointerTable)/4],(extras_.native_display_word&0x0010)!=0);
     if(extras_.mode!=1)button(out,196,149,texts_[(::bmh::layout::Pitch_Render_TextPointer3-::bmh::layout::TextPointerTable)/4],order_panel_open_);
     if(extras_.opponent_team>=0&&!extras_.indoor.value_or(false))
@@ -435,7 +443,7 @@ Image PitchScreen::render()const{
         rect(out,239,110,80,113,0x42);
         // The supported extension stores penalty, rebound and free-kick takers;
         // there is no separate corner-taker field in the match engine.
-        const std::array<std::pair<std::string,int>,3> labels{{{original_to_utf8(exe_.cstring(::bmh::layout::PenaltyTakerLabel)),114},{kEnglishCompetitions?"REBOUND":"NACHSCHUSS",146},{original_to_utf8(exe_.cstring(::bmh::layout::FreeKickTakerLabel)),178}}};
+        const std::array<std::pair<std::string,int>,3> labels{{{original_to_utf8(exe_.cstring(::bmh::layout::PenaltyTakerLabel)),114},{installed_league_system().english_competitions?"REBOUND":"NACHSCHUSS",146},{original_to_utf8(exe_.cstring(::bmh::layout::FreeKickTakerLabel)),178}}};
         for(size_t i=0;i<labels.size();++i)
             diamond_button(out,249,labels[i].second,labels[i].first,
                            shooter_selection_==int(i)+2);
@@ -669,8 +677,11 @@ PitchRequest PitchScreen::click(int x,int y,bool right){
                 r.set_piece_selector=shooter_selection_;r.expected_set_piece_value=extras_.set_piece_takers[size_t(shooter_selection_-2)];
                 pending_=r;return r;
             }
+            if(!selected_)return {};
         }
-        return {};
+        // OpenBMH extension: the field stays editable inside the editor. A click picks a taker
+        // only while a taker kind is chosen; otherwise (or with a player already marked for a
+        // move) the placement below works as on the normal page.
     }
     if(extras_.mode!=1&&order_panel_open_&&x>=243&&x<=315&&y>=179&&y<=226){
         if(!selected_||*selected_>=11){rejection_="Für Anweisungen muss ein Startspieler markiert sein.";return {};}
@@ -754,7 +765,16 @@ PitchRequest PitchScreen::click(int x,int y,bool right){
         selected_=row;hovered_=row;ghost_.reset();return {};}
     return {};
 }
+// Mouse DOWN on one of the two momentary buttons of the desktop page (Daten A/B at y=110, Spielfeld/Kurz at y=123): drawn
+// pressed; pointer_down() runs the action and ends the pressed look. The toggles below them keep their lasting state.
+bool PitchScreen::press(int x,int y){
+    int id=-1;
+    if(!pending_&&!close_&&(extras_.native_display_word&0x08)!=0&&x>=196&&x<=239){
+        if(y>=110&&y<=120)id=0;else if(y>=123&&y<=133)id=1;}
+    const bool changed=id!=pressed_lower_button_;pressed_lower_button_=id;return changed;
+}
 PitchRequest PitchScreen::pointer_down(int x,int y,bool right){
+    pressed_lower_button_=-1;
     source_down_release_barrier_=false;
     const uint16_t display_word=shooter_editor_open_
         ? uint16_t(extras_.native_display_word&0xff0f)

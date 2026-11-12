@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Live matchday overview: all matches of the day with minute, scores, statistics, attendance and weather,
+// plus chance, booking and shoot-out projections. LiveMatchdayFrame is an owned copy made synchronously from
+// the engine's observation hook. LiveScoreReveal keeps preview scores until the result hook so simulation is
+// not delayed. LiveMatchdayScreen renders frames. Implementation: live_matchday.cpp.
 #pragma once
 
 #include <filesystem>
@@ -47,8 +51,14 @@ struct LiveMatchdayFrame {
 LiveMatchdayFrame live_matchday_frame(int minute, const std::vector<MatchGroup>& groups,
                                      const GameState& state);
 
+// Frame of the matchday as it looked before the chance of the event was written to the event log. The engine
+// logs a chance (two log pairs) before its preview hook, so the statistics rows (chances, shots, ...) would
+// otherwise count it before the presentation has even started.
+LiveMatchdayFrame live_matchday_frame_before_chance(int minute, const std::vector<MatchGroup>& groups,
+                                                    const GameState& state, const LiveChanceEvent& event);
+
 // The engine commits a chance before its ball/set-piece/shot presentation. Keep
-// the observed preview scores until the result hook, without delaying simulation.
+// the observed preview scores and statistics until the result hook, without delaying simulation.
 class LiveScoreReveal {
 public:
     void observe(LiveChanceStage stage, const LiveMatchdayFrame& frame) {
@@ -62,6 +72,8 @@ public:
                 row.home_goals = before.home_goals;
                 row.away_goals = before.away_goals;
                 row.score_known = before.score_known;
+                row.home_stats = before.home_stats;
+                row.away_stats = before.away_stats;
                 break;
             }
         return frame;

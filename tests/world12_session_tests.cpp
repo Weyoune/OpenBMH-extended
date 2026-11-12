@@ -131,7 +131,7 @@ void desktop_tests(CareerSnapshot prepared,const GameState& source,const std::fi
                 <<" G="<<state.game_seed<<" W="<<state.watcom_seed<<" Gdraws="<<outcome.game_draws<<" Wdraws="<<outcome.watcom_draws<<" date="<<state.date<<'\n';
         }
         {
-            auto rules=synthetic().german;const uint8_t gate[]={234,0};rules.patch(layout::CareerSession_DispatchLineup_RuntimeField,gate,2);
+            auto rules=synthetic().german;const uint8_t gate[]={234,0};rules.patch(layout::LeagueClubCount,gate,2);
             auto drawing=reference;for(const auto address:{layout::TextGradientDisabled,layout::PlainBackground}){drawing.memory.add_block(address,1);drawing.memory.set8(address,0);}
             auto inspected=state,expected=state;session_app::ClubInformationProvider retained;
             auto oracle=project_manager_desktop(state,drawing);const auto team=int(oracle.local_club(manager.club));int pages=0;

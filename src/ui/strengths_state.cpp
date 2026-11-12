@@ -22,7 +22,6 @@ namespace bmh::ui {
 namespace {
 
 constexpr uint32_t kManagerSettings = ::bmh::layout::ManagerSettings;
-constexpr size_t kManagerRecordSize = 0xb0c;
 constexpr std::array<uint16_t, 4> kCriterionFlags{0x001, 0x002, 0x004, 0x008};
 
 [[noreturn]] void invalid(const std::string& reason) {
@@ -176,7 +175,7 @@ StrengthsProjection strengths_from_game(const GameState& game, int manager_slot,
     if (league < 5 && !game.texts) invalid("TEXTD data is unavailable for the league title");
 
     std::vector<int> teams=context.teams;
-    if(teams.empty())for(int i=0;i<kLeagueSizes[league];++i)teams.push_back(league_first_team(league)+i);
+    if(teams.empty())for(int i=0;i<installed_league_system().sizes[league];++i)teams.push_back(league_first_team(league)+i);
     const int first=teams.front(),size=int(teams.size());
     if(size>20||std::any_of(teams.begin(),teams.end(),[&](int team){return team<0||team>=runtime_dimensions.league_teams;})||
        std::set<int>(teams.begin(),teams.end()).size()!=teams.size())invalid("invalid explicit league clubs");

@@ -65,9 +65,9 @@ void kernel_oracles() {
     rejects([]{season_fairplay_winner({});},"empty fair-play league accepted");
 }
 void native_money(const CareerSnapshot& snapshot,const AnnualAwardsStage& staged,Country country) {
-    uint8_t old_sizes[kLeagueCount];char old_suffix[kLeagueCount];std::copy_n(kLeagueSizes,kLeagueCount,old_sizes);std::copy_n(kLeagueSuffix,kLeagueCount,old_suffix);
+    uint8_t old_sizes[kLeagueCount];char old_suffix[kLeagueCount];std::copy_n(installed_league_system().sizes,kLeagueCount,old_sizes);std::copy_n(installed_league_system().suffix,kLeagueCount,old_suffix);
     uint8_t sizes[kLeagueCount];for(int i=0;i<5;++i)sizes[i]=snapshot.world.catalogue.league(snapshot.world.catalogue.starting_league(country,uint8_t(i))).clubs;for(int i=5;i<9;++i)sizes[i]=12;
-    set_league_sizes(sizes);if(country==Country::england)std::fill_n(kLeagueSuffix,kLeagueCount,char(0));
+    set_league_sizes(sizes);if(country==Country::england)std::fill_n(installed_league_system().suffix,kLeagueCount,char(0));
     GameState native;native.level=snapshot.world.settings->difficulty;native.manager_records.assign(5*0xb0c,0);native.squad_slots.assign(3072,0xfff);
     native.memory.add_block(layout::DeskRecords_Teams_RuntimeField,276);native.memory.add_block(layout::Season_List_RuntimeField,80);
     std::vector<uint8_t> seats;int team=0;
@@ -79,7 +79,7 @@ void native_money(const CareerSnapshot& snapshot,const AnnualAwardsStage& staged
     }
     season_awards(native);
     for(size_t manager=0;manager<seats.size();++manager){const auto actual=manager_finance_from_legacy(native,int(manager));const auto& wanted=*staged.world.managers[seats[manager]].finance;check(actual==wanted,"typed annual payouts differ from complete Original award booking");}
-    std::copy_n(old_sizes,kLeagueCount,kLeagueSizes);std::copy_n(old_suffix,kLeagueCount,kLeagueSuffix);
+    std::copy_n(old_sizes,kLeagueCount,installed_league_system().sizes);std::copy_n(old_suffix,kLeagueCount,installed_league_system().suffix);
 }
 void annual_backing() {
     GameState source;source.manager_records.assign(4*0xb0c,0);source.memory.add_block(layout::EnvironmentYouthTeams,4*0x24);source.memory.add_block(layout::Spending,4*0x24);

@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Implements the alternate score screen declared in game_end_alternate.hpp: loading assets, the calculator
+// buttons and presets, text and mouse input, the point-by-point drawing phase and rendering of each phase.
+// It reports state through phase(), value() and accepted_value(); the caller decides what to do with them.
 #include "formats/executable_layout.hpp"
 #include "ui/game_end_alternate.hpp"
+#include "ui/calculator_widgets.hpp"
 
 #include <algorithm>
 #include <utility>
@@ -180,7 +184,7 @@ Image GameEndAlternateScoreScreen::render(std::optional<unsigned> pressed) const
     for (unsigned i=0; i<15; ++i) {
         const int p=pressed && *pressed==i ? 1:0;
         const int x=x0+assets_.exe.u16(::bmh::layout::Advertising_Click_RuntimeField+2*i),y=y0+assets_.exe.u8(::bmh::layout::Advertising_Click_RuntimeField2+i);
-        copy(out,assets_.calculator,15*p,136,x+p,y+p,15-p,14-p);
+        draw_calculator_key(out,assets_.calculator,x,y,p!=0);
         draw_text(out,x+p+5,y+p+9,keys.substr(i,1),0x62,false);
     }
     for (unsigned i=0; i<8; ++i) {

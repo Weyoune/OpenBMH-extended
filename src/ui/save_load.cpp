@@ -13,7 +13,10 @@
 #include "ui/game_end.hpp"
 #include "ui/host_path.hpp"
 #include "ui/setup.hpp"
+#include "ui/draw.hpp"
 #include "formats/fbm.hpp"
+#include "ui/dialog_frame.hpp"
+#include "ui/button_frame.hpp"
 
 namespace bmh::ui {
 namespace {
@@ -38,8 +41,7 @@ std::string_view text_at(const TextDb& texts, uint32_t address) {
     return texts[(address - kTextBase) / 4];
 }
 void rect(Image& image, int x, int y, int w, int h, uint8_t color) {
-    for (int yy = std::max(0, y); yy < std::min(image.height, y + h); ++yy)
-        for (int xx = std::max(0, x); xx < std::min(image.width, x + w); ++xx) image.at(xx, yy) = color;
+    draw::fill(image, x, y, w, h, color);
 }
 bool has_file_kind_extension(const std::filesystem::path& path, SaveLoadFileKind kind) {
     std::string ext = path_to_utf8(path.extension());
@@ -54,9 +56,7 @@ std::string_view file_kind_extension(SaveLoadFileKind kind) {
 void copy(Image& out, const Image& src, int sx, int sy, int x, int y, int w, int h) {
     if (sx < 0 || sy < 0 || sx + w > src.width || sy + h > src.height)
         throw FormatError("save/load: Original widget outside atlas");
-    for (int yy = 0; yy < h; ++yy) for (int xx = 0; xx < w; ++xx)
-        if (x + xx >= 0 && x + xx < out.width && y + yy >= 0 && y + yy < out.height)
-            out.at(x + xx, y + yy) = src.pixels[size_t(sy + yy) * size_t(src.width) + size_t(sx + xx)];
+    draw::copy_clipped(out, src, sx, sy, x, y, w, h, -1);
 }
 void pattern(Image& out, const LeImage& exe, int x, int y, int w, int h) {
     for (int yy = 0; yy < h; ++yy) for (int xx = 0; xx < w; ++xx)
@@ -143,7 +143,7 @@ Image SaveLoadScreen::render() const {
     text(out, 106, 216, displayed_filename, filename_selected_ ? 0x27 : 0x6c, 140, footer_font_, true);
 
     if (entries_.size() > 15) {
-        button(out, 206, 183, 56, original_to_utf8(exe_.cstring(::bmh::layout::SaveLoad_Render_ExecutableField)));
+        button(out, 206, 183, 56, original_to_utf8(exe_.cstring(::bmh::layout::SaveLoad_Render_ExecutableField)), pressed_more_ != 0);
     }
 
     for (int row = 0; row < 15; ++row) {
@@ -194,7 +194,9 @@ Image SaveLoadScreen::render() const {
         // OpenBMH deviates from the original: the host file picker uses the
         // shared dialog's system identity without a live manager portrait projection.
         draw_source_dialog(out, {widgets_, widgets_, nullptr, footer_font_, font_, exe_, sprite_font_, texts_},
-                           question, gradient_text_);
+                           question, gradient_text_,
+                           pressed_question_ == 0 ? std::nullopt : std::optional<GameEndTaxDialog::Button>(
+                               static_cast<GameEndTaxDialog::Button>(pressed_question_)));
     }
     return out;
 }
@@ -247,37 +249,15 @@ bool SaveLoadScreen::info_press(int x, int y) {
 }
 
 void SaveLoadScreen::frame(Image& out, int x, int y, int width, int height) const {
-    pattern(out, exe_, x + 4, y + 4, width - 7, height - 7);
-    copy(out, widgets_, 0, 0, x, y, 4, 4);
-    copy(out, widgets_, 4, 0, x + width - 4, y, 4, 4);
-    copy(out, widgets_, 0, 4, x, y + height - 4, 4, 4);
-    copy(out, widgets_, 4, 4, x + width - 4, y + height - 4, 4, 4);
-    for (int at = 4; at < width - 4; at += 74) {
-        const int count = std::min(74, width - 4 - at);
-        copy(out, widgets_, 0, 104, x + at, y, count, 4);
-        copy(out, widgets_, 0, 108, x + at, y + height - 4, count, 4);
-    }
-    for (int at = 4; at < height - 4; at += 96) {
-        const int count = std::min(96, height - 4 - at);
-        copy(out, widgets_, 0, 8, x, y + at, 4, count);
-        copy(out, widgets_, 4, 8, x + width - 4, y + at, 4, count);
-    }
+    draw_dialog_frame(out, widgets_, exe_, x, y, width, height, false);   // dialog_frame.hpp
 }
 
-void SaveLoadScreen::button(Image& out, int x, int y, int width, std::string_view label) const {
-    // FormatError3 normal button bevel from KB/0.VGA, with Source horizontal tiling.
-    const int sy = 74;
-    copy(out, widgets_, 24, sy, x, y, 31, 10);
-    int used = 31;
-    while (width - used > 20) {
-        const int count = std::min(8, width - used - 20);
-        copy(out, widgets_, 24, sy + 10, x + used, y, count, 10);
-        used += count;
-    }
-    copy(out, widgets_, 45 - (width - used), sy + 20, x + used, y, width - used, 10);
+void SaveLoadScreen::button(Image& out, int x, int y, int width, std::string_view label, bool pressed) const {
+    // FormatError3 button bevel from KB/0.VGA with Source horizontal tiling (button_frame.hpp: raised or pressed).
+    const int shift = draw_wide_button_frame(out, widgets_, x, y, width, pressed);
     if (!label.empty())
-        sprite_font_.draw(out, x + width / 2 - sprite_font_.text_width(label) / 2, y + 7, label,
-                          exe_.u8(::bmh::layout::Advertising_Button_RuntimeField));
+        sprite_font_.draw(out, x + shift + width / 2 - sprite_font_.text_width(label) / 2, y + shift + 7, label,
+                          exe_.u8(::bmh::layout::Advertising_Button_RuntimeField + int(pressed)));
 }
 
 void SaveLoadScreen::text(Image& out, int x, int baseline, std::string_view value,
@@ -347,7 +327,24 @@ void SaveLoadScreen::request_action() {
                                file_kind_, origin_item_id_};
 }
 
+// Mouse DOWN on Ja/Nein of the overwrite question, or on the page button of a long file list: drawn pressed until
+// the release. Returns true when the picture changed.
+bool SaveLoadScreen::press(int x, int y) {
+    int question = 0, more = 0;
+    if (!info_ && !pending_) {
+        if (overwrite_confirmation_open_)
+            question = int(source_dialog_button_at(TaxDialogKind::question, false, x, y));
+        else if (entries_.size() > 15 && x >= 206 && x <= 262 && y >= 183 && y <= 193) more = 1;
+    }
+    const bool changed = question != pressed_question_ || more != pressed_more_;
+    pressed_question_ = question;
+    pressed_more_ = more;
+    return changed;
+}
+
 bool SaveLoadScreen::click(int x, int y, bool right, bool double_click) {
+    pressed_question_ = 0;   // the release ends the pressed look
+    pressed_more_ = 0;
     if (info_) { info_.reset(); return true; }
     if (pending_) return false;
     if (overwrite_confirmation_open_) {

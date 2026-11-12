@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// DeskState: the copyable, read-only state the manager desk (desktop.hpp) renders, including setup options,
+// managers, dates, opponent history, rank curves and the saved desk layout.
+// Built by desk_from_game()/desk_from_save() in desk_state.cpp. Engine changes are never made here;
+// the desk raises explicit DeskRequest values instead. Runtime club ids are not master database ids.
 #pragma once
 
 #include <array>
@@ -80,6 +84,15 @@ struct DeskState {
     // Explicit runtime role from a typed national projection. Unlike the
     // Original temporary slot, this can contain two independently owned coaches.
     bool projected_national_team = false;
+    // Stable name-pool identity of the runtime club (GameState::club_ids): at the national desk that of
+    // the national team, whereas managers[slot].club_identity_key keeps the home club for the hand-back.
+    int runtime_club_identity = -1;
+    // The identity the session's pages carry for this desk's manager (Table, Stärken, ...): the runtime
+    // club's own identity, so at the national desk that of the national team.
+    int session_identity_key(size_t slot) const {
+        return national_team && int(slot) == manager_slot && runtime_club_identity >= 0
+            ? runtime_club_identity : managers.at(slot).club_identity_key;
+    }
     // SwapManagerSlots2 temporary coach assignment (CoachActive). This can make
     // a league-only, single-manager career temporarily project team 0x165.
     bool national_coach_takeover = false;

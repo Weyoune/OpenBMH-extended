@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Implementation of SetupScreen (setup.hpp): layout tables read from the executable, shared render and hit-testing, and the limits between managers and league/world options.
 #include "formats/executable_layout.hpp"
 #include "formats/resource_bundle.hpp"
 #include "ui/setup.hpp"
@@ -8,6 +9,7 @@
 #include <algorithm>
 #include <cctype>
 #include <sstream>
+#include "ui/draw.hpp"
 
 namespace bmh::ui {
 namespace {
@@ -22,13 +24,7 @@ void copy_rect(Image& dst, const Image& src, int sx, int sy, int dx, int dy,
                int width, int height, bool transparent = false) {
     if (sx < 0 || sy < 0 || sx + width > src.width || sy + height > src.height)
         throw FormatError("setup: original sprite rectangle outside atlas");
-    for (int y = 0; y < height; ++y)
-        for (int x = 0; x < width; ++x) {
-            auto c = src.pixels[size_t(sy + y) * src.width + sx + x];
-            if (dx + x >= 0 && dy + y >= 0 && dx + x < dst.width && dy + y < dst.height &&
-                (!transparent || c != 0))
-                dst.at(dx + x, dy + y) = c;
-        }
+    draw::copy_clipped(dst, src, sx, sy, dx, dy, width, height, transparent ? 0 : -1);
 }
 
 }  // namespace
@@ -44,6 +40,9 @@ std::filesystem::path asset_path(const std::filesystem::path& directory, const s
             found = e.path();
         }
     }
+    // The game runs from its asset files alone: BMH.exe may be missing, load_le() then uses the embedded numbers of the
+    // Diamond executable (formats/diamond_image.hpp). The returned path simply does not exist.
+    if (found.empty() && folded(name) == "bmh.exe") return directory / "BMH.exe";
     if (found.empty()) throw FormatError("missing original asset: " + (directory / name).string());
     return found;
 }
@@ -93,7 +92,36 @@ SetupScreen::SetupScreen(const std::filesystem::path& data, SetupOptions current
     difficulty_arrows_locked_ = current.difficulty == 0;
 }
 
+// The button (0..3 minus, 4..7 plus of duration, difficulty, managers, mode) under the pointer that can be used, or -1.
+int SetupScreen::button_at(int x, int y) const {
+    for (int b = 0; b < 8; ++b) {
+        if (joining_ && (!joining_arrow_permission_[b] ||
+                         (difficulty_arrows_locked_ && (b == 1 || b == 5))))
+            continue;
+        if (x >= button_x_[b] && x <= button_x_[b] + 0x33 && y >= button_y_[b] && y <= button_y_[b] + 0x28) return b;
+    }
+    return -1;
+}
+
+// Mouse DOWN on a minus or plus button: it is drawn pressed until the release (click()). Returns true when the
+// picture changed.
+bool SetupScreen::press(int x, int y) {
+    const int id = x < 0 || y < 0 || x >= 320 || y >= 240 ? -1 : button_at(x, y);
+    const bool changed = id != pressed_button_;
+    pressed_button_ = id;
+    return changed;
+}
+
 SetupResult SetupScreen::click(int x, int y, bool right) {
+    // the release ends the pressed look, which needs a redraw even when the value stays (a button at its limit)
+    const bool was_pressed = pressed_button_ >= 0;
+    pressed_button_ = -1;
+    SetupResult result = handle_click(x, y, right);
+    result.changed |= was_pressed;
+    return result;
+}
+
+SetupResult SetupScreen::handle_click(int x, int y, bool right) {
     if (x < 0 || y < 0 || x >= 320 || y >= 240) return {};
     if (right) return {false, SetupRequest::new_game};
     if(!joining_ && options_.country_selection && y>=199 && y<239) {
@@ -144,8 +172,14 @@ Image SetupScreen::render() const {
         if (joining_ && (!joining_arrow_permission_[b] ||
                          (difficulty_arrows_locked_ && (b == 1 || b == 5))))
             continue;
-        copy_rect(out, atlas_, 0x36 + (b > 3 ? 0x26 : 0), button_source_y_,
-                  button_x_[b], button_y_[b], 0x26, 0x26);
+        // Held down by the mouse: the darker 36x36 picture in the bottom rows of the atlas (minus at x 0, plus at
+        // x 36), drawn 2 pixels right and down of the raised button over the plain background (measured pixel for
+        // pixel against a recording of the original).
+        if (pressed_button_ == b)
+            copy_rect(out, atlas_, b > 3 ? 36 : 0, atlas_.height - 36, button_x_[b] + 2, button_y_[b] + 2, 36, 36);
+        else
+            copy_rect(out, atlas_, 0x36 + (b > 3 ? 0x26 : 0), button_source_y_,
+                      button_x_[b], button_y_[b], 0x26, 0x26);
     }
     const int values[] = {options_.duration, options_.difficulty, options_.managers, options_.mode};
     for (int i = 0; i < 4; ++i) {

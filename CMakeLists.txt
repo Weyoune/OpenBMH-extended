@@ -126,24 +126,38 @@ if(TARGET SDL2::SDL2main)
     list(PREPEND BMH_SDL_TARGET SDL2::SDL2main)
 endif()
 
-# App sources share objects only within identical compile environments.
-# MSVC consumers currently differ in target/source /utf-8 flags; keep that path.
-set(BMH_APP_SESSION_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/src/app/career_session.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/app/window_actions.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/app/desktop_actions.cpp")
-set(BMH_APP_SESSION_SDL_SOURCE "${BMH_APP_SESSION_SOURCE}")
-set(BMH_APP_CONTROLLER_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/src/app/controller.cpp")
-if(NOT MSVC)
-    add_library(bmh_app_session OBJECT src/app/career_session.cpp src/app/window_actions.cpp src/app/desktop_actions.cpp)
-    target_link_libraries(bmh_app_session PRIVATE bmhui)
-    add_library(bmh_app_session_sdl OBJECT src/app/career_session.cpp src/app/window_actions.cpp src/app/desktop_actions.cpp)
-    target_link_libraries(bmh_app_session_sdl PRIVATE bmhui openbmh_audio ${BMH_SDL_TARGET})
-    add_library(bmh_app_controller_sdl OBJECT src/app/controller.cpp)
-    target_link_libraries(bmh_app_controller_sdl PRIVATE bmhui openbmh_audio ${BMH_SDL_TARGET})
-    set(BMH_APP_SESSION_SOURCE "$<TARGET_OBJECTS:bmh_app_session>")
-    set(BMH_APP_SESSION_SDL_SOURCE "$<TARGET_OBJECTS:bmh_app_session_sdl>")
-    set(BMH_APP_CONTROLLER_SOURCE "$<TARGET_OBJECTS:bmh_app_controller_sdl>")
+# The app sources (career session, window/desktop actions, controller) are compiled once per
+# compile environment and shared as objects by the game and by about forty tests and tools.
+# On MSVC they are compiled with /utf-8 like the game itself: their German messages are UTF-8
+# string literals. (Until 1.0.12 the MSVC build compiled these sources again for every
+# consumer, which cost most of the build time; controller.cpp then got /utf-8 only from
+# targets that set it.)
+# The career session is defined by topic in career_session*.cpp (the class: src/app/career_session.hpp).
+set(BMH_APP_SESSION_SOURCES
+    src/app/career_session.cpp
+    src/app/career_session_club.cpp
+    src/app/career_session_league.cpp
+    src/app/career_session_statistics.cpp
+    src/app/career_session_transfer.cpp
+    src/app/career_session_desk.cpp
+    src/app/career_session_match.cpp
+    src/app/career_session_management.cpp
+    src/app/window_actions.cpp
+    src/app/desktop_actions.cpp)
+add_library(bmh_app_session OBJECT ${BMH_APP_SESSION_SOURCES})
+target_link_libraries(bmh_app_session PRIVATE bmhui)
+add_library(bmh_app_session_sdl OBJECT ${BMH_APP_SESSION_SOURCES})
+target_link_libraries(bmh_app_session_sdl PRIVATE bmhui openbmh_audio ${BMH_SDL_TARGET})
+add_library(bmh_app_controller_sdl OBJECT src/app/controller.cpp)
+target_link_libraries(bmh_app_controller_sdl PRIVATE bmhui openbmh_audio ${BMH_SDL_TARGET})
+if(MSVC)
+    target_compile_options(bmh_app_session PRIVATE /utf-8)
+    target_compile_options(bmh_app_session_sdl PRIVATE /utf-8)
+    target_compile_options(bmh_app_controller_sdl PRIVATE /utf-8)
 endif()
+set(BMH_APP_SESSION_SOURCE "$<TARGET_OBJECTS:bmh_app_session>")
+set(BMH_APP_SESSION_SDL_SOURCE "$<TARGET_OBJECTS:bmh_app_session_sdl>")
+set(BMH_APP_CONTROLLER_SOURCE "$<TARGET_OBJECTS:bmh_app_controller_sdl>")
 
 # (before the first subdirectory: tests added there are only registered once testing is on)
 enable_testing()
@@ -212,9 +226,11 @@ add_library(bmhcore STATIC
     src/formats/vga.cpp
     src/formats/font.cpp
     src/formats/textd.cpp
+    src/formats/text_encoding.cpp
     src/formats/fbm.cpp
     src/formats/le.cpp
     src/formats/data_profile.cpp
+    src/formats/diamond_image.cpp
     src/formats/m3d.cpp
     src/formats/savestate.cpp
     src/game/schedule.cpp
@@ -243,6 +259,7 @@ add_library(bmhcore STATIC
     src/game/matchday_setup.cpp
     src/game/prediction.cpp
     src/game/month.cpp
+    src/game/search_profile.cpp
     src/game/desk.cpp
     src/game/cup.cpp
     src/game/club_info.cpp
@@ -269,6 +286,8 @@ add_library(bmhcore STATIC
     src/game/bank_credit.cpp
     src/game/career.cpp
     src/game/save.cpp
+    src/game/digest.cpp
+    src/game/world_layout.cpp
     src/game/turn.cpp
     src/game/turn_driver.cpp
 )
@@ -280,19 +299,20 @@ else()
     target_compile_options(bmhcore PRIVATE -Wall -Wextra)
 endif()
 
+# The asset viewer of the first milestone (not the game). Its file is named openbmh_viewer: as
+# "openbmh" it would be the same file as the game (OpenBMH, target openbmh_play below) on a file
+# system that ignores case, and whichever of the two was linked last would win.
 add_executable(openbmh src/main.cpp)
+set_target_properties(openbmh PROPERTIES OUTPUT_NAME openbmh_viewer)
 target_link_libraries(openbmh PRIVATE bmhcore ${BMH_SDL_TARGET})
 if(MSVC)
     target_compile_options(openbmh PRIVATE /utf-8)
 endif()
 
 # --- Game data launcher (src/launch): find, unpack and check the original game data ---------
-# ZIP: miniz (MIT), 7z: the C decoder of the LZMA SDK (public domain), file dialog:
+# ZIP: miniz 3.0.2 (MIT, vendored in third_party/miniz), 7z: the C decoder of the LZMA SDK (public domain), file dialog:
 # nativefiledialog-extended (zlib). All pinned; fetched like SDL2.
 include(FetchContent)
-FetchContent_Declare(miniz
-    URL https://github.com/richgel999/miniz/releases/download/3.0.2/miniz-3.0.2.zip
-    URL_HASH SHA256=ada38db0b703a56d3dd6d57bf84a9c5d664921d870d8fea4db153979fb5332c5)
 FetchContent_Declare(lzma_sdk
     GIT_REPOSITORY https://github.com/ip7z/7zip.git
     GIT_TAG 24.09
@@ -304,8 +324,9 @@ FetchContent_Declare(nfd
     GIT_REPOSITORY https://github.com/btzy/nativefiledialog-extended.git
     GIT_TAG v1.2.1
     GIT_SHALLOW TRUE)
-FetchContent_MakeAvailable(miniz lzma_sdk nfd)
+FetchContent_MakeAvailable(lzma_sdk nfd)
 
+set(miniz_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/miniz")  # vendored: no download that can fail
 add_library(bmh_miniz STATIC ${miniz_SOURCE_DIR}/miniz.c)
 target_include_directories(bmh_miniz PUBLIC ${miniz_SOURCE_DIR})
 target_link_libraries(bmhcore PRIVATE bmh_miniz)
@@ -474,6 +495,7 @@ target_link_libraries(start_screen_tests PRIVATE openbmh_start_screen)
 add_test(NAME start_screen_tests COMMAND start_screen_tests)
 
 # The playable program: the shared UI library connected to the engine by src/app.
+# (Classic splits the window program into struct App + app_*.cpp; Extended still has it in main.cpp.)
 add_executable(openbmh_play
     src/app/main.cpp
     ${BMH_APP_CONTROLLER_SOURCE}
@@ -486,9 +508,6 @@ set_target_properties(openbmh_play PROPERTIES WIN32_EXECUTABLE TRUE OUTPUT_NAME 
 target_include_directories(openbmh_play PRIVATE "${CMAKE_BINARY_DIR}/generated")
 if(MSVC)
     target_compile_options(openbmh_play PRIVATE /utf-8)
-    # App sources also compile in headless tests/helpers without target /utf-8.
-    set_source_files_properties(src/app/career_session.cpp src/app/window_actions.cpp
-        src/app/desktop_actions.cpp PROPERTIES COMPILE_OPTIONS /utf-8)
 endif()
 
 # Development helper: drives the career session like the UI, without a window
@@ -521,6 +540,14 @@ if(MSVC)
     target_compile_options(app_controller_tests PRIVATE /utf-8)
 endif()
 bmh_add_data_test(NAME app_controller_tests COMMAND app_controller_tests "${BMH_DATA}")
+
+# Regression tool (not a test): replays an input script against the UI flow and the controller without a
+# window and writes picture/state fingerprints per step (see tests/ui_walk.cpp).
+add_executable(ui_walk tests/ui_walk.cpp ${BMH_APP_CONTROLLER_SOURCE} ${BMH_APP_SESSION_SDL_SOURCE})
+target_link_libraries(ui_walk PRIVATE bmhui openbmh_audio ${BMH_SDL_TARGET})
+if(MSVC)
+    target_compile_options(ui_walk PRIVATE /utf-8)
+endif()
 set(BMH_TEST_APP_DELAY_SETTINGS_TESTS_INPUT_1 "" CACHE PATH "External input 1 for app_delay_settings_tests; not distributed")
 bmh_add_data_test(NAME app_desktop_input_tests COMMAND app_controller_tests "${BMH_DATA}" --desktop-input-only)
 bmh_add_data_test(NAME app_advertising_input_tests COMMAND app_controller_tests "${BMH_DATA}" --advertising-input-only)
@@ -972,6 +999,7 @@ bmh_add_data_test(NAME league_views_data_tests COMMAND league_views_data_tests "
 # FLTD is translated by launch_check/the launcher first. Do not point these
 # tests at the raw DOS directory: the shared UI consumes the prepared image.
 set(BMH_ENGLISH_DATA "" CACHE PATH "Prepared Football Limited game-data directory")
+bmh_add_data_test(NAME english_environment_controller_tests DATA_DIR "${BMH_ENGLISH_DATA}" COMMAND app_controller_tests "${BMH_ENGLISH_DATA}" --environment-only)
 bmh_add_data_test(NAME english_edition_startup_app_tests DATA_DIR "${BMH_ENGLISH_DATA}" COMMAND edition_startup_app_tests "${BMH_ENGLISH_DATA}")
     bmh_add_data_test(NAME english_pairings_data_tests DATA_DIR "${BMH_ENGLISH_DATA}" COMMAND league_pairings_data_tests "${BMH_ENGLISH_DATA}")
     bmh_add_data_test(NAME english_desktop_data_tests DATA_DIR "${BMH_ENGLISH_DATA}" COMMAND desktop_data_tests "${BMH_ENGLISH_DATA}" --english)
@@ -1094,11 +1122,18 @@ set(BMH_TEST_SPORTSCHAU_APP_TESTS_INPUT_1 "" CACHE PATH "External input 1 for sp
 bmh_add_data_test(NAME sportschau_app_tests REQUIRED_OPTIONS BMH_TEST_SPORTSCHAU_APP_TESTS_INPUT_1 COMMAND sportschau_app_tests "${BMH_DATA}"
     "${BMH_TEST_SPORTSCHAU_APP_TESTS_INPUT_1}")
 
+# openbmh.dat (the game texts of the original executables, tools/diamond_constants) ships next to the programs and is copied
+# next to the built programs as well, where the game looks for it.
+foreach(product IN ITEMS openbmh_play openbmh_cli)
+    add_custom_command(TARGET ${product} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/data/openbmh.dat" "$<TARGET_FILE_DIR:${product}>")
+endforeach()
+
 # The shared-country Beta ships the graphical game. The legacy console remains
 # a developer tool for Classic-profile data, with a separate install component.
 install(TARGETS openbmh_play RUNTIME DESTINATION . COMPONENT Runtime)
 install(TARGETS openbmh_cli RUNTIME DESTINATION . COMPONENT ClassicTools)
-install(FILES README.md LICENSE THIRD_PARTY_NOTICES.md ACKNOWLEDGEMENTS.md CONTRIBUTING.md
+install(FILES README.md LICENSE THIRD_PARTY_NOTICES.md ACKNOWLEDGEMENTS.md CONTRIBUTING.md data/openbmh.dat
     DESTINATION . COMPONENT Runtime)
 install(DIRECTORY docs/ DESTINATION docs COMPONENT Runtime)
 if(MSVC)
@@ -1165,6 +1200,11 @@ file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/package-dependencies.json" CONTENT "${
 add_executable(classic_rules_unit_tests tests/classic_rules_unit_tests.cpp)
 target_link_libraries(classic_rules_unit_tests PRIVATE bmhcore)
 add_test(NAME classic_rules_unit_tests COMMAND classic_rules_unit_tests)
+
+# The Classic world layout equals the numbers the engine used as literals (no game data needed).
+add_executable(world_layout_tests tests/world_layout_tests.cpp)
+target_link_libraries(world_layout_tests PRIVATE bmhcore)
+add_test(NAME world_layout_tests COMMAND world_layout_tests)
 
 add_executable(season_player_reset_tests tests/season_player_reset_tests.cpp)
 target_link_libraries(season_player_reset_tests PRIVATE bmhcore)
@@ -1682,3 +1722,14 @@ add_test(NAME world12_presentation_tests COMMAND world12_presentation_tests)
 
 add_executable(world12_validate_presentation tools/world12/validate_presentation.cpp)
 target_link_libraries(world12_validate_presentation PRIVATE bmhworld12_session)
+add_executable(diamond_image_tests tests/diamond_image_tests.cpp)
+target_link_libraries(diamond_image_tests PRIVATE bmhcore)
+add_test(NAME diamond_image_tests COMMAND diamond_image_tests - "${CMAKE_CURRENT_SOURCE_DIR}/data/openbmh.dat")
+bmh_add_data_test(NAME diamond_image_data_tests COMMAND diamond_image_tests "${BMH_DATA}" "${CMAKE_CURRENT_SOURCE_DIR}/data/openbmh.dat")
+add_executable(search_profile_tests tests/search_profile_tests.cpp)
+target_link_libraries(search_profile_tests PRIVATE bmhcore)
+add_test(NAME search_profile_tests COMMAND search_profile_tests)
+
+
+
+

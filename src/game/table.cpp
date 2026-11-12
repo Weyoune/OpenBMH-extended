@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// League table computation: adding results with win bonus, sort keys and sorting, and
+// compute_league_table over a range of matchdays for a league.
+// Reads GameState (fixtures and results); returns a LeagueTable. Draws no random numbers.
+// Interface in table.hpp.
 #include "game/table.hpp"
 
 #include <vector>
@@ -73,12 +77,12 @@ void sort_table(LeagueTable& t, int parts) {
 }
 
 
-int league_matchdays(int league) { return kLeagueSizes[league] * 2 - 2; }
+int league_matchdays(int league) { return league_system().sizes[league] * 2 - 2; }
 
 LeagueTable compute_league_table(const GameState& g, int league, int from, int to, int flags, int points_mode) {
     LeagueTable t;
     t.league = league;
-    t.size = kLeagueSizes[league];
+    t.size = league_system().sizes[league];
     int parts = 0;
     if (points_mode & 0xE) {
         parts = points_mode >> 1;
@@ -107,7 +111,7 @@ LeagueTable compute_league_table(const GameState& g, int league, int from, int t
         std::vector<Fixture> fx = generate_fixtures(league_table_teams(league), r + 1, matchdays / 2, first_team);
         bool counted = false;
         for (size_t i = 0; i < fx.size(); i++) {
-            uint8_t b = g.results.at(size_t(league) * 0x17C + size_t(r) * 10 + i);
+            uint8_t b = g.results.at(size_t(league) * kLeagueResultsStride + size_t(r) * 10 + i);
             int club[2] = {fx[i].home - first_team, fx[i].away - first_team};
             if ((b & 0xCC) == 0xCC) {
                 if (b == 0xCD)

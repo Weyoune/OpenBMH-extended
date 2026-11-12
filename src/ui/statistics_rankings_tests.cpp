@@ -1,5 +1,7 @@
 #include "../../tests/test_inputs.hpp"
+#include "testing/check.hpp"
 // SPDX-License-Identifier: GPL-3.0-only
+// Tests for StatisticsRankingsScreen: category selection requests, pressed-state cancel on move-off, and reachability of the oldest archived rows.
 #include "formats/executable_layout.hpp"
 #include "ui/statistics_rankings.hpp"
 #include "ui/setup.hpp"
@@ -12,9 +14,7 @@ using namespace bmh;
 using namespace bmh::ui;
 
 namespace {
-void check(bool condition, const char* message) {
-    if (!condition) throw std::runtime_error(message);
-}
+using bmh::test_support::check;
 
 GameState sample() {
     GameState game;

@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// High-score table of the game: computes a manager's score from his record (assets, history,
+// titles), builds projections of the ranked table and reads/writes the five-row score file bytes.
+// Reads manager records in GameState; the file images are passed in and out as bytes.
+// Draws no random numbers. Interface in highscore.hpp.
 #include "formats/executable_layout.hpp"
 #include "game/highscore.hpp"
 
@@ -12,7 +16,7 @@
 
 namespace bmh {
 namespace {
-constexpr size_t kRecord = 0xb0c;
+constexpr size_t kRecord = kManagerRecordSize;
 // OpenBMH deviates from the original: reads the supported edition-specific high-score format from the loaded image.
 // supported rule profile executable HighscoreRuntimeField..a5144, verified against the installed LE image.
 constexpr std::array<uint8_t, 8> kHistoryWeights{3, 5, 4, 30, 20, 10, 5, 40};
@@ -91,7 +95,7 @@ HighscoreScore highscore_score(const GameState& g, int manager, HighscoreContext
     HighscoreScore result;
     const int team = g.manager_teams.at(size_t(manager));
     if (team == kNoTeam) {
-        // CareerSession_DispatchLineup_RuntimeField+CareerSession_InstallLeagueSizes_RuntimeField6+ClubPlayerDetail_ClubPlayerDetailFromGame_RuntimeField3 == kNoTeam in the supported Original database;
+        // LeagueClubCount+NewcomerClubCount+ForeignCupClubCount == kNoTeam in the supported Original database;
         // national honours store (team-kNoTeam)|0x80, so Germany's index is0.
         std::array<std::array<uint8_t,4>,20> podium;
         for(uint32_t year=0;year<20;++year)for(uint32_t place=0;place<4;++place)podium[year][place]=g.memory.u8(layout::Placements+year*4+place);

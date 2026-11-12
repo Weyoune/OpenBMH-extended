@@ -1,4 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// End-of-career presentation: highscore list, final messages, tax dialog and program error screen.
+// The highscore and final screens are drawing-only: values and order are resolved by the caller and no career
+// state is mutated; acknowledgement is owned by the application loop. Also exposes wrap_source_text(), the
+// word and hyphen wrapping of the original text routine (optionally justified), reusable by text-only UI code.
+// Implementation: game_end.cpp.
 #pragma once
 
 #include <filesystem>
@@ -122,6 +127,10 @@ class SpriteFont;
 // including the existing season-end dialog, share PresentManagerDialog's drawing path.
 // SourceBadgeFallback classifies the raw club token before reading its badge selector.
 bool source_badge_fallback(int club_token);
+// The button of a manager notice (kind acknowledgement: OK, kind question: Ja/Nein) under the pointer, for the pressed look
+// that every screen showing such a dialog draws while the mouse button is held (draw_source_dialog's `pressed`).
+// A timed notice has no button.
+GameEndTaxDialog::Button source_dialog_button_at(TaxDialogKind kind, bool timed_notice, int x, int y);
 struct SourceDialogAssets {
     const Image& widgets;
     const Image& faces;

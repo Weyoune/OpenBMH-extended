@@ -1,4 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Business plan (balance plan) screen of a human manager: builds a draft of the plan rows
+// (income, running costs, shares and loans, catering, ticket price), checks per-row maxima when
+// the player edits a row and writes the accepted plan back on close.
+// Reads and writes the manager records in GameState (manager_records); reads schedule, table and
+// prediction data for the forecast. Draws no random numbers.
+// Interface in balance_plan.hpp; monthly bookings of similar figures live in month.cpp / week.cpp.
 #include "formats/executable_layout.hpp"
 #include "game/environment.hpp"
 #include "game/balance_plan.hpp"
@@ -16,7 +22,7 @@ namespace bmh {
 
 namespace {
 
-constexpr size_t kRecordSize = 0xb0c;
+constexpr size_t kRecordSize = kManagerRecordSize;
 constexpr uint32_t kPlanTicketPrice = ::bmh::layout::PlanTicketPrice;  // one byte per manager
 int league_home_games(const GameState& g,int team) {
     if(!g.projected_match_clubs.empty()) {
@@ -41,7 +47,7 @@ constexpr uint16_t kFacilityCost[22] = {2000, 3000, 3000, 8000, 4000, 3000, 2500
 // BalancePlanRuntimeField6: monthly income of the first six facilities (FacilityIncome)
 constexpr uint16_t kFacilityIncome[6] = {0, 5000, 5000, 4800, 2400, 8000};
 // BalancePlanRuntimeField7: catering income per visitor of the facilities 0-13 (BookMoney)
-constexpr uint8_t kPerVisitor[14] = {0, 10, 10, 3, 5, 15, 3, 3, 3, 3, 2, 2, 2, 2};
+constexpr uint8_t kPerVisitor[14] = {0, 10, 15, 3, 5, 10, 3, 3, 3, 3, 2, 2, 2, 2};  // Diamond 3.7 (entries 2 and 5 were 10 and 15)
 // Rec32: price units of the six funds (BMH.exe+MonthRuntimeField10)
 constexpr int32_t kShareUnits[6] = {15, 18, 21, 24, 27, 30};
 

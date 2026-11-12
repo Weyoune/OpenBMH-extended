@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Tests for TrainingCampScreen: deterministic rendering, hover restore, duplicate-input blocking while pending, and acknowledged focus updates.
 #include "formats/executable_layout.hpp"
 #include "../../tests/test_inputs.hpp"
 #include "ui/training_camp.hpp"
@@ -9,12 +10,13 @@
 
 #include <iostream>
 #include <functional>
+#include "testing/check.hpp"
 
 using namespace bmh;
 using namespace bmh::ui;
 
 namespace {
-void check(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }
+using bmh::test_support::check;
 void rejected(const std::function<void()>& fn) {
     try { fn(); } catch (const FormatError&) { return; }
     throw std::runtime_error("expected rejected operation");

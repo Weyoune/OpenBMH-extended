@@ -252,7 +252,7 @@ void initial_contract_cases() {
         check(w.managers[0].tactics==manager_full_tactics_from_legacy(expected,3,mapping),"initial board/contracts differ from direct Source phase");
         check(w.managers[0].match_state&&w.managers[0].match_state->staff_ratings[2]==0x226&&std::all_of(w.managers[0].match_state->rating_history.begin(),w.managers[0].match_state->rating_history.end(),[](auto x){return x==100;}),"initial match staff/ratings were not supplied by Source settings");
         check(w.managers[0].finance==manager_initial_finance_from_legacy(expected,3),"initial account/baseline differs from Source financial phase");
-        check(w.managers[0].finance->balance==(difficulty==0?50000000:4000000-difficulty*200000)&&w.managers[0].finance->credit==uint32_t(400000-normalized*100000),"initial difficulty/league account policy wrong");
+        check(w.managers[0].finance->balance==(difficulty==0?50000000:3000000-difficulty*200000)&&w.managers[0].finance->credit==uint32_t(400000-normalized*100000),"initial difficulty/league account policy wrong");
         for(size_t r=0;r<20;++r){const auto raw=expected.squad_slots[start+r];const auto id=mapping.at(raw&0xfff);check(w.clubs.at(target).roster[r].player==id&&w.players.at(id).attributes.w364==expected.players.at(raw&0xfff).w364,"initial age/lineup lost global identity");}
         CareerSnapshot snap;snap.world=w;snap.results=SeasonResults::empty(w.catalogue);check(read_save(make_save(snap))==snap,"initial contracts/account baseline lost on reload");
         const auto initialized=w;rejects([&]{app::initialize_manager_contracts(w,owner,identity,rules,policy,b);},"initial contract request replayed");check(w==initialized&&owner.revision==9,"replayed creation changed initialized fields");

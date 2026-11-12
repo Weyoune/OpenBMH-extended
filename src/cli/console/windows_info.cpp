@@ -36,7 +36,7 @@ constexpr int kHighscorePrefix = 889;  // the high score file prefix ("high/h.")
 
 void Console::register_info_commands() {
     // --- TopScorers (05-information 7, menu 20) -------------------------------------------
-    // Codex's read-only port of TopScorersFromGame (game/top_scorers.hpp): the best ten of the own
+    // The read-only port of TopScorersFromGame (game/top_scorers.hpp): the best ten of the own
     // league by goals, assists or both (one point each), for the whole league or only the
     // managers' clubs. No state changes and no random draws, so the console reads it directly.
     struct ScorerView {
@@ -133,7 +133,7 @@ void Console::register_info_commands() {
         if (window_ == "Fixtures" && pairings_) fixtures_action(LeaguePairingsAction::close);
         std::string error;
         ClubInfoEntry entry;
-        if (team < int(exe_.u16(::bmh::layout::CareerSession_DispatchLineup_RuntimeField))) {  // league teams get the entry step (as the app does)
+        if (team < int(exe_.u16(::bmh::layout::LeagueClubCount))) {  // league teams get the entry step (as the app does)
             const auto prepared = session_->enter_club_information(team, error);
             if (!prepared) fail("E_RULE", "club information: " + error);
             entry = *prepared;

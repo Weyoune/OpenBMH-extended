@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Tests for the lineup projection, rendering and request flow (ui/lineup.hpp).
 #include "formats/executable_layout.hpp"
 #include "../../tests/test_inputs.hpp"
 #include "ui/lineup.hpp"
@@ -15,12 +16,13 @@
 #include "game/lineup.hpp"
 #include "game/save.hpp"
 #include "game/state.hpp"
+#include "testing/check.hpp"
 
 using namespace bmh;
 using namespace bmh::ui;
 
 namespace {
-void check(bool ok, const char* message) { if(!ok)throw std::runtime_error(message); }
+using bmh::test_support::check;
 void rejected(const std::function<void()>& action) {
     try { action(); } catch(const FormatError&) { return; }
     throw std::runtime_error("expected rejected lineup operation");

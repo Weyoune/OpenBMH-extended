@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Implementation of transfer_history_from_game() and TransferHistoryScreen (transfer_history.hpp): row decoding, date formatting and row drawing over the underlay.
 #include "formats/executable_layout.hpp"
 #include "ui/transfer_history.hpp"
 
@@ -13,7 +14,7 @@
 
 namespace bmh::ui {
 namespace {
-constexpr size_t kManagerStride = 0xb0c;
+constexpr size_t kManagerStride = kManagerRecordSize;
 constexpr size_t kHistoryCount = 0x21d;
 constexpr size_t kEventWords = 0x760;
 constexpr size_t kNameWords = 0x7d8;

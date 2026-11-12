@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Tests for PlayerCardScreen: deterministic rendering, club/nationality text, statistics plot coordinates and closed-card navigation.
 #include "formats/executable_layout.hpp"
 #include "ui/player_card.hpp"
 
@@ -9,11 +10,12 @@
 #include "formats/fbm.hpp"
 #include "formats/savestate.hpp"
 #include "game/state.hpp"
+#include "testing/check.hpp"
 
 using namespace bmh;
 using namespace bmh::ui;
 namespace {
-void check(bool value,const char* message){if(!value)throw std::runtime_error(message);}
+using bmh::test_support::check;
 void rejected(const std::function<void()>& action){try{action();}catch(const FormatError&){return;}throw std::runtime_error("expected rejected player card");}
 GameState fixture(const LeImage& exe) {
     GameState g;g.memory.add_block(::bmh::layout::ActiveManager,1);g.memory.add_block(::bmh::layout::CareerSession_AnyOf_ExecutableField,8);g.memory.add_block(::bmh::layout::LeaguePresentationOptions,0xb4);

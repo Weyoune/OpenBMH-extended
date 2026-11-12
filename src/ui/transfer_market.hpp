@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Transfer market screen with three views: market listing, own-squad selling and offer review. TransferMarketState
+// is an owned projection (items, squad, previews, club roster) so no GameState pointer is kept. Actions (bid,
+// list player, open offer, quote preview, poach, review offers) become TransferMarketRequests that the caller
+// applies through the desk actions, then it attaches a new projection or a rejection. Implemented in transfer_market.cpp.
 #pragma once
 
 #include <array>
@@ -14,6 +18,7 @@
 #include "game/poach.hpp"
 #include "ui/sprite_font.hpp"
 #include "game/desk_actions.hpp"
+#include "game/search_profile.hpp"
 #include "ui/manager.hpp"
 #include "ui/setup.hpp"
 
@@ -60,13 +65,18 @@ struct TransferMarketState {
     uint8_t source_market_mode = 0; // Unknown is not an inferred Mode III.
     std::optional<std::pair<int32_t,int32_t>> currency;
     std::array<uint16_t,5> active_strengths{},team_strengths{};
+    // Search profile of the manager (buttons Suchen / Vorschlag): the stored profile and the two suggestions the squad
+    // asks for (index 0 = first eleven, 1 = whole squad, chosen by the Komplett-style view flag 0x400).
+    SearchProfile search_profile{};
+    std::array<SearchProfile,2> search_suggestion{};
 };
 
 TransferMarketState transfer_market_from_game(const GameState&, uint64_t revision);
 std::string transfer_market_state_json(const TransferMarketState&);
 TaxDialogProjection poach_notice_from_game(const GameState&,const PoachStart&,std::string original_message);
 
-enum class TransferMarketRequestKind { none, submit_bid, list_player, open_offer, preview_quote, open_poach, review_offers };
+enum class TransferMarketRequestKind { none, submit_bid, list_player, open_offer, preview_quote, open_poach, review_offers,
+                                       store_search_profile };
 struct TransferMarketSelection {
     int list_entry=-1,source_slot=-1,player=-1,seller=-1,squad_row=-1;
 };
@@ -83,6 +93,13 @@ struct TransferMarketRequest {
     int preview_snapshot_index = -1;
     bool offer_is_loan = false;
     std::vector<TransferMarketSelection> selected_players;
+    // store_search_profile: the edited profile when the search dialog is closed; `search_cancelled` = left by right click
+    // (the profile is kept but switched off), `search_apply` = closed with the "Suchen" button (list the matches).
+    SearchProfile search_profile{};
+    bool search_cancelled = false, search_apply = false;
+    // review_offers started by VERKAUFEN on an already listed own player: the original first asks
+    // "Wollen Sie <name> vom Transfermarkt holen?" (yes = off the list, no = look at the offers).
+    bool ask_withdraw = false;
 };
 std::string transfer_market_request_json(const TransferMarketRequest&);
 
@@ -108,11 +125,16 @@ public:
     std::optional<std::pair<int,int>> market_center(int list_entry)const;
     Image render() const;
     TransferMarketRequest click(int x, int y, bool right = false);
+    // Mouse DOWN on a button: the button is drawn pressed until the release (click). Returns whether the picture changed.
+    bool press(int x, int y, bool right = false);
     // TransferMarketScreen hover preview; host acknowledges the quote before more input.
     TransferMarketRequest move(int x, int y);
     TransferMarketRequest key(std::string_view);
     bool text(std::string_view);
     bool close_requested() const { return close_requested_; }
+    // The search dialog (buttons Suchen / Vorschlag) is open: it owns every click until it is closed.
+    bool search_open() const { return search_open_; }
+    const SearchProfile& search_edit() const { return search_edit_; }
     const TransferMarketState& state() const { return state_; }
     const std::optional<TransferMarketRequest>& pending() const { return pending_; }
     void acknowledge(TransferMarketState, std::string notice = {});
@@ -131,7 +153,7 @@ private:
     LeImage exe_;
     TextDb texts_;
     SpriteFont sprite_font_;
-    Image background_, frame_, widgets_, atlas_, flags_, market_widgets_;
+    Image background_, frame_, widgets_, atlas_, flags_, market_widgets_, search_panel_;
     uint16_t view_flags_ = 0x1f0;
     bool data_b_ = false;
     size_t market_page_ = 0;
@@ -151,9 +173,18 @@ private:
     std::string numeric_input_, feedback_; // feedback is UTF-8, like host notices.
     int active_field_ = 0;
     bool close_requested_ = false;
+    bool search_open_ = false;
+    SearchProfile search_edit_{};
+    // The button held by the mouse (draw id: 1..12 market buttons, 100 Data, 101 Komplett, 200 search confirm), -1 none.
+    int pressed_button_ = -1;
+    int button_at(int x, int y) const;
+    void open_search(SearchProfile profile);
+    void draw_search(Image&) const;
+    TransferMarketRequest click_search(int x, int y, bool right);
+    TransferMarketRequest close_search(bool cancelled);
     void draw_text(Image&, int x, int y, std::string_view, uint8_t color) const;
     void commit_numeric_field();
-    TransferMarketRequest make_review(const TransferMarketItem&);
+    TransferMarketRequest make_review(const TransferMarketItem&, bool ask_withdraw = false);
     TransferMarketRequest make_bid();
     TransferMarketRequest make_listing(bool loan=false);
     TransferMarketRequest make_open_offer(bool loan=false);

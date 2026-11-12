@@ -1,4 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Monthly processing: new transfer list entries and free agents, return of loans, monthly expenses
+// and income, shares and loans, market value and contract demands/offers/bonuses, and the
+// month change itself.
+// Reads and writes GameState (transfer list in memory, squad_slots, players, manager records).
+// Draws from WatcomRandom (list generation, demands); no GameRandom draws are made here.
+// Interface in month.hpp; called from turn.cpp, weekly steps are in weekly.cpp.
 #include "formats/executable_layout.hpp"
 #include "game/environment.hpp"
 #include "game/month.hpp"
@@ -19,6 +25,7 @@
 #include "game/messages.hpp"
 #include "game/prediction.hpp"
 #include "game/schedule.hpp"
+#include "game/search_profile.hpp"
 #include "game/season.hpp"
 #include "game/weekly.hpp"
 #include "game/human_buyer_sale.hpp"
@@ -27,9 +34,9 @@ namespace bmh {
 
 namespace {
 
-constexpr size_t kRecord = 0xB0C;       // manager record
-constexpr size_t kBoard = 0x840;        // tactics board of a manager
-constexpr size_t kBoardSlot = 0x58;
+constexpr size_t kRecord = kManagerRecordSize;       // manager record
+constexpr size_t kBoard = kTacticsBoardSize;        // tactics board of a manager
+constexpr size_t kBoardSlot = kTacticsBoardSlotSize;
 constexpr uint32_t kTransferList = ::bmh::layout::EditorList;
 constexpr uint32_t kListEntry = 0x58;
 const int& kPoolFirst = runtime_dimensions.pool_first;       // CareerRuntimeField: the transfer list (40 slots + 4)
@@ -37,13 +44,13 @@ const int& kFreeAgents = runtime_dimensions.free_first;      // CareerRuntimeFie
 const int& kForeignAgents = runtime_dimensions.foreign_free_first;   // MonthRuntimeField: foreign free agents (20 slots)
 const int& kPoolEnd = runtime_dimensions.national_slots_first;         // LargeSquadClubCount
 const int& kBigSquadClubs = runtime_dimensions.big_squad_teams;      // TeamsWithSquads
-const int& kLeagueClubs = runtime_dimensions.league_teams;      // CareerSession_DispatchLineup_RuntimeField
+const int& kLeagueClubs = runtime_dimensions.league_teams;      // LeagueClubCount
 
 // MonthRuntimeField2: development steps by strength / 10; the ten bytes after it (PlayerCard_PlayerCardMarketValue_RuntimeField)
 // are the extra value above 500 points.
 constexpr uint8_t kDevelopment[20] = {6, 6, 6, 5, 5, 5, 4, 4, 3, 1, 10, 15, 20, 30, 40, 45, 55, 75, 85, 95};
 // BalancePlanRuntimeField5: value of the facilities (maintenance per month), u16 per facility.
-constexpr uint16_t kFacilityValue[22] = {2000, 3000, 3000, 8000, 4000, 3000, 2500, 2500, 2500, 2500, 2600,
+constexpr uint16_t kFacilityValue[22] = {2000, 10000, 17000, 8000, 4000, 10000, 2500, 2500, 2500, 2500, 2600,
                                          2600, 2600, 2600, 13000, 9000, 9000, 8000, 1000, 1500, 1500, 2000};
 // BalancePlanRuntimeField6: monthly income of facilities 0-5 per level.
 constexpr uint16_t kFacilityIncome[6] = {0, 5000, 5000, 4800, 2400, 8000};
@@ -187,7 +194,7 @@ void new_list_entries(GameState& g, WatcomRandom& rand, MinuteReport& report) {
                 while (left-- != 0 && !report.unsupported) list_club_player(g, 0, kBigSquadClubs, rand, report);
                 break;
             case 3:
-                while (left-- != 0 && !report.unsupported) list_club_player(g, kBigSquadClubs, kLeagueClubs, rand, report);
+                while (left-- != 0 && !report.unsupported) list_club_player(g, kBigSquadClubs, world_layout().league_teams, rand, report);
                 break;
         }
     }
@@ -848,46 +855,9 @@ ContractInsuranceResult contract_insurance(GameState& g, int manager, int row, i
 }
 
 void search_profile_news(GameState& g, int manager, uint32_t list, int player) {
-    const StaticMemory& mem = g.memory;
-    const size_t rec = size_t(manager) * kRecord;
-    auto b = [&](size_t off) { return int(g.manager_records.at(rec + off)); };
-    const int team = g.manager_teams.at(size_t(manager));
+    // The matching rule is shared with the search dialog (search_profile.cpp, original sub_190B5).
     player &= 0xFFF;
-    if (team == kNoTeam || (mem.u16(list + 8) & 0x7FFF) == team || (b(0x1f6) & 0x40)) return;
-    const uint32_t w364 = g.players.at(size_t(player)).w364, w35c = g.players.at(size_t(player)).w35c;
-    // position wanted (or none selected) and age within the range
-    if (b(0x1f6 + (w364 & 3)) == 0 && b(0x1f9) + b(0x1f8) + b(0x1f7) + b(0x1f6) != 0) return;
-    const int age = int((w364 >> 21) & 0x1F);
-    if (age < b(0x1fa) || age > b(0x1fb)) return;
-    // strength by the selected attributes (condition, technique, form; none = all three)
-    int8_t selected = int8_t(b(0x200) + b(0x1fe) + b(0x1ff));
-    if (selected == 0) selected = 3;
-    int sum = 0, n = 0, form = 0;
-    if (b(0x1fe) != 0 || selected == 3) sum = int((w35c >> 14) & 0x7F), n = 1;
-    if (b(0x1ff) != 0 || selected == 3) sum = int16_t(sum) + int((w35c >> 7) & 0x7F), n++;
-    if (b(0x200) != 0 || selected == 3) form = int(w35c & 0x7F);
-    int16_t strength;
-    if (n == 0) {
-        strength = int16_t((form - 0x23) * 3 + 10);
-    } else {
-        strength = int16_t(uint32_t(sum) / uint32_t(n));
-        if (form != 0) strength = int16_t(uint32_t(strength * int16_t((int16_t(form) >> 3) + 0x5e)) / 100);
-    }
-    if (strength < b(0x1fc) || strength > b(0x1fd)) return;
-    // left / right foot and wing preferences (w35c bits 21-23 and 24-26)
-    const int lane = int((w35c >> 21) & 7), foot = int((w35c >> 24) & 7);
-    bool low_foot = b(0x201) || b(0x203), high_foot = b(0x202) || b(0x204);
-    if (low_foot && high_foot) low_foot = high_foot = false;
-    bool low_lane = b(0x201) || b(0x202), high_lane = b(0x203) || b(0x204);
-    if (low_lane && high_lane) low_lane = high_lane = false;
-    if ((low_lane && lane >= 3) || (high_lane && lane <= 4) || (low_foot && foot >= 3) || (high_foot && foot <= 4)) return;
-    // the price class (asking price 70..130 %) against the classes wanted
-    int8_t price_class = int8_t((mem.u8(list + 0x54) - 0x46) / 0x14);
-    price_class = std::clamp<int8_t>(price_class, 0, 2);
-    const int8_t classes = int8_t(b(0x207) + b(0x205) + b(0x206));
-    int highest = 2;
-    while (highest >= 0 && b(0x205 + size_t(highest)) == 0) highest--;
-    if (classes == 0 || price_class <= highest)
+    if (search_profile_matches_listing(g, manager, list, player))
         post_composed(g, manager, message_text(g, ::bmh::layout::Month_SearchProfileNews_TextPointer) + g.player_name(player) + message_text(g, ::bmh::layout::Month_SearchProfileNews_TextPointer2));
 }
 

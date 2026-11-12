@@ -17,7 +17,7 @@ struct SeasonLicenceAccount {
 inline bool season_licence_broke(const SeasonLicenceAccount& account) {
     const auto total=std::bit_cast<int32_t>(uint32_t(account.creditworthiness)*80000u+
         uint32_t(account.assets)-uint32_t(account.remaining_loans));
-    return total < -6000000 || ((account.sanction>>5)==2&&
+    return total < -4000000 || ((account.sanction>>5)==2&&
         int32_t(account.sanction&31)*100000<=account.transfer_balance);
 }
 // Source samples draw positions until an AI club at zero-based rank10..15 is

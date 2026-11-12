@@ -3,6 +3,7 @@
 #include "formats/badge_policy.hpp"
 #include "formats/executable_layout.hpp"
 #include "ui/team_statistics.hpp"
+#include "ui/dialog_frame.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -12,6 +13,7 @@
 #include "game/season.hpp"
 #include "ui/manager.hpp"
 #include "ui/setup.hpp"
+#include "ui/draw.hpp"
 
 namespace bmh::ui {
 namespace {
@@ -19,34 +21,15 @@ void copy(Image& out, const Image& src, int sx, int sy, int x, int y, int w, int
           int transparent = -1) {
     if (sx < 0 || sy < 0 || w < 0 || h < 0 || sx + w > src.width || sy + h > src.height)
         throw FormatError("team statistics: Source asset bounds");
-    for (int yy = 0; yy < h; ++yy) for (int xx = 0; xx < w; ++xx) {
-        const uint8_t value = src.pixels[size_t(sy + yy) * size_t(src.width) + size_t(sx + xx)];
-        if (value != transparent && x + xx >= 0 && y + yy >= 0 && x + xx < out.width && y + yy < out.height)
-            out.at(x + xx, y + yy) = value;
-    }
+    draw::copy_clipped(out, src, sx, sy, x, y, w, h, transparent);
 }
 void rect(Image& out, int x, int y, int w, int h, uint8_t value) {
-    for (int yy = std::max(0, y); yy < std::min(out.height, y + h); ++yy)
-        for (int xx = std::max(0, x); xx < std::min(out.width, x + w); ++xx) out.at(xx, yy) = value;
+    draw::fill(out, x, y, w, h, value);
 }
 void source_frame(Image& out, const Image& widgets, const LeImage& exe,
                   int x, int y, int w, int h, uint8_t color) {
-    for (int yy = 0; yy < h - 7; ++yy) for (int xx = 0; xx < w - 7; ++xx)
-        out.at(x + 4 + xx, y + 4 + yy) = exe.u8(::bmh::layout::Advertising_PatternRect_RuntimeField + (yy & 15) * 16 + (xx & 15));
-    copy(out, widgets, 0, 0, x, y, 4, 4); copy(out, widgets, 4, 0, x + w - 4, y, 4, 4);
-    copy(out, widgets, 0, 4, x, y + h - 4, 4, 4); copy(out, widgets, 4, 4, x + w - 4, y + h - 4, 4, 4);
-    for (int xx = 4; xx < w - 4; xx += 74) {
-        const int amount = std::min(74, w - 4 - xx);
-        copy(out, widgets, 0, 104, x + xx, y, amount, 4); copy(out, widgets, 0, 108, x + xx, y + h - 4, amount, 4);
-    }
-    for (int yy = 4; yy < h - 4; yy += 96) {
-        const int amount = std::min(96, h - 4 - yy);
-        copy(out, widgets, 0, 8, x, y + yy, 4, amount); copy(out, widgets, 4, 8, x + w - 4, y + yy, 4, amount);
-    }
-    int ramp = 0; while (ramp < 32 && exe.u8(::bmh::layout::Advertising_Text_RuntimeField2 + ramp) != color) ++ramp;
-    const uint8_t shadow = exe.u8(::bmh::layout::Advertising_Text_RuntimeField + ramp * 6 + 5);
-    rect(out, x + 2, y + h, w, 2, 0x40); rect(out, x + w, y + 2, 2, h, 0x40);
-    (void)shadow;
+    (void)color;
+    draw_dialog_frame(out, widgets, exe, x, y, w, h, true);   // dialog_frame.hpp
 }
 std::string source_field(int value, int width) {
     std::string s = std::to_string(value);
@@ -106,8 +89,8 @@ TeamStatisticsProjection team_statistics_from_game(const GameState& game, int te
                 if (league >= league_gate) out.flag_index = uint8_t(league - league_gate + 1);
                 break;
             }
-            if (league == 8 && region_team >= int(exe.u16(::bmh::layout::CareerSession_InstallLeagueSizes_RuntimeField6)))
-                out.flag_index = uint8_t((region_team - int(exe.u16(::bmh::layout::CareerSession_InstallLeagueSizes_RuntimeField6))) / 7 - league_gate + 10);
+            if (league == 8 && region_team >= int(exe.u16(::bmh::layout::NewcomerClubCount)))
+                out.flag_index = uint8_t((region_team - int(exe.u16(::bmh::layout::NewcomerClubCount))) / 7 - league_gate + 10);
         }
     }
     out.source_has_league_panel = team < runtime_dimensions.record_teams;
@@ -117,7 +100,7 @@ TeamStatisticsProjection team_statistics_from_game(const GameState& game, int te
         if (out.league < 0 || out.league >= kLeagueCount)
             throw FormatError("team statistics: Source league index unavailable");
         out.league_row = team - league_first_team(out.league);
-        if (out.league_row < 0 || out.league_row >= kLeagueSizes[out.league])
+        if (out.league_row < 0 || out.league_row >= league_system().sizes[out.league])
             throw FormatError("team statistics: runtime team is not in a supported league table");
         out.source_flags = exe.u8(::bmh::layout::TableFlags + uint32_t(mode_number));
         out.points_mode = exe.u8(::bmh::layout::CareerSession_BeginFriendlyOpponentTable_RuntimeField + uint32_t(out.league));
@@ -437,16 +420,16 @@ Image TeamStatisticsScreen::render() const {
         const int league = projection_.league;
         rect(out, 225, 150, 1, 43, 0x6a); rect(out, 225, 192, 81, 1, 0x6a);
         if (projection_.source_has_position_history && projection_.source_has_league_panel) {
-        const int clubs = kLeagueSizes[league];
+        const int clubs = league_system().sizes[league];
         for (int round = 0; round < projection_.league_rounds && round < 39; ++round) {
             const size_t word_index = size_t(round / 3) * 2;
             const uint16_t packed = uint16_t(projection_.position_history[word_index] |
                 uint16_t(projection_.position_history[word_index + 1]) << 8);
             const int rank_value = (packed >> (5 * (round % 3))) & 0x1f;
             int kind = 1;
-            if (rank_value < int(exe_.u8(::bmh::layout::CareerSession_InstallLeagueSizes_RuntimeField + league)) + int(exe_.u8(::bmh::layout::DeskDrawers_Curve_RuntimeField + league)) ||
+            if (rank_value < int(exe_.u8(::bmh::layout::LeagueEuropeanPlaces + league)) + int(exe_.u8(::bmh::layout::DeskDrawers_Curve_RuntimeField + league)) ||
                 (rank_value == 0 && league == 0)) kind = 0;
-            if (int(exe_.u8(::bmh::layout::LeagueSizes + league)) - int(exe_.u8(::bmh::layout::CareerSession_InstallLeagueSizes_RuntimeField2 + league)) <= rank_value) kind = 2;
+            if (int(exe_.u8(::bmh::layout::LeagueSizes + league)) - int(exe_.u8(::bmh::layout::LeagueRelegationPlaces + league)) <= rank_value) kind = 2;
             for (int series = 0; series < 2; ++series) {
                 const int x = 226 + round * 2 + series;
                 if (x >= 306) continue;

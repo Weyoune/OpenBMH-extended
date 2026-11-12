@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
+// Implementation of TrainingCampScreen and training_camp_from_game() (training_camp.hpp): resort rows with hover, price and star display, and booking/focus request construction.
 #include "formats/executable_layout.hpp"
 #include "formats/badge_policy.hpp"
 #include "ui/training_camp.hpp"
+#include "ui/button_frame.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -14,11 +16,12 @@
 #include "ui/manager.hpp"
 #include "ui/setup.hpp"
 #include "ui/game_end.hpp"
+#include "ui/draw.hpp"
 
 namespace bmh::ui {
 namespace {
 
-constexpr size_t kRecord = 0xb0c;
+constexpr size_t kRecord = kManagerRecordSize;
 constexpr size_t kTeam = 0x290;
 constexpr size_t kFocus = 0xc1;
 constexpr size_t kStays = 0x21f;
@@ -27,15 +30,10 @@ constexpr size_t kMoney = 0x314;
 void copy(Image& out, const Image& src, int sx, int sy, int x, int y, int w, int h, int transparent = -1) {
     if (sx < 0 || sy < 0 || sx + w > src.width || sy + h > src.height)
         throw FormatError("training camp: sprite outside original atlas");
-    for (int yy = 0; yy < h; ++yy) for (int xx = 0; xx < w; ++xx) {
-        const uint8_t color = src.pixels[size_t(sy + yy) * src.width + sx + xx];
-        if (x + xx >= 0 && y + yy >= 0 && x + xx < out.width && y + yy < out.height && color != transparent)
-            out.at(x + xx, y + yy) = color;
-    }
+    draw::copy_clipped(out, src, sx, sy, x, y, w, h, transparent);
 }
 void rect(Image& out, int x, int y, int w, int h, uint8_t color) {
-    for (int yy = std::max(0, y); yy < std::min(out.height, y + h); ++yy)
-        for (int xx = std::max(0, x); xx < std::min(out.width, x + w); ++xx) out.at(xx, yy) = color;
+    draw::fill(out, x, y, w, h, color);
 }
 int32_t rd32(const std::vector<uint8_t>& v, size_t at) {
     return int32_t(uint32_t(v.at(at)) | uint32_t(v.at(at + 1)) << 8 | uint32_t(v.at(at + 2)) << 16 |
@@ -248,13 +246,11 @@ Image TrainingCampScreen::render() const {
     sprite_text(out, 104, 235, visit_text, 5);
     if (chosen_resort_ >= 0 && state_.booking_allowed()) {
         constexpr int x = 223, y = 214, width = 64, height = 10;
-        rect(out, x + 2, y + height, width, 2, 0x40); rect(out, x + width, y + 2, 2, height, 0x40);
-        copy(out, buttons_, 24, 74, x, y, 31, height);
-        int at = 31, remaining = width - 31;
-        while (remaining > 20) { const int n = std::min(8, remaining - 20); copy(out, buttons_, 24, 84, x + at, y, n, height); at += n; remaining -= n; }
-        copy(out, buttons_, 45 - remaining, 94, x + at, y, remaining, height);
+        (void)height;
+        // the booking button is drawn pressed while the mouse button is held (button_frame.hpp)
+        const int shift = draw_wide_button_frame(out, buttons_, x, y, width, booking_pressed_);
         const int label_width = small_.text_width(texts_[1267]);
-        text(out, x + width / 2 - label_width / 2, y + 7, texts_[1267], 0);
+        text(out, x + shift + width / 2 - label_width / 2, y + shift + 7, texts_[1267], 0);
     }
     if (!rejection_.empty() || state_.feedback != TrainingCampFeedback::none) {
         std::string message;
@@ -273,7 +269,8 @@ Image TrainingCampScreen::render() const {
         notice.source_manager_flags=state_.feedback==TrainingCampFeedback::booked ||
             state_.feedback==TrainingCampFeedback::none ? 0x80 : 0x40;
         draw_source_dialog(out,{buttons_,portraits_,&badge_,small_,large_,exe_,sprite_font_,texts_},
-            notice,state_.gradient_text);
+            notice,state_.gradient_text,
+            notice_pressed_ ? std::optional<GameEndTaxDialog::Button>(GameEndTaxDialog::Button::acknowledge) : std::nullopt);
     }
     return out;
 }
@@ -289,7 +286,24 @@ TrainingCampRequest TrainingCampScreen::initialize_focus() {
     return *pending_;
 }
 
+// Mouse DOWN on the booking button: drawn pressed until the release. Returns true when the picture changed.
+bool TrainingCampScreen::press(int x, int y) {
+    const bool on = !pending_ && chosen_resort_ >= 0 && state_.booking_allowed() && rejection_.empty() &&
+        state_.feedback == TrainingCampFeedback::none && x >= 223 && x < 287 && y >= 214 && y < 224;
+    // OK of an acknowledging notice (booked or a plain rejection; the timed warnings have no button)
+    const bool notice_shown = !pending_ && (!rejection_.empty() || state_.feedback != TrainingCampFeedback::none);
+    const bool acknowledging = state_.feedback == TrainingCampFeedback::booked || state_.feedback == TrainingCampFeedback::none;
+    const bool ok = notice_shown && acknowledging &&
+        source_dialog_button_at(TaxDialogKind::acknowledgement, false, x, y) == GameEndTaxDialog::Button::acknowledge;
+    const bool changed = on != booking_pressed_ || ok != notice_pressed_;
+    booking_pressed_ = on;
+    notice_pressed_ = ok;
+    return changed;
+}
+
 TrainingCampRequest TrainingCampScreen::click(int x, int y, bool right) {
+    booking_pressed_ = false;   // the release ends the pressed look
+    notice_pressed_ = false;
     if (pending_) return {};
     if (right && timed_notice_open()) {
         rejection_.clear(); state_.feedback=TrainingCampFeedback::none; return {};

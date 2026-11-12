@@ -27,14 +27,14 @@ int main()try {
         }
         uint8_t sizes[bmh::kLeagueCount];for(auto& size:sizes)size=league.clubs;bmh::runtime_dimensions.league_teams=league.clubs*9;bmh::runtime_dimensions.expanded=true;bmh::set_league_sizes(sizes);
         const int native_league=1,team=league.clubs;
-        bmh::kLeagueRelegation[native_league]=league.relegation;
+        bmh::installed_league_system().relegation[native_league]=league.relegation;
         int europe=0;
         if(league.playable) {
             if(league.local_index==0)europe=4;
             else if(league.country==Country::england)europe=4;
             else {const int places[]={4,3,2,2,4};europe=places[league.local_index];}
         }
-        bmh::kLeagueEurope[native_league]=uint8_t(europe);
+        bmh::installed_league_system().europe[native_league]=uint8_t(europe);
         bmh::GameState native;native.results.assign(9*0x17c,0xcc);native.league_rounds.assign(9,0);native.league_rounds[native_league]=uint8_t(rounds);
         native.manager_teams={team};native.manager_records.resize(0xb0c);native.manager_records[0x220]=uint8_t(0x60|deduction);
         native.club_ids.resize(9*league.clubs);native.club_names={'C','l','u','b',0};native.mailbox.resize(bmh::kMailboxEntries*bmh::kMailboxEntry);
