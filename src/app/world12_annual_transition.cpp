@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "game/world12/job_offers.hpp"
+#include "game/world12/almanac.hpp"
 #include "app/world12_annual_transition.hpp"
 #include "game/world12/annual_archive.hpp"
 #include "game/world12/annual_moods.hpp"
@@ -52,6 +54,8 @@ AnnualTransitionOutcome publish_annual_transition(CareerSnapshot& state,ManagerA
     const auto before=state;auto candidate=state;const uint32_t target=state.season+1;AnnualTransitionOutcome out;
     const auto unchanged=[&]{if(state!=before||!owned())throw FormatError("world12: annual owner changed during Source presentation");};
     const auto archive=stage_annual_title_archive(state);
+    // OpenBMH-Extended: final tables and scorers of the closing season, taken before anything is reset.
+    std::optional<AlmanacSeason> almanac;if(state.world.catalogue.scope.club_play())almanac=stage_almanac_season(state);
     std::optional<ScoreFile> score;if(*state.world.highscore_signature)score=read_score(score_file);
     const auto moods=stage_annual_moods(candidate,reference);candidate=moods.snapshot;out.game_draws+=moods.game_draws;out.watcom_draws+=moods.watcom_draws;unchanged();
     {
@@ -81,7 +85,11 @@ AnnualTransitionOutcome publish_annual_transition(CareerSnapshot& state,ManagerA
     for(const auto& draw:fields.draws){const bool accepted=hooks.cup_draw_owned?hooks.cup_draw_owned(candidate,draw):hooks.cup_draw&&hooks.cup_draw(draw);if(!accepted)throw FormatError("world12: actual annual cup draw needs its presenter");unchanged();}
     const auto players=stage_annual_player_renewal(candidate,qualification,promotions,reference,texts);candidate.world=players.world;candidate.desktop=players.desktop;candidate.transfers=players.transfers;candidate.results=players.results;candidate.league_rounds=players.league_rounds;candidate.game_seed=players.game_seed;candidate.watcom_seed=players.watcom_seed;out.game_draws+=players.game_draws;out.watcom_draws+=players.watcom_draws;out.retired=players.released;unchanged();
     if(players.inactive_origin_refresh_required)throw FormatError("world12: actual inactive population refresh is incomplete");
-    begin_annual_manager_history(candidate.world,target);candidate.season=target;candidate.friendly_plan=empty_friendly_plan(target,before.friendly_plan?&*before.friendly_plan:nullptr);candidate.world.annual_title_archive=archive;candidate.calendar.reset();candidate.progress.reset();candidate.prepared_event.reset();
+    begin_annual_manager_history(candidate.world,target);candidate.season=target;candidate.friendly_plan=empty_friendly_plan(target,before.friendly_plan?&*before.friendly_plan:nullptr);candidate.world.annual_title_archive=archive;if(almanac){record_almanac_season(candidate.world,*almanac,before.world.managers,before.world);
+        // Job offers for the new season (OpenBMH-Extended rule, job_offers.hpp): judged on the closed season,
+        // made by clubs of the new league membership. No random number is drawn.
+        std::array<bool,4> sanctioned{};for(const auto& manager:candidate.world.managers)if(manager.seat<4)sanctioned[manager.seat]=accounts.pending_sanctions[manager.seat]!=0;
+        candidate.world.extended->job_offer_season=target;candidate.world.extended->job_offers=make_job_offers(before.world,*almanac,archive.seasons.back(),candidate.world,target,sanctioned);}candidate.calendar.reset();candidate.progress.reset();candidate.prepared_event.reset();
     out.highscore=project_owned_highscores(candidate,reference,score?score->rows:HighscoreTable{});
     if(!hooks.highscore||!hooks.highscore(out.highscore,false))throw FormatError("world12: annual highscore update needs its actual owner");unchanged();
     if(candidate.world.settings->duration<5)--candidate.world.settings->duration;out.career_complete=candidate.world.settings->duration==0;

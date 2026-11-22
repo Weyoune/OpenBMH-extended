@@ -69,6 +69,10 @@ DeskState world12_initial_desktop(const std::filesystem::path& data,const bmh::w
     }}
     const auto id=desk.managers.at(size_t(desk.manager_slot)).world_club;
     const auto& crest=state.world.crests.at(state.world.clubs.at(id).crest);desk.badge=crest.cell;desk.badge_atlas=crest.path;
+    // Additional icons of OpenBMH-Extended. A national coach desk has the almanac only.
+    {const auto places=desk_icon_places(state.world,seat);
+     desk.extra_items.push_back({54,int(places[kDeskIconAlmanac].x),int(places[kDeskIconAlmanac].y),32,25,30});
+     if(!national)desk.extra_items.push_back({55,int(places[kDeskIconChange].x),int(places[kDeskIconChange].y),32,25,31});}
     desk.rank_curves[0].league=desk.league;desk.source="world12";world12_readonly_capabilities(state,desk);validate_desk_state(desk);return desk;
 }
 }

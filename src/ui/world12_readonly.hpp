@@ -12,6 +12,8 @@
 #include "ui/top_scorers_state.hpp"
 namespace bmh::ui {
 struct World12StatisticsState;
+struct AlmanacState;
+struct JobOffersState;
 struct World12ReadonlyIdentity {
     uint8_t manager=0,menu=0;
     bmh::world12::ClubId club;
@@ -30,7 +32,8 @@ struct World12ReadonlySelection {
     std::optional<bmh::world12::ManagerBalancePlan> balance_closed_plan;
     bool operator==(const World12ReadonlySelection&)const=default;
 };
-enum class World12ReadonlyAction:uint8_t {close,set_metric,toggle_scope,close_child,select_statistics_page,set_prediction,set_statistics_flags,select_title_category,select_alltime_nation,toggle_alltime_relative,balance,reschedule};
+enum class World12ReadonlyAction:uint8_t {close,set_metric,toggle_scope,close_child,select_statistics_page,set_prediction,set_statistics_flags,select_title_category,select_alltime_nation,toggle_alltime_relative,balance,reschedule,
+    accept_job_offer /* Wechsel: value = index of the accepted offer; changes the career and closes */};
 struct World12ReadonlyRequest {
     World12ReadonlyIdentity identity;
     World12ReadonlyAction action=World12ReadonlyAction::close;
@@ -46,6 +49,8 @@ struct World12ReadonlyState {
     World12ReadonlySelection selection;
     bool decorated_background=true;
     std::shared_ptr<World12StatisticsState> statistics;
+    std::shared_ptr<const AlmanacState> almanac;        // menu 30 (world12_extended_pages.hpp)
+    std::shared_ptr<const JobOffersState> job_offers;   // menu 31
     std::optional<TopScorersState> top_scorers;
     std::optional<DeskRecordsState> records;
     std::optional<AchievementsState> achievements;

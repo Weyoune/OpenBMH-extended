@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "game/world12/job_offers.hpp"
 #include "app/world12_event.hpp"
 #include "game/world12/progression.hpp"
 #include "app/world12_first_event.hpp"
@@ -100,7 +101,7 @@ void finish_scheduled_desks(CareerSnapshot& state,ManagerActionOwner& owner,Mana
        size_t(state.desktop->initial_event->manager_position)+1!=state.desktop->initial_event->manager_order.size())
         throw FormatError("world12: scheduled manager loop has unfinished decisions");
     auto candidate=state;candidate.progress->last_manager=*candidate.desktop->active_seat;
-    candidate.desktop->initial_event.reset();candidate.desktop->active_seat.reset();
+    candidate.desktop->initial_event.reset();candidate.desktop->active_seat.reset();expire_job_offers(candidate.world);
     candidate.prepared_event->desk_phase=PreparedEvent::DeskPhase::complete;candidate.validate();
     state=std::move(candidate);++owner.revision;
 }

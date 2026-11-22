@@ -4,6 +4,7 @@
 #include "ui/top_scorers.hpp"
 #include "ui/calendar.hpp"
 #include "ui/world12_statistics_screen.hpp"
+#include "ui/world12_extended_pages.hpp"
 namespace bmh::ui {
 // Owns the existing Original screens; render/input rules stay in those screens.
 class World12ReadonlyScreen {
@@ -29,6 +30,7 @@ public:
     void reject(std::string reason){if(statistics_)statistics_->reject(std::move(reason));}
 private:
     World12ReadonlyState state_;
+    std::unique_ptr<World12ExtendedScreen> extended_;   // Almanach or Wechsel (OpenBMH-Extended)
     std::unique_ptr<World12StatisticsScreen> statistics_;
     std::unique_ptr<AchievementsScreen> achievements_;
     std::unique_ptr<IndoorStandingsScreen> indoor_;

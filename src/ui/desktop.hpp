@@ -19,7 +19,9 @@
 namespace bmh::ui {
 
 enum class DeskRequestKind { none, open_menu, advance_turn, change_layout, change_option, change_ticket_price, end_session };
-enum class DeskLayoutOperation : uint8_t { none, move_item, set_folder, toggle_quickbar_drawer, return_folder_child, send_to_folder, restore_folder_child };
+enum class DeskLayoutOperation : uint8_t { none, move_item, set_folder, toggle_quickbar_drawer, return_folder_child, send_to_folder, restore_folder_child,
+    // An additional icon of OpenBMH-Extended was dragged: item_id 54.., value = x | y << 16. No layout records.
+    move_extra };
 struct DeskRequest {
     DeskRequestKind kind = DeskRequestKind::none;
     int manager_slot = -1, item_id = -1, menu_kind = -1, value = -1;

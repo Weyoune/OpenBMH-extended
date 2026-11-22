@@ -10,6 +10,15 @@ void Session::apply_desktop(const ui::DeskRequest& request,const std::filesystem
     validate_file_owner(request.manager_slot,request.revision);
     if(request.kind!=ui::DeskRequestKind::change_layout&&request.kind!=ui::DeskRequestKind::change_option&&request.kind!=ui::DeskRequestKind::change_ticket_price)
         throw FormatError("world12: unsupported desktop mutation");
+    if(request.kind==ui::DeskRequestKind::change_layout&&request.layout_operation==ui::DeskLayoutOperation::move_extra){
+        // An additional icon of OpenBMH-Extended was moved: its place is kept per seat in World::extended.
+        const int index=request.item_id-54,x=request.value&0xffff,y=request.value>>16;
+        if(index<0||index>1||request.menu_kind!=30+index||x<0||x>320-32||y<0||y>240-25||!state_.desktop||!state_.desktop->active_seat||preparation_menu_)throw FormatError("world12: invalid place of an additional desk icon");
+        auto candidate=state_;const auto seat=*candidate.desktop->active_seat;auto places=desk_icon_places(candidate.world,seat);places[size_t(index)]={uint16_t(x),uint8_t(y)};
+        if(!candidate.world.extended)candidate.world.extended.emplace();
+        candidate.world.extended->desk_icons.erase(seat);candidate.world.extended->desk_icons.emplace(seat,places);
+        candidate.validate();state_=std::move(candidate);++owner_.revision;return;
+    }
     const auto before=state_;const auto revision=owner_.revision;auto candidate=state_;auto p=project_manager_desktop(candidate,resources_.reference);auto scratch=revision;std::string error;
     auto local_request=request;local_request.manager_slot=p.state.memory.u8(layout::ActiveManager);
     const auto desk=ui::world12_initial_desktop(data,candidate,resources_.reference,resources_.german,options_,revision);

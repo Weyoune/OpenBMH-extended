@@ -9,23 +9,15 @@
 #include "game/career.hpp"
 #include <algorithm>
 namespace bmh::world12 {
-ManagerJoiningOutcome add_running_manager(CareerSnapshot& state,const InitialManagerChoice& choice,
-    const GameState& reference,const LeImage& country_rules) {
-    state.validate();
-    if(!state.world.settings||!state.world.economy||!state.world.markets||!state.desktop||!state.desktop->active_seat||!state.desktop->initial_event||!state.calendar||!state.transfers||national_roles_active(state.world)||
-       state.world.managers.size()>=4||state.world.managers.size()>=state.world.settings->planned_managers||choice.seat>=4||choice.name.empty()||choice.name.size()>20||choice.portrait>11||
-       std::any_of(state.world.managers.begin(),state.world.managers.end(),[&](const auto& m){return m.seat==choice.seat||m.club==choice.club||m.portrait==choice.portrait;})||state.desktop->initial_event->offer||
-       (state.prepared_event&&(state.prepared_event->gates_booked||state.prepared_event->desk_phase!=PreparedEvent::DeskPhase::desks)))
-        throw FormatError("world12: running manager entry lacks its actual club desk owner");
-    const auto selected=state.world.clubs.find(choice.club);
-    if(selected==state.world.clubs.end()||selected->second.kind!=ClubKind::club||!selected->second.league.valid()||selected->second.league!=choice.start_league||!state.world.catalogue.selectable(selected->second.country))
-        throw FormatError("world12: running manager selected an unavailable club");
-    const auto visible=state.world.catalogue.player_leagues(selected->second.country);
-    if(std::find(visible.begin(),visible.end(),selected->second.league)==visible.end())throw FormatError("world12: hidden league cannot be taken over");
-    const auto owner_loans=std::count_if(state.world.loans.begin(),state.world.loans.end(),[&](const auto& loan){return loan.owner==choice.club;});
-    if(owner_loans>3||state.transfers->loans.size()+size_t(owner_loans)>12)throw FormatError("world12: takeover exceeds the existing human loan-contract capacity");
-    const auto before=state;auto candidate=state;auto& world=candidate.world;const auto settings=*world.settings;WatcomRandom random(candidate.watcom_seed);
-    auto initial=reference;initial.date=state.date;initial.season=int(state.season);initial.season_start=state.date-state.calendar->next_day;
+// Everything a manager gets when he takes over a club he did not lead before: a clean personal record,
+// facilities of the club's division, contracts with the squad, funds, tactics, match state, loan boards;
+// the club's own listings and bids leave the transfer market. Used by a manager who joins a running
+// career (below) and by a manager who changes club (manager_change.cpp). The seat must not be in
+// world.managers; the new Manager is appended. Desk layout and desk order are the caller's business.
+void seat_manager_at_club(CareerSnapshot& candidate,const InitialManagerChoice& choice,const GameState& reference,
+    const LeImage& country_rules,WatcomRandom& random) {
+    auto& world=candidate.world;const auto settings=*world.settings;
+    auto initial=reference;initial.date=candidate.date;initial.season=int(candidate.season);initial.season_start=candidate.date-candidate.calendar->next_day;
     const auto rec=size_t(choice.seat)*0xb0c;
     if(initial.manager_records.size()<5*0xb0c||initial.manager_options.size()<20)throw FormatError("world12: running manager lacks its Source numeric template");
     // Source clean personal record. No former club/person history is attributed.
@@ -56,7 +48,7 @@ ManagerJoiningOutcome add_running_manager(CareerSnapshot& state,const InitialMan
     for(const auto& contract:candidate.transfers->loans)if(contract.source_slot)board_slots[*contract.source_slot]=true;
     for(const auto& contract:candidate.transfers->loans)if(!contract.source_slot){const auto slot=std::find(board_slots.begin(),board_slots.end(),false);if(slot==board_slots.end())throw FormatError("world12: existing loan boards exceed capacity");*slot=true;}
     for(const auto& loan:world.loans)if(loan.owner==choice.club){
-        auto board=initialize_joined_owner_loan_board(world,choice.seat,loan.player,policy,random,state.season);
+        auto board=initialize_joined_owner_loan_board(world,choice.seat,loan.player,policy,random,candidate.season);
         const auto slot=std::find(board_slots.begin(),board_slots.end(),false);if(slot==board_slots.end())throw FormatError("world12: no Source owner loan-board slot remains");const auto index=uint8_t(slot-board_slots.begin());*slot=true;
         candidate.transfers->loans.push_back({loan.player,choice.seat,board,{},{},index});
     }
@@ -67,6 +59,24 @@ ManagerJoiningOutcome add_running_manager(CareerSnapshot& state,const InitialMan
         }
         for(auto& bidder:world.transfer_market->last_entry40_bidders)if(bidder==choice.club)bidder={};
     }
+}
+ManagerJoiningOutcome add_running_manager(CareerSnapshot& state,const InitialManagerChoice& choice,
+    const GameState& reference,const LeImage& country_rules) {
+    state.validate();
+    if(!state.world.settings||!state.world.economy||!state.world.markets||!state.desktop||!state.desktop->active_seat||!state.desktop->initial_event||!state.calendar||!state.transfers||national_roles_active(state.world)||
+       state.world.managers.size()>=4||state.world.managers.size()>=state.world.settings->planned_managers||choice.seat>=4||choice.name.empty()||choice.name.size()>20||choice.portrait>11||
+       std::any_of(state.world.managers.begin(),state.world.managers.end(),[&](const auto& m){return m.seat==choice.seat||m.club==choice.club||m.portrait==choice.portrait;})||state.desktop->initial_event->offer||
+       (state.prepared_event&&(state.prepared_event->gates_booked||state.prepared_event->desk_phase!=PreparedEvent::DeskPhase::desks)))
+        throw FormatError("world12: running manager entry lacks its actual club desk owner");
+    const auto selected=state.world.clubs.find(choice.club);
+    if(selected==state.world.clubs.end()||selected->second.kind!=ClubKind::club||!selected->second.league.valid()||selected->second.league!=choice.start_league||!state.world.catalogue.selectable(selected->second.country))
+        throw FormatError("world12: running manager selected an unavailable club");
+    const auto visible=state.world.catalogue.player_leagues(selected->second.country);
+    if(std::find(visible.begin(),visible.end(),selected->second.league)==visible.end())throw FormatError("world12: hidden league cannot be taken over");
+    const auto owner_loans=std::count_if(state.world.loans.begin(),state.world.loans.end(),[&](const auto& loan){return loan.owner==choice.club;});
+    if(owner_loans>3||state.transfers->loans.size()+size_t(owner_loans)>12)throw FormatError("world12: takeover exceeds the existing human loan-contract capacity");
+    const auto before=state;auto candidate=state;WatcomRandom random(candidate.watcom_seed);
+    seat_manager_at_club(candidate,choice,reference,country_rules,random);
     ManagerDesktop desk;desk.seat=choice.seat;const auto address=layout::Desktops+uint32_t(choice.seat)*0x360;
     for(size_t row=0;row<54;++row)for(size_t byte=0;byte<16;++byte)desk.layout[row][byte]=reference.memory.u8(address+uint32_t(row*16+byte));
     const auto display=layout::CareerSession_AnyOf_ExecutableField+uint32_t(choice.seat)*2;desk.display_word=reference.memory.has(display+1)?reference.memory.u16(display):0;

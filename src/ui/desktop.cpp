@@ -17,6 +17,11 @@
 
 namespace bmh::ui {
 namespace {
+// Pictures of the additional icons (see extended_icons.inc); kind 30 is picture 0.
+constexpr uint8_t kExtendedIcons[2][25*32]={
+#include "ui/extended_icons.inc"
+};
+bool extra_icon(const DeskItem& item){return item.kind==30||item.kind==31;}
 void rect(Image& out, int x, int y, int w, int h, uint8_t color) {
     draw::fill(out, x, y, w, h, color);
 }
@@ -92,6 +97,8 @@ std::string_view desk_menu_name(int kind) {
     case 10: return "load_game";
     case 11: return "save_game";
     case 12: return "advance_turn";
+    case 30: return "almanac";
+    case 31: return "job_offers";
     default: return "unknown";
     }
 }
@@ -168,6 +175,15 @@ void DesktopScreen::digits(Image& out, int value, int sx, int sy, int w, int h, 
 
 void DesktopScreen::draw_item(Image& out, const DeskItem& item) const {
     int x = item.x, y = item.y;
+    if (extra_icon(item)) {
+        // Own picture; its light edge (first row and column) is the one of every original icon.
+        const auto& picture = kExtendedIcons[item.kind - 30];
+        for (int yy = 0; yy < 25; ++yy) for (int xx = 0; xx < 32; ++xx)
+            if (x + xx >= 0 && y + yy >= 0 && x + xx < out.width && y + yy < out.height)
+                out.at(x + xx, y + yy) = picture[yy * 32 + xx];
+        copy(out, icons_, 0, 0, x, y, 32, 1); copy(out, icons_, 0, 0, x, y, 1, 25);
+        return;
+    }
     if (item.kind < 50) {
         copy(out, icons_, (item.kind % 8) * 32, (item.kind / 8) * 25, x, y, 32, 25);
         return;
@@ -264,6 +280,11 @@ Image DesktopScreen::render() const {
         rect(out, item.x + item.width, item.y + 2, 2, item.height, 0x40);
     }
     for (const auto& item : visible.items) draw_item(out, item);
+    for (const auto& item : visible.extra_items) {
+        rect(out, item.x + 2, item.y + item.height, item.width, 2, 0x40);
+        rect(out, item.x + item.width, item.y + 2, 2, item.height, 0x40);
+        draw_item(out, item);
+    }
     // SourceDrawerTeam's compact drawer bar. Typed layout requests cover all
     // native drawer records; MEN remains a separate file-picker action.
     if (shortcut_bar_visible_) {
@@ -384,6 +405,13 @@ DeskRequest DesktopScreen::pointer_down(int x, int y, bool right) {
         sound_ids_.insert(sound_ids_.end(), {15, 12, 15});
         return {};
     }
+    for (const auto& item : state_.extra_items) {
+        if (x < item.x || y < item.y || x >= item.x + item.width || y >= item.y + item.height) continue;
+        if (!right || !state_.drawer_handles || bin_mode_) return {}; // the left button opens it on release
+        layout_drag_ = LayoutDrag{item.id, x - item.x, y - item.y, item.x, item.y, -1, false, false, false, right};
+        layout_preview_ = state_;
+        return {};
+    }
     for (auto it = state_.items.rbegin(); it != state_.items.rend(); ++it) {
         const auto& item = *it;
         const int inset = item.kind >= 50 && !item.open ? 8 : 0;
@@ -415,9 +443,10 @@ bool DesktopScreen::pointer_move(int x, int y) {
     if (pending_ || socket_release_pending_ || drawer_close_release_pending_) return false;
     if (!layout_drag_ || !layout_preview_) return sample_shortcut_pointer(x, y);
     auto& drag = *layout_drag_;
-    auto found = std::find_if(layout_preview_->items.begin(), layout_preview_->items.end(),
-        [&](const DeskItem& item) { return item.id == drag.item; });
-    if (found == layout_preview_->items.end()) return false;
+    DeskItem* found = nullptr;
+    for (auto& item : layout_preview_->items) if (item.id == drag.item) found = &item;
+    for (auto& item : layout_preview_->extra_items) if (item.id == drag.item) found = &item;
+    if (!found) return false;
     int next_x = x - drag.grab_x, next_y = y - drag.grab_y;
     if (state_.layout_snap) { next_x = (next_x / 5) * 5; next_y = (next_y / 5) * 5; }
     const int max_x=std::max(1,319-found->width), max_y=std::max(1,239-found->height);
@@ -446,6 +475,16 @@ DeskRequest DesktopScreen::pointer_up(int x, int y, bool right) {
         layout_preview_.reset();
         if(drag.drawer_handle) return {}; // Source handle release is not a body click.
         return click(x,y,right);
+    }
+    if (drag.item >= 54) {
+        // An additional icon: only its place changes, reported in its own request.
+        const auto moved = std::find_if(layout_preview_->extra_items.begin(), layout_preview_->extra_items.end(),
+            [&](const DeskItem& item) { return item.id == drag.item; });
+        if (moved == layout_preview_->extra_items.end()) { layout_preview_.reset(); return {}; }
+        auto req = request(DeskRequestKind::change_layout, *moved, moved->x | (moved->y << 16));
+        req.layout_operation = DeskLayoutOperation::move_extra;
+        pending_ = req; layout_preview_.reset();
+        return req;
     }
     const auto source = std::find_if(state_.items.begin(), state_.items.end(),
         [&](const DeskItem& item) { return item.id == drag.item; });
@@ -627,6 +666,11 @@ DeskRequest DesktopScreen::click(int x, int y, bool right) {
         }
         if(right) return {};
         return request(child->kind==12?DeskRequestKind::advance_turn:DeskRequestKind::open_menu,*child);
+    }
+    for (const auto& item : state_.extra_items) {
+        if (x < item.x || y < item.y || x >= item.x + item.width || y >= item.y + item.height) continue;
+        if (right) return {};
+        return request(DeskRequestKind::open_menu, item);
     }
     for (auto it = state_.items.rbegin(); it != state_.items.rend(); ++it) {
         const auto& item = *it;

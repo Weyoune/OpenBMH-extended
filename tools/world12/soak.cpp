@@ -13,6 +13,12 @@
 //
 // This is the regression net of the typed world: two builds that behave the same write the same
 // digest file, and a stop names the first place a real career cannot pass.
+#include "formats/palette.hpp"
+#include "ui/world12_readonly_screen.hpp"
+#include "ui/world12_desktop.hpp"
+#include "ui/desktop.hpp"
+#include "game/world12/manager_change.hpp"
+#include "ui/world12_extended_pages.hpp"
 #include "app/world12_session.hpp"
 #include "app/world12_startup.hpp"
 #include "app/world12_pending.hpp"
@@ -77,6 +83,22 @@ uint64_t fingerprint(const CareerSnapshot& snapshot) {
 
 }  // namespace
 
+// Writes a 320x240 picture of the game as a 24-bit BMP (pictures for a person to look at).
+static void save_picture(const std::filesystem::path& file, const Image& image, const Palette& palette) {
+    const int w = image.width, h = image.height, stride = (w * 3 + 3) & ~3;
+    std::vector<uint8_t> out(54 + size_t(stride) * h, 0);
+    const auto put = [&](size_t at, uint32_t value, int bytes) { for (int i = 0; i < bytes; ++i) out[at + i] = uint8_t(value >> (8 * i)); };
+    out[0] = 'B'; out[1] = 'M'; put(2, uint32_t(out.size()), 4); put(10, 54, 4); put(14, 40, 4); put(18, uint32_t(w), 4); put(22, uint32_t(h), 4);
+    put(26, 1, 2); put(28, 24, 2); put(34, uint32_t(stride * h), 4);
+    for (int y = 0; y < h; ++y) for (int x = 0; x < w; ++x) {
+        const uint32_t colour = palette.argb[image.pixels[size_t(y) * w + x]];
+        const size_t at = 54 + size_t(h - 1 - y) * stride + size_t(x) * 3;
+        out[at] = uint8_t(colour); out[at + 1] = uint8_t(colour >> 8); out[at + 2] = uint8_t(colour >> 16);
+    }
+    std::filesystem::create_directories(file.parent_path());
+    if (FILE* f = std::fopen(file.string().c_str(), "wb")) { std::fwrite(out.data(), 1, out.size(), f); std::fclose(f); }
+}
+
 int main(int argc, char** argv) {
     if (argc < 6) {
         std::fprintf(stderr, "usage: world12_soak <data directory> <managers 1..4> <de|en|deen> <seed> <seasons> [digest file]\n");
@@ -85,6 +107,10 @@ int main(int argc, char** argv) {
     const std::filesystem::path data = argv[1];
     const int managers = std::atoi(argv[2]);
     const std::string scope_name = argv[3];
+    const bool extended_screens = scope_name.find('j') != std::string::npos;   // "j": almanac and job offers (Beta 5)
+    int club_changes = 0, almanac_views = 0;
+    // WORLD12_SOAK_SHOTS=<directory>: pictures of the desk and of the additional screens at each first desk.
+    const std::filesystem::path shots = std::getenv("WORLD12_SOAK_SHOTS") ? std::getenv("WORLD12_SOAK_SHOTS") : "";
     const uint32_t seed = uint32_t(std::strtoul(argv[4], nullptr, 0));
     const int seasons = std::atoi(argv[5]);
     std::FILE* digest = argc > 6 ? std::fopen(argv[6], "wb") : nullptr;
@@ -185,6 +211,50 @@ int main(int argc, char** argv) {
                 session.resolve_pending(data, leave, pending);
                 leave.revision = session.revision();
             }
+            if (extended_screens && session.snapshot().calendar && session.snapshot().calendar->next_day == 0 && !session.snapshot().prepared_event) {
+                // First desk of a season. The almanac is built and closed; a manager with an offer he may
+                // accept takes the first one.
+                const auto open = [&](int item, int menu) {
+                    ui::DeskRequest request;
+                    request.kind = ui::DeskRequestKind::open_menu; request.manager_slot = leave.manager_slot;
+                    request.item_id = item; request.menu_kind = menu; request.revision = session.revision();
+                    return session.open_readonly(request, data, Image(320, 240));
+                };
+                const std::string tag = "s" + std::to_string(session.snapshot().season) + "_seat" + std::to_string(leave.manager_slot) + "_";
+                const auto picture = [&](const std::string& name, const Image& image) {
+                    if (!shots.empty()) save_picture(shots / (tag + name + ".bmp"), image, load_palette(ui::asset_path(data, "M3PC.COL")));
+                };
+                const auto desk_picture = [&](const std::string& name) {
+                    if (shots.empty()) return;
+                    ui::DesktopScreen desk(data, ui::world12_initial_desktop(data, session.snapshot(), session.reference(), session.rules(), session.options(), session.revision()), session.rules());
+                    picture(name, desk.render());
+                };
+                desk_picture("desk");
+                phase += ", almanac";
+                { const auto page = open(54, ui::kMenuAlmanac);
+                  if (!page.almanac || page.almanac->tabs.size() != 6) throw std::runtime_error("almanac has not six tabs");
+                  if (!shots.empty()) { ui::World12ReadonlyScreen screen(data, page, session.rules());
+                      for (int tab = 0; tab < 6; ++tab) { picture("almanac" + std::to_string(tab), screen.render()); screen.key("TAB"); } }
+                  ui::World12ReadonlyRequest close; close.identity = page.identity;
+                  if (!session.apply_readonly(close)) throw std::runtime_error("almanac did not close");
+                  ++almanac_views; }
+                const auto& now = session.snapshot(); const auto seat = *now.desktop->active_seat;
+                const bool club_desk = now.world.clubs.at(std::find_if(now.world.managers.begin(), now.world.managers.end(), [&](const auto& m) { return m.seat == seat; })->club).kind == ClubKind::club;
+                if (club_desk && now.world.extended && now.world.extended->job_offer_season == now.season &&
+                    now.world.extended->job_offers.contains(seat) && manager_change_refusal(now, seat).empty()) {
+                    phase += ", job offer";
+                    const auto page = open(55, ui::kMenuJobOffers);
+                    if (!page.job_offers || page.job_offers->offers.empty()) throw std::runtime_error("offer screen shows no offer");
+                    if (!shots.empty()) { ui::World12ReadonlyScreen screen(data, page, session.rules()); picture("offers", screen.render());
+                        screen.pointer_down(100, 72, false); picture("offers_confirm", screen.render()); }
+                    ui::World12ReadonlyRequest accept; accept.identity = page.identity;
+                    accept.action = ui::World12ReadonlyAction::accept_job_offer; accept.value = 0;
+                    if (!session.apply_readonly(accept)) throw std::runtime_error("accepted offer did not close its screen");
+                    ++club_changes;
+                    desk_picture("desk_after_change");
+                }
+                leave.revision = session.revision();
+            }
             const auto& event = *session.snapshot().desktop->initial_event;
             if (size_t(event.manager_position) + 1 < event.manager_order.size()) {
                 session.advance_manager(leave);
@@ -208,6 +278,7 @@ int main(int argc, char** argv) {
                 std::fflush(stdout);
             }
         }
+        if (extended_screens) std::printf("almanac opened %d times, %d changes of club\n", almanac_views, club_changes);
         std::printf("%s: %d seasons, %d turns, %d managers, scope %s, seed %u\n", complete ? "career complete" : "played",
                     int(session.snapshot().season - first_season), turns, managers, scope_name.c_str(), unsigned(seed));
         if (digest) std::fclose(digest);

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "game/world12/job_offers.hpp"
 #include "app/world12_clock.hpp"
 #include "game/world12/annual_opening.hpp"
 #include "game/week.hpp"
@@ -50,7 +51,7 @@ static void finish_empty_opening_event(CareerSnapshot& state,ManagerActionOwner&
     candidate.game_seed=game.seed();candidate.watcom_seed=random.seed();
     candidate.desktop->manager_order=event.manager_order;
     candidate.desktop->matchday_number=event.matchday_number;
-    candidate.desktop->initial_event.reset();candidate.desktop->active_seat.reset();complete_empty_day(candidate);candidate.progress=progress;candidate.validate();
+    candidate.desktop->initial_event.reset();candidate.desktop->active_seat.reset();expire_job_offers(candidate.world);complete_empty_day(candidate);candidate.progress=progress;candidate.validate();
     if(state!=before)throw FormatError("world12: initial event changed while closing");owner_matches(owner,expected);state=std::move(candidate);++owner.revision;
 }
 void finish_initial_event(CareerSnapshot& state,ManagerActionOwner& owner,ManagerActionOwner expected,const GameState& reference,CalendarEpoch epoch) {

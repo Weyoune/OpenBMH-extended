@@ -1168,7 +1168,7 @@ bool StartupFlow::resume_manager_selection(SelectionContext context) {
 // Name of the visible screen. The order mirrors the input chains: overlays and pages first, then submenus, desktop, setup.
 std::string StartupFlow::screen_name() const {
     if(world12_friendly_)return "world12_friendly";
-    if(world12_readonly_)return world12_readonly_->state().identity.menu==28?"balance":world12_readonly_->state().identity.menu==4?"achievements":world12_readonly_->state().identity.menu==9?"indoor_standings":world12_readonly_->state().identity.menu==8?"calendar":world12_readonly_->state().identity.menu==20?"top_scorers":world12_readonly_->state().identity.menu==26?"highscore":"fair_play";
+    if(world12_readonly_)return world12_readonly_->state().identity.menu==30?"almanac":world12_readonly_->state().identity.menu==31?"job_offers":world12_readonly_->state().identity.menu==28?"balance":world12_readonly_->state().identity.menu==4?"achievements":world12_readonly_->state().identity.menu==9?"indoor_standings":world12_readonly_->state().identity.menu==8?"calendar":world12_readonly_->state().identity.menu==20?"top_scorers":world12_readonly_->state().identity.menu==26?"highscore":"fair_play";
     if (indoor_standings_) return "indoor_standings";
     if(achievements_)return "achievements";
     if (settings_readme_) return "settings_readme";

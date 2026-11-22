@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 #include "game/world12/annual_archive_types.hpp"
+#include "game/world12/extended_features.hpp"
 #include "game/world12/european_campaign.hpp"
 #include "game/world12/indoor.hpp"
 #include "game/world12/regional_playoff.hpp"
@@ -324,6 +325,7 @@ struct TransferMarket {
 };
 using GlobalPlayerStatistics = std::map<std::pair<ClubId,PlayerId>,PlayerClubStatistics>;
 struct World {
+    std::optional<ExtendedFeatures> extended; // Additions of OpenBMH-Extended (desk icons, almanac, job offers); schema45.
     std::optional<InactiveNationalDraw> inactive_national_draw;
     std::optional<InactiveClubState> inactive_club_state;
     std::optional<uint16_t> highscore_signature; // Fresh Source saved fact: zero known-unranked, absent oldunknown; schema41.

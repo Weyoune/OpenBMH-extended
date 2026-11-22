@@ -8,4 +8,7 @@ struct ManagerJoiningOutcome {uint8_t seat=0;uint64_t watcom_draws=0;};
 // age/ratings and other humans are retained; new personal state uses shared kernels.
 ManagerJoiningOutcome add_running_manager(CareerSnapshot&,const InitialManagerChoice&,
     const GameState& reference,const LeImage& country_rules);
+// The shared kernel of joining and changing club; see manager_join.cpp.
+void seat_manager_at_club(CareerSnapshot& candidate,const InitialManagerChoice& choice,const GameState& reference,
+    const LeImage& country_rules,WatcomRandom& random);
 }

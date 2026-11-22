@@ -142,6 +142,10 @@ struct DeskState {
     std::optional<std::array<uint8_t, 22>> automation_formation;
     std::array<std::optional<bool>, 10> warnings{};
     std::vector<DeskItem> items; // Original linked-list drawing / hit-test order.
+    // Additional icons of OpenBMH-Extended (ids 54.., kinds 30 Almanach, 31 Wechsel). They are not part of
+    // the 54 original layout records: drawn above the items, moved by their own request (move_extra),
+    // never placed in folders or on the shortcut bar. Empty outside the shared world.
+    std::vector<DeskItem> extra_items;
     std::string source;
     uint64_t revision = 0;
 };

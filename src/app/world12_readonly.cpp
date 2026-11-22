@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "game/world12/manager_change.hpp"
+#include "ui/world12_extended_pages.hpp"
 #include "app/world12_session.hpp"
 #include "app/world12_visible_menu.hpp"
 #include "game/world12/desktop_projection.hpp"
@@ -16,7 +18,7 @@ std::vector<ui::World12CareerIdentity> roster(const CareerSnapshot& state){
 }
 ui::World12ReadonlyState Session::open_readonly(const ui::DeskRequest& request,const std::filesystem::path& data,const Image& underlay,const std::filesystem::path& save_directory){
     state_.validate();
-    if(preparation_menu_||readonly_owner_||request.kind!=ui::DeskRequestKind::open_menu||(request.menu_kind!=4&&request.menu_kind!=7&&request.menu_kind!=8&&request.menu_kind!=9&&request.menu_kind!=23&&request.menu_kind!=20&&request.menu_kind!=25&&request.menu_kind!=26&&request.menu_kind!=28)||request.value!=-1||request.revision!=owner_.revision||owner_.revision==UINT64_MAX||readonly_generation_>=UINT32_MAX||underlay.width!=320||underlay.height!=240)
+    if(preparation_menu_||readonly_owner_||request.kind!=ui::DeskRequestKind::open_menu||(request.menu_kind!=30&&request.menu_kind!=31&&request.menu_kind!=4&&request.menu_kind!=7&&request.menu_kind!=8&&request.menu_kind!=9&&request.menu_kind!=23&&request.menu_kind!=20&&request.menu_kind!=25&&request.menu_kind!=26&&request.menu_kind!=28)||request.value!=-1||request.revision!=owner_.revision||owner_.revision==UINT64_MAX||readonly_generation_>=UINT32_MAX||underlay.width!=320||underlay.height!=240)
         throw FormatError("world12: stale or unavailable readonly desktop owner");
     const auto desk=ui::world12_initial_desktop(data,state_,resources_.reference,resources_.german,options_,owner_.revision);
     if(ui::desk_actor(desk)!=request.manager_slot||desk.world12_career_roster!=roster(state_)||!visible_world12_menu(desk,request.item_id,request.menu_kind))
@@ -89,6 +91,13 @@ bool Session::apply_readonly(const ui::World12ReadonlyRequest& request){
         break;
     }
 
+    case ui::World12ReadonlyAction::accept_job_offer:{
+        // Wechsel: the manager at the desk takes the offer he clicked (manager_change.hpp), then the screen closes.
+        if(current.identity.menu!=ui::kMenuJobOffers||!current.job_offers||request.value<0||size_t(request.value)>=current.job_offers->offers.size())throw FormatError("world12: no such job offer");
+        const auto club=current.job_offers->offers[size_t(request.value)].club;changed=state_;
+        change_manager_club(*changed,current.identity.manager,club,resources_.reference,changed->world.clubs.at(club).country==Country::germany?resources_.german:resources_.english);
+        closed=true;break;
+    }
     case ui::World12ReadonlyAction::close:if(request.metric!=current.selection.metric)throw FormatError("world12: readonly close metric changed");closed=true;break;
     case ui::World12ReadonlyAction::set_metric:
         if(current.identity.menu!=20||uint8_t(request.metric)>uint8_t(ui::TopScorersMetric::scorer))throw FormatError("world12: unsupported readonly metric");selection.metric=request.metric;break;
