@@ -67,7 +67,9 @@ void validate_extended_features(const World& world){
     }
     std::set<ClubId> offered;
     for(const auto& [seat,offers]:e.job_offers){
-        if(std::none_of(world.managers.begin(),world.managers.end(),[&](const auto& manager){return manager.seat==seat;}))invalid("job offer has no manager");
+        // The seat is not looked up in world.managers: parts of the game validate a copy of the world that holds
+        // only some of the managers (for example while one manager's contracts are initialized).
+        if(seat>3)invalid("job offer seat is out of range");
         if(offers.empty()||offers.size()>kMaximumJobOffers)invalid("job offer count is invalid");
         for(const auto& offer:offers){
             if(!real_club(offer.club)||!offered.insert(offer.club).second)invalid("job offer names an unknown or twice offered club");

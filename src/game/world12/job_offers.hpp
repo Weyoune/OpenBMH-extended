@@ -20,6 +20,7 @@
 // No club is offered to two managers. The choice among equally suitable clubs is made by a fixed mixing
 // function of season, seat and club: it draws nothing from the two random streams of the game, so the
 // course of a career does not depend on whether the rule exists.
+// OpenBMH deviates from the original: at the change of season a human club manager can receive job offers of other clubs, judged by his final place against the strength of his squad.
 #pragma once
 #include "game/world12/world.hpp"
 namespace bmh::world12 {

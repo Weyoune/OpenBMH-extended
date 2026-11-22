@@ -10,6 +10,7 @@
 // What is given up: cash, savings, credits, shares and funds, stadium, sponsors, youth teams, season
 // tickets, the transfer history and every listing, bid and booked friendly of the old club. The old club
 // is led by the computer from then on and keeps its squad.
+// OpenBMH deviates from the original: a manager may accept a job offer at the first desk of a season and starts anew at that club, keeping his career record.
 #pragma once
 #include "game/world12/manager_join.hpp"
 namespace bmh::world12 {

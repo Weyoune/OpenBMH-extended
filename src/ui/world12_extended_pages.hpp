@@ -7,6 +7,7 @@
 // (AlmanacState) that a pure function makes from the career; the screen itself only pages through them.
 // All texts are in the character set of the original game (ISO 646-DE), ready for the small font.
 // The screens are hosted by World12ReadonlyScreen (world12_readonly_screen.hpp).
+// OpenBMH deviates from the original: the desk of the shared world has two additional icons, Almanach (a reference book of the career) and Wechsel (job offers), outside the original desk layout.
 #pragma once
 #include "game/world12/save.hpp"
 #include "game/state.hpp"
@@ -38,14 +39,19 @@ struct AlmanacView {
 // combination, first selector major: views[first*second_labels.size()+second]. A tab without a second
 // selector has one empty second label.
 struct AlmanacTab {
-    std::string label;
+    std::string label;      // on the page button
+    std::string heading;    // in the window, large font
+    // Captions of the buttons that step the first selector back and forth (seasons: earlier/later).
+    std::string first_previous,first_next;
     std::vector<std::string> first_labels,second_labels;
     std::vector<AlmanacView> views;
     int first=0,second=0;   // selection shown first
 };
 struct AlmanacState {
     std::vector<AlmanacTab> tabs;
-    bool decorated_background=true;
+    // Display options of the career, as every original screen honours them: picture or plain background,
+    // textured or plain window, shaded or plain heading text.
+    bool decorated_background=true,textured_window=true,gradient_text=true;
 };
 // The almanac of the career as seen by the manager of `seat`. `season_year` is the calendar year in which
 // the current season started. Never changes the career.
@@ -60,9 +66,9 @@ struct JobOffersState {
     std::string manager_name,current_club;
     std::vector<JobOfferRow> offers;
     std::string refusal;        // why no offer can be accepted right now (German); empty if one can
-    bool decorated_background=true;
+    bool decorated_background=true,textured_window=true,gradient_text=true;
 };
-JobOffersState world12_job_offers_state(const bmh::world12::CareerSnapshot&,uint8_t seat);
+JobOffersState world12_job_offers_state(const bmh::world12::CareerSnapshot&,uint8_t seat,const GameState& reference);
 
 // Common face of both screens for the host.
 class World12ExtendedScreen {
@@ -80,6 +86,7 @@ protected:
     bool closed_=false;
     int accepted_=-1;
 };
-std::unique_ptr<World12ExtendedScreen> make_almanac_screen(const std::filesystem::path& data,std::shared_ptr<const AlmanacState>);
-std::unique_ptr<World12ExtendedScreen> make_job_offers_screen(const std::filesystem::path& data,std::shared_ptr<const JobOffersState>);
+// `rules` is the rule image of the game (glyph map of the sprite font, button text colours, text shading).
+std::unique_ptr<World12ExtendedScreen> make_almanac_screen(const std::filesystem::path& data,std::shared_ptr<const AlmanacState>,const LeImage& rules);
+std::unique_ptr<World12ExtendedScreen> make_job_offers_screen(const std::filesystem::path& data,std::shared_ptr<const JobOffersState>,const LeImage& rules);
 }

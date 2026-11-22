@@ -35,8 +35,11 @@ describe deliberate changes; they are not a list of every known compatibility li
 - [src/game/week.hpp](../src/game/week.hpp): uses the enhanced assistant-training rules, retaining the selected skill until it reaches its maximum.
 - [src/game/weekly.cpp](../src/game/weekly.cpp): uses the supported weekly-event configuration, with its rule switch disabled.
 - [src/game/weekly.hpp](../src/game/weekly.hpp): uses the supported weekly processing and transfer rule profile.
+- [src/game/world12/almanac.hpp](../src/game/world12/almanac.hpp): the final table and the five best scorers of every league are kept for every completed season, together with the club each human manager led.
 - [src/game/world12/annual_qualification.cpp](../src/game/world12/annual_qualification.cpp): a domestic winner and finalist can both occupy CL places.
+- [src/game/world12/job_offers.hpp](../src/game/world12/job_offers.hpp): at the change of season a human club manager can receive job offers of other clubs, judged by his final place against the strength of his squad.
 - [src/game/world12/league_history.cpp](../src/game/world12/league_history.cpp): FLTD's inherited literal18 collapse aliases its fourth20-club tier with the third.
+- [src/game/world12/manager_change.hpp](../src/game/world12/manager_change.hpp): a manager may accept a job offer at the first desk of a season and starts anew at that club, keeping his career record.
 - [src/game/world12/progression.cpp](../src/game/world12/progression.cpp): shared English outdoor fixtures precede Hall passes on a coincident date, with no repeated daily service.
 - [src/ui/bank.cpp](../src/ui/bank.cpp): read-only totals use wide arithmetic; individual saved account, price, holding and paid fields are unchanged.
 - [src/ui/desk_state.cpp](../src/ui/desk_state.cpp): the desk shows the opponent's badge whenever the data has one.
@@ -48,3 +51,4 @@ describe deliberate changes; they are not a list of every known compatibility li
 - [src/ui/save_load.cpp](../src/ui/save_load.cpp): the host file picker uses the shared dialog's system identity without a live manager portrait projection.
 - [src/ui/save_load.cpp](../src/ui/save_load.cpp): permits cancelling host file dialogs with the right mouse button.
 - [src/ui/settings.cpp](../src/ui/settings.cpp): the settings page names the product and its build version instead of the original's version text.
+- [src/ui/world12_extended_pages.hpp](../src/ui/world12_extended_pages.hpp): the desk of the shared world has two additional icons, Almanach (a reference book of the career) and Wechsel (job offers), outside the original desk layout.

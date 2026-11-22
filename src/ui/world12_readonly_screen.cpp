@@ -2,8 +2,8 @@
 #include "ui/world12_readonly_screen.hpp"
 namespace bmh::ui {
 World12ReadonlyScreen::World12ReadonlyScreen(const std::filesystem::path& data,World12ReadonlyState state,const LeImage& source):state_(std::move(state)){
-    if(state_.identity.menu==kMenuAlmanac&&state_.almanac)extended_=make_almanac_screen(data,state_.almanac);
-    else if(state_.identity.menu==kMenuJobOffers&&state_.job_offers)extended_=make_job_offers_screen(data,state_.job_offers);
+    if(state_.identity.menu==kMenuAlmanac&&state_.almanac)extended_=make_almanac_screen(data,state_.almanac,source);
+    else if(state_.identity.menu==kMenuJobOffers&&state_.job_offers)extended_=make_job_offers_screen(data,state_.job_offers,source);
     else if(state_.identity.menu==28&&state_.balance){balance_=std::make_unique<BalanceScreen>(data,*state_.balance,source);}
     else if(state_.identity.menu==23&&state_.statistics)statistics_=std::make_unique<World12StatisticsScreen>(data,state_,source);
     else if(state_.identity.menu==4&&state_.achievements)achievements_=std::make_unique<AchievementsScreen>(data,*state_.achievements,source);

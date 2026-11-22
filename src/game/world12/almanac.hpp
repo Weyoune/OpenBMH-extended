@@ -2,6 +2,7 @@
 // Almanac recording: what OpenBMH-Extended writes down when a season is closed, so that later seasons
 // can look it up (final tables, best scorers, the club of every human manager).
 // The original game keeps none of this. The data lives in World::extended (extended_features.hpp).
+// OpenBMH deviates from the original: the final table and the five best scorers of every league are kept for every completed season, together with the club each human manager led.
 #pragma once
 #include "game/world12/save.hpp"
 namespace bmh::world12 {

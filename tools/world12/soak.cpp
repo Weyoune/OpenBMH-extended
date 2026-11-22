@@ -246,7 +246,8 @@ int main(int argc, char** argv) {
                     const auto page = open(55, ui::kMenuJobOffers);
                     if (!page.job_offers || page.job_offers->offers.empty()) throw std::runtime_error("offer screen shows no offer");
                     if (!shots.empty()) { ui::World12ReadonlyScreen screen(data, page, session.rules()); picture("offers", screen.render());
-                        screen.pointer_down(100, 72, false); picture("offers_confirm", screen.render()); }
+                        screen.pointer_down(100, 52, false); picture("offers_selected", screen.render());
+                        screen.pointer_down(50, 208, false); picture("offers_confirm", screen.render()); }
                     ui::World12ReadonlyRequest accept; accept.identity = page.identity;
                     accept.action = ui::World12ReadonlyAction::accept_job_offer; accept.value = 0;
                     if (!session.apply_readonly(accept)) throw std::runtime_error("accepted offer did not close its screen");
