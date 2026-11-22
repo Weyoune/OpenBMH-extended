@@ -444,8 +444,9 @@ bool DesktopScreen::pointer_move(int x, int y) {
     if (!layout_drag_ || !layout_preview_) return sample_shortcut_pointer(x, y);
     auto& drag = *layout_drag_;
     DeskItem* found = nullptr;
-    for (auto& item : layout_preview_->items) if (item.id == drag.item) found = &item;
-    for (auto& item : layout_preview_->extra_items) if (item.id == drag.item) found = &item;
+    // The first entry with the id, as before: a dragged folder child can be listed twice in the preview.
+    for (auto& item : layout_preview_->items) if (item.id == drag.item) { found = &item; break; }
+    if (!found) for (auto& item : layout_preview_->extra_items) if (item.id == drag.item) { found = &item; break; }
     if (!found) return false;
     int next_x = x - drag.grab_x, next_y = y - drag.grab_y;
     if (state_.layout_snap) { next_x = (next_x / 5) * 5; next_y = (next_y / 5) * 5; }

@@ -17,6 +17,7 @@ add_library(bmhui STATIC
     world12_readonly_flow.cpp
     world12_statistics_screen.cpp
     world12_readonly_screen.cpp
+    world12_extended_screens.cpp
     lineup.cpp
     training.cpp
     training_camp.cpp
