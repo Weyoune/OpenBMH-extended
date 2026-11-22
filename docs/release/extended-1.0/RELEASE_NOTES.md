@@ -25,6 +25,53 @@ and match calculations. It is a separate game line from
 - New high-resolution Extended start artwork; recent Classic input, dialog,
   localization and desktop corrections are included.
 
+## Beta 5: Almanach and Wechsel
+
+Two additional icons stand on the desk of the shared world, below the lowest icon row. They are
+additions of OpenBMH-Extended; the original game has neither. Both can be moved with the right
+mouse button like the other icons, but not put into folders or onto the shortcut bar.
+
+**Almanach** is the reference book of the career, in the look of the statistics screens:
+
+- Saison: champion and runner-up of every league, the cups, the European cups, the indoor
+  Masters and the national tournament, for every completed season.
+- Tabelle: the final table of every league and season.
+- Torjäger: the five best scorers of every league and season.
+- Ehrentafel: titles counted per club and competition.
+- Ewige Tabelle: the all-time table of the highest division of each country.
+- Manager: club, league and final place of every human manager, season by season, and his titles.
+
+Final tables, scorers and the clubs of the managers are recorded from Beta 5 on. A career that
+was started earlier shows the title holders of its earlier seasons and "no record" for the rest.
+
+**Wechsel** shows job offers. This is a new rule:
+
+- At the change of season every human club manager is judged by his final place against the
+  strength of his squad. A manager who clearly did better than his squad promised, a champion,
+  a promoted manager or a cup winner receives up to three offers, up to two of them from the
+  next higher division. A season as expected brings one or two offers of comparable clubs. A
+  manager far below expectation, relegated or starting with a point deduction receives none.
+- Offers come only from clubs without a human manager. With both countries in the game an offer
+  can come from the other country. No club is offered to two managers.
+- An offer can only be accepted at the first desk of the new season. It is a new start: the
+  funds, stadium, sponsors and squad contracts of the new club, as for a manager who joins a
+  running career. The manager keeps his name, picture, desk, mailbox and his career record
+  (places, titles, awards, series), so the highscore counts the whole career. Cash, savings,
+  credits, shares, the old stadium and sponsors are given up. The old club is led by the
+  computer from then on.
+- A change is refused while credits between human managers are open.
+- There is no dismissal.
+
+How it was checked: a test without game data covers the recording, the saved form (a world
+in the format of Beta 4 loads; an actual save file of Beta 4 was not tried), the offer rule and the change of club. `world12_soak` with the new
+scope letter `j` opened the almanac at every first desk and accepted every first offer: careers
+with one and four managers over three seasons ran to the end, with four changes of club in the
+four-manager career. The window program was driven by script through both screens.
+
+Known limits: the page of record results is not part of the almanac yet; the mailbox does not
+announce new offers (the Wechsel screen shows them); a table longer than the window is scrolled
+by a click into its upper or lower half.
+
 ## Beta 4: on the code base of Classic 1.0.13
 
 Beta 4 merges everything OpenBMH Classic gained between 1.0.2 and 1.0.13 and adds the

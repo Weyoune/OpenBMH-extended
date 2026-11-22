@@ -342,7 +342,8 @@ public:
         if(chosen.scroll>0)for(int i=0;i<3;++i)draw::fill(out,313-i,34+i,1+2*i,1,kBeige);
         if(chosen.scroll+shown<rows)for(int i=0;i<3;++i)draw::fill(out,311+i,170+i,5-2*i,1,kBeige);
         // Selector rows: step back, the current choice (shown pressed in), step forward.
-        if(tab.first_labels.size()>1){
+        // The current choice is shown even when there is nothing to step to (one recorded season).
+        if(tab.first_labels.size()>1||!tab.first_labels[0].empty()){
             button(out,selector_x(0),selector_y(0),tab.first_previous,pressed_==10,chosen.first>0);
             button(out,selector_x(1),selector_y(0),tab.first_labels[size_t(chosen.first)],true);
             button(out,selector_x(2),selector_y(0),tab.first_next,pressed_==12,chosen.first+1<int(tab.first_labels.size()));
@@ -392,7 +393,9 @@ public:
     }
 private:
     struct Chosen{int first=0,second=0,scroll=0;};
-    static int row_spacing(int rows){return rows<15?8:rows>19?6:7;}
+    // 8 pixels for short tables, 7 up to a full English division (20 clubs), 6 beyond (the original all-time
+    // table changes to 6 one row earlier; 7 keeps twenty rows apart and still fits the window).
+    static int row_spacing(int rows){return rows<15?8:rows>20?6:7;}
     static int visible_rows(int rows){return (kLastBaseline-kFirstBaseline)/row_spacing(rows)+1;}
     const AlmanacView& current()const{
         const auto& tab=state_->tabs[size_t(tab_)];const auto& chosen=selection_[size_t(tab_)];
